@@ -211,19 +211,38 @@ Event появился в `events(model)` → подписка. Исчез → �
 
 ## Roadmap
 
-**Phase 1: MVP**
-- Signal, Event, комбинаторы
-- Примитивы: interval, keyboard, request, websocket
-- App, Html, Runtime
+**Phase 1: MVP** — всё интуитивно понятное
 
-**Phase 2: Расширения**
-- Dynamic, Widget
-- Конкурентность (workers)
-- Routing, storage
+Core:
+- Signal, Event
+- Базовые: never, merge, mapE, filterE, occur
+- Signal ↔ Event: foldp, stepper, changes
+- Sampling: snapshot, attach, tag, gate
+- Аккумуляторы: accumE, accumB
+- Временные: debounce, throttle
+- Прочее: mergeWith, pre, catchE
 
-**Phase 3: Продвинутое**
+Примитивы:
+- interval, animationFrame, keyboard, mouse, request
+
+App, Html (с keyed), Runtime
+
+**Phase 2: Расширения** — отдельные концепции
+
+- websocket (сложное состояние)
+- localStorage (persistence)
+- routing (URL, history)
+- switchE, alignWith (динамические потоки)
+- touch, focus management
+
+**Phase 3: Конкурентность** — отдельный модуль
+
+- worker, parallel, race, channel
+
+**Phase 4: Продвинутое** — для экспертов
+
 - Incremental (патчи коллекций)
-- Session types для протоколов
+- Session types, Linear types
 - Формальная верификация
 
 > Подробнее: [architecture/](architecture/)

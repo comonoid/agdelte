@@ -1116,23 +1116,23 @@ websocket                же           channel, pool
 
 ## Roadmap
 
-**Phase 1 (MVP+):**
+> Конкурентность — **Phase 3** общего roadmap (после MVP и Extensions).
+> См. [README.md](../README.md) для полного roadmap.
+
+**Phase 3a: Базовая конкурентность**
 - `worker : WorkerFn A B → A → Event B`
 - Базовая отмена
-- Один worker на Event
-
-**Phase 2:**
-- `workerWithProgress`
 - `parallel`, `race`
-- Worker pool
 
-**Phase 3:**
+**Phase 3b: Расширенная конкурентность**
+- `workerWithProgress`
+- Worker pool
 - Channels
+
+**Phase 4: Продвинутое**
 - SharedArrayBuffer
 - Linear types для ресурсов
-
-**Phase 4:**
 - Session types
 - STM интеграция (серверная часть через GHC)
-- Distributed workers (across machines)
+- Distributed workers
 - GPU compute (WebGPU)

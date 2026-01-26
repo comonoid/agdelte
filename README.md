@@ -254,20 +254,37 @@ Structured concurrency, automatic resource management, no leaks. See [architectu
 
 ## Roadmap
 
-**Phase 1: MVP**
-- Signal, Event, foldp
-- Sampling combinators: snapshot, attach, tag, gate, changes
-- Primitives: interval, animationFrame, keyboard, request, websocket
-- App (init, update, view, events)
-- Html, Runtime
+**Phase 1: MVP** — all intuitively understandable concepts
 
-**Phase 2: Extensions**
-- Dynamic (Signal + Event), Widget (Applicative UI)
-- mouse, localStorage, routing
-- Concurrency: worker, parallel, race
-- Focus management, keyed elements
+Core:
+- Signal, Event
+- Basic: never, merge, mapE, filterE, occur
+- Signal ↔ Event: foldp, stepper, changes
+- Sampling: snapshot, attach, tag, gate
+- Accumulators: accumE, accumB
+- Time: debounce, throttle
+- Other: mergeWith, pre, catchE
 
-**Phase 3: Advanced**
+Primitives:
+- interval, animationFrame, keyboard, mouse, request
+
+App, Html (with keyed), Runtime
+
+**Phase 2: Extensions** — separate concepts requiring dedicated learning
+
+- websocket (complex state, reconnection)
+- localStorage (persistence)
+- routing (URL, history)
+- switchE, alignWith (dynamic streams)
+- touch, focus management
+
+**Phase 3: Concurrency** — separate module
+
+- worker, parallel, race, channel
+- Worker pools, SharedArrayBuffer
+
+**Phase 4: Advanced** — for experts
+
 - Incremental (patches for large collections)
 - Indexed types for UI states
 - Session types for protocols
