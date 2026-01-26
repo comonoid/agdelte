@@ -1,5 +1,7 @@
 # Svelte 5 vs Agdelte: Сравнение примеров
 
+> Детальное сравнение подходов. Архитектура Agdelte: [README.md](README.md)
+
 10 примеров с анализом достоинств и недостатков обоих подходов.
 
 ---
@@ -563,6 +565,85 @@ viewHeader m = div []
 
 ---
 
+## 11. Анимации (animationFrame)
+
+### Svelte 5
+
+```svelte
+<script>
+  import { onMount, onDestroy } from 'svelte'
+
+  let position = $state(0)
+  let velocity = 200  // px/sec
+  let rafId
+  let lastTime
+
+  function animate(time) {
+    if (lastTime) {
+      const dt = time - lastTime
+      position += velocity * dt / 1000
+    }
+    lastTime = time
+    rafId = requestAnimationFrame(animate)
+  }
+
+  onMount(() => {
+    rafId = requestAnimationFrame(animate)
+  })
+
+  onDestroy(() => {
+    cancelAnimationFrame(rafId)
+  })
+</script>
+
+<div style="transform: translateX({position}px)">●</div>
+```
+
+### Agdelte
+
+```agda
+data Msg = Tick FrameInfo | ToggleAnimation
+
+record Model : Set where
+  field
+    position  : ℕ
+    velocity  : ℕ
+    animating : Bool
+
+app = record
+  { init = { position = 0; velocity = 200; animating = true }
+
+  ; update = λ where
+      (Tick frame) m → record m
+        { position = m .position + m .velocity * frame .dt / 1000 }
+      ToggleAnimation m → record m { animating = not (m .animating) }
+
+  ; view = λ m → div [ style [("transform", "translateX(" ++ show (m .position) ++ "px)")] ]
+      [ text "●" ]
+
+  ; events = λ m →
+      if m .animating
+      then mapE Tick animationFrame  -- браузер даёт dt и fps
+      else never                      -- автоматическая отмена RAF
+  }
+```
+
+### Анализ
+
+| | Svelte | Agdelte |
+|--|--------|---------|
+| **Управление RAF** | ⚠️ Вручную (onMount/onDestroy) | ✅ Автоматически (events) |
+| **Delta time** | ⚠️ Считать вручную | ✅ Готовый `frame.dt` |
+| **FPS** | ❌ Нет | ✅ Готовый `frame.fps` |
+| **Cleanup** | ⚠️ Можно забыть cancelAnimationFrame | ✅ Автоматический при `never` |
+| **Пауза анимации** | ⚠️ Флаги, условия в animate | ✅ `if animating then ... else never` |
+
+**Svelte лучше:** привычный императивный подход.
+
+**Agdelte лучше:** декларативное управление анимацией, автоматический cleanup, встроенный dt/fps.
+
+---
+
 ## Сводная таблица
 
 | Аспект | Svelte 5 | Agdelte |
@@ -603,10 +684,29 @@ viewHeader m = div []
 - Магия компилятора скрывает сложность
 - Оптимизация для developer experience
 - Императивный код выглядит декларативным
+- Реактивность — свойство компилятора
 
 **Agdelte:** "Сделай явно, типы гарантируют"
 - Явная модель данных и потока событий
 - Оптимизация для correctness
 - Декларативный код и есть декларативный
+- Реактивность — следствие математической модели (Polynomial Functors)
+
+### Три слоя Agdelte
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  ПОЛЬЗОВАТЕЛЬ: Elm-подобный DSL                         │
+│  app { init, update, view, events }                     │
+├─────────────────────────────────────────────────────────┤
+│  БИБЛИОТЕКА: Типизированные комбинаторы                │
+│  mapE, filterE, merge, snapshot, debounce              │
+├─────────────────────────────────────────────────────────┤
+│  ТЕОРИЯ: Poly, Coalg, Lens (скрыта от пользователя)    │
+│  Signal = Coalg StreamP, Lens = морфизм полиномов      │
+└─────────────────────────────────────────────────────────┘
+```
+
+Svelte строит абстракции "снизу вверх" — от DOM к компонентам. Agdelte строит "сверху вниз" — от математической теории к удобному DSL. Теория гарантирует корректность; DSL скрывает сложность.
 
 Оба подхода валидны — выбор зависит от приоритетов проекта.

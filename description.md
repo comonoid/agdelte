@@ -4,80 +4,57 @@
 
 Svelte 5 ввёл Runes — явную реактивность вместо магии компилятора. Правильный шаг, но TypeScript не знает о Runes, это надстройка.
 
-Agdelte — те же идеи в языке с настоящей системой типов. Реактивность через стандартные абстракции: Functor, Applicative, потоки.
+Agdelte — те же идеи в языке с настоящей системой типов. Реактивность через стандартные абстракции. Эффекты явны в типах. Невозможные состояния непредставимы.
 
 ---
 
-## Два типа
+## Философия: Три слоя
 
-### Signal — значения во времени
-
-```agda
-record Signal (A : Set) : Set where
-  coinductive              -- бесконечная структура
-  field
-    now  : A               -- текущее значение
-    next : Signal A        -- продолжение (следующий такт)
+```
+┌───────────────────────────────────────────────────────┐
+│  ПОЛЬЗОВАТЕЛЬ: Elm-подобный DSL                       │
+│  app { init, update, view, events }                   │
+├───────────────────────────────────────────────────────┤
+│  БИБЛИОТЕКА: Типизированные комбинаторы              │
+│  mapE, filterE, merge, snapshot                       │
+├───────────────────────────────────────────────────────┤
+│  ТЕОРИЯ: Poly, Coalg, Lens (скрыта)                  │
+└───────────────────────────────────────────────────────┘
 ```
 
-Signal — бесконечный поток значений. Не "переменная", а последовательность: значение сейчас (`now`) и значение потом (`next`).
-
-**Такт** — одна итерация: событие пришло → update → render. Между тактами система ждёт.
-
-### Event — события извне
-
-```agda
-Event A = Signal (List A)
-```
-
-Event — поток списков. За один такт: 0, 1 или несколько событий.
-
-```agda
-never : Event A           -- событие, которое никогда не происходит
-never = pure []           -- каждый такт — пустой список
-```
+**Принцип:** Elm-модель имеет *фундаментальные* ограничения (нет теории композиции, Cmd непрозрачен). Poly-модель имеет *поверхностную* сложность (можно скрыть за хорошим API). Берём лучшее из обоих.
 
 ---
 
-## Всё IO — это Event
+## Что видит пользователь
 
-Любое взаимодействие с внешним миром — события, которые приходят в систему:
-
-```agda
-interval       : ℕ → Event ⊤              -- тики таймера
-animationFrame : Event FrameInfo          -- кадры браузера (~60 FPS) с delta time
-keyboard       : Event Key                -- нажатия клавиш
-request        : Request → Event Response -- HTTP ответы
-websocket      : Url → WebSocket          -- WebSocket канал (recv + send)
-```
-
-WebSocket — двунаправленный канал:
-```agda
-record WebSocket : Set where
-  recv : Event WsEvent       -- входящие события
-  send : String → Event ⊤    -- отправить сообщение
-```
-
-HTTP запрос — не команда, а источник событий. Запрос выполняется когда runtime подписывается на Event.
-
----
-
-## App
+### App — главная абстракция
 
 ```agda
 record App (Msg : Set) (Model : Set) : Set where
-  init   : Model
-  update : Msg → Model → Model
-  view   : Model → Html Msg
-  events : Model → Event Msg
+  init   : Model                    -- начальное состояние
+  update : Msg → Model → Model      -- чистая функция
+  view   : Model → Html Msg         -- чистая функция
+  events : Model → Event Msg        -- декларативные подписки
 ```
 
-- `init` — начальное состояние
-- `update` — чистая функция, без эффектов
-- `view` — чистая функция
-- `events` — какие внешние события слушать (зависит от Model)
+### Signal и Event
 
-DOM events из `view` добавляются автоматически.
+```agda
+Signal : Set → Set              -- значение, меняющееся во времени
+Event  : Set → Set              -- дискретные события
+Event A = Signal (List A)
+```
+
+### IO — всё это Event
+
+```agda
+interval       : ℕ → Event ⊤              -- тики таймера
+animationFrame : Event FrameInfo          -- кадры браузера
+keyboard       : Event Key                -- нажатия клавиш
+request        : Request → Event Response -- HTTP ответы
+websocket      : Url → WebSocket          -- WebSocket канал
+```
 
 ---
 
@@ -101,74 +78,78 @@ counter = record
   }
 ```
 
-### Часы
+### HTTP запрос
 
 ```agda
-data Msg = Tick
+data Msg = Fetch | GotData Response
+data Status = Idle | Loading | Ready Data
 
-clock : App Msg ℕ
-clock = record
-  { init   = 0
-  ; update = λ { Tick n → suc n }
-  ; view   = λ n → text (show n)
-  ; events = λ _ → map (const Tick) (interval 1000)  -- const Tick _ = Tick
-  }
-```
-
-### Fetch по клику
-
-```agda
-data Msg = FetchData | GotData Response
-
-fetch : App Msg Model
-fetch = record
-  { init   = { loading = false; data = Nothing }
+app : App Msg Model
+app = record
+  { init   = { status = Idle }
   ; update = λ where
-      FetchData m → record m { loading = true }
-      (GotData d) m → record m { loading = false; data = Just d }
-  ; view   = λ m → button [ onClick FetchData ] [ text "Load" ]
-  ; events = λ m →
-      if m.loading
-      then map GotData (request (get "/api"))
-      else never
+      Fetch m → record m { status = Loading }
+      (GotData r) m → record m { status = Ready (parse r) }
+  ; view   = λ m → button [ onClick Fetch ] [ text "Load" ]
+  ; events = λ m → case m.status of λ where
+      Loading → mapE GotData (request (get "/api"))
+      _ → never
   }
 ```
 
-Когда `loading = true`, runtime подписывается на `request` → HTTP запрос уходит → ответ приходит как `GotData`.
+**Ключевой инсайт:** `events` зависит от `Model`. Когда `status = Loading` — runtime подписывается на HTTP. Ответ пришёл → status изменился → автоматическая отписка. Нет ручного cleanup.
 
 ---
 
-## Push-FRP
+## Комбинаторы
 
-**Push** означает: события "проталкиваются" извне в приложение. Приложение не опрашивает источники — оно реагирует на входящие события.
+```agda
+-- Базовые
+never     : Event A                           -- пустой поток
+merge     : Event A → Event A → Event A       -- объединить
+mapE      : (A → B) → Event A → Event B       -- преобразовать
+filterE   : (A → Bool) → Event A → Event A    -- отфильтровать
 
-```
-Внешний мир
-    │
-    ├── interval ────► тики
-    ├── keyboard ────► клавиши
-    ├── request ─────► HTTP ответы
-    ├── websocket ───► сообщения
-    │
-    ▼
-  Event Msg
-    │
-    ▼
-  update (чистая)
-    │
-    ▼
-  Model
-    │
-    ▼
-  view (чистая)
-    │
-    ▼
-  Html ──► DOM events ──┐
-                        │
-    events(Model) ◄─────┘
+-- Sampling
+snapshot  : (A → B → C) → Event A → Signal B → Event C
+gate      : Event A → Signal Bool → Event A
+changes   : Signal A → Event A
+
+-- Временные
+debounce  : ℕ → Event A → Event A
+throttle  : ℕ → Event A → Event A
+
+-- Композиция приложений
+_∥_       : App Msg₁ Model₁ → App Msg₂ Model₂ → App (Msg₁ ⊎ Msg₂) (Model₁ × Model₂)
 ```
 
-Всё взаимодействие с миром — входящие события. Внутри — чистые функции.
+---
+
+## Что под капотом (для любопытных)
+
+Теория основана на **Polynomial Functors** (Spivak, Niu):
+
+```agda
+-- Poly: интерфейс взаимодействия
+record Poly : Set₁ where
+  Pos : Set              -- что система выдаёт
+  Dir : Pos → Set        -- что принимает
+
+-- Coalg: система с состоянием
+record Coalg (p : Poly) : Set₁ where
+  State : Set
+  pos   : State → p.Pos
+  step  : (s : State) → p.Dir (pos s) → State
+
+-- Signal, Event, App — экземпляры Coalg
+Signal A = Coalg (A, λ _ → ⊤)
+Event A  = Signal (List A)
+App      = Coalg (Html Msg, λ _ → Msg) + events
+```
+
+Комбинаторы — это **Lens** (морфизмы полиномов). Композиция — моноидальные структуры (⊗, ◁, ⊕).
+
+Пользователю это знать не нужно. Но теория гарантирует корректность.
 
 ---
 
@@ -179,107 +160,80 @@ fetch = record
 2. html := view(model)
 3. Рендер, установить DOM обработчики
 4. Подписаться на events(model)
-5. Ждать событие (DOM, interval, request, ...)
+5. Ждать событие
 6. model := update(msg, model)
 7. Обновить подписки (diff events)
 8. goto 2
 ```
 
-Runtime управляет подписками декларативно: Event появился в `events(model)` → подписка, исчез → отписка.
+Event появился в `events(model)` → подписка. Исчез → отписка. Автоматически.
 
 ---
 
 ## Ключевые свойства
 
-**Унификация.** Таймеры, HTTP, WebSocket — всё Event. Один механизм.
+| Свойство | Описание |
+|----------|----------|
+| **Унификация** | Таймеры, HTTP, WebSocket — всё Event |
+| **Чистота** | update и view — чистые функции |
+| **Декларативность** | events описывает *что*, не *как* |
+| **Автоматический cleanup** | Нет утечек ресурсов |
+| **Композиция** | Приложения комбинируются как значения |
 
-**Чистота.** `update` и `view` — чистые функции. Эффекты только через Event.
+---
 
-**Декларативность.** `events` описывает *что* слушать, не *как* управлять подписками.
+## Что получаем бесплатно
 
-**Ацикличность.** Signal — чистые потоки. Циклические зависимости невозможны по построению.
+| Возможность | Почему просто |
+|-------------|---------------|
+| Time-travel debugging | Model — это данные |
+| Undo/Redo | Список предыдущих Model |
+| Сериализация | JSON.stringify(model) |
+| Тестирование | update msg model ≡ expected |
+| Отмена запросов | Автоматически при отписке |
+| Race conditions | Невозможны по построению |
 
-**Композиция.** Event комбинируются стандартными операциями:
+---
 
-```agda
--- Базовые
-never     : Event A                           -- ничего
-merge     : Event A → Event A → Event A       -- объединить два потока
-mapE      : (A → B) → Event A → Event B       -- преобразовать события
-filterE   : (A → Bool) → Event A → Event A    -- отфильтровать
+## Сравнение
 
--- Sampling (взаимодействие Event и Signal)
-snapshot  : (A → B → C) → Event A → Signal B → Event C  -- семплировать Signal
-gate      : Event A → Signal Bool → Event A   -- фильтр по Signal
-changes   : Signal A → Event A                -- события изменения Signal
-
--- Time-based
-debounce  : ℕ → Event A → Event A             -- после паузы N мс
-throttle  : ℕ → Event A → Event A             -- максимум раз в N мс
-
--- Switching
-switchE   : Event A → Event (Event A) → Event A  -- переключить Event
-
--- Merging
-mergeWith : (A → A → A) → Event A → Event A → Event A  -- merge с функцией
-
--- Accumulators
-accumE    : A → Event (A → A) → Event A        -- свёртка в Event
-
--- Deferred
-pre       : A → Signal A → Signal A            -- задержка на такт
-
--- Error handling
-catchE    : Event (Result E A) → (E → A) → Event A  -- обработка ошибок
-
--- Testing
-interpret : (Event A → Event B) → List (List A) → List (List B)  -- тестирование
-```
+| | Svelte 5 | Elm | Agdelte |
+|--|----------|-----|---------|
+| Реактивность | Магия компилятора | Архитектура | Poly + DSL |
+| Типы | TypeScript | ML | Зависимые типы |
+| Эффекты | Скрыты в $effect | Cmd (непрозрачен) | Event (явно) |
+| Композиция | Компоненты | Boilerplate | ⊗, ◁, Lens |
+| Доказательства | Нет | Нет | Возможны |
 
 ---
 
 ## Roadmap
 
 **Phase 1: MVP**
-- Signal, Event, foldp
-- Sampling комбинаторы: snapshot, attach, tag, gate, changes
-- Примитивы: interval, animationFrame, keyboard, request, websocket
-- App (init, update, view, events)
-- Html, Runtime
+- Signal, Event, комбинаторы
+- Примитивы: interval, keyboard, request, websocket
+- App, Html, Runtime
 
 **Phase 2: Расширения**
-- Dynamic (Signal + Event изменений) — идея из Reflex
-- Widget (Applicative UI) — идея из Concur
-- mouse, storage, routing
-- Конкурентность: `worker : WorkerFn A B → A → Event B` (тот же паттерн Event)
-- Focus management, keyed elements
+- Dynamic, Widget
+- Конкурентность (workers)
+- Routing, storage
 
 **Phase 3: Продвинутое**
-- Incremental (патчи для больших коллекций)
-- Индексированные типы для состояний UI
+- Incremental (патчи коллекций)
 - Session types для протоколов
-- Time-travel debugging
+- Формальная верификация
 
-> Подробнее: `architecture.md` (базовая архитектура), `arch-concurrency.md` (конкурентность)
-
----
-
-## Сравнение
-
-| Svelte Runes | Agdelte |
-|--------------|---------|
-| Магия компилятора | Стандартные абстракции |
-| `$state`, `$effect` | Signal, Event |
-| Мутация | Fold по событиям |
-| Эффекты скрыты | Эффекты = Event |
+> Подробнее: [architecture/](architecture/)
 
 ---
 
 ## Заключение
 
-- **Signal** — значения во времени
-- **Event** — события извне (всё IO)
-- **update** — чистая функция
-- **events** — декларативные подписки
+```
+Пользователь пишет:     app { init, update, view, events }
+Библиотека реализует:   Coalg, Lens, ⊗
+Теория гарантирует:     Корректность, композируемость
+```
 
-Реактивность без магии, IO без императивности, эффекты явны в типах.
+**Реактивность без магии. IO без императивности. Эффекты явны в типах.**

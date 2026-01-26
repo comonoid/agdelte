@@ -8,17 +8,29 @@ Agdelte brings the same ideas to a language with a real type system. Reactivity 
 
 ## Core Idea
 
-```agda
--- Signal: values over time (coinductive stream)
-record Signal (A : Set) : Set where
-  coinductive
-  field
-    now  : A          -- current value
-    next : Signal A   -- continuation
+Everything is a **system implementing an interface**.
 
--- Event: occurrences from the outside world
-Event A = Signal (List A)
+```agda
+-- Poly: interface (what system outputs, what it accepts)
+record Poly : Set₁ where
+  field
+    Pos : Set              -- positions (outputs)
+    Dir : Pos → Set        -- directions (inputs)
+
+-- Sys: system = coalgebra of polynomial
+record Sys (P : Poly) : Set₁ where
+  field
+    State : Set
+    pos   : State → P.Pos
+    step  : (s : State) → P.Dir (pos s) → State
+
+-- Signal, Event, App — all are Sys P for different P
+Signal A = Sys (A, λ _ → ⊤)           -- outputs A, trivial input
+Event A  = Signal (List A)            -- outputs List A
+App      = Sys (Html Msg, λ _ → Msg)  -- outputs Html, accepts Msg
 ```
+
+Theoretical foundation: **Polynomial Functors** (Spivak, Niu).
 
 **All IO is Event.** Timers, HTTP, WebSocket, animations — unified under one mechanism:
 
@@ -121,9 +133,24 @@ DOM events from `view` are handled automatically by runtime.
 | Document | Description |
 |----------|-------------|
 | [description.md](description.md) | Concise overview of the core idea |
-| [architecture.md](architecture.md) | Complete architecture for MVP implementation |
-| [arch-concurrency.md](arch-concurrency.md) | Concurrency extension (Web Workers) |
-| [vs-svelte.md](vs-svelte.md) | Detailed comparison with Svelte 5 (10 examples) |
+| [architecture/](architecture/) | Full architecture documentation |
+
+### Architecture
+
+| Document | Description |
+|----------|-------------|
+| [architecture/README.md](architecture/README.md) | Three-layer architecture (Poly foundation + Elm-like DSL) |
+| [architecture/concurrency.md](architecture/concurrency.md) | Concurrency extension (Web Workers) |
+| [architecture/vs-svelte.md](architecture/vs-svelte.md) | Detailed comparison with Svelte 5 |
+| [architecture/vs-vue3.md](architecture/vs-vue3.md) | Feature comparison with Vue 3 |
+
+### Reference
+
+| Document | Description |
+|----------|-------------|
+| [architecture/time-model.md](architecture/time-model.md) | Time model: ticks, animationFrame, fixed timestep |
+| [architecture/combinators.md](architecture/combinators.md) | All combinators with types and examples |
+| [architecture/ffi.md](architecture/ffi.md) | JavaScript FFI implementations |
 
 ## Project Structure
 
@@ -221,7 +248,7 @@ events m = if m.computing
 -- Event disappears → worker cancelled (automatic cleanup)
 ```
 
-Structured concurrency, automatic resource management, no leaks. See [arch-concurrency.md](arch-concurrency.md).
+Structured concurrency, automatic resource management, no leaks. See [architecture/concurrency.md](architecture/concurrency.md).
 
 ## Roadmap
 
