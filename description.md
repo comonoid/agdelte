@@ -44,10 +44,11 @@ never = pure []           -- каждый такт — пустой список
 Любое взаимодействие с внешним миром — события, которые приходят в систему:
 
 ```agda
-interval  : ℕ → Event ⊤              -- тики таймера
-keyboard  : Event Key                -- нажатия клавиш
-request   : Request → Event Response -- HTTP ответы
-websocket : Url → WebSocket          -- WebSocket канал (recv + send)
+interval       : ℕ → Event ⊤              -- тики таймера
+animationFrame : Event FrameInfo          -- кадры браузера (~60 FPS) с delta time
+keyboard       : Event Key                -- нажатия клавиш
+request        : Request → Event Response -- HTTP ответы
+websocket      : Url → WebSocket          -- WebSocket канал (recv + send)
 ```
 
 WebSocket — двунаправленный канал:
@@ -201,10 +202,38 @@ Runtime управляет подписками декларативно: Event 
 **Композиция.** Event комбинируются стандартными операциями:
 
 ```agda
-never  : Event A                        -- ничего
-merge  : Event A → Event A → Event A    -- объединить два потока
-map    : (A → B) → Event A → Event B    -- преобразовать события
-filter : (A → Bool) → Event A → Event A -- отфильтровать
+-- Базовые
+never     : Event A                           -- ничего
+merge     : Event A → Event A → Event A       -- объединить два потока
+mapE      : (A → B) → Event A → Event B       -- преобразовать события
+filterE   : (A → Bool) → Event A → Event A    -- отфильтровать
+
+-- Sampling (взаимодействие Event и Signal)
+snapshot  : (A → B → C) → Event A → Signal B → Event C  -- семплировать Signal
+gate      : Event A → Signal Bool → Event A   -- фильтр по Signal
+changes   : Signal A → Event A                -- события изменения Signal
+
+-- Time-based
+debounce  : ℕ → Event A → Event A             -- после паузы N мс
+throttle  : ℕ → Event A → Event A             -- максимум раз в N мс
+
+-- Switching
+switchE   : Event A → Event (Event A) → Event A  -- переключить Event
+
+-- Merging
+mergeWith : (A → A → A) → Event A → Event A → Event A  -- merge с функцией
+
+-- Accumulators
+accumE    : A → Event (A → A) → Event A        -- свёртка в Event
+
+-- Deferred
+pre       : A → Signal A → Signal A            -- задержка на такт
+
+-- Error handling
+catchE    : Event (Result E A) → (E → A) → Event A  -- обработка ошибок
+
+-- Testing
+interpret : (Event A → Event B) → List (List A) → List (List B)  -- тестирование
 ```
 
 ---
@@ -213,17 +242,20 @@ filter : (A → Bool) → Event A → Event A -- отфильтровать
 
 **Phase 1: MVP**
 - Signal, Event, foldp
-- Примитивы: interval, keyboard, request, websocket
+- Sampling комбинаторы: snapshot, attach, tag, gate, changes
+- Примитивы: interval, animationFrame, keyboard, request, websocket
 - App (init, update, view, events)
 - Html, Runtime
 
 **Phase 2: Расширения**
+- Dynamic (Signal + Event изменений) — идея из Reflex
+- Widget (Applicative UI) — идея из Concur
 - mouse, storage, routing
 - Конкурентность: `worker : WorkerFn A B → A → Event B` (тот же паттерн Event)
 - Focus management, keyed elements
-- Higher-order: `join : Signal (Signal A) → Signal A`
 
-**Phase 3: Типизация состояний**
+**Phase 3: Продвинутое**
+- Incremental (патчи для больших коллекций)
 - Индексированные типы для состояний UI
 - Session types для протоколов
 - Time-travel debugging

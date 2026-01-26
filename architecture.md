@@ -39,6 +39,293 @@
 
 Исключение: события внутри одного DOM event (например, `input` с несколькими символами при paste) — приходят как один такт со списком.
 
+### Модель времени
+
+Agdelte использует **дискретное время** по образцу игровых движков, а не непрерывное время классического FRP (Conal Elliott).
+
+#### Почему не непрерывное время?
+
+Классический FRP определяет:
+
+```haskell
+type Behavior a = Time → a  -- Time ∈ ℝ (непрерывное)
+```
+
+**Проблемы непрерывного времени:**
+
+| Проблема | Описание |
+|----------|----------|
+| Невычислимость | Компьютер дискретен — непрерывное время это иллюзия |
+| Time leaks | `Behavior` может требовать всю историю значений |
+| Неопределённость | Когда именно вычислять? При каждом событии? 60 FPS? |
+| Накопление thunks | Ленивость приводит к утечкам памяти |
+
+**Решение Agdelte:** время дискретно, такт — атомарная единица.
+
+```
+Непрерывное (Conal Elliott):     Дискретное (Agdelte):
+
+  Behavior a = Time → a            Signal a = now + next
+  "значение в КАЖДЫЙ момент"       "значение в КАЖДЫЙ ТАКТ"
+
+  Реальность: сэмплируем           Реальность: именно так
+  в дискретные моменты             и вычисляем
+```
+
+#### Уровни времени
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  Agdelte Time Architecture                   │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Level 1: Logical Time (такты)                              │
+│  ─────────────────────────────                              │
+│  • Событие = один такт                                      │
+│  • UI: клики, input, HTTP, WebSocket                        │
+│  • Между событиями — idle (эффективно!)                     │
+│  • Примитивы: interval, keyboard, request                   │
+│                                                              │
+│  Level 2: Frame Time (кадры)                                │
+│  ─────────────────────────────                              │
+│  • requestAnimationFrame                                     │
+│  • dt = миллисекунды с прошлого кадра                       │
+│  • Для: CSS-анимации, transitions, плавные эффекты          │
+│  • Примитив: animationFrame                                  │
+│                                                              │
+│  Level 3: Physics Time (фиксированный шаг)                  │
+│  ─────────────────────────────────────────                  │
+│  • Фиксированный dt (например, 16ms = 60Hz)                 │
+│  • Детерминизм: одинаковый input → одинаковый результат     │
+│  • Для: игры, симуляции, физика                             │
+│  • Модуль: Agdelte.Physics                                   │
+│                                                              │
+│  Level 4: Continuous Time — НЕТ                             │
+│  ──────────────────────────────                             │
+│  • Аппроксимируется через Level 2/3                         │
+│  • "Интеграл" = сумма по dt                                 │
+│  • Это честно, и это работает                               │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Примитив animationFrame
+
+```agda
+-- Событие на каждый кадр браузера (~60 FPS)
+animationFrame : Event FrameInfo
+
+record FrameInfo : Set where
+  field
+    dt  : ℕ    -- миллисекунды с прошлого кадра (обычно 16-17)
+    fps : ℕ    -- текущий FPS (вычисляется runtime)
+```
+
+**Использование:**
+
+```agda
+data Msg = Tick FrameInfo | StartAnimation | StopAnimation
+
+record Model : Set where
+  field
+    position  : ℕ      -- пиксели
+    velocity  : ℕ      -- пиксели/секунду
+    animating : Bool
+
+app : App Msg Model
+app = record
+  { init = { position = 0; velocity = 200; animating = false }
+
+  ; update = λ where
+      (Tick frame) m → record m
+        { position = m.position + m.velocity * frame.dt / 1000 }
+      StartAnimation m → record m { animating = true }
+      StopAnimation m → record m { animating = false }
+
+  ; view = λ m → div []
+      [ div [ style [("transform", "translateX(" ++ show m.position ++ "px)")] ]
+          [ text "●" ]
+      , text ("FPS: " ++ show frame.fps)
+      , button [ onClick (if m.animating then StopAnimation else StartAnimation) ]
+          [ text (if m.animating then "Stop" else "Start") ]
+      ]
+
+  ; events = λ m →
+      if m.animating
+      then mapE Tick animationFrame
+      else never  -- не крутим цикл без необходимости
+  }
+```
+
+**Ключевое:** когда `animating = false`, события не генерируются — браузер idle, батарея не тратится.
+
+#### Fixed Timestep (для игр и физики)
+
+Проблема variable timestep:
+
+```
+Frame 1: dt = 16ms  → position += velocity * 0.016
+Frame 2: dt = 100ms → position += velocity * 0.100  // лаг!
+         ↑
+    Объект "пролетает" сквозь стену
+```
+
+Решение — fixed timestep (как в игровых движках):
+
+```agda
+module Agdelte.Physics where
+
+-- Фиксированная частота физики
+PHYSICS_HZ : ℕ
+PHYSICS_HZ = 60
+
+FIXED_DT : ℕ
+FIXED_DT = 1000 / PHYSICS_HZ  -- 16ms
+
+-- Состояние физической симуляции
+record PhysicsModel (A : Set) : Set where
+  field
+    current     : A      -- текущее состояние (после последнего шага)
+    previous    : A      -- предыдущее (для интерполяции рендеринга)
+    accumulator : ℕ      -- накопленное время
+
+-- Шаг физики (ВСЕГДА вызывается с одинаковым dt!)
+PhysicsStep : Set → Set
+PhysicsStep A = A → A
+
+-- Обновление: может выполнить 0, 1 или несколько шагов физики
+updatePhysics : PhysicsStep A → ℕ → PhysicsModel A → PhysicsModel A
+updatePhysics step dt model = go (record model { accumulator = model.accumulator + dt })
+  where
+    go : PhysicsModel A → PhysicsModel A
+    go m = if m.accumulator >= FIXED_DT
+           then go (record m
+             { current = step (m.current)
+             ; previous = m.current
+             ; accumulator = m.accumulator - FIXED_DT
+             })
+           else m
+
+-- Интерполяция для плавного рендеринга между шагами физики
+interpolate : Lerp A → PhysicsModel A → A
+interpolate lerp m =
+  let alpha = m.accumulator * 1000 / FIXED_DT  -- 0..1000
+  in lerp (m.previous) (m.current) alpha
+
+-- Typeclass для интерполяции
+Lerp : Set → Set
+Lerp A = A → A → ℕ → A  -- from → to → alpha(0-1000) → result
+```
+
+**Пример: прыгающий мяч**
+
+```agda
+record Ball : Set where
+  field
+    y  : ℤ    -- позиция (миллиметры для точности)
+    vy : ℤ    -- скорость (мм/с)
+
+GRAVITY : ℤ
+GRAVITY = -9800  -- мм/с² (ускорение свободного падения)
+
+-- Один шаг физики (dt = FIXED_DT = 16ms)
+ballStep : PhysicsStep Ball
+ballStep b =
+  let newVy = b.vy + GRAVITY * FIXED_DT / 1000
+      newY  = b.y + newVy * FIXED_DT / 1000
+      -- Отскок от земли (y = 0)
+      (y', vy') = if newY < 0
+                  then (0, negate newVy * 80 / 100)  -- 80% энергии сохраняется
+                  else (newY, newVy)
+  in record { y = y'; vy = vy' }
+
+-- Линейная интерполяция для рендеринга
+lerpBall : Lerp Ball
+lerpBall a b alpha = record
+  { y  = a.y + (b.y - a.y) * alpha / 1000
+  ; vy = b.vy  -- скорость не интерполируем
+  }
+
+-- Приложение
+data Msg = Frame FrameInfo | Drop
+
+record Model : Set where
+  field
+    physics : PhysicsModel Ball
+    running : Bool
+
+ballApp : App Msg Model
+ballApp = record
+  { init =
+      { physics = { current = { y = 5000; vy = 0 }
+                  ; previous = { y = 5000; vy = 0 }
+                  ; accumulator = 0 }
+      ; running = false
+      }
+
+  ; update = λ where
+      (Frame f) m → record m { physics = updatePhysics ballStep f.dt m.physics }
+      Drop m → record m
+        { physics = resetPhysics { y = 5000; vy = 0 }
+        ; running = true
+        }
+
+  ; view = λ m →
+      let ball = interpolate lerpBall m.physics
+          yPx = ball.y / 10  -- мм → пиксели
+      in div [ className "game" ]
+        [ div [ className "ball"
+              , style [("bottom", show yPx ++ "px")]
+              ] [ text "🔴" ]
+        , button [ onClick Drop ] [ text "Drop Ball" ]
+        , text ("FPS: " ++ show (getLastFps m))
+        ]
+
+  ; events = λ m →
+      if m.running
+      then mapE Frame animationFrame
+      else never
+  }
+```
+
+**Преимущества fixed timestep:**
+
+| Свойство | Variable dt | Fixed dt |
+|----------|-------------|----------|
+| Детерминизм | ❌ Зависит от FPS | ✅ Всегда одинаково |
+| Replay | ❌ Нужно сохранять dt | ✅ Только input |
+| Стабильность | ❌ Глитчи при лагах | ✅ Физика не ломается |
+| Сетевая игра | ❌ Рассинхрон | ✅ Lockstep возможен |
+
+#### Сравнение с другими FRP-системами
+
+| Система | Модель времени | Комментарий |
+|---------|----------------|-------------|
+| Fran (Conal Elliott) | Непрерывное | Красиво математически, проблемы на практике |
+| Yampa | Дискретное (SF) | Signal Functions, нет time leaks |
+| Reflex | Дискретное | Spider timeline, практичный |
+| Elm | Дискретное | Такты по событиям |
+| Игровые движки | Fixed timestep | Индустриальный стандарт |
+| **Agdelte** | **Дискретное + fixed** | Такты + опциональный fixed timestep |
+
+#### Итог
+
+```
+Событийное время (UI):     Кадровое время (анимации):    Физическое время (игры):
+
+  Event ───► Такт            animationFrame               Fixed timestep
+     │                            │                            │
+     ▼                            ▼                            ▼
+  update                    update(dt)                   updatePhysics(dt)
+  render                      render                    interpolate + render
+     │                            │                            │
+     ▼                            ▼                            ▼
+   idle                    requestAnimationFrame         while(acc >= FIXED_DT)
+ (ждём событие)              (следующий кадр)              step(FIXED_DT)
+```
+
+**Философия:** время дискретно на всех уровнях. Непрерывное время — полезная абстракция для математики, но не для реализации.
+
 ## Обзор
 
 ```
@@ -178,6 +465,611 @@ partitionE : (A → Bool) → Event A → Event A × Event A
 partitionE p e = (filterE p e , filterE (not ∘ p) e)
 ```
 
+### Sampling комбинаторы
+
+Комбинаторы для взаимодействия Event и Signal. Взяты из Sodium и Reactive-banana.
+
+```agda
+-- snapshot: при событии A взять текущее значение Signal B, применить f
+snapshot : (A → B → C) → Event A → Signal B → Event C
+snapshot f e s .now  = List.map (λ a → f a (s .now)) (e .now)
+snapshot f e s .next = snapshot f (e .next) (s .next)
+
+-- attach: при событии приложить текущее значение Signal
+attach : Event A → Signal B → Event (A × B)
+attach = snapshot _,_
+
+-- tag: при событии взять текущее значение Signal (игнорируя значение события)
+tag : Signal A → Event B → Event A
+tag s e = snapshot (λ _ a → a) e s
+
+-- sample: синоним tag с другим порядком аргументов
+sample : Event A → Signal B → Event B
+sample e s = snapshot (λ _ b → b) e s
+
+-- gate: пропускать события только когда Signal Bool = true
+gate : Event A → Signal Bool → Event A
+gate e s .now  = if s .now then e .now else []
+gate e s .next = gate (e .next) (s .next)
+```
+
+**Примеры использования:**
+
+```agda
+-- 1. При клике на "Save" взять текущий текст из поля ввода
+saveClicks : Event ⊤
+currentText : Signal String
+
+savedText : Event String
+savedText = tag currentText saveClicks
+-- или: savedText = sample saveClicks currentText
+
+-- 2. При отправке формы собрать все поля
+data FormData : Set where
+  mkForm : String → String → FormData
+
+submitEvent : Event ⊤
+nameSignal : Signal String
+emailSignal : Signal String
+
+formSubmit : Event FormData
+formSubmit = snapshot (λ _ name →
+               snapshot (λ _ email → mkForm name email)
+                        submitEvent emailSignal)
+             submitEvent nameSignal
+
+-- Или элегантнее с Applicative:
+formSubmit = tag (pure mkForm <*> nameSignal <*> emailSignal) submitEvent
+
+-- 3. Клики только когда кнопка активна
+rawClicks : Event ⊤
+isEnabled : Signal Bool
+
+activeClicks : Event ⊤
+activeClicks = gate rawClicks isEnabled
+
+-- 4. Применить текущую операцию к данным события
+currentOp : Signal (ℕ → ℕ)  -- например, (*2) или (+10)
+numbers : Event ℕ
+
+processed : Event ℕ
+processed = snapshot (λ n f → f n) numbers currentOp
+```
+
+### Детекция изменений
+
+```agda
+-- changes: генерирует событие когда Signal меняет значение
+changes : ⦃ Eq A ⦄ → Signal A → Event A
+changes s .now  = []  -- в первый такт нет "изменения"
+changes s .next .now  = if s .now ≡ s .next .now
+                        then []
+                        else [ s .next .now ]
+changes s .next .next = changes (s .next) .next
+
+-- Альтернативная реализация через zip
+changes' : ⦃ Eq A ⦄ → Signal A → Event A
+changes' s = filterE (uncurry (_≠_)) (attach (drop 1 (toEvent s)) s)
+  where
+    drop : ℕ → Event A → Event A
+    drop 0 e = e
+    drop (suc n) e = drop n (e .next)
+
+    toEvent : Signal A → Event A
+    toEvent s .now = [ s .now ]
+    toEvent s .next = toEvent (s .next)
+```
+
+**Пример: реагировать только на изменение выбранной вкладки**
+
+```agda
+data Tab = Tab1 | Tab2 | Tab3
+
+currentTab : Signal Tab
+
+-- БЕЗ changes: обработчик вызывается каждый такт
+-- tabEvents = mapE handle (toEvent currentTab)  -- плохо!
+
+-- С changes: только при реальном изменении
+tabChanged : Event Tab
+tabChanged = changes currentTab
+
+-- Загрузить данные при переключении вкладки
+events m = merge
+  (mapE LoadTabData tabChanged)  -- только при изменении
+  (otherEvents m)
+```
+
+### Дополнительные комбинаторы
+
+```agda
+-- split: разделить Event (Either A B) на два Event
+split : Event (Either A B) → Event A × Event B
+split e = (filterMap leftToMaybe e , filterMap rightToMaybe e)
+  where
+    leftToMaybe : Either A B → Maybe A
+    leftToMaybe (Left a) = Just a
+    leftToMaybe (Right _) = Nothing
+
+    rightToMaybe : Either A B → Maybe B
+    rightToMaybe (Left _) = Nothing
+    rightToMaybe (Right b) = Just b
+
+-- filterMap: map + filter в одном (как mapMaybe)
+filterMap : (A → Maybe B) → Event A → Event B
+filterMap f e .now  = List.mapMaybe f (e .now)
+filterMap f e .next = filterMap f (e .next)
+
+-- fan: разделить по функции (обобщение split)
+fan : Event A → (A → Either B C) → Event B × Event C
+fan e f = split (mapE f e)
+
+-- leftmost: взять первое событие из списка (приоритет слева)
+leftmost : List (Event A) → Event A
+leftmost [] = never
+leftmost (e ∷ es) .now = case e .now of
+  [] → leftmost es .now
+  xs → xs  -- нашли события, остальные игнорируем
+leftmost (e ∷ es) .next = leftmost (e .next ∷ List.map next es)
+
+-- difference: события из первого, которых нет во втором (по значению)
+difference : ⦃ Eq A ⦄ → Event A → Event A → Event A
+difference e1 e2 .now  = filter (λ a → not (elem a (e2 .now))) (e1 .now)
+difference e1 e2 .next = difference (e1 .next) (e2 .next)
+```
+
+### Time-based комбинаторы
+
+Комбинаторы для работы с временными задержками. Критически важны для UI.
+
+```agda
+-- debounce: событие только после паузы в N мс
+-- Если новое событие приходит до истечения таймера — таймер сбрасывается
+debounce : ℕ → Event A → Event A
+
+-- throttle: максимум одно событие за N мс
+-- Первое событие проходит сразу, следующие игнорируются до истечения периода
+throttle : ℕ → Event A → Event A
+
+-- delay: задержка события на N мс
+delay : ℕ → Event A → Event A
+
+-- timeout: событие ⊤ если ничего не пришло за N мс
+timeout : ℕ → Event A → Event ⊤
+
+-- after: событие через N мс после исходного
+after : ℕ → Event A → Event A
+```
+
+**Семантика debounce:**
+
+```
+Входные события:  [a]  []  [b]  []  []  []  [c]  []  []  []  []  []
+Время (мс):        0   16   32  48  64  80  96  112 128 144 160 176
+                   ↑        ↑                ↑
+                   │        │                └─ сброс таймера
+                   │        └─ сброс таймера
+                   └─ старт таймера
+
+debounce 50:      []  []  []  []  []  []  []  []  []  []  [c]  []
+                                                          ↑
+                                               50мс после последнего события
+```
+
+**Семантика throttle:**
+
+```
+Входные события:  [a]  [b]  [c]  []  []  []  [d]  [e]  []  []
+Время (мс):        0   16   32  48  64  80  96  112 128 144
+                   ↑    ↓    ↓              ↑    ↓
+                   │    │    │              │    └─ игнорируется
+                   │    │    │              └─ проходит (период истёк)
+                   │    │    └─ игнорируется
+                   │    └─ игнорируется
+                   └─ проходит, старт периода
+
+throttle 50:      [a]  []  []  []  []  []  [d]  []  []  []
+```
+
+**FFI реализация:**
+
+```javascript
+const debounce = (ms) => (event) => ({
+  _type: 'debounce',
+  _args: [ms, event],
+
+  subscribe: (emit) => {
+    let timerId = null
+    let lastValue = null
+
+    const innerUnsub = event.subscribe((values) => {
+      if (values.length > 0) {
+        lastValue = values[values.length - 1]  // берём последнее
+
+        if (timerId) clearTimeout(timerId)
+        timerId = setTimeout(() => {
+          emit([lastValue])
+          timerId = null
+        }, ms)
+      }
+    })
+
+    return { innerUnsub, timerId }
+  },
+
+  unsubscribe: ({ innerUnsub, timerId }) => {
+    if (timerId) clearTimeout(timerId)
+    innerUnsub()
+  }
+})
+
+const throttle = (ms) => (event) => ({
+  _type: 'throttle',
+  _args: [ms, event],
+
+  subscribe: (emit) => {
+    let lastEmit = 0
+
+    const innerUnsub = event.subscribe((values) => {
+      const now = performance.now()
+      if (values.length > 0 && now - lastEmit >= ms) {
+        emit([values[0]])  // берём первое
+        lastEmit = now
+      }
+    })
+
+    return innerUnsub
+  },
+
+  unsubscribe: (innerUnsub) => innerUnsub()
+})
+```
+
+**Пример: поиск с debounce**
+
+```agda
+data Msg = UpdateQuery String | Search String | GotResults (List Result)
+
+record Model : Set where
+  field
+    query    : String
+    results  : List Result
+    loading  : Bool
+
+app : App Msg Model
+app = record
+  { init = { query = ""; results = []; loading = false }
+
+  ; update = λ where
+      (UpdateQuery q) m → record m { query = q }
+      (Search q) m → record m { loading = true }
+      (GotResults rs) m → record m { loading = false; results = rs }
+
+  ; view = λ m → div []
+      [ input [ value (m .query)
+              , onInput UpdateQuery
+              , placeholder "Search..."
+              ] []
+      , if m .loading
+        then text "Searching..."
+        else ul [] (map viewResult (m .results))
+      ]
+
+  ; events = λ m →
+      let queryChanges = changes (pure (m .query))  -- Signal → Event
+          debouncedQuery = debounce 300 queryChanges  -- ждём 300мс паузы
+      in merge
+        (mapE Search debouncedQuery)
+        (if m .loading
+         then mapE GotResults (request (searchApi (m .query)))
+         else never)
+  }
+```
+
+**Пример: throttle для scroll**
+
+```agda
+-- Обновлять позицию скролла максимум 60 раз в секунду
+scrollPosition : Event ℕ
+scrollPosition = throttle 16 rawScrollEvents  -- ~60 FPS
+```
+
+### Switching комбинаторы
+
+Динамическое переключение между Event/Signal. Идея из Reflex и Sodium.
+
+```agda
+-- switchE: переключиться на новый Event при каждом событии
+switchE : Event A → Event (Event A) → Event A
+
+-- Семантика:
+-- Начинаем со первого Event
+-- При событии во втором — переключаемся на Event из этого события
+-- Старый Event отписывается, новый подписывается
+
+switchE initial switch .now =
+  case switch .now of
+    []       → initial .now
+    (e ∷ _)  → e .now  -- переключились на новый Event
+switchE initial switch .next =
+  case switch .now of
+    []       → switchE (initial .next) (switch .next)
+    (e ∷ _)  → switchE (e .next) (switch .next)
+
+-- switchB / switchS: переключение Signal
+switchS : Signal A → Event (Signal A) → Signal A
+switchS initial switch .now = initial .now
+switchS initial switch .next =
+  case switch .now of
+    []       → switchS (initial .next) (switch .next)
+    (s ∷ _)  → switchS s (switch .next)  -- новый Signal
+
+-- switcher: удобный синоним для switchS
+switcher : Signal A → Event (Signal A) → Signal A
+switcher = switchS
+
+-- switchDyn: для Dynamic
+switchDyn : Dynamic A → Event (Dynamic A) → Dynamic A
+
+-- join для Event (безопасный — не вызывает time leaks)
+coincidence : Event (Event A) → Event A
+-- При событии внешнего Event — взять текущие события внутреннего
+coincidence ee .now = case ee .now of
+  []       → []
+  (e ∷ es) → e .now ++ concatMap (.now) es
+coincidence ee .next = coincidence (ee .next)
+
+-- switchHold: переключиться и держать
+switchHold : Event A → Event (Event A) → Event A
+switchHold = switchE
+```
+
+**Пример: вкладки с разными источниками событий**
+
+```agda
+data Tab = Users | Posts | Settings
+data Msg = SelectTab Tab | TabMsg TabMsg | ...
+
+-- Каждая вкладка имеет свои события
+usersEvents   : Model → Event TabMsg
+postsEvents   : Model → Event TabMsg
+settingsEvents : Model → Event TabMsg
+
+-- Выбрать события для текущей вкладки
+currentTabEvents : Tab → Model → Event TabMsg
+currentTabEvents Users m    = usersEvents m
+currentTabEvents Posts m    = postsEvents m
+currentTabEvents Settings m = settingsEvents m
+
+-- Переключение при смене вкладки
+events m =
+  let tabChange = changes (pure (m .currentTab))
+      switched = switchE
+        (currentTabEvents (m .currentTab) m)
+        (mapE (λ tab → currentTabEvents tab m) tabChange)
+  in mapE TabMsg switched
+```
+
+**Пример: форма с динамическими полями**
+
+```agda
+-- Тип формы меняется в зависимости от выбора
+data FormType = Simple | Advanced
+
+simpleFormEvents : Event FormMsg
+advancedFormEvents : Event FormMsg  -- больше полей, валидация
+
+formEvents : Signal FormType → Event FormMsg
+formEvents formType = switchE
+  simpleFormEvents
+  (mapE selectForm (changes formType))
+  where
+    selectForm Simple   = simpleFormEvents
+    selectForm Advanced = advancedFormEvents
+```
+
+**Пример: переключение WebSocket соединений**
+
+```agda
+-- При смене сервера — переподключиться
+data Msg = SelectServer Url | WsMsg WsEvent
+
+currentWs : Signal Url → Event WsEvent
+currentWs serverUrl = switchE
+  (websocket (serverUrl .now) .recv)                    -- начальный
+  (mapE (λ url → websocket url .recv) (changes serverUrl))  -- при смене
+```
+
+### Merging комбинаторы
+
+Разные стратегии объединения событий.
+
+```agda
+-- Текущий merge: конкатенация списков
+merge : Event A → Event A → Event A
+merge e1 e2 .now = e1 .now ++ e2 .now
+
+-- mergeWith: объединить одновременные события функцией
+mergeWith : (A → A → A) → Event A → Event A → Event A
+mergeWith f e1 e2 .now = case (e1 .now, e2 .now) of
+  ([], [])     → []
+  (xs, [])     → xs
+  ([], ys)     → ys
+  (x ∷ _, y ∷ _) → [ f x y ]  -- объединяем первые
+mergeWith f e1 e2 .next = mergeWith f (e1 .next) (e2 .next)
+
+-- mergeAll: свернуть все события в такте
+mergeAll : (A → A → A) → A → Event A → Event A
+mergeAll f init e .now = case e .now of
+  [] → []
+  xs → [ foldl f init xs ]
+mergeAll f init e .next = mergeAll f init (e .next)
+
+-- unionWith: как mergeWith, но с приоритетом левого
+unionWith : (A → A → A) → Event A → Event A → Event A
+-- Если оба события — применить f
+-- Если только левое — взять его
+-- Если только правое — взять его
+
+-- alignWith: объединение событий разных типов
+data These A B = This A | That B | Both A B
+
+alignWith : (These A B → C) → Event A → Event B → Event C
+alignWith f ea eb .now = case (ea .now, eb .now) of
+  ([], [])     → []
+  (a ∷ _, [])  → [ f (This a) ]
+  ([], b ∷ _)  → [ f (That b) ]
+  (a ∷ _, b ∷ _) → [ f (Both a b) ]
+alignWith f ea eb .next = alignWith f (ea .next) (eb .next)
+
+-- align: alignWith с сохранением These
+align : Event A → Event B → Event (These A B)
+align = alignWith id
+```
+
+**Пример: mergeWith для приоритетов**
+
+```agda
+-- Два источника команд, локальный приоритетнее
+localCommands : Event Command
+remoteCommands : Event Command
+
+-- При одновременных командах — выполнить локальную
+commands : Event Command
+commands = mergeWith (λ local _ → local) localCommands remoteCommands
+```
+
+**Пример: alignWith для синхронизации**
+
+```agda
+-- Синхронизация двух потоков данных
+userUpdates : Event User
+profileUpdates : Event Profile
+
+-- Объединить в один поток обновлений
+data Update = UserOnly User | ProfileOnly Profile | Both User Profile
+
+syncedUpdates : Event Update
+syncedUpdates = alignWith toUpdate userUpdates profileUpdates
+  where
+    toUpdate (This u)     = UserOnly u
+    toUpdate (That p)     = ProfileOnly p
+    toUpdate (Both u p)   = Both u p
+
+-- В update обрабатываем все случаи
+update (SyncUpdate upd) m = case upd of
+  UserOnly u   → record m { user = u }
+  ProfileOnly p → record m { profile = p }
+  Both u p     → record m { user = u; profile = p }
+```
+
+**Пример: align для join**
+
+```agda
+-- Ждать оба события (как Applicative для Event)
+both : Event A → Event B → Event (A × B)
+both ea eb = filterMap extract (align ea eb)
+  where
+    extract (Both a b) = Just (a , b)
+    extract _          = Nothing
+
+-- Пример: ждать и пользователя и его настройки
+userAndSettings : Event (User × Settings)
+userAndSettings = both (request getUser) (request getSettings)
+```
+
+### Сводка комбинаторов Event
+
+#### Базовые
+
+| Комбинатор | Тип | Описание |
+|------------|-----|----------|
+| `never` | `Event A` | Никогда не происходит |
+| `occur` | `A → Event A` | Одно событие сейчас |
+| `merge` | `Event A → Event A → Event A` | Объединить потоки |
+| `mapE` | `(A → B) → Event A → Event B` | Преобразовать |
+| `filterE` | `(A → Bool) → Event A → Event A` | Отфильтровать |
+| `filterMap` | `(A → Maybe B) → Event A → Event B` | Map + filter |
+| `partitionE` | `(A → Bool) → Event A → Event A × Event A` | Разделить по предикату |
+| `split` | `Event (Either A B) → Event A × Event B` | Разделить Either |
+| `leftmost` | `List (Event A) → Event A` | Первое событие (приоритет) |
+| `difference` | `Event A → Event A → Event A` | Разница множеств |
+
+#### Sampling (Event + Signal)
+
+| Комбинатор | Тип | Описание |
+|------------|-----|----------|
+| `snapshot` | `(A → B → C) → Event A → Signal B → Event C` | Семплировать Signal |
+| `attach` | `Event A → Signal B → Event (A × B)` | Приложить Signal |
+| `tag` | `Signal A → Event B → Event A` | Взять значение Signal |
+| `gate` | `Event A → Signal Bool → Event A` | Фильтр по Signal |
+| `changes` | `Signal A → Event A` | События изменения |
+
+#### Time-based
+
+| Комбинатор | Тип | Описание |
+|------------|-----|----------|
+| `debounce` | `ℕ → Event A → Event A` | После паузы N мс |
+| `throttle` | `ℕ → Event A → Event A` | Максимум раз в N мс |
+| `delay` | `ℕ → Event A → Event A` | Задержка на N мс |
+| `timeout` | `ℕ → Event A → Event ⊤` | Событие если тишина N мс |
+| `after` | `ℕ → Event A → Event A` | Через N мс после |
+
+#### Switching
+
+| Комбинатор | Тип | Описание |
+|------------|-----|----------|
+| `switchE` | `Event A → Event (Event A) → Event A` | Переключить Event |
+| `switchS` | `Signal A → Event (Signal A) → Signal A` | Переключить Signal |
+| `coincidence` | `Event (Event A) → Event A` | Join для Event |
+
+#### Merging
+
+| Комбинатор | Тип | Описание |
+|------------|-----|----------|
+| `mergeWith` | `(A → A → A) → Event A → Event A → Event A` | Merge с функцией |
+| `mergeAll` | `(A → A → A) → A → Event A → Event A` | Свернуть все в такте |
+| `alignWith` | `(These A B → C) → Event A → Event B → Event C` | Объединить разные типы |
+| `align` | `Event A → Event B → Event (These A B)` | Выровнять события |
+
+#### Accumulators
+
+| Комбинатор | Тип | Описание |
+|------------|-----|----------|
+| `foldp` | `(A → B → B) → B → Event A → Signal B` | Свёртка в Signal |
+| `hold` | `A → Event A → Signal A` | Запомнить последнее |
+| `accumE` | `A → Event (A → A) → Event A` | Свёртка в Event |
+| `accumB` | `A → Event (A → A) → Signal A` | foldp с функциями |
+| `mapAccum` | `(A → S → S × B) → S → Event A → Event B` | Map + accumulate |
+
+#### Deferred
+
+| Комбинатор | Тип | Описание |
+|------------|-----|----------|
+| `pre` | `A → Signal A → Signal A` | Задержка на такт |
+| `delayS` | `ℕ → A → Signal A → Signal A` | Задержка на N тактов |
+| `edge` | `Signal Bool → Event ⊤` | Событие на фронте |
+| `risingEdge` | `Signal Bool → Event ⊤` | Передний фронт |
+| `fallingEdge` | `Signal Bool → Event ⊤` | Задний фронт |
+
+#### Error Handling
+
+| Комбинатор | Тип | Описание |
+|------------|-----|----------|
+| `filterOk` | `Event (Result E A) → Event A` | Только успехи |
+| `filterErr` | `Event (Result E A) → Event E` | Только ошибки |
+| `partitionResult` | `Event (Result E A) → Event A × Event E` | Разделить |
+| `catchE` | `Event (Result E A) → (E → A) → Event A` | Обработать ошибку |
+
+#### Testing
+
+| Комбинатор | Тип | Описание |
+|------------|-----|----------|
+| `interpret` | `(Event A → Event B) → List (List A) → List (List B)` | Тест Event |
+| `interpretS` | `(Signal A → Signal B) → List A → List B` | Тест Signal |
+| `interpretApp` | `App Msg Model → List (List Msg) → List Model` | Тест App |
+| `collectN` | `ℕ → Event A → List (List A)` | Собрать N тактов |
+
 **Примечание:** `mapE` для Event отличается от `map` для Signal:
 - `map : (A → B) → Signal A → Signal B` — применяет к `now`
 - `mapE : (A → B) → Event A → Event B` — применяет к каждому элементу списка
@@ -207,6 +1099,378 @@ hold init e .next = hold (fromMaybe init (lastMaybe (e .now))) (e .next)
     fromMaybe _   (Just x) = x
 ```
 
+### Accumulator Variants
+
+Разные способы накопления состояния из событий. Идеи из Reactive-banana.
+
+```agda
+-- accumE: применить функции к аккумулятору, выдать СОБЫТИЕ с результатом
+-- В отличие от foldp, возвращает Event, не Signal
+accumE : A → Event (A → A) → Event A
+accumE init e .now  = case e .now of
+  []       → []
+  (f ∷ fs) → [ foldl (λ a g → g a) (f init) fs ]  -- применить все функции
+accumE init e .next = accumE (foldl (λ a f → f a) init (e .now)) (e .next)
+
+-- accumB: как foldp, но принимает функции (синоним для удобства)
+accumB : A → Event (A → A) → Signal A
+accumB init e = foldp (λ f a → f a) init e
+
+-- stepper: запомнить последнее значение
+-- Отличие от hold: семантика timing (когда именно меняется)
+stepper : A → Event A → Signal A
+stepper = hold  -- в дискретном времени эквивалентны
+
+-- mapAccum: комбинация accumE и mapE
+-- Обрабатывает событие, обновляет состояние, выдаёт результат
+mapAccum : (A → S → S × B) → S → Event A → Event B
+mapAccum f init e .now = case e .now of
+  []       → []
+  (a ∷ as) → let (s', b) = f a init
+             in b ∷ mapAccum' f s' as
+  where
+    mapAccum' : (A → S → S × B) → S → List A → List B
+    mapAccum' f s []       = []
+    mapAccum' f s (a ∷ as) = let (s', b) = f a s in b ∷ mapAccum' f s' as
+mapAccum f init e .next = mapAccum f (finalState f init (e .now)) (e .next)
+  where
+    finalState : (A → S → S × B) → S → List A → S
+    finalState f s []       = s
+    finalState f s (a ∷ as) = finalState f (fst (f a s)) as
+```
+
+**Пример accumE: история действий**
+
+```agda
+-- Поток функций-модификаторов
+data Action = Increment | Double | Reset
+
+toFn : Action → ℕ → ℕ
+toFn Increment = suc
+toFn Double    = λ n → n * 2
+toFn Reset     = const 0
+
+actions : Event Action
+modifiers : Event (ℕ → ℕ)
+modifiers = mapE toFn actions
+
+-- Событие с текущим значением после каждого действия
+counterEvents : Event ℕ
+counterEvents = accumE 0 modifiers
+
+-- actions       = [[], [Inc], [Double, Inc], [], [Reset], ...]
+-- counterEvents = [[], [1],   [3],           [], [0],     ...]
+--                       ↑      ↑↑
+--                     0+1    (0+1)*2+1=3
+```
+
+**Пример mapAccum: нумерация событий**
+
+```agda
+-- Добавить порядковый номер к каждому событию
+numberEvents : Event A → Event (ℕ × A)
+numberEvents = mapAccum (λ a n → (suc n, (n, a))) 0
+
+-- events           = [[], [a], [b,c], [], [d], ...]
+-- numberEvents     = [[], [(0,a)], [(1,b),(2,c)], [], [(3,d)], ...]
+```
+
+### Deferred Evaluation
+
+Комбинаторы для управления временем вычисления.
+
+```agda
+-- pre: задержка Signal на один такт
+-- Критично для разрыва циклических зависимостей
+pre : A → Signal A → Signal A
+pre init s .now  = init
+pre init s .next = s  -- не s.next, а s!
+
+-- Пример: предыдущее значение
+previous : A → Signal A → Signal A
+previous = pre
+
+-- delay для Signal (на N тактов)
+delayS : ℕ → A → Signal A → Signal A
+delayS 0 _ s = s
+delayS (suc n) init s = pre init (delayS n init s)
+
+-- edge: обнаружить изменение (событие на фронте)
+edge : Signal Bool → Event ⊤
+edge s .now = []
+edge s .next .now = if not (s .now) && s .next .now then [ tt ] else []
+edge s .next .next = edge (s .next) .next
+
+-- risingEdge / fallingEdge
+risingEdge : Signal Bool → Event ⊤
+risingEdge = edge
+
+fallingEdge : Signal Bool → Event ⊤
+fallingEdge s = edge (map not s)
+```
+
+**Пример: разрыв цикла с pre**
+
+```agda
+-- БЕЗ pre: бесконечный цикл!
+-- bad = map f bad  -- зависит от себя
+
+-- С pre: работает
+feedback : Signal ℕ
+feedback = map suc (pre 0 feedback)
+-- feedback = [0, 1, 2, 3, 4, ...]
+--             ↑  ↑
+--           init suc 0, suc 1, ...
+```
+
+**Пример: детектор изменения направления**
+
+```agda
+-- Событие когда значение начинает расти после падения
+turningPoint : Signal ℕ → Event ⊤
+turningPoint s =
+  let prev = pre 0 s
+      wasDecreasing = map (λ (p, c) → p > c) (zip prev s)
+      nowIncreasing = map (λ (p, c) → p < c) (zip prev s)
+  in gate (risingEdge nowIncreasing) wasDecreasing
+```
+
+### Error Handling
+
+Комбинаторы для обработки ошибок в событиях.
+
+```agda
+-- Результат с возможной ошибкой
+data Result (E A : Set) : Set where
+  Err : E → Result E A
+  Ok  : A → Result E A
+
+-- Проверить результат
+isOk : Result E A → Bool
+isOk (Ok _) = true
+isOk (Err _) = false
+
+isErr : Result E A → Bool
+isErr = not ∘ isOk
+
+-- mapResult
+mapResult : (A → B) → Result E A → Result E B
+mapResult f (Ok a)  = Ok (f a)
+mapResult f (Err e) = Err e
+
+-- Фильтрация по результату
+filterOk : Event (Result E A) → Event A
+filterOk = filterMap (λ { (Ok a) → Just a; (Err _) → Nothing })
+
+filterErr : Event (Result E A) → Event E
+filterErr = filterMap (λ { (Err e) → Just e; (Ok _) → Nothing })
+
+-- partitionResult: разделить на успехи и ошибки
+partitionResult : Event (Result E A) → Event A × Event E
+partitionResult e = (filterOk e, filterErr e)
+
+-- catchE: обработать ошибку
+catchE : Event (Result E A) → (E → A) → Event A
+catchE e handler = mapE (λ { (Ok a) → a; (Err e) → handler e }) e
+
+-- catchE с Event-обработчиком
+catchEventE : Event (Result E A) → (E → Event A) → Event A
+catchEventE e handler = merge (filterOk e) (switchE never (mapE handler (filterErr e)))
+
+-- throwE: создать событие-ошибку
+throwE : E → Event (Result E A)
+throwE e = occur (Err e)
+
+-- tryE: обернуть Event в Result (всегда Ok)
+tryE : Event A → Event (Result E A)
+tryE = mapE Ok
+
+-- onError: выполнить действие при ошибке
+onError : Event (Result E A) → Event E
+onError = filterErr
+
+-- onSuccess: выполнить действие при успехе
+onSuccess : Event (Result E A) → Event A
+onSuccess = filterOk
+```
+
+**HTTP с обработкой ошибок:**
+
+```agda
+data HttpError : Set where
+  NetworkError : String → HttpError
+  Timeout      : HttpError
+  BadStatus    : ℕ → HttpError
+  ParseError   : String → HttpError
+
+-- Безопасный request
+requestSafe : Request → Event (Result HttpError Response)
+
+-- Пример использования
+data Msg = Loading | GotData Data | GotError String | Retry
+
+app = record
+  { ...
+  ; update = λ where
+      Loading m → record m { status = InProgress }
+      (GotData d) m → record m { status = Ready d }
+      (GotError e) m → record m { status = Failed e }
+      Retry m → record m { status = InProgress }  -- повторить
+
+  ; events = λ m → case m.status of λ where
+      InProgress →
+        let response = requestSafe (get "/api/data")
+            (oks, errs) = partitionResult response
+        in merge
+          (mapE (GotData ∘ parse) oks)
+          (mapE (GotError ∘ showError) errs)
+      _ → never
+  }
+  where
+    showError : HttpError → String
+    showError (NetworkError s) = "Network error: " ++ s
+    showError Timeout = "Request timed out"
+    showError (BadStatus n) = "Server error: " ++ show n
+    showError (ParseError s) = "Parse error: " ++ s
+```
+
+**Retry с экспоненциальной задержкой:**
+
+```agda
+-- Повторять при ошибке с увеличивающейся задержкой
+retryWithBackoff : ℕ → ℕ → Event (Result E A) → Event (Result E A)
+retryWithBackoff maxRetries initialDelay e = go 0 initialDelay e
+  where
+    go : ℕ → ℕ → Event (Result E A) → Event (Result E A)
+    go n delayMs evt =
+      if n >= maxRetries
+      then evt  -- отдать как есть
+      else
+        let (oks, errs) = partitionResult evt
+        in merge
+          (mapE Ok oks)  -- успехи проходят сразу
+          (switchE never (mapE (λ _ → delay delayMs (go (suc n) (delayMs * 2) evt)) errs))
+```
+
+### Testing Combinators
+
+Комбинаторы для тестирования реактивной логики без браузера.
+
+```agda
+-- Интерпретировать Event-трансформацию на тестовых данных
+-- Каждый элемент списка = один такт
+interpret : (Event A → Event B) → List (List A) → List (List B)
+interpret f inputs = go (f (fromList inputs))
+  where
+    fromList : List (List A) → Event A
+    fromList [] .now = []
+    fromList [] .next = never
+    fromList (xs ∷ xss) .now = xs
+    fromList (xs ∷ xss) .next = fromList xss
+
+    go : Event B → List (List B)
+    go e = take (length inputs) (toList e)
+
+    toList : Event B → List (List B)
+    toList e = e .now ∷ toList (e .next)
+
+-- interpretS: для Signal
+interpretS : (Signal A → Signal B) → List A → List B
+interpretS f inputs = go (f (fromList inputs))
+  where
+    fromList : List A → Signal A
+    fromList [] .now = ⊥  -- или default
+    fromList (x ∷ []) .now = x
+    fromList (x ∷ []) .next = pure x
+    fromList (x ∷ xs) .now = x
+    fromList (x ∷ xs) .next = fromList xs
+
+    go : Signal B → List B
+    go s = take (length inputs) (toListS s)
+
+    toListS : Signal B → List B
+    toListS s = s .now ∷ toListS (s .next)
+
+-- interpretApp: тестировать целое приложение
+interpretApp : App Msg Model → List (List Msg) → List Model
+interpretApp app inputs = go app.init inputs
+  where
+    go : Model → List (List Msg) → List Model
+    go m [] = []
+    go m (msgs ∷ rest) =
+      let m' = foldl (flip app.update) m msgs
+      in m' ∷ go m' rest
+```
+
+**Примеры тестов:**
+
+```agda
+-- Тест mapE
+test_mapE : interpret (mapE suc) [[1,2], [], [3]] ≡ [[2,3], [], [4]]
+test_mapE = refl
+
+-- Тест filterE
+test_filterE : interpret (filterE (_> 2)) [[1,2,3], [4,1], []] ≡ [[3], [4], []]
+test_filterE = refl
+
+-- Тест merge
+test_merge : interpret (λ e → merge e (mapE (*10) e)) [[1], [2]]
+           ≡ [[1,10], [2,20]]
+test_merge = refl
+
+-- Тест foldp через interpretS
+test_foldp : interpretS (foldp _+_ 0) [1, 2, 3, 4] ≡ [0, 1, 3, 6]
+test_foldp = refl
+
+-- Тест debounce (концептуально)
+-- debounce 2 такта: событие только если 2 такта тишины после
+test_debounce_concept :
+  interpret (debounce2Ticks) [[a], [], [], [b], [], []]
+  ≡ [[], [], [a], [], [], [b]]
+```
+
+**Тестирование App:**
+
+```agda
+-- Counter app
+counterApp : App CounterMsg ℕ
+counterApp = record
+  { init = 0
+  ; update = λ { Inc n → suc n; Dec n → pred n }
+  ; view = ...
+  ; events = λ _ → never
+  }
+
+-- Тесты
+test_counter_inc : interpretApp counterApp [[Inc], [Inc], [Inc]] ≡ [1, 2, 3]
+test_counter_inc = refl
+
+test_counter_mixed : interpretApp counterApp [[Inc, Inc], [Dec], []] ≡ [2, 1, 1]
+test_counter_mixed = refl
+
+-- Property-based тест
+prop_counter_inc_dec : ∀ n →
+  interpretApp counterApp (replicate n [Inc] ++ replicate n [Dec])
+  ≡ [1..n] ++ [n-1..0]
+```
+
+**Утилиты для тестов:**
+
+```agda
+-- Собрать N тактов Event в список
+collectN : ℕ → Event A → List (List A)
+collectN 0 _ = []
+collectN (suc n) e = e .now ∷ collectN n (e .next)
+
+-- Проверить что Event никогда не срабатывает (на N тактов)
+isNeverFor : ℕ → Event A → Bool
+isNeverFor n e = all null (collectN n e)
+
+-- Проверить что Event срабатывает ровно один раз
+occursOnce : ℕ → Event A → Bool
+occursOnce n e = length (concat (collectN n e)) ≡ 1
+```
+
 ### Пример foldp
 
 ```agda
@@ -220,6 +1484,138 @@ counter = foldp (λ _ n → suc n) 0 clicks
 --                 ↑         ↑↑
 --              +1 тут    +2 тут (два клика за такт)
 ```
+
+### Практический пример: форма с snapshot
+
+Типичная задача: при отправке формы собрать текущие значения всех полей.
+
+**Без snapshot (плохо — дублирование):**
+
+```agda
+-- Приходится хранить копию данных в Msg
+data Msg = SetName String | SetEmail String | Submit String String
+--                                                    ↑↑↑↑↑↑↑↑↑↑↑↑
+--                                               дублирование Model!
+
+update (Submit name email) m = record m { sending = true; ... }
+-- name и email уже есть в m, зачем передавать?
+```
+
+**С snapshot (хорошо):**
+
+```agda
+data Msg = SetName String | SetEmail String | Submit | Sent Response
+
+record Model : Set where
+  field
+    name    : String
+    email   : String
+    sending : Bool
+    result  : Maybe Response
+
+record FormData : Set where
+  field
+    name  : String
+    email : String
+
+app : App Msg Model
+app = record
+  { init = { name = ""; email = ""; sending = false; result = Nothing }
+
+  ; update = λ where
+      (SetName n) m  → record m { name = n }
+      (SetEmail e) m → record m { email = e }
+      Submit m       → record m { sending = true }
+      (Sent r) m     → record m { sending = false; result = Just r }
+
+  ; view = λ m → form [ onSubmit Submit ]
+      [ input [ value (m .name), onInput SetName, placeholder "Name" ] []
+      , input [ value (m .email), onInput SetEmail, placeholder "Email" ] []
+      , button [ disabled (m .sending) ]
+          [ text (if m .sending then "Sending..." else "Submit") ]
+      , maybe empty viewResult (m .result)
+      ]
+
+  ; events = λ m →
+      if m .sending
+      then
+        -- snapshot берёт текущие значения Model в момент отправки
+        let formData = snapshot (λ _ m' → { name = m' .name; email = m' .email })
+                                (request (post "/api/submit" (toJson formData)))
+                                (pure m)
+        in mapE Sent (request (post "/api/submit" (toJson { name = m .name; email = m .email })))
+      else never
+  }
+```
+
+**Ещё проще с tag:**
+
+```agda
+-- Если нужно просто текущее состояние при событии
+events m =
+  if m .sending
+  then
+    let formData = { name = m .name; email = m .email }
+        response = request (post "/api/submit" (toJson formData))
+    in mapE Sent response
+  else never
+```
+
+### Практический пример: gate
+
+**Кнопка активна только при валидной форме:**
+
+```agda
+isValid : Model → Bool
+isValid m = length (m .name) > 0 && contains "@" (m .email)
+
+-- Без gate: проверка в update
+update Submit m = if isValid m then ... else m  -- легко забыть!
+
+-- С gate: клики просто не проходят
+app = record
+  { ...
+  ; events = λ m →
+      let rawSubmit = domEvent "submit" (m .formElement)
+          validSubmit = gate rawSubmit (pure (isValid m))
+      in mapE (λ _ → DoSubmit) validSubmit
+  }
+```
+
+### Практический пример: changes
+
+**Загружать данные при смене вкладки, а не каждый такт:**
+
+```agda
+data Tab = Users | Posts | Settings
+
+data Msg = SelectTab Tab | TabChanged Tab | LoadedData Data
+
+app = record
+  { ...
+  ; events = λ m →
+      merge
+        -- Событие ТОЛЬКО когда вкладка изменилась
+        (mapE TabChanged (changes (pure (m .currentTab))))
+        -- Загрузка данных для новой вкладки
+        (case m .loading of λ where
+          (Just tab) → mapE LoadedData (request (getTabData tab))
+          Nothing → never)
+
+  ; update = λ where
+      (SelectTab t) m → record m { currentTab = t }
+      (TabChanged t) m → record m { loading = Just t }  -- начать загрузку
+      (LoadedData d) m → record m { loading = Nothing; data = Just d }
+  }
+```
+
+**Сравнение:**
+
+| | Без changes | С changes |
+|--|-------------|-----------|
+| Событий | Каждый такт | Только при изменении |
+| Загрузок | Много лишних | Ровно по необходимости |
+| Производительность | ❌ | ✅ |
 
 ---
 
@@ -254,6 +1650,12 @@ data Key : Set where
   Ctrl Alt Shift Meta : Key → Key  -- модификаторы
   F : ℕ → Key                       -- F1-F12
   Other : String → Key              -- остальные
+
+-- Информация о кадре (для animationFrame)
+record FrameInfo : Set where
+  field
+    dt  : ℕ    -- миллисекунды с прошлого кадра (обычно 16-17)
+    fps : ℕ    -- текущий FPS (скользящее среднее за секунду)
 ```
 
 ### interval
@@ -274,6 +1676,64 @@ interval 1000:
   ...
   такт 2000ms: [tt]  ← событие
   ...
+```
+
+### animationFrame
+
+```agda
+animationFrame : Event FrameInfo
+```
+
+Событие на каждый кадр браузера (requestAnimationFrame, ~60 FPS).
+
+```
+animationFrame:
+  кадр 0:   [FrameInfo { dt = 16, fps = 60 }]
+  кадр 1:   [FrameInfo { dt = 17, fps = 59 }]
+  кадр 2:   [FrameInfo { dt = 16, fps = 60 }]
+  ...
+```
+
+**Отличие от interval:**
+
+| | `interval 16` | `animationFrame` |
+|--|---------------|------------------|
+| Точность | ±4ms (setTimeout) | Синхронизирован с дисплеем |
+| FPS info | ❌ Нет | ✅ Да |
+| Батарея | ⚠️ Работает в фоне | ✅ Пауза в фоновых вкладках |
+| Использование | Периодические задачи | Анимации, игры |
+
+**Пример: анимация движения**
+
+```agda
+data Msg = Tick FrameInfo | Start | Stop
+
+record Model : Set where
+  field
+    x : ℕ            -- позиция (пиксели)
+    speed : ℕ        -- скорость (пиксели/сек)
+    moving : Bool
+
+app : App Msg Model
+app = record
+  { init = { x = 0; speed = 100; moving = false }
+
+  ; update = λ where
+      (Tick f) m → record m { x = m.x + m.speed * f.dt / 1000 }
+      Start m → record m { moving = true }
+      Stop m → record m { moving = false }
+
+  ; view = λ m → div []
+      [ div [ style [("left", show m.x ++ "px")] ] [ text "→" ]
+      , button [ onClick (if m.moving then Stop else Start) ]
+          [ text (if m.moving then "Stop" else "Start") ]
+      ]
+
+  ; events = λ m →
+      if m.moving
+      then mapE Tick animationFrame
+      else never  -- цикл не крутится, браузер idle
+  }
 ```
 
 ### keyboard
@@ -426,11 +1886,40 @@ events m = if m.loading then mapE GotData (request ...) else never
 | Примитив | Тип | Подписка | Отписка |
 |----------|-----|----------|---------|
 | `interval n` | `Event ⊤` | Запустить таймер | Остановить таймер |
+| `animationFrame` | `Event FrameInfo` | requestAnimationFrame | cancelAnimationFrame |
 | `keyboard` | `Event Key` | addEventListener | removeEventListener |
 | `request r` | `Event Response` | Отправить запрос | Отменить запрос |
 | `websocket url` | `WebSocket` | — | — |
 | `ws.recv` | `Event WsEvent` | Открыть соединение | Закрыть соединение |
 | `ws.send msg` | `Event ⊤` | Отправить сообщение | — (уже отправлено) |
+
+### animationFrame
+
+```agda
+record FrameInfo : Set where
+  field
+    dt  : ℕ    -- миллисекунды с прошлого кадра
+    fps : ℕ    -- текущий FPS (скользящее среднее)
+
+animationFrame : Event FrameInfo
+```
+
+**Семантика:**
+- Подписка на `animationFrame` → запускает requestAnimationFrame loop
+- Каждый кадр (~60 FPS) → событие `FrameInfo` с delta time
+- Отписка → cancelAnimationFrame, loop останавливается
+
+```
+animationFrame:
+  подписка → requestAnimationFrame(loop)
+  кадр 0:   FrameInfo { dt = 16, fps = 60 }
+  кадр 1:   FrameInfo { dt = 17, fps = 59 }
+  кадр 2:   FrameInfo { dt = 16, fps = 60 }
+  ...
+  отписка → cancelAnimationFrame
+```
+
+**Важно:** когда `animationFrame` не в `events`, цикл не крутится — браузер idle, батарея не тратится.
 
 ### Примитивы Phase 2
 
@@ -1455,6 +2944,55 @@ const interval = (ms) => ({
 })
 ```
 
+### animationFrame
+
+```javascript
+const animationFrame = {
+  _type: 'animationFrame',
+  _args: [],
+
+  subscribe: (emit) => {
+    let lastTime = performance.now()
+    let rafId = null
+
+    // FPS tracking (скользящее среднее)
+    let frameCount = 0
+    let fpsTime = lastTime
+    let currentFps = 60
+
+    const loop = (now) => {
+      const dt = Math.round(now - lastTime)
+      lastTime = now
+
+      // Вычисляем FPS раз в секунду
+      frameCount++
+      if (now - fpsTime >= 1000) {
+        currentFps = frameCount
+        frameCount = 0
+        fpsTime = now
+      }
+
+      emit([{ dt, fps: currentFps }])
+      rafId = requestAnimationFrame(loop)
+    }
+
+    rafId = requestAnimationFrame(loop)
+    return { rafId, cancel: () => cancelAnimationFrame(rafId) }
+  },
+
+  unsubscribe: (handle) => {
+    handle.cancel()
+  }
+}
+```
+
+**Особенности реализации:**
+
+1. **Delta time** — `performance.now()` даёт миллисекунды с высокой точностью
+2. **FPS** — вычисляется как количество кадров за последнюю секунду
+3. **Cleanup** — `cancelAnimationFrame` останавливает loop при отписке
+4. **Энергоэффективность** — когда Event не в `events`, loop не работает
+
 ### keyboard
 
 ```javascript
@@ -1770,6 +3308,129 @@ postulate
     };
   }
 #-}
+
+{-# COMPILE JS animationFrame =
+  (function() {
+    return {
+      _type: 'animationFrame',
+      _args: [],
+      subscribe: function(emit) {
+        var lastTime = performance.now();
+        var rafId = null;
+        var frameCount = 0;
+        var fpsTime = lastTime;
+        var currentFps = 60;
+
+        function loop(now) {
+          var dt = Math.round(now - lastTime);
+          lastTime = now;
+          frameCount++;
+          if (now - fpsTime >= 1000) {
+            currentFps = frameCount;
+            frameCount = 0;
+            fpsTime = now;
+          }
+          emit([{ dt: dt, fps: currentFps }]);
+          rafId = requestAnimationFrame(loop);
+        }
+
+        rafId = requestAnimationFrame(loop);
+        return rafId;
+      },
+      unsubscribe: function(rafId) {
+        cancelAnimationFrame(rafId);
+      }
+    };
+  })()
+#-}
+
+{-# COMPILE JS debounce =
+  function(ms) {
+    return function(event) {
+      return {
+        _type: 'debounce',
+        _args: [ms, event],
+        subscribe: function(emit) {
+          var timerId = null;
+          var lastValue = null;
+
+          var innerUnsub = event.subscribe(function(values) {
+            if (values.length > 0) {
+              lastValue = values[values.length - 1];
+              if (timerId) clearTimeout(timerId);
+              timerId = setTimeout(function() {
+                emit([lastValue]);
+                timerId = null;
+              }, ms);
+            }
+          });
+
+          return { innerUnsub: innerUnsub, timerId: timerId };
+        },
+        unsubscribe: function(handle) {
+          if (handle.timerId) clearTimeout(handle.timerId);
+          handle.innerUnsub();
+        }
+      };
+    };
+  }
+#-}
+
+{-# COMPILE JS throttle =
+  function(ms) {
+    return function(event) {
+      return {
+        _type: 'throttle',
+        _args: [ms, event],
+        subscribe: function(emit) {
+          var lastEmit = 0;
+
+          var innerUnsub = event.subscribe(function(values) {
+            var now = performance.now();
+            if (values.length > 0 && now - lastEmit >= ms) {
+              emit([values[0]]);
+              lastEmit = now;
+            }
+          });
+
+          return innerUnsub;
+        },
+        unsubscribe: function(innerUnsub) {
+          innerUnsub();
+        }
+      };
+    };
+  }
+#-}
+
+{-# COMPILE JS delay =
+  function(ms) {
+    return function(event) {
+      return {
+        _type: 'delay',
+        _args: [ms, event],
+        subscribe: function(emit) {
+          var timers = [];
+
+          var innerUnsub = event.subscribe(function(values) {
+            values.forEach(function(v) {
+              var timerId = setTimeout(function() {
+                emit([v]);
+              }, ms);
+              timers.push(timerId);
+            });
+          });
+
+          return { innerUnsub: innerUnsub, timers: timers };
+        },
+        unsubscribe: function(handle) {
+          handle.timers.forEach(function(t) { clearTimeout(t); });
+          handle.innerUnsub();
+        }
+      };
+    };
+  }
+#-}
 ```
 
 Для типов данных:
@@ -1860,6 +3521,7 @@ src/
     │
     ├── Primitive/               -- IO-примитивы (по необходимости)
     │   ├── Interval.agda        -- interval : ℕ → Event ⊤
+    │   ├── AnimationFrame.agda  -- animationFrame : Event FrameInfo
     │   ├── Keyboard.agda        -- keyboard : Event Key
     │   ├── Request.agda         -- request : Request → Event Response
     │   └── WebSocket.agda       -- websocket : Url → Event Message
@@ -2414,6 +4076,165 @@ worker    : WorkerFn A B → A → Event B
 
 Worker — это "ещё один примитив Event". Декларативная модель, управление подписками, композиция через `merge` — всё работает одинаково.
 
+### Dynamic (Phase 2)
+
+`Dynamic` объединяет `Signal` и `Event` — текущее значение плюс события изменений. Идея из Reflex.
+
+```agda
+-- Dynamic = Signal + Event изменений
+record Dynamic (A : Set) : Set where
+  field
+    current : Signal A      -- текущее значение (всегда доступно)
+    updated : Event A       -- события изменения (для оптимизации)
+
+-- Конструкторы
+holdDyn : A → Event A → Dynamic A
+holdDyn init e = record
+  { current = hold init e
+  ; updated = e
+  }
+
+foldDyn : (A → B → B) → B → Event A → Dynamic B
+foldDyn f init e = record
+  { current = foldp f init e
+  ; updated = -- событие с новым значением после применения f
+  }
+
+-- Из Signal (updated = changes)
+fromSignal : ⦃ Eq A ⦄ → Signal A → Dynamic A
+fromSignal s = record { current = s; updated = changes s }
+```
+
+**Зачем нужен Dynamic?**
+
+```agda
+-- Signal: нужно проверять каждый такт, изменилось ли
+-- Event: знаем точно когда изменилось, но нет "текущего значения"
+-- Dynamic: и то, и другое!
+
+-- Пример: оптимизированный рендеринг
+viewOptimized : Dynamic Model → Html Msg
+viewOptimized dm = div []
+  [ -- Перерисовывается только при изменении counter
+    dynText (mapDyn (λ m → show m.counter) dm)
+  , -- Статический контент
+    footer [] [ text "Footer" ]
+  ]
+
+-- mapDyn : (A → B) → Dynamic A → Dynamic B
+-- dynText : Dynamic String → Html Msg  (обновляет DOM только при updated)
+```
+
+**Комбинаторы Dynamic:**
+
+```agda
+-- Functor
+mapDyn : (A → B) → Dynamic A → Dynamic B
+
+-- Applicative
+pureDyn : A → Dynamic A
+apDyn : Dynamic (A → B) → Dynamic A → Dynamic B
+
+-- Переключение
+switchDyn : Dynamic A → Event (Dynamic A) → Dynamic A
+```
+
+### Widget (Phase 2)
+
+`Widget` — виджет, который "возвращает значение" при завершении. Идея из Concur.
+
+```agda
+-- Widget A = виджет, который вернёт A когда завершится
+record Widget (A : Set) : Set where
+  field
+    html   : Html WidgetMsg
+    result : Event A
+
+-- Примитивные виджеты
+button : String → Widget ⊤
+button label = record
+  { html = Html.button [ onClick Done ] [ text label ]
+  ; result = -- событие при клике
+  }
+
+textInput : Widget String
+textInput = record
+  { html = Html.input [ onKeyDown check, onInput Update ] []
+  ; result = -- событие со строкой при Enter
+  }
+```
+
+**Композиция виджетов:**
+
+```agda
+-- Applicative: оба виджета активны параллельно
+instance Applicative Widget where
+  pure a = record { html = empty; result = occur a }
+  wf <*> wa = record
+    { html = div [] [ wf .html, wa .html ]
+    ; result = -- ждём оба результата
+    }
+
+-- Alternative: первый кто вернёт
+instance Alternative Widget where
+  w1 <|> w2 = record
+    { html = div [] [ w1 .html, w2 .html ]
+    ; result = race [ w1 .result, w2 .result ]
+    }
+
+-- Monad: последовательно
+instance Monad Widget where
+  wa >>= f = -- сначала wa, потом f с результатом
+```
+
+**Пример: форма логина**
+
+```agda
+loginForm : Widget Credentials
+loginForm = do
+  username ← labeled "Username:" textInput
+  password ← labeled "Password:" passwordInput
+  _ ← button "Login"
+  pure (Credentials username password)
+
+-- С альтернативой: логин или отмена
+loginOrCancel : Widget (Maybe Credentials)
+loginOrCancel = (Just <$> loginForm) <|> (Nothing <$ button "Cancel")
+```
+
+**Интеграция в App:**
+
+```agda
+-- Запустить виджет внутри App
+embedWidget : Widget A → (A → Msg) → Model → Html Msg
+```
+
+### Incremental (Phase 3)
+
+Инкрементальные вычисления для больших структур данных. Идея из Reflex.
+
+```agda
+-- Патч описывает изменение, не полное значение
+data ListPatch (A : Set) : Set where
+  Insert : ℕ → A → ListPatch A
+  Delete : ℕ → ListPatch A
+  Update : ℕ → A → ListPatch A
+
+-- Incremental: значение + патчи
+record Incremental (A : Set) (P : Set) : Set where
+  field
+    current : Signal A
+    patches : Event P
+
+-- Инкрементальный map (обновляет только изменённые элементы)
+imapWithKey
+  : (K → Dynamic V → Html Msg)
+  → IncrementalMap K V
+  → Html Msg
+```
+
+**Польза:** при добавлении одного элемента в список из 10000 — обновляется только один DOM-элемент, не весь список.
+
 ---
 
 ## Итого
@@ -2437,3 +4258,289 @@ Worker — это "ещё один примитив Event". Декларатив
 2. **Декларативность** — описываем *что*, не *как*
 3. **Чистота** — эффекты на границе, внутри только чистые функции
 4. **Простота** — минимум концепций, максимум выразительности
+
+---
+
+## На будущее: идеи для исследования
+
+Идеи из FRP-систем, которые могут быть добавлены в будущих версиях. Требуют дополнительного исследования и проектирования.
+
+### 1. Signal Functions (Yampa)
+
+**Идея:** Вместо первоклассных `Signal A` — трансформации `SF A B = Signal A → Signal B`.
+
+```agda
+SF : Set → Set → Set
+SF A B = Signal A → Signal B
+
+-- Arrow комбинаторы
+arr    : (A → B) → SF A B
+_>>>_  : SF A B → SF B C → SF A C
+_&&&_  : SF A B → SF A C → SF A (B × C)
+first  : SF A B → SF (A × C) (B × C)
+loop   : SF (A × C) (B × C) → SF A B  -- feedback
+
+-- Для физики
+integral   : SF ℕ ℕ
+derivative : SF ℕ ℕ
+
+-- Переключение
+switch  : SF A (B × Event C) → (C → SF A B) → SF A B
+rSwitch : SF A B → Event (SF A B) → SF A B
+```
+
+**Польза:** Гарантированно нет time leaks — `join : Signal (Signal A) → Signal A` невозможен.
+
+**Сложность:** ★★★ — требует изменения базовой модели или параллельного API.
+
+**Источник:** Yampa, Dunai/Rhine.
+
+---
+
+### 2. Collection Combinators (Reflex)
+
+**Идея:** Эффективная работа с динамическими коллекциями виджетов.
+
+```agda
+-- Динамический список
+simpleList
+  : Dynamic (List A)
+  → (Dynamic A → Widget B)
+  → Widget (List B)
+
+-- Список с ключами (обновляется только изменённый элемент)
+listWithKey
+  : Dynamic (Map K V)
+  → (K → Dynamic V → Widget B)
+  → Widget (Map K B)
+
+-- Выбор из списка
+selectViewListWithKey
+  : Dynamic K                              -- выбранный
+  → Dynamic (Map K V)                      -- элементы
+  → (K → Dynamic V → Dynamic Bool → Widget B)
+  → Widget (Event K)
+```
+
+**Польза:** При изменении одного элемента в списке из 10000 — обновляется один DOM-элемент.
+
+**Сложность:** ★★★ — требует `Dynamic` и `Widget`.
+
+**Источник:** Reflex.
+
+---
+
+### 3. FRPNow Patterns
+
+**Идея:** Монада `Now` для описания "текущего момента" и планирования.
+
+```agda
+Now : Set → Set
+
+sample   : Signal A → Now A                    -- текущее значение
+plan     : Event (Now A) → Now (Event A)       -- запланировать
+callback : Now (A → IO ⊤ × Event A)            -- создать callback
+async    : IO A → Now (Event A)                -- async как Event
+```
+
+**Польза:** Удобная интеграция с императивным кодом, callbacks.
+
+**Сложность:** ★★☆ — новая монада, но концептуально понятно.
+
+**Источник:** FRPNow.
+
+---
+
+### 4. Resource Management (Bracket Pattern)
+
+**Идея:** Гарантированное освобождение ресурсов.
+
+```agda
+-- Bracket: acquire → use → cleanup (всегда)
+bracket : Event A → (A → Event ⊤) → (A → Event B) → Event B
+
+-- Пример
+withWebSocket : Url → (WebSocket → Event A) → Event A
+withWebSocket url use = bracket
+  (connect url)       -- acquire
+  (λ ws → close ws)   -- cleanup
+  use                 -- use
+
+-- withFile, withTransaction, ...
+```
+
+**Польза:** Нет утечек ресурсов даже при ошибках.
+
+**Сложность:** ★★☆ — нужна интеграция с runtime.
+
+**Источник:** Haskell bracket, RAII.
+
+---
+
+### 5. Рекурсивные определения (MonadFix)
+
+**Идея:** Ссылка на будущие значения в реактивной сети.
+
+```agda
+mfix : (Event A → Now (Event A)) → Now (Event A)
+
+-- Позволяет:
+network : Now ()
+network = mfix $ λ clicks → do
+  counter ← foldDyn (+1) 0 clicks
+  button ← render counter
+  return (buttonClicks button)  -- clicks через себя!
+```
+
+**Польза:** Элегантное описание взаимозависимых компонентов.
+
+**Сложность:** ★★★ — требует MonadFix, сложная семантика.
+
+**Источник:** Reflex (rec), Haskell MonadFix.
+
+---
+
+### 6. Push-Pull Hybrid
+
+**Идея:** Комбинация push (события) и pull (ленивое вычисление).
+
+```agda
+record Reactive A : Set where
+  field
+    sample  : Time → A       -- pull: значение в момент t
+    changes : Event ⊤        -- push: когда могло измениться
+```
+
+**Польза:** Эффективность — вычисляем только когда нужно.
+
+**Сложность:** ★★★ — значительное изменение модели.
+
+**Источник:** Conal Elliott "Push-Pull FRP".
+
+---
+
+### 7. Session Types для протоколов
+
+**Идея:** Типизированные протоколы общения (WebSocket, Worker).
+
+```agda
+-- Протокол: Send Int, потом Recv String, потом End
+Protocol : Session
+Protocol = Send ℕ (Recv String End)
+
+-- Канал следует протоколу
+Channel : Session → Set
+
+-- Операции проверяются типами
+send : Channel (Send A S) → A → Channel S
+recv : Channel (Recv A S) → Event (A × Channel S)
+```
+
+**Польза:** Невозможно нарушить протокол — ошибки на этапе компиляции.
+
+**Сложность:** ★★★ — продвинутые типы.
+
+**Источник:** Session Types literature.
+
+---
+
+### 8. Linear Types для ресурсов
+
+**Идея:** Ресурсы, которые нужно использовать ровно один раз.
+
+```agda
+-- Линейный handle
+data Handle¹ (A : Set) : Set where ...
+
+-- Использовать можно только один раз
+use : Handle¹ A → (A → B) → B
+
+-- Нельзя забыть использовать, нельзя использовать дважды
+```
+
+**Польза:** Статическая гарантия корректного управления ресурсами.
+
+**Сложность:** ★★★ — Agda не имеет встроенных линейных типов (нужна эмуляция).
+
+**Источник:** Linear Haskell, Clean uniqueness types.
+
+---
+
+### 9. Time-Travel Debugging
+
+**Идея:** Записать все события, воспроизвести состояние в любой момент.
+
+```agda
+-- Записать сессию
+record Session : Set where
+  field
+    initialModel : Model
+    events       : List (Timestamp × Msg)
+
+-- Воспроизвести до момента t
+replayTo : Session → Timestamp → Model
+
+-- UI для отладки
+debugger : App Msg Model → App DebugMsg (DebugModel Model)
+```
+
+**Польза:** Отладка сложных багов — "отмотать" и посмотреть что произошло.
+
+**Сложность:** ★★☆ — архитектура уже позволяет (чистый update).
+
+**Источник:** Redux DevTools, Elm Debugger.
+
+---
+
+### 10. Distributed/Replicated State
+
+**Идея:** Синхронизация состояния между клиентами.
+
+```agda
+-- CRDT-совместимые операции
+data Op : Set where ...
+
+-- Применить операцию (коммутативно)
+apply : Op → Model → Model
+-- ∀ op1 op2 m → apply op1 (apply op2 m) ≡ apply op2 (apply op1 m)
+
+-- Синхронизация
+sync : Event Op → Event Op → Event Op
+```
+
+**Польза:** Collaborative editing, offline-first apps.
+
+**Сложность:** ★★★ — CRDTs, конфликты, консистентность.
+
+**Источник:** CRDTs literature, Yjs, Automerge.
+
+---
+
+### Сводка: приоритеты исследования
+
+| Идея | Сложность | Польза | Приоритет |
+|------|-----------|--------|-----------|
+| Time-Travel Debugging | ★★☆ | ★★★ | Высокий |
+| Collection Combinators | ★★★ | ★★★ | Высокий |
+| Resource Management | ★★☆ | ★★☆ | Средний |
+| Signal Functions | ★★★ | ★★☆ | Средний |
+| FRPNow Patterns | ★★☆ | ★☆☆ | Низкий |
+| Session Types | ★★★ | ★★☆ | Низкий |
+| Linear Types | ★★★ | ★★☆ | Низкий |
+| MonadFix/rec | ★★★ | ★☆☆ | Низкий |
+| Push-Pull Hybrid | ★★★ | ★☆☆ | Исследование |
+| Distributed State | ★★★ | ★★☆ | Исследование |
+
+---
+
+### Источники для изучения
+
+| Тема | Ресурсы |
+|------|---------|
+| Signal Functions | "The Yampa Arcade" paper, Dunai/Rhine |
+| Dynamic Collections | Reflex documentation, `reflex-dom` |
+| FRPNow | "Practical Principled FRP" paper |
+| Push-Pull | Conal Elliott "Push-Pull FRP" |
+| Session Types | "Session Types for Functional Programmers" |
+| CRDTs | "A comprehensive study of CRDTs" |
+| Time-Travel | Redux DevTools, Elm Debugger source |

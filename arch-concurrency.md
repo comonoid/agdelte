@@ -49,12 +49,13 @@ events m = if m.needsCompute
 
 ```agda
 -- Базовые примитивы (architecture.md)
-interval  : ℕ → Event ⊤
-request   : Request → Event Response
-websocket : Url → WebSocket          -- WebSocket.recv : Event WsEvent
+interval       : ℕ → Event ⊤
+animationFrame : Event FrameInfo     -- кадры браузера с delta time
+request        : Request → Event Response
+websocket      : Url → WebSocket     -- WebSocket.recv : Event WsEvent
 
 -- Примитив конкурентности (этот документ)
-worker    : WorkerFn A B → A → Event B
+worker         : WorkerFn A B → A → Event B
 ```
 
 **Единая модель:**

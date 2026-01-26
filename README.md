@@ -20,13 +20,14 @@ record Signal (A : Set) : Set where
 Event A = Signal (List A)
 ```
 
-**All IO is Event.** Timers, HTTP, WebSocket — unified under one mechanism:
+**All IO is Event.** Timers, HTTP, WebSocket, animations — unified under one mechanism:
 
 ```agda
-interval  : ℕ → Event ⊤              -- timer ticks
-keyboard  : Event Key                -- key presses
-request   : Request → Event Response -- HTTP responses
-websocket : Url → WebSocket          -- bidirectional channel (recv + send)
+interval       : ℕ → Event ⊤              -- timer ticks
+animationFrame : Event FrameInfo          -- browser frames (~60 FPS) with delta time
+keyboard       : Event Key                -- key presses
+request        : Request → Event Response -- HTTP responses
+websocket      : Url → WebSocket          -- bidirectional channel (recv + send)
 ```
 
 ## Quick Example
@@ -135,6 +136,7 @@ src/
     │
     ├── Primitive/               -- IO primitives
     │   ├── Interval.agda
+    │   ├── AnimationFrame.agda  -- browser frames with delta time
     │   ├── Keyboard.agda
     │   ├── Request.agda
     │   └── WebSocket.agda
@@ -167,10 +169,40 @@ runtime/
 **Composability.** Events combine with standard operations:
 
 ```agda
-never  : Event A                        -- nothing
-merge  : Event A → Event A → Event A    -- combine streams
-mapE   : (A → B) → Event A → Event B    -- transform
-filterE: (A → Bool) → Event A → Event A -- filter
+-- Basic
+never     : Event A                           -- nothing
+merge     : Event A → Event A → Event A       -- combine streams
+mapE      : (A → B) → Event A → Event B       -- transform
+filterE   : (A → Bool) → Event A → Event A    -- filter
+
+-- Sampling (Event + Signal interaction)
+snapshot  : (A → B → C) → Event A → Signal B → Event C  -- sample Signal
+gate      : Event A → Signal Bool → Event A   -- filter by Signal
+changes   : Signal A → Event A                -- events when Signal changes
+
+-- Time-based
+debounce  : ℕ → Event A → Event A             -- after N ms pause
+throttle  : ℕ → Event A → Event A             -- max once per N ms
+
+-- Switching
+switchE   : Event A → Event (Event A) → Event A  -- dynamic Event switching
+
+-- Merging
+mergeWith : (A → A → A) → Event A → Event A → Event A  -- merge with function
+alignWith : (These A B → C) → Event A → Event B → Event C  -- align different types
+
+-- Accumulators
+accumE    : A → Event (A → A) → Event A        -- fold to Event
+accumB    : A → Event (A → A) → Signal A       -- fold functions to Signal
+
+-- Deferred
+pre       : A → Signal A → Signal A            -- delay by one tick
+
+-- Error handling
+catchE    : Event (Result E A) → (E → A) → Event A  -- handle errors
+
+-- Testing
+interpret : (Event A → Event B) → List (List A) → List (List B)  -- test Event transformations
 ```
 
 ## Concurrency
@@ -195,16 +227,19 @@ Structured concurrency, automatic resource management, no leaks. See [arch-concu
 
 **Phase 1: MVP**
 - Signal, Event, foldp
-- Primitives: interval, keyboard, request, websocket
+- Sampling combinators: snapshot, attach, tag, gate, changes
+- Primitives: interval, animationFrame, keyboard, request, websocket
 - App (init, update, view, events)
 - Html, Runtime
 
 **Phase 2: Extensions**
+- Dynamic (Signal + Event), Widget (Applicative UI)
 - mouse, localStorage, routing
 - Concurrency: worker, parallel, race
 - Focus management, keyed elements
 
-**Phase 3: Advanced Types**
+**Phase 3: Advanced**
+- Incremental (patches for large collections)
 - Indexed types for UI states
 - Session types for protocols
 - Linear types for resources
