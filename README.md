@@ -24,23 +24,25 @@ record Sys (P : Poly) : Set₁ where
     pos   : State → P.Pos
     step  : (s : State) → P.Dir (pos s) → State
 
--- Signal, Event, App — all are Sys P for different P
-Signal A = Sys (A, λ _ → ⊤)           -- outputs A, trivial input
-Event A  = Signal (List A)            -- outputs List A
+-- Signal, Event, App — all are Sys P for different P (all discrete!)
+Signal A = Sys (A, λ _ → ⊤)           -- discrete stream: one value per tick
+Event A  = Signal (List A)            -- discrete events: list per tick
 App      = Sys (Html Msg, λ _ → Msg)  -- outputs Html, accepts Msg
 ```
 
 Theoretical foundation: **Polynomial Functors** (Spivak, Niu).
 
-**All IO is Event.** Timers, HTTP, WebSocket, animations — unified under one mechanism:
+**All IO is Event.** Timers, HTTP, WebSocket, animations — unified under one mechanism. Everything is discrete events:
 
 ```agda
-interval       : ℕ → Event ⊤              -- timer ticks
-animationFrame : Event FrameInfo          -- browser frames (~60 FPS) with delta time
-keyboard       : Event Key                -- key presses
-request        : Request → Event Response -- HTTP responses
-websocket      : Url → WebSocket          -- bidirectional channel (recv + send)
+interval       : ℕ → Event ⊤              -- discrete ticks every N ms
+animationFrame : Event FrameInfo          -- discrete event per frame (dt for interpolation)
+keyboard       : Event Key                -- discrete key presses
+request        : Request → Event Response -- discrete HTTP responses
+websocket      : Url → WebSocket          -- discrete messages
 ```
+
+No continuous time. `animationFrame` provides `dt` (milliseconds since last event) for interpolation, but it's still discrete events.
 
 ## Quick Example
 

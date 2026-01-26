@@ -2,293 +2,286 @@
 
 > Справочник. Концептуальное понимание: [README.md](README.md)
 
+## Главный принцип: всё дискретно
+
+**В Agdelte нет непрерывного времени.** Вся система построена на дискретных событиях.
+
+```
+Event ───► Event ───► Event ───► Event
+  │          │          │          │
+  ▼          ▼          ▼          ▼
+Такт 0    Такт 1    Такт 2    Такт 3
+```
+
+- **Signal** — дискретный поток значений (одно значение на такт)
+- **Event** — дискретные события (список событий за такт)
+- **animationFrame** — дискретный Event, срабатывает каждый кадр
+- **interval** — дискретный Event, срабатывает каждые N мс
+
+Никаких функций `Time → A`. Никакого "непрерывного Behavior". Только дискретные события.
+
+---
+
 ## Такт (Tick)
 
-**Такт** — атомарная единица дискретного времени. Один такт = одна итерация event loop.
+**Такт** — атомарная единица времени. Один такт = одна итерация event loop.
 
 ```
-Такт 0 → Такт 1 → Такт 2 → ...
-   │        │        │
-   ▼        ▼        ▼
- events   events   events
+Внешний мир          Runtime              Приложение
+     │                  │                     │
+     │  событие         │                     │
+     ├─────────────────►│                     │
+     │                  │  update(msg, model) │
+     │                  ├────────────────────►│
+     │                  │                     │
+     │                  │  newModel           │
+     │                  │◄────────────────────┤
+     │                  │                     │
+     │                  │  render(view)       │
+     │                  ├─────────────────────►
+     │                  │                     │
+     │                  │  idle...            │
 ```
 
-Границы такта определяются **событиями**:
-- Каждое внешнее событие (клик, таймер, HTTP ответ) начинает новый такт
-- За один такт: получить события → update → обновить подписки → render
-- Между тактами система в состоянии покоя (idle)
-
-В терминах браузера: такт ≈ обработка одного события из event queue.
+Границы такта:
+- Каждое внешнее событие (клик, таймер, HTTP ответ) — один такт
+- За такт: событие → update → обновить подписки → render
+- Между тактами — система idle
 
 ---
 
-## Push-семантика
+## Почему не непрерывное время?
 
-События "проталкиваются" (push) извне в систему:
-- **Внешний мир** → генерирует события (клики, таймеры, HTTP ответы)
-- **Runtime** → получает и направляет события в `update`
-- **Приложение** → реактивно обновляется
-
-Приложение не опрашивает источники (pull), а получает уведомления (push).
-
----
-
-## Одновременные события
-
-Если несколько внешних событий происходят "одновременно":
-
-- **Браузер** сериализует их в очередь событий
-- **Каждое событие** обрабатывается отдельным тактом
-- **Порядок** сохраняется (FIFO)
-
-Исключение: события внутри одного DOM event (например, `input` с несколькими символами при paste) — приходят как один такт со списком.
-
----
-
-## Почему дискретное время?
-
-Agdelte использует **дискретное время**, а не непрерывное время классического FRP (Conal Elliott).
-
-Классический FRP:
+Классический FRP (Conal Elliott):
 ```haskell
 type Behavior a = Time → a  -- Time ∈ ℝ (непрерывное)
 ```
 
-**Проблемы непрерывного времени:**
+**Проблемы:**
 
 | Проблема | Описание |
 |----------|----------|
-| Невычислимость | Компьютер дискретен — непрерывное время это иллюзия |
-| Time leaks | `Behavior` может требовать всю историю значений |
-| Неопределённость | Когда именно вычислять? При каждом событии? 60 FPS? |
-| Накопление thunks | Ленивость приводит к утечкам памяти |
+| Невычислимость | Компьютер дискретен — ℝ не представимо |
+| Time leaks | Behavior может требовать всю историю |
+| Неопределённость | Когда вычислять? 60 FPS? 120 FPS? |
+| Накопление thunks | Ленивость → утечки памяти |
 
-**Решение Agdelte:** время дискретно, такт — атомарная единица.
-
-```
-Непрерывное (Conal Elliott):     Дискретное (Agdelte):
-
-  Behavior a = Time → a            Signal a = now + next
-  "значение в КАЖДЫЙ момент"       "значение в КАЖДЫЙ ТАКТ"
-
-  Реальность: сэмплируем           Реальность: именно так
-  в дискретные моменты             и вычисляем
-```
-
----
-
-## Уровни времени
+**Решение Agdelte:** отказ от иллюзии непрерывности.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                  Agdelte Time Architecture                   │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  Level 1: Logical Time (такты)                              │
-│  ─────────────────────────────                              │
-│  • Событие = один такт                                      │
-│  • UI: клики, input, HTTP, WebSocket                        │
-│  • Между событиями — idle (эффективно!)                     │
-│  • Примитивы: interval, keyboard, request                   │
-│                                                              │
-│  Level 2: Frame Time (кадры)                                │
-│  ─────────────────────────────                              │
-│  • requestAnimationFrame                                     │
-│  • dt = миллисекунды с прошлого кадра                       │
-│  • Для: CSS-анимации, transitions, плавные эффекты          │
-│  • Примитив: animationFrame                                  │
-│                                                              │
-│  Level 3: Physics Time (фиксированный шаг)                  │
-│  ─────────────────────────────────────────                  │
-│  • Фиксированный dt (например, 16ms = 60Hz)                 │
-│  • Детерминизм: одинаковый input → одинаковый результат     │
-│  • Для: игры, симуляции, физика                             │
-│  • Модуль: Agdelte.Physics                                   │
-│                                                              │
-│  Level 4: Continuous Time — НЕТ                             │
-│  ──────────────────────────────                             │
-│  • Аппроксимируется через Level 2/3                         │
-│  • "Интеграл" = сумма по dt                                 │
-│  • Это честно, и это работает                               │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+Классический FRP:              Agdelte:
+
+  Behavior a = Time → a          Signal a = now + next
+  "значение в КАЖДЫЙ момент"     "значение в КАЖДЫЙ ТАКТ"
+
+  Реальность: сэмплируем         Реальность: именно так
+  в дискретные моменты           и вычисляем
 ```
 
 ---
 
-## animationFrame
+## animationFrame — дискретный Event
+
+`animationFrame` — это **обычный Event**, который срабатывает каждый кадр браузера.
 
 ```agda
 animationFrame : Event FrameInfo
 
 record FrameInfo : Set where
   field
-    dt  : ℕ    -- миллисекунды с прошлого кадра (обычно 16-17)
-    fps : ℕ    -- текущий FPS
+    dt  : ℕ    -- миллисекунды с прошлого события (измерение!)
+    fps : ℕ    -- текущий FPS (измерение!)
 ```
 
-**Пример: анимация**
+**Ключевое понимание:**
+- `animationFrame` — это **не** "непрерывный источник"
+- Это дискретные события, ~60 раз в секунду
+- `dt` — не "непрерывное время", а измерение интервала между событиями
+- `fps` — измеренная частота событий
 
 ```agda
-data Msg = Tick FrameInfo | StartAnimation | StopAnimation
-
-record Model : Set where
-  field
-    position  : ℕ      -- пиксели
-    velocity  : ℕ      -- пиксели/секунду
-    animating : Bool
-
-app : App Msg Model
-app = record
-  { init = { position = 0; velocity = 200; animating = false }
-
-  ; update = λ where
-      (Tick frame) m → record m
-        { position = m.position + m.velocity * frame.dt / 1000 }
-      StartAnimation m → record m { animating = true }
-      StopAnimation m → record m { animating = false }
-
-  ; view = λ m → div []
-      [ div [ style [("transform", "translateX(" ++ show m.position ++ "px)")] ]
-          [ text "●" ]
-      , button [ onClick (if m.animating then StopAnimation else StartAnimation) ]
-          [ text (if m.animating then "Stop" else "Start") ]
-      ]
-
-  ; events = λ m →
-      if m.animating
-      then mapE Tick animationFrame
-      else never  -- браузер idle, батарея не тратится
-  }
+events m =
+  if m.animating
+  then mapE Tick animationFrame  -- подписка на дискретные события
+  else never                      -- никаких событий, браузер idle
 ```
 
-**Отличие от interval:**
-
-| | `interval 16` | `animationFrame` |
-|--|---------------|------------------|
-| Точность | ±4ms (setTimeout) | Синхронизирован с дисплеем |
-| FPS info | Нет | Да |
-| Батарея | Работает в фоне | Пауза в фоновых вкладках |
-| Использование | Периодические задачи | Анимации, игры |
+Когда `animating = false`, никаких событий не происходит. Система в idle. Батарея не тратится.
 
 ---
 
-## Fixed Timestep (для игр и физики)
+## Анимации: интерполяция между дискретными событиями
 
-Проблема variable timestep:
-
-```
-Frame 1: dt = 16ms  → position += velocity * 0.016
-Frame 2: dt = 100ms → position += velocity * 0.100  // лаг!
-         ↑
-    Объект "пролетает" сквозь стену
-```
-
-Решение — fixed timestep:
+Для плавных анимаций используем `dt` для интерполяции:
 
 ```agda
-module Agdelte.Physics where
+update (Tick frame) m = record m
+  { position = m.position + m.velocity * frame.dt / 1000 }
+```
 
-PHYSICS_HZ : ℕ
-PHYSICS_HZ = 60
+Это **не** непрерывное движение. Это:
+1. Получили дискретное событие с `dt = 16`
+2. Вычислили новую позицию: `position += velocity * 0.016`
+3. Отрендерили
+4. Ждём следующее дискретное событие
+
+**Визуально** выглядит плавно (60 FPS достаточно для глаза). **Технически** — дискретные шаги.
+
+---
+
+## Fixed Timestep — паттерн для физики
+
+Проблема variable dt:
+
+```
+Событие 1: dt = 16ms  → position += velocity * 0.016
+Событие 2: dt = 100ms → position += velocity * 0.100  // лаг!
+                        ↑
+              Объект "пролетает" сквозь стену
+```
+
+**Решение:** фиксированный шаг физики (как в игровых движках).
+
+```agda
+-- Это паттерн использования, не примитив!
 
 FIXED_DT : ℕ
-FIXED_DT = 1000 / PHYSICS_HZ  -- 16ms
+FIXED_DT = 16  -- 60 Hz
 
 record PhysicsModel (A : Set) : Set where
   field
-    current     : A      -- текущее состояние
-    previous    : A      -- предыдущее (для интерполяции)
+    current     : A      -- текущее состояние физики
+    previous    : A      -- для интерполяции рендера
     accumulator : ℕ      -- накопленное время
 
-PhysicsStep : Set → Set
-PhysicsStep A = A → A
-
-updatePhysics : PhysicsStep A → ℕ → PhysicsModel A → PhysicsModel A
+updatePhysics : (A → A) → ℕ → PhysicsModel A → PhysicsModel A
 updatePhysics step dt model = go (record model { accumulator = model.accumulator + dt })
   where
     go m = if m.accumulator >= FIXED_DT
            then go (record m
-             { current = step (m.current)
+             { current = step m.current
              ; previous = m.current
              ; accumulator = m.accumulator - FIXED_DT
              })
            else m
-
-interpolate : Lerp A → PhysicsModel A → A
-interpolate lerp m =
-  let alpha = m.accumulator * 1000 / FIXED_DT
-  in lerp (m.previous) (m.current) alpha
-
-Lerp : Set → Set
-Lerp A = A → A → ℕ → A  -- from → to → alpha(0-1000) → result
 ```
 
-**Пример: прыгающий мяч**
+**Как это работает:**
+
+```
+animationFrame даёт dt = 100ms (лаг!)
+
+accumulator += 100  -- теперь 100
+
+while accumulator >= 16:
+  step()            -- физика с фиксированным dt=16
+  accumulator -= 16
+
+-- Выполнилось 6 шагов физики
+-- accumulator = 4 (остаток для интерполяции рендера)
+```
+
+Физика всегда детерминирована. Один и тот же input → один и тот же результат.
+
+---
+
+## Интерполяция рендера
+
+После физики `accumulator` содержит "остаток" времени. Используем для плавного рендера:
+
+```agda
+interpolate : Lerp A → PhysicsModel A → A
+interpolate lerp m =
+  let alpha = m.accumulator * 1000 / FIXED_DT  -- 0..1000
+  in lerp m.previous m.current alpha
+
+Lerp : Set → Set
+Lerp A = A → A → ℕ → A  -- from → to → alpha → result
+```
+
+```
+previous ●────────────────● current
+              ↑
+         alpha = 0.25
+              ↓
+           render здесь
+```
+
+---
+
+## Пример: прыгающий мяч
 
 ```agda
 record Ball : Set where
-  field
-    y  : ℤ    -- позиция (миллиметры)
-    vy : ℤ    -- скорость (мм/с)
+  y  : ℤ    -- позиция (миллиметры)
+  vy : ℤ    -- скорость (мм/с)
 
 GRAVITY : ℤ
 GRAVITY = -9800  -- мм/с²
 
-ballStep : PhysicsStep Ball
+ballStep : Ball → Ball
 ballStep b =
   let newVy = b.vy + GRAVITY * FIXED_DT / 1000
       newY  = b.y + newVy * FIXED_DT / 1000
-      (y', vy') = if newY < 0
-                  then (0, negate newVy * 80 / 100)  -- отскок
-                  else (newY, newVy)
-  in record { y = y'; vy = vy' }
+  in if newY < 0
+     then record { y = 0; vy = negate newVy * 80 / 100 }  -- отскок
+     else record { y = newY; vy = newVy }
 
-lerpBall : Lerp Ball
-lerpBall a b alpha = record
-  { y  = a.y + (b.y - a.y) * alpha / 1000
-  ; vy = b.vy
-  }
+-- В update:
+update (Tick frame) m = record m
+  { physics = updatePhysics ballStep frame.dt m.physics }
+
+-- В view:
+view m =
+  let ball = interpolate lerpBall m.physics
+  in div [ style [("transform", "translateY(" ++ show ball.y ++ "mm)")] ]
+       [ text "●" ]
 ```
-
-**Преимущества fixed timestep:**
-
-| Свойство | Variable dt | Fixed dt |
-|----------|-------------|----------|
-| Детерминизм | Зависит от FPS | Всегда одинаково |
-| Replay | Нужно сохранять dt | Только input |
-| Стабильность | Глитчи при лагах | Физика не ломается |
-| Сетевая игра | Рассинхрон | Lockstep возможен |
 
 ---
 
-## Сравнение с другими FRP-системами
+## Сравнение с другими системами
 
 | Система | Модель времени | Комментарий |
 |---------|----------------|-------------|
-| Fran (Conal Elliott) | Непрерывное | Красиво математически, проблемы на практике |
-| Yampa | Дискретное (SF) | Signal Functions, нет time leaks |
-| Reflex | Дискретное | Spider timeline, практичный |
+| Fran (Conal Elliott) | Непрерывное (Time → A) | Красиво математически, проблемы на практике |
+| Yampa | Дискретное (Signal Functions) | Нет time leaks |
+| Reflex | Дискретное | Spider timeline |
 | Elm | Дискретное | Такты по событиям |
-| Игровые движки | Fixed timestep | Индустриальный стандарт |
-| **Agdelte** | **Дискретное + fixed** | Такты + опциональный fixed timestep |
+| Игровые движки | Дискретное + fixed timestep | Индустриальный стандарт |
+| **Agdelte** | **Дискретное** | Event + паттерн fixed timestep |
 
 ---
 
 ## Итог
 
 ```
-Событийное время (UI):     Кадровое время (анимации):    Физическое время (игры):
-
-  Event ───► Такт            animationFrame               Fixed timestep
-     │                            │                            │
-     ▼                            ▼                            ▼
-  update                    update(dt)                   updatePhysics(dt)
-  render                      render                    interpolate + render
-     │                            │                            │
-     ▼                            ▼                            ▼
-   idle                    requestAnimationFrame         while(acc >= FIXED_DT)
- (ждём событие)              (следующий кадр)              step(FIXED_DT)
+┌─────────────────────────────────────────────────────────────┐
+│  БАЗИС: дискретные события (Event)                          │
+│                                                             │
+│  interval 1000      → Event ⊤     (каждую секунду)         │
+│  animationFrame     → Event FrameInfo (каждый кадр)        │
+│  keyboard           → Event Key   (при нажатии)            │
+│  request            → Event Response (при ответе)          │
+│                                                             │
+│  Всё — дискретные события. Никакой непрерывности.          │
+├─────────────────────────────────────────────────────────────┤
+│  ПАТТЕРН: fixed timestep (для физики)                       │
+│                                                             │
+│  • Накапливаем dt из animationFrame                         │
+│  • Выполняем шаги физики с фиксированным FIXED_DT           │
+│  • Интерполируем рендер                                     │
+│                                                             │
+│  Детерминизм, replay, сетевая синхронизация.               │
+├─────────────────────────────────────────────────────────────┤
+│  "НЕПРЕРЫВНОСТЬ": иллюзия                                   │
+│                                                             │
+│  • 60 событий/сек визуально неотличимо от непрерывности     │
+│  • dt позволяет интерполировать между событиями             │
+│  • Технически — дискретные шаги                             │
+│                                                             │
+│  Это честно. И это работает.                                │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-**Философия:** время дискретно на всех уровнях. Непрерывное время — полезная абстракция для математики, но не для реализации.
+**Философия:** непрерывное время — полезная абстракция для математики, но иллюзия для реализации. Мы не притворяемся. Всё дискретно.

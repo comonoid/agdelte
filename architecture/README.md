@@ -38,13 +38,13 @@ record App (Msg : Set) (Model : Set) : Set where
     events : Model → Event Msg        -- декларативные подписки
 ```
 
-### Signal и Event — два типа потоков
+### Signal и Event — дискретные потоки
 
 ```agda
--- Signal: значение, меняющееся во времени
+-- Signal: дискретный поток значений (одно значение на такт)
 Signal : Set → Set
 
--- Event: дискретные события
+-- Event: дискретные события (список событий за такт)
 Event : Set → Set
 Event A = Signal (List A)
 

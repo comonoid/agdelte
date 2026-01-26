@@ -38,13 +38,15 @@ record App (Msg : Set) (Model : Set) : Set where
   events : Model → Event Msg        -- декларативные подписки
 ```
 
-### Signal и Event
+### Signal и Event — дискретные потоки
 
 ```agda
-Signal : Set → Set              -- значение, меняющееся во времени
-Event  : Set → Set              -- дискретные события
+Signal : Set → Set              -- дискретный поток (одно значение на такт)
+Event  : Set → Set              -- дискретные события (список за такт)
 Event A = Signal (List A)
 ```
+
+**Важно:** в Agdelte нет непрерывного времени. Signal — это дискретный поток значений, не функция `Time → A`.
 
 ### IO — всё это Event
 
