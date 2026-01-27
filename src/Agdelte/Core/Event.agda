@@ -6,7 +6,7 @@
 module Agdelte.Core.Event where
 
 open import Data.List using (List; []; _∷_; _++_; map; concat; filterᵇ;
-                             foldr; length; null; head; reverse)
+                             foldl; length; null; head; reverse)
 open import Data.List.NonEmpty using (List⁺; _∷_; toList) renaming (map to map⁺)
 open import Data.Bool using (Bool; true; false; if_then_else_; not; _∧_; _∨_)
 open import Data.Nat using (ℕ; zero; suc; _+_; _<ᵇ_; _∸_)
@@ -118,25 +118,27 @@ eitherE ea eb = merge (tagLeft ea) (tagRight eb)
 ------------------------------------------------------------------------
 
 -- Свёртка через время (foldp в Elm)
-foldE : (A → B → B) → B → Event A → Signal B
-now  (foldE f b e) = foldr f b (now e)
-next (foldE f b e) = foldE f (foldr f b (now e)) (next e)
+-- Семантика: события обрабатываются в порядке поступления (слева направо)
+-- foldl f z [a,b,c] = f (f (f z a) b) c
+foldE : (B → A → B) → B → Event A → Signal B
+now  (foldE f b e) = foldl f b (now e)
+next (foldE f b e) = foldE f (foldl f b (now e)) (next e)
 
--- Аккумулятор (accumE)
+-- Аккумулятор (accumE) — применяет функции-события к состоянию
 accumE : B → Event (B → B) → Signal B
-accumE = foldE (λ f b → f b)
+accumE = foldE (λ b f → f b)
 
 -- Подсчёт событий
 count : Event A → Signal ℕ
-count = foldE (const suc) zero
+count = foldE (λ n _ → suc n) zero
 
--- Собрать все события в список
+-- Собрать все события в список (в порядке поступления)
 collect : Event A → Signal (List A)
-collect = foldE (λ a as → as ++ (a ∷ [])) []
+collect = foldE (λ as a → as ++ (a ∷ [])) []
 
 -- Последнее событие (или начальное значение)
 stepper : A → Event A → Signal A
-stepper a = foldE const a
+stepper a = foldE (λ _ x → x) a
 
 -- hold — синоним stepper
 hold : A → Event A → Signal A

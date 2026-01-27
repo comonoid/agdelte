@@ -1,0 +1,19 @@
+# Agda interface files
+*.agdai
+
+# Agda build artifacts
+MAlonzo/
+build/
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+*~
+*.swp
+.vscode/
+.idea/

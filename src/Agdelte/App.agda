@@ -179,18 +179,23 @@ batchUpdate app [] m = m
 batchUpdate app (msg ∷ msgs) m = batchUpdate app msgs (update app msg m)
 
 ------------------------------------------------------------------------
--- Связь с полиномами
+-- Связь с полиномами (см. Agdelte.Core.PolyApp для деталей)
 ------------------------------------------------------------------------
 
--- App как коалгебра полинома Html × Event
--- Позиция = Html Msg (что показываем)
--- Направление = Msg (что принимаем)
-
--- appToPoly : App Model Msg → Poly
--- appToPoly app = mkPoly (Html Msg) (const Msg)
-
--- appToCoalg : App Model Msg → Coalg (appToPoly app)
--- appToCoalg app = mkCoalg Model (view app) (flip (update app))
+-- App Model Msg — это коалгебра полинома AppPoly Msg = Mono (Html Msg) Msg
+--
+-- Ключевое соответствие:
+--   App.init   → начальное состояние коалгебры
+--   App.view   → Coalg.observe : State → Pos
+--   App.update → Coalg.update  : State → Dir → State
+--
+-- Операции на App соответствуют wiring diagrams на коалгебрах:
+--   _∥_  ↔ Poly.parallel : Coalg P → Coalg Q → Coalg (P ⊗ Q)
+--   _⊕ᵃ_ ↔ Poly.choice   : Coalg P → Coalg Q → Coalg (P ⊕ Q)
+--   mapMsg ↔ Poly.transformCoalg : Lens P Q → Coalg P → Coalg Q
+--
+-- Это делает App экземпляром Moore machine в терминах polynomial functors:
+--   Moore machine = ν X. Output × (Input → X) = Coalg (Mono Output Input)
 
 ------------------------------------------------------------------------
 -- Утилиты
@@ -212,3 +217,15 @@ step msg app = mkApp
 steps : ∀ {Model Msg : Set} → List Msg → App Model Msg → App Model Msg
 steps [] app = app
 steps (msg ∷ msgs) app = steps msgs (step msg app)
+
+------------------------------------------------------------------------
+-- Wiring diagram aliases (для совместимости с Poly терминологией)
+------------------------------------------------------------------------
+
+-- Параллельное соединение (tensor product)
+tensor : ∀ {M₁ M₂ A₁ A₂ : Set} → App M₁ A₁ → App M₂ A₂ → App (M₁ × M₂) (A₁ ⊎ A₂)
+tensor = _∥_
+
+-- Выбор (coproduct)
+coproduct : ∀ {M₁ M₂ A₁ A₂ : Set} → App M₁ A₁ → App M₂ A₂ → App (M₁ ⊎ M₂) (A₁ ⊎ A₂)
+coproduct = _⊕ᵃ_
