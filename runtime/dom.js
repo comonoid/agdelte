@@ -135,21 +135,43 @@ function applyAttribute(el, attr, dispatch) {
       break;
 
     case 'on':
-      el.addEventListener(name, (e) => {
-        dispatch(value); // value = Msg
-      });
+      // Store handler in element, add listener only once
+      el._handlers = el._handlers || {};
+      el._handlers[`on:${name}`] = value;
+      if (!el._listenersAttached?.[`on:${name}`]) {
+        el._listenersAttached = el._listenersAttached || {};
+        el._listenersAttached[`on:${name}`] = true;
+        el.addEventListener(name, (e) => {
+          const h = el._handlers[`on:${name}`];
+          if (h) dispatch(h);
+        });
+      }
       break;
 
     case 'onInput':
-      el.addEventListener('input', (e) => {
-        dispatch(handler(e.target.value));
-      });
+      el._handlers = el._handlers || {};
+      el._handlers['onInput'] = handler;
+      if (!el._listenersAttached?.['onInput']) {
+        el._listenersAttached = el._listenersAttached || {};
+        el._listenersAttached['onInput'] = true;
+        el.addEventListener('input', (e) => {
+          const h = el._handlers['onInput'];
+          if (h) dispatch(h(e.target.value));
+        });
+      }
       break;
 
     case 'onKey':
-      el.addEventListener(name, (e) => {
-        dispatch(handler(e.key));
-      });
+      el._handlers = el._handlers || {};
+      el._handlers[`onKey:${name}`] = handler;
+      if (!el._listenersAttached?.[`onKey:${name}`]) {
+        el._listenersAttached = el._listenersAttached || {};
+        el._listenersAttached[`onKey:${name}`] = true;
+        el.addEventListener(name, (e) => {
+          const h = el._handlers[`onKey:${name}`];
+          if (h) dispatch(h(e.key));
+        });
+      }
       break;
 
     case 'key':
@@ -246,15 +268,7 @@ export function patch(dom, oldVnode, newVnode, dispatch) {
   }
 
   // Тот же тег — патчим атрибуты и детей
-  const needsRecreate = patchAttributes(dom, toArray(oldVnode.attrs || []), toArray(newVnode.attrs || []), dispatch);
-
-  if (needsRecreate) {
-    // Event handlers changed - recreate element to avoid listener accumulation
-    const newDom = createElement(newVnode, dispatch);
-    dom.parentNode?.replaceChild(newDom, dom);
-    return newDom;
-  }
-
+  patchAttributes(dom, toArray(oldVnode.attrs || []), toArray(newVnode.attrs || []), dispatch);
   patchChildren(dom, oldVnode, newVnode, dispatch);
 
   return dom;
@@ -262,41 +276,26 @@ export function patch(dom, oldVnode, newVnode, dispatch) {
 
 /**
  * Патчинг атрибутов
- * Returns true if element needs to be recreated (event handlers changed)
+ * Now handles events efficiently - updates handler reference without recreating element
  */
 function patchAttributes(el, oldAttrs, newAttrs, dispatch) {
   const oldMap = new Map(oldAttrs.filter(Boolean).map(a => [attrKey(a), a]));
   const newMap = new Map(newAttrs.filter(Boolean).map(a => [attrKey(a), a]));
 
-  // Check if any event handlers changed - if so, need to recreate element
-  const eventTypes = ['on', 'onInput', 'onKey'];
-  for (const [key, attr] of newMap) {
-    if (eventTypes.includes(attr.type)) {
-      const oldAttr = oldMap.get(key);
-      // Event handlers are functions, can't compare properly - always recreate if events exist
-      if (!oldAttr || oldAttr.value !== attr.value || oldAttr.handler !== attr.handler) {
-        return true; // Signal that element needs recreation
-      }
-    }
-  }
-
-  // Удаляем старые (non-event)
+  // Удаляем старые
   for (const [key, attr] of oldMap) {
-    if (!newMap.has(key) && !eventTypes.includes(attr.type)) {
+    if (!newMap.has(key)) {
       removeAttribute(el, attr);
     }
   }
 
-  // Добавляем/обновляем новые (non-event)
+  // Добавляем/обновляем новые (включая events - теперь они обновляются эффективно)
   for (const [key, attr] of newMap) {
-    if (eventTypes.includes(attr.type)) continue; // Skip events
     const oldAttr = oldMap.get(key);
     if (!oldAttr || !attrsEqual(oldAttr, attr)) {
       applyAttribute(el, attr, dispatch);
     }
   }
-
-  return false;
 }
 
 /**
