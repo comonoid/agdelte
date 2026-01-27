@@ -1,7 +1,8 @@
-# Agda interface files
+# Agda interface files (legacy location)
 *.agdai
 
 # Agda build artifacts
+_build/
 MAlonzo/
 build/
 
