@@ -91,24 +91,26 @@ export function diffEvents(currentSubs, newEventSignal) {
 function extractEventSpecs(eventSignal) {
   const specs = new Map();
 
-  // Event = Signal (List EventSpec)
-  // Проходим по структуре и извлекаем спецификации
+  if (!eventSignal) return specs;
 
-  function extract(signal, depth = 0) {
-    if (!signal || depth > 100) return; // Защита от бесконечности
+  // Primitive events (interval, timeout) имеют type на верхнем уровне
+  // Формат: { type: 'interval', config: { ms, msg }, now: [], next: ... }
+  if (eventSignal.type && eventSignal.type !== 'never') {
+    const key = eventKey(eventSignal);
+    specs.set(key, eventSignal);
+    return specs;
+  }
 
-    const events = signal.now;
-    if (Array.isArray(events)) {
-      for (const event of events) {
-        if (event && event.type) {
-          const key = eventKey(event);
-          specs.set(key, event);
-        }
+  // Event = Signal (List EventSpec) — события в now
+  const events = eventSignal.now;
+  if (Array.isArray(events)) {
+    for (const event of events) {
+      if (event && event.type) {
+        const key = eventKey(event);
+        specs.set(key, event);
       }
     }
   }
-
-  extract(eventSignal);
 
   return specs;
 }
@@ -118,7 +120,13 @@ function extractEventSpecs(eventSignal) {
  */
 function eventKey(eventSpec) {
   const { type, config = {} } = eventSpec;
-  return `${type}:${JSON.stringify(config)}`;
+  // BigInt не сериализуется в JSON, конвертируем
+  const safeConfig = {};
+  for (const [k, v] of Object.entries(config)) {
+    safeConfig[k] = typeof v === 'bigint' ? v.toString() :
+                    typeof v === 'function' ? 'fn' : v;
+  }
+  return `${type}:${JSON.stringify(safeConfig)}`;
 }
 
 // ========================================
@@ -126,9 +134,12 @@ function eventKey(eventSpec) {
 // ========================================
 
 function subscribeInterval({ ms, msg }, dispatch) {
+  // ms может быть BigInt из Agda, конвертируем в Number
+  const msNum = typeof ms === 'bigint' ? Number(ms) : ms;
+
   const id = setInterval(() => {
     dispatch(msg);
-  }, ms);
+  }, msNum);
 
   return {
     type: 'interval',

@@ -166,10 +166,10 @@ next (changed eq s) = changed' eq (now s) (next s)
     now  (changed' eq prev s) = if eq prev (now s) then false else true
     next (changed' eq prev s) = changed' eq (now s) (next s)
 
--- Подсчёт тактов
-counter : Signal ℕ
-counter = go zero
-  where
-    go : ℕ → Signal ℕ
-    now  (go n) = n
-    next (go n) = go (suc n)
+-- Создание счётчика (вызывать с начальным значением)
+-- Примечание: не определяем глобальный counter, так как JS backend
+-- вычисляет его сразу (eager), что вызывает бесконечную рекурсию.
+-- Используй: mkCounter 0 там, где нужен счётчик.
+mkCounter : ℕ → Signal ℕ
+now  (mkCounter n) = n
+next (mkCounter n) = mkCounter (suc n)

@@ -11,13 +11,10 @@
       --card: #16213e;
       --text: #eee;
       --accent: #e94560;
+      --success: #4ade80;
     }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -31,7 +28,7 @@
     }
 
     h1 {
-      font-size: 2.5rem;
+      font-size: 3rem;
       margin-bottom: 0.5rem;
       background: linear-gradient(135deg, var(--primary), var(--accent));
       -webkit-background-clip: text;
@@ -42,429 +39,189 @@
     .subtitle {
       color: #888;
       margin-bottom: 2rem;
+      font-size: 1.1rem;
     }
 
-    #app {
+    .features {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .feature {
+      background: rgba(74, 158, 255, 0.1);
+      border: 1px solid rgba(74, 158, 255, 0.3);
+      padding: 0.5rem 1rem;
+      border-radius: 20px;
+      font-size: 0.85rem;
+    }
+
+    .examples {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+      max-width: 900px;
+      width: 100%;
+      margin-bottom: 2rem;
+    }
+
+    .example-card {
       background: var(--card);
       border-radius: 12px;
-      padding: 2rem;
-      min-width: 400px;
-      box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+      padding: 1.5rem;
+      text-decoration: none;
+      color: var(--text);
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
     }
 
-    /* Counter styles */
-    .counter {
-      text-align: center;
+    .example-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.3);
     }
 
-    .counter h1 {
-      font-size: 1.5rem;
+    .example-card h2 {
+      color: var(--primary);
+      margin-bottom: 0.5rem;
+      font-size: 1.3rem;
+    }
+
+    .example-card p {
+      color: #aaa;
+      font-size: 0.9rem;
       margin-bottom: 1rem;
     }
 
-    .counter .display {
-      font-size: 4rem;
-      font-weight: bold;
-      margin: 1rem 0;
-      color: var(--primary);
+    .example-card .status {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
     }
 
-    .counter .buttons {
-      display: flex;
-      gap: 1rem;
-      justify-content: center;
+    .status.ready {
+      background: rgba(74, 222, 128, 0.2);
+      color: var(--success);
     }
 
-    .btn {
-      background: var(--primary);
-      color: white;
-      border: none;
-      padding: 0.75rem 1.5rem;
-      font-size: 1.25rem;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: transform 0.1s, background 0.2s;
+    .status.wip {
+      background: rgba(251, 191, 36, 0.2);
+      color: #fbbf24;
     }
 
-    .btn:hover {
-      background: #3a8eef;
-      transform: translateY(-2px);
-    }
-
-    .btn:active {
-      transform: translateY(0);
-    }
-
-    /* Timer styles */
-    .timer {
-      text-align: center;
-    }
-
-    .timer .display {
-      font-size: 4rem;
-      font-family: monospace;
-      color: var(--primary);
-      margin: 1rem 0;
-    }
-
-    .timer .controls {
-      display: flex;
-      gap: 1rem;
-      justify-content: center;
-    }
-
-    /* TodoMVC styles */
-    .todoapp {
-      max-width: 500px;
-    }
-
-    .todoapp h1 {
-      text-align: center;
-      font-size: 2rem;
-      opacity: 0.3;
-    }
-
-    .new-todo {
-      width: 100%;
-      padding: 1rem;
-      font-size: 1.25rem;
-      border: none;
-      border-radius: 8px;
-      background: rgba(255,255,255,0.1);
-      color: var(--text);
-      margin: 1rem 0;
-    }
-
-    .new-todo::placeholder {
-      color: #666;
-    }
-
-    .todo-list {
-      list-style: none;
-    }
-
-    .todo-list li {
-      padding: 1rem;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
-      display: flex;
-      align-items: center;
-    }
-
-    .todo-list li.completed label {
-      text-decoration: line-through;
-      opacity: 0.5;
-    }
-
-    .todo-list .toggle {
-      width: 20px;
-      height: 20px;
-      margin-right: 1rem;
-    }
-
-    .todo-list label {
-      flex: 1;
-    }
-
-    .todo-list .destroy {
-      background: var(--accent);
-      color: white;
-      border: none;
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
-      cursor: pointer;
-      opacity: 0;
-      transition: opacity 0.2s;
-    }
-
-    .todo-list li:hover .destroy {
-      opacity: 1;
-    }
-
-    .footer {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 1rem 0;
-      font-size: 0.9rem;
-      color: #666;
-    }
-
-    .filters {
-      display: flex;
-      list-style: none;
-      gap: 0.5rem;
-    }
-
-    .filters a {
-      padding: 0.25rem 0.5rem;
-      border-radius: 4px;
-      cursor: pointer;
+    .example-card code {
+      display: block;
+      margin-top: 0.75rem;
+      padding: 0.5rem;
+      background: rgba(0,0,0,0.3);
+      border-radius: 6px;
+      font-size: 0.8rem;
       color: #888;
     }
 
-    .filters a.selected {
-      color: var(--primary);
-      background: rgba(74, 158, 255, 0.1);
-    }
-
-    .clear-completed {
-      background: none;
-      border: none;
-      color: #666;
-      cursor: pointer;
-    }
-
-    .clear-completed:hover {
-      color: var(--accent);
-    }
-
-    /* Demo selector */
-    .demo-selector {
-      margin-bottom: 2rem;
-      display: flex;
-      gap: 1rem;
-    }
-
-    .demo-btn {
-      background: transparent;
-      border: 2px solid var(--primary);
-      color: var(--primary);
-      padding: 0.5rem 1rem;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .demo-btn:hover, .demo-btn.active {
-      background: var(--primary);
-      color: white;
-    }
-
     .info {
-      margin-top: 2rem;
       text-align: center;
       color: #666;
       font-size: 0.9rem;
+      max-width: 600px;
     }
 
     .info a {
       color: var(--primary);
       text-decoration: none;
     }
+
+    .info a:hover {
+      text-decoration: underline;
+    }
+
+    .tech-stack {
+      margin-top: 2rem;
+      padding: 1.5rem;
+      background: var(--card);
+      border-radius: 12px;
+      max-width: 600px;
+    }
+
+    .tech-stack h3 {
+      color: var(--primary);
+      margin-bottom: 1rem;
+      font-size: 1rem;
+    }
+
+    .tech-stack ul {
+      list-style: none;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+    }
+
+    .tech-stack li {
+      color: #aaa;
+      font-size: 0.85rem;
+    }
+
+    .tech-stack li::before {
+      content: "→ ";
+      color: var(--accent);
+    }
   </style>
 </head>
 <body>
   <h1>Agdelte</h1>
-  <p class="subtitle">Reactive UI Framework with Dependent Types</p>
+  <p class="subtitle">Reactive UI Framework with Dependent Types in Agda</p>
 
-  <div class="demo-selector">
-    <button class="demo-btn active" onclick="showDemo('counter')">Counter</button>
-    <button class="demo-btn" onclick="showDemo('timer')">Timer</button>
-    <button class="demo-btn" onclick="showDemo('todo')">TodoMVC</button>
+  <div class="features">
+    <span class="feature">Polynomial Functors</span>
+    <span class="feature">Elm Architecture</span>
+    <span class="feature">Type-Safe HTML</span>
+    <span class="feature">Compiles to JS</span>
   </div>
 
-  <div id="app"></div>
+  <div class="examples">
+    <a href="counter.html" class="example-card">
+      <h2>Counter</h2>
+      <p>Simple counter with increment, decrement, and reset. Demonstrates basic Elm architecture.</p>
+      <span class="status ready">Ready</span>
+      <code>examples/Counter.agda</code>
+    </a>
+
+    <a href="timer.html" class="example-card">
+      <h2>Timer</h2>
+      <p>Stopwatch with start/stop/reset. Shows Event subscriptions and time-based updates.</p>
+      <span class="status ready">Ready</span>
+      <code>examples/Timer.agda</code>
+    </a>
+
+    <a href="todo.html" class="example-card">
+      <h2>TodoMVC</h2>
+      <p>Full TodoMVC implementation. Demonstrates lists, filtering, and complex state.</p>
+      <span class="status wip">WIP</span>
+      <code>examples/TodoMVC.agda</code>
+    </a>
+  </div>
 
   <div class="info">
-    <p>Built with <strong>Agda</strong> + <strong>Polynomial Functors</strong></p>
-    <p>Compile examples: <code>npm run build:all</code></p>
+    <p>All examples are <strong>real Agda code</strong> compiled to JavaScript via the Agda JS backend.</p>
+    <p style="margin-top: 0.5rem">
+      Build: <code>npm run build:counter</code> |
+      Serve: <code>npm run dev</code>
+    </p>
   </div>
 
-  <script type="module">
-    import { runApp } from './runtime/index.js';
-
-    // Mock apps for demo (before Agda compilation)
-    const counterApp = {
-      init: 0,
-      update: (msg) => (model) => {
-        switch (msg) {
-          case 'inc': return model + 1;
-          case 'dec': return Math.max(0, model - 1);
-          case 'reset': return 0;
-          default: return model;
-        }
-      },
-      view: (model) => ({
-        tag: 'div',
-        attrs: [{ type: 'attr', name: 'class', value: 'counter' }],
-        children: [
-          { tag: 'h1', attrs: [], children: ['Agdelte Counter'] },
-          { tag: 'div', attrs: [{ type: 'attr', name: 'class', value: 'display' }], children: [String(model)] },
-          { tag: 'div', attrs: [{ type: 'attr', name: 'class', value: 'buttons' }], children: [
-            { tag: 'button', attrs: [{ type: 'attr', name: 'class', value: 'btn' }, { type: 'on', name: 'click', value: 'dec' }], children: ['-'] },
-            { tag: 'button', attrs: [{ type: 'attr', name: 'class', value: 'btn' }, { type: 'on', name: 'click', value: 'reset' }], children: ['Reset'] },
-            { tag: 'button', attrs: [{ type: 'attr', name: 'class', value: 'btn' }, { type: 'on', name: 'click', value: 'inc' }], children: ['+'] }
-          ]}
-        ]
-      }),
-      events: () => ({ now: [], next: null })
-    };
-
-    const timerApp = {
-      init: { seconds: 0, running: false },
-      update: (msg) => (model) => {
-        switch (msg) {
-          case 'tick': return model.running ? { ...model, seconds: model.seconds + 1 } : model;
-          case 'toggle': return { ...model, running: !model.running };
-          case 'reset': return { seconds: 0, running: false };
-          default: return model;
-        }
-      },
-      view: (model) => {
-        const mins = Math.floor(model.seconds / 60);
-        const secs = model.seconds % 60;
-        const time = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-        return {
-          tag: 'div',
-          attrs: [{ type: 'attr', name: 'class', value: 'timer' }],
-          children: [
-            { tag: 'h1', attrs: [], children: ['Agdelte Timer'] },
-            { tag: 'div', attrs: [{ type: 'attr', name: 'class', value: 'display' }], children: [time] },
-            { tag: 'div', attrs: [{ type: 'attr', name: 'class', value: 'controls' }], children: [
-              { tag: 'button', attrs: [{ type: 'attr', name: 'class', value: 'btn' }, { type: 'on', name: 'click', value: 'toggle' }], children: [model.running ? 'Pause' : 'Start'] },
-              { tag: 'button', attrs: [{ type: 'attr', name: 'class', value: 'btn' }, { type: 'on', name: 'click', value: 'reset' }], children: ['Reset'] }
-            ]}
-          ]
-        };
-      },
-      events: () => ({ now: [], next: null })
-    };
-
-    // Timer tick
-    let timerInterval = null;
-
-    const todoApp = {
-      init: { todos: [], newTodo: '', nextId: 0, filter: 'all' },
-      update: (msg) => (model) => {
-        if (msg.type === 'input') return { ...model, newTodo: msg.value };
-        if (msg.type === 'add' && model.newTodo.trim()) {
-          return {
-            ...model,
-            todos: [...model.todos, { id: model.nextId, text: model.newTodo, completed: false }],
-            newTodo: '',
-            nextId: model.nextId + 1
-          };
-        }
-        if (msg.type === 'toggle') {
-          return {
-            ...model,
-            todos: model.todos.map(t => t.id === msg.id ? { ...t, completed: !t.completed } : t)
-          };
-        }
-        if (msg.type === 'delete') {
-          return { ...model, todos: model.todos.filter(t => t.id !== msg.id) };
-        }
-        if (msg.type === 'filter') return { ...model, filter: msg.filter };
-        if (msg.type === 'clear') return { ...model, todos: model.todos.filter(t => !t.completed) };
-        return model;
-      },
-      view: (model) => {
-        const filtered = model.todos.filter(t => {
-          if (model.filter === 'active') return !t.completed;
-          if (model.filter === 'completed') return t.completed;
-          return true;
-        });
-        const remaining = model.todos.filter(t => !t.completed).length;
-
-        return {
-          tag: 'section',
-          attrs: [{ type: 'attr', name: 'class', value: 'todoapp' }],
-          children: [
-            { tag: 'header', attrs: [{ type: 'attr', name: 'class', value: 'header' }], children: [
-              { tag: 'h1', attrs: [], children: ['todos'] },
-              { tag: 'input', attrs: [
-                { type: 'attr', name: 'class', value: 'new-todo' },
-                { type: 'attr', name: 'placeholder', value: 'What needs to be done?' },
-                { type: 'attr', name: 'value', value: model.newTodo },
-                { type: 'onInput', handler: (v) => ({ type: 'input', value: v }) },
-                { type: 'onKey', name: 'keydown', handler: (k) => k === 'Enter' ? { type: 'add' } : null }
-              ], children: [] }
-            ]},
-            { tag: 'ul', attrs: [{ type: 'attr', name: 'class', value: 'todo-list' }], children: filtered.map(t => ({
-              tag: 'li',
-              attrs: [{ type: 'attr', name: 'class', value: t.completed ? 'completed' : '' }],
-              children: [
-                { tag: 'div', attrs: [{ type: 'attr', name: 'class', value: 'view' }], children: [
-                  { tag: 'input', attrs: [
-                    { type: 'attr', name: 'type', value: 'checkbox' },
-                    { type: 'attr', name: 'class', value: 'toggle' },
-                    t.completed ? { type: 'boolAttr', name: 'checked' } : null,
-                    { type: 'on', name: 'click', value: { type: 'toggle', id: t.id } }
-                  ].filter(Boolean), children: [] },
-                  { tag: 'label', attrs: [], children: [t.text] },
-                  { tag: 'button', attrs: [
-                    { type: 'attr', name: 'class', value: 'destroy' },
-                    { type: 'on', name: 'click', value: { type: 'delete', id: t.id } }
-                  ], children: [] }
-                ]}
-              ]
-            }))},
-            { tag: 'footer', attrs: [{ type: 'attr', name: 'class', value: 'footer' }], children: [
-              { tag: 'span', attrs: [{ type: 'attr', name: 'class', value: 'todo-count' }], children: [`${remaining} items left`] },
-              { tag: 'ul', attrs: [{ type: 'attr', name: 'class', value: 'filters' }], children: ['all', 'active', 'completed'].map(f => ({
-                tag: 'li',
-                attrs: [],
-                children: [{ tag: 'a', attrs: [
-                  { type: 'attr', name: 'class', value: model.filter === f ? 'selected' : '' },
-                  { type: 'on', name: 'click', value: { type: 'filter', filter: f } }
-                ], children: [f.charAt(0).toUpperCase() + f.slice(1)] }]
-              }))},
-              { tag: 'button', attrs: [
-                { type: 'attr', name: 'class', value: 'clear-completed' },
-                { type: 'on', name: 'click', value: { type: 'clear' } }
-              ], children: ['Clear completed'] }
-            ]}
-          ]
-        };
-      },
-      events: () => ({ now: [], next: null })
-    };
-
-    let currentApp = null;
-
-    function showDemo(name) {
-      // Clear timer if any
-      if (timerInterval) {
-        clearInterval(timerInterval);
-        timerInterval = null;
-      }
-
-      // Update buttons
-      document.querySelectorAll('.demo-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.textContent.toLowerCase().includes(name));
-      });
-
-      // Destroy current app
-      if (currentApp) {
-        currentApp.destroy();
-      }
-
-      const container = document.getElementById('app');
-
-      switch (name) {
-        case 'counter':
-          currentApp = runApp(counterApp, container);
-          break;
-        case 'timer':
-          currentApp = runApp(timerApp, container);
-          // Start timer interval
-          timerInterval = setInterval(() => {
-            currentApp.dispatch('tick');
-          }, 1000);
-          break;
-        case 'todo':
-          currentApp = runApp(todoApp, container);
-          break;
-      }
-    }
-
-    // Initialize with counter
-    showDemo('counter');
-
-    // Expose to window for debugging
-    window.showDemo = showDemo;
-    window.getApp = () => currentApp;
-  </script>
+  <div class="tech-stack">
+    <h3>Architecture</h3>
+    <ul>
+      <li>App ≅ Coalg (Mono Html Msg)</li>
+      <li>Signal A ≅ ν X. A × X</li>
+      <li>Event A = Signal (List A)</li>
+      <li>Lens morphisms for composition</li>
+      <li>Scott encoding for sum types</li>
+      <li>List compiles to JS Array</li>
+    </ul>
+  </div>
 </body>
 </html>

@@ -26,7 +26,7 @@ open import Agdelte.Primitive.Interval
 record Model : Set where
   constructor mkModel
   field
-    seconds : ℕ
+    tenths  : ℕ    -- Десятые доли секунды
     running : Bool
 
 open Model public
@@ -48,20 +48,22 @@ data Msg : Set where
 ------------------------------------------------------------------------
 
 update : Msg → Model → Model
-update Tick m = if running m then record m { seconds = suc (seconds m) } else m
+update Tick m = if running m then record m { tenths = suc (tenths m) } else m
   where open import Data.Bool using (if_then_else_)
 update Toggle m = record m { running = not (running m) }
-update Reset _ = initialModel
+update Reset m = record m { tenths = 0 }  -- Не останавливает таймер!
 
 ------------------------------------------------------------------------
 -- View
 ------------------------------------------------------------------------
 
 formatTime : ℕ → String
-formatTime n =
-  let mins = n / 60
-      secs = n % 60
-  in pad (show mins) ++ ":" ++ pad (show secs)
+formatTime t =
+  let totalSecs = t / 10
+      tenthsPart = t % 10
+      mins = totalSecs / 60
+      secs = totalSecs % 60
+  in pad (show mins) ++ ":" ++ pad (show secs) ++ "." ++ show tenthsPart
   where
     open import Data.Nat.DivMod using (_/_; _%_)
     open import Data.Nat using (_<ᵇ_)
@@ -76,7 +78,7 @@ view m =
   div (class "timer" ∷ [])
     ( h1 [] (text "Agdelte Timer" ∷ [])
     ∷ div (class "display" ∷ fontSize "48px" ∷ [])
-        (text (formatTime (seconds m)) ∷ [])
+        (text (formatTime (tenths m)) ∷ [])
     ∷ div (class "controls" ∷ [])
         ( button (onClick Toggle ∷ class "btn" ∷ [])
             (text (if running m then "Pause" else "Start") ∷ [])
@@ -92,7 +94,7 @@ view m =
 
 events : Model → Event Msg
 events m = if running m
-           then interval 1000 Tick  -- Каждую секунду
+           then interval 100 Tick  -- Каждые 0.1 секунды
            else never
   where open import Data.Bool using (if_then_else_)
 

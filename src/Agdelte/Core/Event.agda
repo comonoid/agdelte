@@ -33,9 +33,11 @@ Event A = Signal (List A)
 ------------------------------------------------------------------------
 
 -- Никогда не происходит
+-- JS pragma для ленивой реализации (избегаем eager evaluation при загрузке модуля)
 never : Event A
 now  never = []
 next never = never
+{-# COMPILE JS never = _ => ({ type: 'never', now: [], get next() { return this; } }) #-}
 
 -- Одиночное событие в момент 0
 once : A → Event A
