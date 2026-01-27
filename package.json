@@ -17,7 +17,8 @@
     "build:todo": "agda --js --js-es6 --js-optimize --compile-dir=build -i src -i examples examples/Todo.agda",
     "build:all": "npm run build:counter && npm run build:timer && npm run build:todo",
     "typecheck": "agda -i src src/Agdelte/App.agda",
-    "typecheck:all": "agda -i src -i examples src/Agdelte/App.agda && agda -i src -i examples examples/Counter.agda && agda -i src -i examples examples/Timer.agda && agda -i src -i examples examples/Todo.agda",
+    "typecheck:theory": "agda -i src src/Agdelte/Theory/PolyApp.agda",
+    "typecheck:all": "agda -i src -i examples src/Agdelte/App.agda && agda -i src src/Agdelte/Theory/PolyApp.agda && agda -i src -i examples examples/Counter.agda && agda -i src -i examples examples/Timer.agda && agda -i src -i examples examples/Todo.agda",
     "dev": "node serve.cjs",
     "clean": "rm -rf build MAlonzo jAgda"
   },

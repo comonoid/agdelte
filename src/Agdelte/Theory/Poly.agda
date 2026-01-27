@@ -5,7 +5,7 @@
 -- Poly = ∑(i : Pos) (Dir i → -)
 -- MVP версия: без universe polymorphism
 
-module Agdelte.Core.Poly where
+module Agdelte.Theory.Poly where
 
 open import Data.Product using (Σ; _,_; proj₁; proj₂; _×_)
 open import Data.Sum using (_⊎_; inj₁; inj₂)

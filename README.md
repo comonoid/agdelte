@@ -8,29 +8,42 @@ Agdelte brings the same ideas to a language with a real type system. Reactivity 
 
 ## Core Idea
 
-Everything is a **system implementing an interface**.
+Agdelte combines **Elm Architecture** with **declarative subscriptions**:
 
 ```agda
--- Poly: interface (what system outputs, what it accepts)
-record Poly : Set₁ where
+record App (Model Msg : Set) : Set where
   field
-    Pos : Set              -- positions (outputs)
-    Dir : Pos → Set        -- directions (inputs)
-
--- Sys: system = coalgebra of polynomial
-record Sys (P : Poly) : Set₁ where
-  field
-    State : Set
-    pos   : State → P.Pos
-    step  : (s : State) → P.Dir (pos s) → State
-
--- Signal, Event, App — all are Sys P for different P (all discrete!)
-Signal A = Sys (A, λ _ → ⊤)           -- discrete stream: one value per tick
-Event A  = Signal (List A)            -- discrete events: list per tick
-App      = Sys (Html Msg, λ _ → Msg)  -- outputs Html, accepts Msg
+    init   : Model                    -- initial state
+    update : Msg → Model → Model      -- pure state transition
+    view   : Model → Html Msg         -- pure rendering
+    events : Model → Event Msg        -- declarative subscriptions
 ```
 
-Theoretical foundation: **Polynomial Functors** (Spivak, Niu).
+Key insight: `events` depends on `Model`. Subscriptions automatically update when model changes. No manual cleanup.
+
+```agda
+-- Signal: discrete stream (one value per tick)
+Signal A  -- coinductive: now : A, next : Signal A
+
+-- Event: discrete events (list per tick)
+Event A = Signal (List A)
+```
+
+### Theoretical Foundation
+
+The `Theory/` module (isolated, optional) establishes correspondence with **Polynomial Functors** (Spivak, Niu):
+
+- `Signal A ≅ Coalg (Mono A ⊤)` — signals as coalgebras
+- `App ≅ Coalg (AppPoly) + init + events` — apps as systems
+- Composition operators correspond to Poly operations (⊗, ⊕)
+
+**Philosophy:** Simple definitions for ergonomics and clear error messages. Theory in separate module for formal guarantees and proofs.
+
+| Phase | User API | Internal | Theory |
+|-------|----------|----------|--------|
+| **MVP** | Simple definitions | Simple functions | Isolated in Theory/ |
+| **Phase 2+** | Same simple API | Poly inside combinators | Guarantees by construction |
+| **Phase 3+** | + Wiring diagrams | Poly everywhere | For advanced users |
 
 **All IO is Event.** Timers, HTTP, WebSocket, animations — unified under one mechanism. Everything is discrete events:
 
@@ -98,7 +111,8 @@ app = record
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                         Agdelte                             │
+│  USER: Simple definitions, clear error messages             │
+│  App { init, update, view, events }                         │
 ├─────────────────────────────────────────────────────────────┤
 │  Core          │  Signal, Event, combinators                │
 ├─────────────────────────────────────────────────────────────┤
@@ -109,6 +123,9 @@ app = record
 │  Html          │  Typed elements and attributes             │
 ├─────────────────────────────────────────────────────────────┤
 │  Runtime       │  Event loop, subscriptions, rendering      │
+├─────────────────────────────────────────────────────────────┤
+│  Theory/       │  Poly, Coalg, Lens (isolated, optional)    │
+│                │  Phase 2+: used internally for guarantees  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -135,6 +152,7 @@ DOM events from `view` are handled automatically by runtime.
 | Document | Description |
 |----------|-------------|
 | [description.md](description.md) | Concise overview of the core idea |
+| [examples/README.md](examples/README.md) | Running examples (Counter, Timer, Todo) |
 | [architecture/](architecture/) | Full architecture documentation |
 
 ### Architecture
@@ -142,7 +160,7 @@ DOM events from `view` are handled automatically by runtime.
 | Document | Description |
 |----------|-------------|
 | [architecture/README.md](architecture/README.md) | Three-layer architecture (Poly foundation + Elm-like DSL) |
-| [architecture/concurrency.md](architecture/concurrency.md) | Concurrency extension (Web Workers) |
+| [architecture/concurrency.md](architecture/concurrency.md) | Concurrency extension — Phase 3 (planned) |
 | [architecture/vs-svelte.md](architecture/vs-svelte.md) | Detailed comparison with Svelte 5 |
 | [architecture/vs-vue3.md](architecture/vs-vue3.md) | Feature comparison with Vue 3 |
 
@@ -152,37 +170,45 @@ DOM events from `view` are handled automatically by runtime.
 |----------|-------------|
 | [architecture/time-model.md](architecture/time-model.md) | Time model: ticks, animationFrame, fixed timestep |
 | [architecture/combinators.md](architecture/combinators.md) | All combinators with types and examples |
-| [architecture/ffi.md](architecture/ffi.md) | JavaScript FFI implementations |
+| [architecture/ffi.md](architecture/ffi.md) | JavaScript FFI implementations (reference) |
 
 ## Project Structure
 
 ```
 src/
   Agdelte/
-    ├── Core/                    -- Core (required)
-    │   ├── Signal.agda          -- Signal, Functor, Applicative
-    │   └── Event.agda           -- Event, combinators, foldp
+    ├── Core/                    -- Простые определения (для пользователя)
+    │   ├── Signal.agda          -- Coinductive stream
+    │   └── Event.agda           -- Event = Signal (List A)
+    │
+    ├── Theory/                  -- Теоретическое обоснование (опционально)
+    │   ├── Poly.agda            -- Polynomial functors, Coalg, Lens
+    │   ├── PolySignal.agda      -- Signal ≅ Coalg (Mono A ⊤)
+    │   └── PolyApp.agda         -- App ≅ Coalg (AppPoly)
+    │
+    ├── Html/                    -- Typed HTML
+    │   ├── Types.agda           -- Html, Attr types
+    │   ├── Elements.agda        -- div, span, button, input, etc.
+    │   ├── Attributes.agda      -- className, style, value, etc.
+    │   └── Events.agda          -- onClick, onInput, onKey
     │
     ├── Primitive/               -- IO primitives
-    │   ├── Interval.agda
-    │   ├── AnimationFrame.agda  -- browser frames with delta time
-    │   ├── Keyboard.agda
-    │   ├── Request.agda
-    │   └── WebSocket.agda
+    │   ├── Interval.agda        -- interval timer
+    │   ├── AnimationFrame.agda  -- browser frames with dt/fps
+    │   └── ...                  -- keyboard, mouse, request (Phase 2)
     │
-    ├── Concurrent/              -- Concurrency (optional)
-    │   ├── Worker.agda          -- worker : WorkerFn A B → A → Event B
-    │   ├── Pool.agda
-    │   └── Parallel.agda        -- parallel, race
-    │
-    ├── App.agda
-    └── Html.agda
+    └── App.agda                 -- App record, mkApp
+
+examples/
+    Counter.agda                 -- Simple counter
+    Timer.agda                   -- Stopwatch with interval
+    Todo.agda                    -- TodoMVC-style app
 
 runtime/
     index.js                     -- runApp, event loop
-    primitives.js                -- interval, keyboard, request, websocket
-    dom.js                       -- Html rendering, createElement, applyPatches
-    diff.js                      -- diffEvents, diffHtml for subscriptions
+    dom.js                       -- createElement, patch, VDOM diffing
+    events.js                    -- Event processing
+    primitives.js                -- interval, animationFrame
 ```
 
 ## Key Properties
@@ -252,30 +278,53 @@ events m = if m.computing
 
 Structured concurrency, automatic resource management, no leaks. See [architecture/concurrency.md](architecture/concurrency.md).
 
+## Quick Start
+
+```bash
+# Install dependencies (Agda 2.6.4+, agda-stdlib 2.0+)
+
+# Build all examples
+npm run build:all
+
+# Start dev server
+npm run dev
+
+# Open http://localhost:8080/
+```
+
+See [examples/README.md](examples/README.md) for details.
+
 ## Roadmap
 
-**Phase 1: MVP** — all intuitively understandable concepts
+**Phase 1: MVP** ✅ — all intuitively understandable concepts
 
-Core:
-- Signal, Event
-- Basic: never, merge, mapE, filterE, occur
-- Signal ↔ Event: foldp, stepper, changes
-- Sampling: snapshot, attach, tag, gate
-- Accumulators: accumE, accumB
-- Time: debounce, throttle
-- Other: mergeWith, pre, catchE
+Core: ✅
+- Signal, Event, Poly foundation
+- Basic combinators: mapE
+- App record with init, update, view, events
 
-Primitives:
-- interval, animationFrame, keyboard, mouse, request
+Primitives: ✅
+- interval, animationFrame
 
-App, Html (with keyed), Runtime
+Html: ✅
+- Elements: div, span, button, input, ul, li, etc.
+- Attributes: className, style, value, checked, disabled
+- Events: onClick, onInput, onKey
+
+Runtime: ✅
+- Event loop, VDOM patching, efficient handler updates
+
+Examples: ✅
+- Counter, Timer, Todo
 
 **Phase 2: Extensions** — separate concepts requiring dedicated learning
 
 - websocket (complex state, reconnection)
 - localStorage (persistence)
 - routing (URL, history)
-- switchE, alignWith (dynamic streams)
+- keyboard, mouse (global events)
+- request (HTTP)
+- More combinators: filterE, merge, snapshot, debounce, throttle
 - touch, focus management
 
 **Phase 3: Concurrency** — separate module

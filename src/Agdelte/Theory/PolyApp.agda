@@ -3,14 +3,14 @@
 -- PolyApp: связь между App и Polynomial Functors
 -- Демонстрирует, что App Model Msg ≅ Coalg (AppPoly Msg)
 
-module Agdelte.Core.PolyApp where
+module Agdelte.Theory.PolyApp where
 
 open import Data.Unit using (⊤; tt)
 open import Data.Product using (Σ; _,_; proj₁; proj₂; _×_)
 open import Data.Sum using (_⊎_; inj₁; inj₂)
 open import Function using (_∘_; id)
 
-open import Agdelte.Core.Poly
+open import Agdelte.Theory.Poly
 open import Agdelte.Core.Signal hiding (merge; delay)
 open import Agdelte.Core.Event
 open import Agdelte.Html.Types

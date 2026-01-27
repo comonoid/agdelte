@@ -3,13 +3,13 @@
 -- PolySignal: явная связь между Signal и Polynomial Functors
 -- Демонстрирует, что Signal A ≅ Coalg (Mono A ⊤)
 
-module Agdelte.Core.PolySignal where
+module Agdelte.Theory.PolySignal where
 
 open import Data.Unit using (⊤; tt)
 open import Data.Product using (Σ; _,_; proj₁; proj₂)
 open import Function using (_∘_; id)
 
-open import Agdelte.Core.Poly
+open import Agdelte.Theory.Poly
 open import Agdelte.Core.Signal
 
 private

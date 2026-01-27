@@ -179,7 +179,7 @@ batchUpdate app [] m = m
 batchUpdate app (msg ∷ msgs) m = batchUpdate app msgs (update app msg m)
 
 ------------------------------------------------------------------------
--- Связь с полиномами (см. Agdelte.Core.PolyApp для деталей)
+-- Связь с полиномами (см. Agdelte.Theory.PolyApp для деталей)
 ------------------------------------------------------------------------
 
 -- App Model Msg — это коалгебра полинома AppPoly Msg = Mono (Html Msg) Msg
