@@ -1,0 +1,45 @@
+{
+  "name": "agdelte",
+  "version": "0.1.0",
+  "description": "Reactive UI Framework with Dependent Types in Agda",
+  "type": "module",
+  "main": "runtime/index.js",
+  "exports": {
+    ".": "./runtime/index.js",
+    "./dom": "./runtime/dom.js",
+    "./events": "./runtime/events.js",
+    "./primitives": "./runtime/primitives.js"
+  },
+  "scripts": {
+    "test": "node test/runtime.test.js",
+    "build": "agda --compile --compile-dir=build examples/Counter.agda",
+    "build:all": "agda --compile --compile-dir=build examples/Counter.agda && agda --compile --compile-dir=build examples/Timer.agda && agda --compile --compile-dir=build examples/TodoMVC.agda",
+    "typecheck": "agda src/Agdelte/App.agda",
+    "typecheck:all": "agda src/Agdelte/App.agda && agda examples/Counter.agda && agda examples/Timer.agda && agda examples/TodoMVC.agda",
+    "dev": "python3 -m http.server 8080",
+    "clean": "rm -rf build MAlonzo"
+  },
+  "keywords": [
+    "agda",
+    "reactive",
+    "ui",
+    "framework",
+    "dependent-types",
+    "polynomial-functors",
+    "elm-architecture"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {},
+  "agda": {
+    "version": ">=2.6.4",
+    "standardLibrary": ">=2.0"
+  }
+}
