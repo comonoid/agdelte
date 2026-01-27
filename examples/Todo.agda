@@ -55,6 +55,7 @@ initialModel = mkModel [] "" 0
 ------------------------------------------------------------------------
 
 data Msg : Set where
+  NoOp           : Msg
   UpdateInput    : String → Msg
   AddTodo        : Msg
   ToggleTodo     : ℕ → Msg
@@ -93,15 +94,15 @@ isEmpty s with s ≟ ""
 {-# COMPILE JS isEmpty = s => s === "" #-}
 
 update : Msg → Model → Model
+update NoOp m = m
 update (UpdateInput s) m = record m { inputText = s }
 update AddTodo m =
   if isEmpty (inputText m)
   then m
   else record m
-    { todos     = todos m ∷ʳ mkTodo (nextId m) (inputText m) false
-    ; inputText = ""
-    ; nextId    = suc (nextId m)
-    }
+    { todos  = todos m ∷ʳ mkTodo (nextId m) (inputText m) false
+    ; nextId = suc (nextId m)
+    }  -- inputText сохраняется для быстрого добавления дубликатов
   where
     open import Data.List using (_∷ʳ_)
 update (ToggleTodo id) m = record m { todos = map (toggleItem id) (todos m) }
@@ -126,7 +127,7 @@ hasCompleted items = not (null (filterᵇ completed items))
 
 viewTodo : TodoItem → Html Msg
 viewTodo item =
-  li (class "todo-item" ∷ itemStyle ∷ [])
+  li (keyAttr (show (todoId item)) ∷ class "todo-item" ∷ itemStyle ∷ [])
     ( input (type' "checkbox" ∷ checkboxAttrs ∷ onClick (ToggleTodo (todoId item)) ∷ [])
     ∷ span (textStyle ∷ []) (text (todoText item) ∷ [])
     ∷ button (onClick (RemoveTodo (todoId item)) ∷ class "delete-btn" ∷ deleteStyle ∷ [])
@@ -195,7 +196,7 @@ view m =
 
     handleKey : String → Msg
     handleKey "Enter" = AddTodo
-    handleKey _       = UpdateInput (inputText m)  -- no-op: сохраняем текущий input
+    handleKey _       = NoOp  -- Ignore other keys, onInput handles text
 
 ------------------------------------------------------------------------
 -- Events (без внешних событий)

@@ -1,0 +1,6 @@
+name: agdelte
+include:
+  src
+  examples
+depend:
+  standard-library

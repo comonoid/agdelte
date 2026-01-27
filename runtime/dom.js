@@ -115,7 +115,14 @@ function applyAttribute(el, attr, dispatch) {
 
   switch (type) {
     case 'attr':
-      el.setAttribute(name, value);
+      // Special handling for input value - must set property, not attribute
+      if (name === 'value' && 'value' in el) {
+        el.value = value;
+      } else if (name === 'checked' && 'checked' in el) {
+        el.checked = !!value;
+      } else {
+        el.setAttribute(name, value);
+      }
       break;
 
     case 'boolAttr':
@@ -239,7 +246,15 @@ export function patch(dom, oldVnode, newVnode, dispatch) {
   }
 
   // Тот же тег — патчим атрибуты и детей
-  patchAttributes(dom, toArray(oldVnode.attrs || []), toArray(newVnode.attrs || []), dispatch);
+  const needsRecreate = patchAttributes(dom, toArray(oldVnode.attrs || []), toArray(newVnode.attrs || []), dispatch);
+
+  if (needsRecreate) {
+    // Event handlers changed - recreate element to avoid listener accumulation
+    const newDom = createElement(newVnode, dispatch);
+    dom.parentNode?.replaceChild(newDom, dom);
+    return newDom;
+  }
+
   patchChildren(dom, oldVnode, newVnode, dispatch);
 
   return dom;
@@ -247,25 +262,41 @@ export function patch(dom, oldVnode, newVnode, dispatch) {
 
 /**
  * Патчинг атрибутов
+ * Returns true if element needs to be recreated (event handlers changed)
  */
 function patchAttributes(el, oldAttrs, newAttrs, dispatch) {
   const oldMap = new Map(oldAttrs.filter(Boolean).map(a => [attrKey(a), a]));
   const newMap = new Map(newAttrs.filter(Boolean).map(a => [attrKey(a), a]));
 
-  // Удаляем старые
+  // Check if any event handlers changed - if so, need to recreate element
+  const eventTypes = ['on', 'onInput', 'onKey'];
+  for (const [key, attr] of newMap) {
+    if (eventTypes.includes(attr.type)) {
+      const oldAttr = oldMap.get(key);
+      // Event handlers are functions, can't compare properly - always recreate if events exist
+      if (!oldAttr || oldAttr.value !== attr.value || oldAttr.handler !== attr.handler) {
+        return true; // Signal that element needs recreation
+      }
+    }
+  }
+
+  // Удаляем старые (non-event)
   for (const [key, attr] of oldMap) {
-    if (!newMap.has(key)) {
+    if (!newMap.has(key) && !eventTypes.includes(attr.type)) {
       removeAttribute(el, attr);
     }
   }
 
-  // Добавляем/обновляем новые
+  // Добавляем/обновляем новые (non-event)
   for (const [key, attr] of newMap) {
+    if (eventTypes.includes(attr.type)) continue; // Skip events
     const oldAttr = oldMap.get(key);
     if (!oldAttr || !attrsEqual(oldAttr, attr)) {
       applyAttribute(el, attr, dispatch);
     }
   }
+
+  return false;
 }
 
 /**

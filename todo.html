@@ -220,13 +220,7 @@
       init: Todo.initialModel,
 
       update: (msg) => (model) => {
-        console.log('UPDATE called');
-        console.log('  msg:', msg);
-        console.log('  model.inputText:', Todo.Model.inputText(model));
-        console.log('  isEmpty:', Todo.isEmpty(Todo.Model.inputText(model)));
-        const newModel = Todo.update(msg)(model);
-        console.log('  new model.todos length:', Todo.Model.todos(newModel)?.length);
-        return newModel;
+        return Todo.update(msg)(model);
       },
 
       view: (model) => {
