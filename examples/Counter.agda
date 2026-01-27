@@ -1,4 +1,4 @@
-{-# OPTIONS --without-K --guardedness #-}
+{-# OPTIONS --without-K #-}
 
 -- Counter: простейший пример приложения Agdelte
 
@@ -10,7 +10,6 @@ open import Data.String using (String)
 open import Data.List using ([]; _∷_; [_])
 open import Function using (const)
 
-open import Agdelte.Core.Signal hiding (merge; delay)
 open import Agdelte.Core.Event
 open import Agdelte.Html.Types
 open import Agdelte.Html.Elements

@@ -1,4 +1,4 @@
-{-# OPTIONS --without-K --guardedness #-}
+{-# OPTIONS --without-K #-}
 
 -- Todo: классический TodoMVC пример
 
@@ -13,8 +13,7 @@ open import Data.List.Base using (filterᵇ)
 open import Data.Product using (_×_; _,_)
 open import Relation.Nullary using (yes; no)
 
-open import Agdelte.Core.Signal hiding (merge; delay)
-open import Agdelte.Core.Event
+open import Agdelte.Core.Event hiding (onKeyDown; onKeyUp)
 open import Agdelte.Html.Types
 open import Agdelte.Html.Elements
 open import Agdelte.Html.Attributes

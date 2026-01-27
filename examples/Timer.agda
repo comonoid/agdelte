@@ -1,4 +1,4 @@
-{-# OPTIONS --without-K --guardedness #-}
+{-# OPTIONS --without-K #-}
 
 -- Timer: пример с внешними событиями (interval)
 
@@ -10,14 +10,12 @@ open import Data.Bool using (Bool; true; false; not)
 open import Data.String using (String; _++_)
 open import Data.List using ([]; _∷_; [_])
 
-open import Agdelte.Core.Signal hiding (merge; delay)
 open import Agdelte.Core.Event
 open import Agdelte.Html.Types
 open import Agdelte.Html.Elements
 open import Agdelte.Html.Attributes
 open import Agdelte.Html.Events
 import Agdelte.App as App
-open import Agdelte.Primitive.Interval
 
 ------------------------------------------------------------------------
 -- Model

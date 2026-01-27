@@ -146,7 +146,7 @@
       runApp = runtimeModule.runApp;
       console.log('Runtime loaded');
 
-      const timerModule = await import('./build/jAgda.Timer.mjs');
+      const timerModule = await import('./_build/jAgda.Timer.mjs');
       Timer = timerModule.default;
       console.log('Timer module loaded:', Object.keys(Timer));
     } catch (e) {
@@ -179,10 +179,13 @@
         return Timer.view(model);
       },
 
-      // Events returns interval subscription when running
-      events: (model) => {
+      // Subscriptions: interval when running
+      subs: (model) => {
         return Timer.events(model);
-      }
+      },
+
+      // Commands: no commands for Timer (ε = empty)
+      command: (msg) => (model) => (cb) => cb['ε']()
     };
 
     // Mount

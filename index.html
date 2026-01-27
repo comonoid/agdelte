@@ -175,8 +175,8 @@
   <p class="subtitle">Reactive UI Framework with Dependent Types in Agda</p>
 
   <div class="features">
-    <span class="feature">Polynomial Functors</span>
     <span class="feature">Elm Architecture</span>
+    <span class="feature">Event + Cmd</span>
     <span class="feature">Type-Safe HTML</span>
     <span class="feature">Compiles to JS</span>
   </div>
@@ -191,7 +191,7 @@
 
     <a href="timer.html" class="example-card">
       <h2>Timer</h2>
-      <p>Stopwatch with start/stop/reset. Shows Event subscriptions and time-based updates.</p>
+      <p>Stopwatch with start/stop/reset. Shows Event subs with interval timer.</p>
       <span class="status ready">Ready</span>
       <code>examples/Timer.agda</code>
     </a>
@@ -199,8 +199,29 @@
     <a href="todo.html" class="example-card">
       <h2>TodoMVC</h2>
       <p>Full TodoMVC implementation. Demonstrates lists, filtering, and complex state.</p>
-      <span class="status wip">WIP</span>
-      <code>examples/TodoMVC.agda</code>
+      <span class="status ready">Ready</span>
+      <code>examples/Todo.agda</code>
+    </a>
+
+    <a href="keyboard.html" class="example-card">
+      <h2>Keyboard</h2>
+      <p>Global keyboard events via onKeys. Arrow keys move box, Escape resets.</p>
+      <span class="status ready">Ready</span>
+      <code>examples/KeyboardDemo.agda</code>
+    </a>
+
+    <a href="http.html" class="example-card">
+      <h2>HTTP</h2>
+      <p>HTTP via Cmd. Demonstrates one-shot effects separate from subscriptions.</p>
+      <span class="status ready">Ready</span>
+      <code>examples/HttpDemo.agda</code>
+    </a>
+
+    <a href="task.html" class="example-card">
+      <h2>Task Chain</h2>
+      <p>Monadic HTTP chains with do-notation. Sequential requests via Task monad.</p>
+      <span class="status ready">Ready</span>
+      <code>examples/TaskDemo.agda</code>
     </a>
   </div>
 
@@ -215,12 +236,12 @@
   <div class="tech-stack">
     <h3>Architecture</h3>
     <ul>
-      <li>App ≅ Coalg (Mono Html Msg)</li>
-      <li>Signal A ≅ ν X. A × X</li>
-      <li>Event A = Signal (List A)</li>
-      <li>Lens morphisms for composition</li>
-      <li>Scott encoding for sum types</li>
-      <li>List compiles to JS Array</li>
+      <li>Event — subscriptions (subs)</li>
+      <li>Cmd — one-shot commands</li>
+      <li>Task — monadic chains (do-notation)</li>
+      <li>update: Msg → Model → Model</li>
+      <li>Type-safe HTML elements</li>
+      <li>Automatic subscription cleanup</li>
     </ul>
   </div>
 </body>

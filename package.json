@@ -12,15 +12,18 @@
   },
   "scripts": {
     "test": "node test/runtime.test.js",
-    "build:counter": "agda --js --js-es6 --js-optimize --compile-dir=build -i src -i examples examples/Counter.agda",
-    "build:timer": "agda --js --js-es6 --js-optimize --compile-dir=build -i src -i examples examples/Timer.agda",
-    "build:todo": "agda --js --js-es6 --js-optimize --compile-dir=build -i src -i examples examples/Todo.agda",
-    "build:all": "npm run build:counter && npm run build:timer && npm run build:todo",
+    "build:counter": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/Counter.agda",
+    "build:timer": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/Timer.agda",
+    "build:todo": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/Todo.agda",
+    "build:keyboard": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/KeyboardDemo.agda",
+    "build:http": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/HttpDemo.agda",
+    "build:task": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/TaskDemo.agda",
+    "build:all": "npm run build:counter && npm run build:timer && npm run build:todo && npm run build:keyboard && npm run build:http && npm run build:task",
     "typecheck": "agda -i src src/Agdelte/App.agda",
     "typecheck:theory": "agda -i src src/Agdelte/Theory/PolyApp.agda",
     "typecheck:all": "agda -i src -i examples src/Agdelte/App.agda && agda -i src src/Agdelte/Theory/PolyApp.agda && agda -i src -i examples examples/Counter.agda && agda -i src -i examples examples/Timer.agda && agda -i src -i examples examples/Todo.agda",
     "dev": "node serve.cjs",
-    "clean": "rm -rf build MAlonzo jAgda"
+    "clean": "rm -rf _build MAlonzo jAgda"
   },
   "keywords": [
     "agda",

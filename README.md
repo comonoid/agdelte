@@ -8,18 +8,22 @@ Agdelte brings the same ideas to a language with a real type system. Reactivity 
 
 ## Core Idea
 
-Agdelte combines **Elm Architecture** with **declarative subscriptions**:
+Agdelte combines **Elm Architecture** with **declarative subscriptions** and **explicit commands**:
 
 ```agda
 record App (Model Msg : Set) : Set where
   field
-    init   : Model                    -- initial state
-    update : Msg → Model → Model      -- pure state transition
-    view   : Model → Html Msg         -- pure rendering
-    events : Model → Event Msg        -- declarative subscriptions
+    init    : Model                    -- initial state
+    update  : Msg → Model → Model      -- pure state transition (simple!)
+    view    : Model → Html Msg         -- pure rendering
+    subs    : Model → Event Msg        -- subscriptions (continuous)
+    command : Msg → Model → Cmd Msg    -- commands (one-shot effects)
 ```
 
-Key insight: `events` depends on `Model`. Subscriptions automatically update when model changes. No manual cleanup.
+Key insight: **separation of concerns**:
+- `Event` (subs) — subscriptions to continuous sources (timers, keyboard)
+- `Cmd` (command) — one-shot effects (HTTP requests)
+- `update` — stays simple: `Msg → Model → Model`
 
 ```agda
 -- Signal: discrete stream (one value per tick)
@@ -61,41 +65,50 @@ No continuous time. `animationFrame` provides `dt` (milliseconds since last even
 
 ```agda
 -- Counter with HTTP fetch
-data Msg = Inc | Dec | Fetch | GotData Response
+data Msg = Inc | Dec | Fetch | GotData String | GotError String
 
-data Status = Idle | Loading | Ready Data
+data Status = Idle | Loading | Ready String
 
 record Model : Set where
   field
     count  : ℕ
     status : Status
 
-app : App Msg Model
-app = record
-  { init = { count = 0; status = Idle }
+-- update stays simple!
+update : Msg → Model → Model
+update Inc m = record m { count = suc (m .count) }
+update Dec m = record m { count = pred (m .count) }
+update Fetch m = record m { status = Loading }
+update (GotData d) m = record m { status = Ready d }
+update (GotError _) m = record m { status = Idle }
 
-  ; update = λ where
-      Inc m → record m { count = suc (m .count) }
-      Dec m → record m { count = pred (m .count) }
-      Fetch m → record m { status = Loading }
-      (GotData (ok _ body)) m → record m { status = Ready (parse body) }
-      (GotData (error _ _)) m → record m { status = Idle }
+-- command: when to make HTTP requests
+command : Msg → Model → Cmd Msg
+command Fetch _ = httpGet "/api/data" GotData GotError
+command _ _ = ε  -- no command for other messages
 
-  ; view = λ m → div []
+-- subs: continuous subscriptions (none here)
+subs : Model → Event Msg
+subs _ = never
+
+app : App Model Msg
+app = mkCmdApp
+  (record { count = 0; status = Idle })
+  update
+  (λ m → div []
       [ button [ onClick Dec ] [ text "-" ]
       , span [] [ text (show (m .count)) ]
       , button [ onClick Inc ] [ text "+" ]
-      , button [ onClick Fetch, disabled (isLoading m) ] [ text "Load" ]
-      , viewStatus (m .status)
-      ]
-
-  ; events = λ m → case m .status of λ where
-      Loading → mapE GotData (request (get "/api/data"))
-      _ → never
-  }
+      , button [ onClick Fetch ] [ text "Load" ]
+      ])
+  subs
+  command
 ```
 
-**Key insight:** `events` depends on `Model`. When `status = Loading`, runtime subscribes to the HTTP request. When response arrives and status changes — automatic unsubscribe. No manual cleanup, no resource leaks.
+**Key insight:**
+- HTTP requests go in `command`, executed **once** when Fetch is dispatched
+- `subs` is for **continuous** subscriptions (timers, keyboard)
+- `update` stays **simple**: `Msg → Model → Model`
 
 ## Why Agdelte?
 
@@ -112,17 +125,19 @@ app = record
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  USER: Simple definitions, clear error messages             │
-│  App { init, update, view, events }                         │
+│  mkApp { init, update, view, subs }      -- simple apps    │
+│  mkCmdApp { ..., command }               -- with HTTP      │
 ├─────────────────────────────────────────────────────────────┤
-│  Core          │  Signal, Event, combinators                │
+│  Core          │  Event (subs), Cmd (commands)              │
 ├─────────────────────────────────────────────────────────────┤
-│  Primitives    │  interval, keyboard, request, websocket    │
+│  Primitives    │  interval, keyboard (Event)                │
+│                │  httpGet, httpPost (Cmd)                   │
 ├─────────────────────────────────────────────────────────────┤
-│  App           │  init, update, view, events                │
+│  App           │  init, update, view, subs, command         │
 ├─────────────────────────────────────────────────────────────┤
 │  Html          │  Typed elements and attributes             │
 ├─────────────────────────────────────────────────────────────┤
-│  Runtime       │  Event loop, subscriptions, rendering      │
+│  Runtime       │  Event loop, subscriptions, commands       │
 ├─────────────────────────────────────────────────────────────┤
 │  Theory/       │  Poly, Coalg, Lens (isolated, optional)    │
 │                │  Phase 2+: used internally for guarantees  │
@@ -132,20 +147,26 @@ app = record
 ### App Structure
 
 ```agda
-record App (Msg : Set) (Model : Set) : Set where
+record App (Model Msg : Set) : Set where
   field
-    init   : Model                    -- initial state
-    update : Msg → Model → Model      -- pure state transition
-    view   : Model → Html Msg         -- pure rendering
-    events : Model → Event Msg        -- declarative subscriptions
+    init    : Model                    -- initial state
+    update  : Msg → Model → Model      -- pure state transition (simple!)
+    view    : Model → Html Msg         -- pure rendering
+    subs    : Model → Event Msg        -- subscriptions (continuous)
+    command : Msg → Model → Cmd Msg    -- commands (one-shot effects)
 ```
 
 - **init** — initial state
-- **update** — pure function, no side effects, easily testable
+- **update** — pure function, stays simple: `Msg → Model → Model`
 - **view** — pure function, returns typed Html
-- **events** — which external events to listen to (depends on Model)
+- **subs** — subscriptions to continuous events (timers, keyboard)
+- **command** — one-shot effects (HTTP requests)
 
 DOM events from `view` are handled automatically by runtime.
+
+**Two constructors:**
+- `mkApp` — for simple apps (Counter, Timer, Keyboard) — no commands
+- `mkCmdApp` — for apps with HTTP — adds command field
 
 ## Documentation
 
@@ -179,7 +200,8 @@ src/
   Agdelte/
     ├── Core/                    -- Простые определения (для пользователя)
     │   ├── Signal.agda          -- Coinductive stream
-    │   └── Event.agda           -- Event = Signal (List A)
+    │   ├── Event.agda           -- Event — подписки (interval, keyboard)
+    │   └── Cmd.agda             -- Cmd — команды (httpGet, httpPost)
     │
     ├── Theory/                  -- Теоретическое обоснование (опционально)
     │   ├── Poly.agda            -- Polynomial functors, Coalg, Lens
@@ -319,13 +341,12 @@ Examples: ✅
 
 **Phase 2: Extensions** — separate concepts requiring dedicated learning
 
-- websocket (complex state, reconnection)
-- localStorage (persistence)
-- routing (URL, history)
-- keyboard, mouse (global events)
-- request (HTTP)
+- websocket (complex state, reconnection) — via Cmd
+- localStorage (persistence) — via Cmd
+- routing (URL, history) — via Event + Cmd
 - More combinators: filterE, merge, snapshot, debounce, throttle
 - touch, focus management
+- More Cmd effects: focus, scrollTo, copy to clipboard
 
 **Phase 3: Concurrency** — separate module
 

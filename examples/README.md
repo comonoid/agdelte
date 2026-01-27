@@ -1,12 +1,14 @@
 # Agdelte Examples
 
-Три примера демонстрируют возможности Agdelte:
+Примеры демонстрируют возможности Agdelte:
 
 | Пример | Описание | Особенности |
 |--------|----------|-------------|
 | Counter | Простой счётчик | Базовый Elm Architecture |
-| Timer | Секундомер | Event subscriptions (interval) |
+| Timer | Секундомер | Event subs (interval) |
 | Todo | Список задач | Списки, фильтрация, input handling |
+| Keyboard | Управление стрелками | onKeyDown, global keyboard events |
+| HttpDemo | HTTP запросы | Cmd (httpGet), one-shot effects |
 
 ## Компиляция
 
@@ -17,6 +19,8 @@
 npm run build:counter
 npm run build:timer
 npm run build:todo
+npm run build:keyboard
+npm run build:http
 
 # Все сразу
 npm run build:all
@@ -55,6 +59,8 @@ agda Todo.agda
    - http://localhost:8080/counter.html — Counter
    - http://localhost:8080/timer.html — Timer
    - http://localhost:8080/todo.html — Todo
+   - http://localhost:8080/keyboard.html — Keyboard
+   - http://localhost:8080/http.html — HTTP
 
 ## Структура примера
 
@@ -67,16 +73,20 @@ record Model : Set where ...
 -- Msg: сообщения (события)
 data Msg : Set where ...
 
--- update: обновление состояния
+-- update: обновление состояния (остаётся простым!)
 update : Msg → Model → Model
 
 -- view: рендеринг HTML
 view : Model → Html Msg
 
--- events: подписки на внешние события
-events : Model → Event Msg
+-- subs: подписки на события (interval, keyboard)
+subs : Model → Event Msg
+
+-- command: команды (HTTP, one-shot effects) — опционально
+command : Msg → Model → Cmd Msg
 
 -- app: сборка приложения
 app : App Model Msg
-app = mkApp initialModel update view events
+app = mkApp init update view subs          -- простые приложения
+app = mkCmdApp init update view subs cmd   -- с HTTP
 ```

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Todo - Agdelte</title>
+  <title>Task Demo - Agdelte</title>
   <style>
     :root {
       --primary: #4a9eff;
@@ -11,6 +11,7 @@
       --card: #16213e;
       --text: #eee;
       --accent: #e94560;
+      --success: #4ade80;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -55,93 +56,58 @@
       box-shadow: 0 10px 40px rgba(0,0,0,0.3);
     }
 
-    /* Todo styles from Agda view */
-    .todo-app { max-width: 500px; margin: 0 auto; }
-    .todo-app h1 {
-      text-align: center;
-      color: #b83f45 !important;
-      font-size: 80px !important;
-      font-weight: 200;
-      background: none !important;
-      -webkit-text-fill-color: #b83f45 !important;
-    }
-    .input-section {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 16px;
-    }
-    .todo-list {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-      border: 1px solid #444;
-      border-radius: 4px;
-    }
-    .todo-item {
-      display: flex;
-      align-items: center;
-      padding: 12px;
-      border-bottom: 1px solid #333;
-    }
-    .todo-item:last-child { border-bottom: none; }
-    .todo-item input[type="checkbox"] {
-      width: 20px;
-      height: 20px;
-      margin-right: 12px;
-      cursor: pointer;
-    }
-    .todo-item span { flex: 1; }
-    .delete-btn {
+    /* Task demo styles */
+    .task-demo h1 {
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
       background: none;
-      border: none;
-      color: #cc9a9a;
-      font-size: 24px;
-      cursor: pointer;
-      padding: 0 8px;
-      opacity: 0.5;
-      transition: opacity 0.2s;
+      -webkit-text-fill-color: var(--text);
     }
-    .delete-btn:hover { opacity: 1; }
-    .footer {
-      display: flex;
-      justify-content: space-between;
-      padding: 12px;
-      color: #888;
-      font-size: 14px;
-    }
-    .footer button {
-      background: none;
-      border: none;
-      color: var(--accent);
-      cursor: pointer;
-    }
-    .footer button:hover { text-decoration: underline; }
 
-    /* Input styling */
-    #app input[type="text"] {
-      flex: 1;
-      padding: 12px;
-      font-size: 16px;
-      border: 1px solid #444;
-      border-radius: 4px;
-      background: #0f0f23;
-      color: var(--text);
+    .task-demo p {
+      margin-bottom: 0.75rem;
+      color: #aaa;
     }
-    #app input[type="text"]:focus {
-      outline: none;
-      border-color: var(--primary);
+
+    .task-demo .status {
+      margin: 1rem 0;
     }
-    #app button {
-      padding: 12px 24px;
-      background: var(--accent);
+
+    .task-demo .status pre {
+      background: rgba(0,0,0,0.2);
+      padding: 1rem;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 0.85rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .task-demo .fetch-btn {
+      background: var(--primary);
       color: white;
       border: none;
-      border-radius: 4px;
+      padding: 0.75rem 1.5rem;
+      font-size: 1rem;
+      border-radius: 8px;
       cursor: pointer;
-      font-size: 16px;
+      transition: transform 0.1s, background 0.2s;
     }
-    #app button:hover {
-      background: #d13550;
+    .task-demo .fetch-btn:hover:not(:disabled) {
+      background: #3a8eef;
+      transform: translateY(-2px);
+    }
+    .task-demo .fetch-btn:disabled {
+      background: #555;
+      cursor: not-allowed;
+    }
+
+    .task-demo .step-info {
+      margin-top: 1rem;
+      color: #666;
+      font-size: 0.85rem;
     }
 
     .info {
@@ -173,73 +139,69 @@
     .loading {
       color: #888;
       font-style: italic;
-      text-align: center;
     }
   </style>
 </head>
 <body>
-  <a href="index.html" class="back">← Back to examples</a>
+  <a href="index.html" class="back">&larr; Back to examples</a>
 
-  <h1>Agdelte Todo</h1>
-  <p class="subtitle">Classic TodoMVC in dependently-typed Agda</p>
+  <h1>Task Chain Demo</h1>
+  <p class="subtitle">Monadic HTTP request chains with do-notation</p>
 
   <div id="app">
     <p class="loading">Loading compiled Agda...</p>
   </div>
 
   <div class="info">
-    <p>Source: <code>examples/Todo.agda</code></p>
-    <p>Features: List filtering, record updates, input handling</p>
+    <p>Source: <code>examples/TaskDemo.agda</code></p>
+    <p>Fetches 3 posts sequentially using <code>Task</code> monad</p>
   </div>
 
   <script type="module">
     const container = document.getElementById('app');
 
-    let Todo, runApp;
+    let TaskDemo, runApp;
     try {
       const runtimeModule = await import('./runtime/index.js');
       runApp = runtimeModule.runApp;
       console.log('Runtime loaded');
 
-      const todoModule = await import('./_build/jAgda.Todo.mjs');
-      Todo = todoModule.default;
-      console.log('Todo module loaded:', Object.keys(Todo));
+      const demoModule = await import('./_build/jAgda.TaskDemo.mjs');
+      TaskDemo = demoModule.default;
+      console.log('TaskDemo module loaded:', Object.keys(TaskDemo));
     } catch (e) {
       console.error('Module load error:', e);
       container.innerHTML = `
         <div class="error">
           <strong>Module load failed:</strong> ${e.message}
           <pre>${e.stack}</pre>
-          <p style="margin-top:1rem">Run: <code>npm run build:todo</code></p>
+          <p style="margin-top:1rem">Run: <code>agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/TaskDemo.agda</code></p>
         </div>
       `;
       throw e;
     }
 
-    const todoApp = {
-      init: Todo.initialModel,
+    // Import App module for record accessors
+    const appModule = await import('./_build/jAgda.Agdelte.App.mjs');
+    const App = appModule.default;
 
-      update: (msg) => (model) => {
-        return Todo.update(msg)(model);
-      },
+    // Extract fields using Scott-encoded accessors
+    const compiledApp = TaskDemo.app;
 
-      view: (model) => {
-        return Todo.view(model);
-      },
-
-      subs: (model) => {
-        return Todo.events(model);
-      },
-
-      command: (msg) => (model) => (cb) => cb['ε']()
+    const taskApp = {
+      init: App.App.init(compiledApp),
+      update: App.App.update(compiledApp),
+      view: App.App.view(compiledApp),
+      subs: App.App.subs(compiledApp),
+      command: App.App.command(compiledApp)
     };
 
     // Mount
     try {
       container.innerHTML = '';
-      const app = runApp(todoApp, container);
+      const app = runApp(taskApp, container);
       window.app = app;
-      console.log('Agdelte: Todo mounted from compiled Agda');
+      console.log('Agdelte: TaskDemo mounted from compiled Agda');
     } catch (e) {
       console.error('Agdelte error:', e);
       container.innerHTML = `

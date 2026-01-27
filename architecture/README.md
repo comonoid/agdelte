@@ -11,13 +11,14 @@ Agdelte построена на принципе **простые определ
 ┌─────────────────────────────────────────────────────────────┐
 │  ПОЛЬЗОВАТЕЛЬ                                               │
 │  Простые record-определения                                 │
-│  App { init, update, view, events }                         │
-│  Signal, Event — coinductive streams                        │
+│  App { init, update, view, subs, command }                  │
+│  Event — подписки (постоянные)                              │
+│  Cmd — команды (одноразовые)                                │
 │  Понятные сообщения об ошибках                              │
 ├─────────────────────────────────────────────────────────────┤
 │  БИБЛИОТЕКА                                                 │
 │  Типизированные комбинаторы                                 │
-│  mapE, filterE, merge, _∥_, mapMsg                         │
+│  mapE, filterE, merge, _∥_, mapMsg, mapCmd                  │
 ├─────────────────────────────────────────────────────────────┤
 │  ТЕОРИЯ (Theory/)                                           │
 │  Poly, Coalg, Lens — теоретическое обоснование             │
@@ -36,13 +37,28 @@ Agdelte построена на принципе **простые определ
 ### App — главная абстракция
 
 ```agda
-record App (Msg : Set) (Model : Set) : Set where
+record App (Model Msg : Set) : Set where
   field
-    init   : Model                    -- начальное состояние
-    update : Msg → Model → Model      -- чистая функция
-    view   : Model → Html Msg         -- чистая функция
-    events : Model → Event Msg        -- декларативные подписки
+    init    : Model                    -- начальное состояние
+    update  : Msg → Model → Model      -- чистая функция (простой!)
+    view    : Model → Html Msg         -- чистая функция
+    subs    : Model → Event Msg        -- подписки (постоянные события)
+    command : Msg → Model → Cmd Msg    -- команды (одноразовые эффекты)
 ```
+
+### Cmd — одноразовые эффекты
+
+```agda
+data Cmd (A : Set) : Set where
+  ε        : Cmd A                    -- пустая команда
+  _<>_     : Cmd A → Cmd A → Cmd A    -- композиция
+  httpGet  : String → (String → A) → (String → A) → Cmd A
+  httpPost : String → String → (String → A) → (String → A) → Cmd A
+```
+
+**Ключевое разделение:**
+- `Event` (subs) — подписки: interval, onKeyDown, onKeyUp (постоянно слушаем)
+- `Cmd` (command) — команды: httpGet, httpPost (выполняются один раз)
 
 ### Signal и Event — дискретные потоки
 
@@ -67,43 +83,53 @@ websocket      : Url → WebSocket
 ```agda
 data Msg = Inc | Dec | Tick
 
-counter : App Msg ℕ
-counter = record
-  { init   = 0
-  ; update = λ { Inc n → suc n ; Dec n → pred n ; Tick n → suc n }
-  ; view   = λ n → div []
+counter : App ℕ Msg
+counter = mkApp
+  0                                                    -- init
+  (λ { Inc n → suc n ; Dec n → pred n ; Tick n → suc n })  -- update
+  (λ n → div []                                         -- view
       [ button [ onClick Dec ] [ text "-" ]
       , span [] [ text (show n) ]
       , button [ onClick Inc ] [ text "+" ]
-      ]
-  ; events = λ _ → mapE (const Tick) (interval 1000)
-  }
+      ])
+  (λ _ → interval 1000 Tick)                           -- subs
+-- Никаких команд! mkApp автоматически подставляет ε
 ```
 
 ### Пример: HTTP запрос
 
 ```agda
-data Msg = Fetch | GotData Response
+data Msg = Fetch | GotData String | GotError String
 
-data Status = Idle | Loading | Ready Data
+data Status = Idle | Loading | Ready String
 
 record Model : Set where
-  status : Status
+  field status : Status
 
-app : App Msg Model
-app = record
-  { init = { status = Idle }
-  ; update = λ where
-      Fetch m → record m { status = Loading }
-      (GotData r) m → record m { status = Ready (parse r) }
-  ; view = λ m → button [ onClick Fetch ] [ text "Load" ]
-  ; events = λ m → case m.status of λ where
-      Loading → mapE GotData (request (get "/api"))
-      _ → never
-  }
+-- update остаётся простым!
+update : Msg → Model → Model
+update Fetch m = record m { status = Loading }
+update (GotData d) m = record m { status = Ready d }
+update (GotError _) m = record m { status = Idle }
+
+-- command: когда делать HTTP запрос
+command : Msg → Model → Cmd Msg
+command Fetch _ = httpGet "/api/data" GotData GotError
+command _ _ = ε  -- остальные сообщения — без команд
+
+app : App Model Msg
+app = mkCmdApp
+  (record { status = Idle })   -- init
+  update                        -- update (простой!)
+  (λ m → button [ onClick Fetch ] [ text "Load" ])  -- view
+  (λ _ → never)                 -- subs (нет подписок)
+  command                       -- команды
 ```
 
-**Ключевой инсайт:** `events` зависит от `Model`. Когда `status = Loading` — runtime подписывается на HTTP. Ответ пришёл, status изменился — автоматическая отписка. Нет ручного cleanup, нет утечек.
+**Ключевой инсайт:**
+- `update` остаётся **простым**: `Msg → Model → Model`
+- HTTP запрос — в `command`, выполняется **один раз** при Fetch
+- `subs` — только для **постоянных** подписок (таймеры, клавиатура)
 
 ---
 
@@ -329,11 +355,13 @@ toCoalg app = record
 1. model := app.init
 2. html := app.view(model)
 3. Рендер DOM, установить обработчики
-4. Подписаться на app.events(model)
-5. Ждать событие (DOM, interval, request, ...)
-6. model := app.update(msg, model)
-7. Обновить подписки: diff(events(old), events(new))
-8. goto 2
+4. Подписаться на app.subs(model)
+5. Ждать событие (DOM, interval, keyboard, ...)
+6. cmd := app.command(msg, model)     -- получить команду
+7. model := app.update(msg, model)    -- обновить модель
+8. Выполнить cmd (httpGet → fetch)    -- выполнить команды
+9. Обновить подписки: diff(subs(old), subs(new))
+10. goto 2
 ```
 
 ### JavaScript реализация
@@ -341,20 +369,43 @@ toCoalg app = record
 ```javascript
 function runApp(app) {
   let model = app.init;
-  let currentEvents = app.events(model);
+  let currentSubs = app.subs(model);
 
   function dispatch(msg) {
-    model = app.update(msg, model);
+    // 1. Получить команды
+    const cmd = app.command(msg)(model);
 
-    const newEvents = app.events(model);
-    diffSubscriptions(currentEvents, newEvents, dispatch);
-    currentEvents = newEvents;
+    // 2. Обновить модель
+    model = app.update(msg)(model);
 
+    // 3. Выполнить команды
+    executeCmd(cmd, dispatch);  // httpGet → fetch → dispatch result
+
+    // 4. Обновить подписки
+    const newSubs = app.subs(model);
+    updateSubscriptions(currentSubs, newSubs, dispatch);
+    currentSubs = newSubs;
+
+    // 5. Перерисовать
     render(app.view(model));
   }
 
   render(app.view(model));
-  subscribe(currentEvents, dispatch);
+  subscribe(currentSubs, dispatch);
+}
+
+function executeCmd(cmd, dispatch) {
+  cmd({
+    'ε': () => {},  // пустая команда
+    '_<>_': (c1, c2) => { executeCmd(c1, dispatch); executeCmd(c2, dispatch); },
+    'httpGet': (url, onOk, onErr) => {
+      fetch(url)
+        .then(r => r.text())
+        .then(t => dispatch(onOk(t)))
+        .catch(e => dispatch(onErr(e.message)));
+    },
+    'httpPost': (url, body, onOk, onErr) => { ... }
+  });
 }
 ```
 
@@ -442,8 +493,10 @@ function runApp(app) {
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  ПОЛЬЗОВАТЕЛЬ (все фазы)                                    │
-│    app { init, update, view, events }                       │
-│    mapE, filterE, merge, snapshot                           │
+│    mkApp { init, update, view, subs }      -- простые      │
+│    mkCmdApp { ..., command }               -- с HTTP       │
+│    Event — подписки (interval, keyboard)                    │
+│    Cmd — команды (httpGet, httpPost)                        │
 │    Понятные типы, понятные ошибки                           │
 ├─────────────────────────────────────────────────────────────┤
 │  БИБЛИОТЕКА                                                 │
@@ -460,3 +513,8 @@ function runApp(app) {
 **Принцип:** Реактивность без магии, IO без императивности, эффекты явны в типах.
 
 **Подход:** Простота для пользователя. Гарантии по построению внутри. Путь к формальной верификации.
+
+**Ключевое разделение:**
+- `Event` (subs) — **подписки** на постоянные источники событий
+- `Cmd` (command) — **команды** для одноразовых эффектов
+- `update` — **остаётся простым**: `Msg → Model → Model`

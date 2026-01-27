@@ -39,6 +39,12 @@ postulate
   -- Подписка на конкретную клавишу
   onKey : ∀ {A : Set} → String → A → Event A
 
+  -- Подписка на стрелки (возвращает событие когда нажата любая стрелка)
+  onArrowKeys : ∀ {A : Set} → A → A → A → A → Event A  -- up, down, left, right
+
+  -- Подписка на стрелки + Escape
+  onArrowKeysWithEscape : ∀ {A : Set} → A → A → A → A → A → Event A  -- up, down, left, right, escape
+
 {-# COMPILE JS onKeyDown = _ => handler => ({
   type: 'keyboard',
   config: {
@@ -78,6 +84,43 @@ postulate
   config: {
     eventType: 'keydown',
     handler: (e) => e.key === key ? msg : null
+  },
+  now: [],
+  get next() { return this; }
+}) #-}
+
+{-# COMPILE JS onArrowKeys = _ => up => down => left => right => ({
+  type: 'keyboard',
+  config: {
+    eventType: 'keydown',
+    handler: (e) => {
+      switch (e.key) {
+        case 'ArrowUp': return up;
+        case 'ArrowDown': return down;
+        case 'ArrowLeft': return left;
+        case 'ArrowRight': return right;
+        default: return null;
+      }
+    }
+  },
+  now: [],
+  get next() { return this; }
+}) #-}
+
+{-# COMPILE JS onArrowKeysWithEscape = _ => up => down => left => right => esc => ({
+  type: 'keyboard',
+  config: {
+    eventType: 'keydown',
+    handler: (e) => {
+      switch (e.key) {
+        case 'ArrowUp': return up;
+        case 'ArrowDown': return down;
+        case 'ArrowLeft': return left;
+        case 'ArrowRight': return right;
+        case 'Escape': return esc;
+        default: return null;
+      }
+    }
   },
   now: [],
   get next() { return this; }

@@ -13,7 +13,7 @@ Agdelte — те же идеи в языке с настоящей систем�
 ```
 ┌───────────────────────────────────────────────────────┐
 │  ПОЛЬЗОВАТЕЛЬ: Простые record-определения             │
-│  App { init, update, view, events }                   │
+│  App { init, update, view, subs, command }            │
 │  Понятные сообщения об ошибках                        │
 ├───────────────────────────────────────────────────────┤
 │  БИБЛИОТЕКА: Типизированные комбинаторы              │
@@ -33,12 +33,18 @@ Agdelte — те же идеи в языке с настоящей систем�
 ### App — главная абстракция
 
 ```agda
-record App (Msg : Set) (Model : Set) : Set where
-  init   : Model                    -- начальное состояние
-  update : Msg → Model → Model      -- чистая функция
-  view   : Model → Html Msg         -- чистая функция
-  events : Model → Event Msg        -- декларативные подписки
+record App (Model Msg : Set) : Set where
+  init    : Model                    -- начальное состояние
+  update  : Msg → Model → Model      -- чистая функция (остаётся простой!)
+  view    : Model → Html Msg         -- чистая функция
+  subs    : Model → Event Msg        -- подписки (interval, keyboard)
+  command : Msg → Model → Cmd Msg    -- команды (HTTP, one-shot effects)
 ```
+
+**Ключевое разделение:**
+- `Event` (subs) — подписки на непрерывные источники (таймеры, клавиатура)
+- `Cmd` (command) — одноразовые эффекты (HTTP запросы)
+- `update` — остаётся простым: `Msg → Model → Model`
 
 ### Signal и Event — дискретные потоки
 
@@ -50,14 +56,21 @@ Event A = Signal (List A)
 
 **Важно:** в Agdelte нет непрерывного времени. Signal — это дискретный поток значений, не функция `Time → A`.
 
-### IO — всё это Event
+### IO — Event для подписок, Cmd для команд
 
+**Event (subs) — подписки:**
 ```agda
 interval       : ℕ → Event ⊤              -- тики таймера
 animationFrame : Event FrameInfo          -- кадры браузера
-keyboard       : Event Key                -- нажатия клавиш
-request        : Request → Event Response -- HTTP ответы
-websocket      : Url → WebSocket          -- WebSocket канал
+onKeyDown      : Event Key                -- нажатия клавиш
+```
+
+**Cmd (command) — одноразовые эффекты:**
+```agda
+httpGet  : String → (String → Msg) → (String → Msg) → Cmd Msg
+httpPost : String → String → (String → Msg) → (String → Msg) → Cmd Msg
+ε        : Cmd Msg                        -- пустая команда
+_<>_     : Cmd Msg → Cmd Msg → Cmd Msg    -- композиция
 ```
 
 ---
@@ -69,39 +82,43 @@ websocket      : Url → WebSocket          -- WebSocket канал
 ```agda
 data Msg = Inc | Dec
 
-counter : App Msg ℕ
-counter = record
-  { init   = 0
-  ; update = λ { Inc n → suc n ; Dec n → pred n }
-  ; view   = λ n → div []
-      [ button [ onClick Dec ] [ text "-" ]
-      , span [] [ text (show n) ]
-      , button [ onClick Inc ] [ text "+" ]
-      ]
-  ; events = λ _ → never
-  }
+counter : App ℕ Msg
+counter = mkApp 0 update view subs
+  where
+  update Inc n = suc n
+  update Dec n = pred n
+  view n = div []
+    [ button [ onClick Dec ] [ text "-" ]
+    , span [] [ text (show n) ]
+    , button [ onClick Inc ] [ text "+" ]
+    ]
+  subs _ = never
 ```
 
 ### HTTP запрос
 
 ```agda
-data Msg = Fetch | GotData Response
-data Status = Idle | Loading | Ready Data
+data Msg = Fetch | GotData String | GotError String
+data Status = Idle | Loading | Ready String
 
-app : App Msg Model
-app = record
-  { init   = { status = Idle }
-  ; update = λ where
-      Fetch m → record m { status = Loading }
-      (GotData r) m → record m { status = Ready (parse r) }
-  ; view   = λ m → button [ onClick Fetch ] [ text "Load" ]
-  ; events = λ m → case m.status of λ where
-      Loading → mapE GotData (request (get "/api"))
-      _ → never
-  }
+-- update остаётся простым!
+update : Msg → Model → Model
+update Fetch m = record m { status = Loading }
+update (GotData d) m = record m { status = Ready d }
+update (GotError _) m = record m { status = Idle }
+
+-- command: когда делать HTTP запросы
+command : Msg → Model → Cmd Msg
+command Fetch _ = httpGet "/api/data" GotData GotError
+command _ _ = ε  -- нет команд для других сообщений
+
+app : App Model Msg
+app = mkCmdApp init update view subs command
+  where
+  subs _ = never  -- нет подписок
 ```
 
-**Ключевой инсайт:** `events` зависит от `Model`. Когда `status = Loading` — runtime подписывается на HTTP. Ответ пришёл → status изменился → автоматическая отписка. Нет ручного cleanup.
+**Ключевой инсайт:** HTTP через `command` (одноразовый эффект), а не `subs` (подписка). Команда выполняется один раз при dispatch Fetch.
 
 ---
 
@@ -166,14 +183,17 @@ record Coalg (p : Poly) : Set₁ where
 1. model := init
 2. html := view(model)
 3. Рендер, установить DOM обработчики
-4. Подписаться на events(model)
-5. Ждать событие
-6. model := update(msg, model)
-7. Обновить подписки (diff events)
-8. goto 2
+4. Подписаться на subs(model)
+5. Ждать событие (msg)
+6. cmd := command(msg)(model)
+7. model := update(msg)(model)
+8. Выполнить cmd (HTTP запросы и т.д.)
+9. Обновить подписки (diff subs)
+10. goto 2
 ```
 
-Event появился в `events(model)` → подписка. Исчез → отписка. Автоматически.
+- `subs` появилась → подписка. Исчезла → отписка. Автоматически.
+- `command` выполняется один раз при dispatch.
 
 ---
 
@@ -208,7 +228,8 @@ Event появился в `events(model)` → подписка. Исчез → �
 |--|----------|-----|---------|
 | Реактивность | Магия компилятора | Архитектура | Elm-like + Poly теория |
 | Типы | TypeScript | ML | Зависимые типы |
-| Эффекты | Скрыты в $effect | Cmd (непрозрачен) | Event (явно) |
+| Эффекты | Скрыты в $effect | Cmd (непрозрачен) | Event (subs) + Cmd (явно) |
+| update | Мутации | Model × Cmd | Model (простой!) |
 | Композиция | Компоненты | Boilerplate | `_∥_`, `mapMsg` (Poly внутри) |
 | Сообщения об ошибках | Хорошие | Хорошие | Хорошие (простые типы) |
 | Доказательства | Нет | Нет | Возможны (через Theory/) |
@@ -219,12 +240,13 @@ Event появился в `events(model)` → подписка. Исчез → �
 
 **Phase 1: MVP** ✅ — простота и работающие примеры
 
-- Signal, Event — простые coinductive records
-- App — Elm-like record { init, update, view, events }
+- Signal, Event, Cmd — ядро реактивности
+- App — Elm-like record { init, update, view, subs, command }
 - Html — типизированные элементы и атрибуты
-- Примитивы: interval, animationFrame
-- Runtime: event loop, VDOM patching
-- Примеры: Counter, Timer, Todo
+- Event примитивы: interval, onKeyDown
+- Cmd примитивы: httpGet, httpPost
+- Runtime: event loop, VDOM patching, command execution
+- Примеры: Counter, Timer, Todo, Keyboard, HTTP
 
 **Phase 2: Расширения + Poly внутри**
 
@@ -260,7 +282,8 @@ IO примитивы:
 ## Заключение
 
 ```
-Пользователь пишет:     app = mkApp init update view events
+Простые приложения:     app = mkApp init update view subs
+С HTTP запросами:       app = mkCmdApp init update view subs command
 Пользователь видит:     Простые типы, понятные ошибки
 Внутри работает:        Poly гарантирует корректность (Phase 2+)
 Для продвинутых:        Theory/, wiring diagrams (Phase 3+)

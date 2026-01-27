@@ -4,7 +4,137 @@
  */
 
 import { createElement, patch } from './dom.js';
-import { subscribe, unsubscribe, diffEvents } from './events.js';
+import { interpretEvent, unsubscribe } from './events.js';
+
+/**
+ * Интерпретирует и выполняет Task (монадическую цепочку)
+ * @param {Object} task - Scott-encoded Task
+ * @param {Function} onSuccess - callback при успехе (value)
+ * @param {Function} onError - callback при ошибке (string)
+ */
+function executeTask(task, onSuccess, onError) {
+  task({
+    // pure(a) - успешное завершение
+    'pure': (value) => {
+      onSuccess(value);
+    },
+
+    // fail(e) - ошибка
+    'fail': (error) => {
+      onError(error);
+    },
+
+    // httpGet(url, onOk, onErr) - HTTP GET с continuation
+    'httpGet': (url, onOk, onErr) => {
+      fetch(url)
+        .then(async (response) => {
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          return response.text();
+        })
+        .then((text) => {
+          // Продолжаем с результатом
+          const nextTask = onOk(text);
+          executeTask(nextTask, onSuccess, onError);
+        })
+        .catch((error) => {
+          // Продолжаем с ошибкой (onErr continuation)
+          const nextTask = onErr(error.message);
+          executeTask(nextTask, onSuccess, onError);
+        });
+    },
+
+    // httpPost(url, body, onOk, onErr) - HTTP POST с continuation
+    'httpPost': (url, body, onOk, onErr) => {
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          return response.text();
+        })
+        .then((text) => {
+          const nextTask = onOk(text);
+          executeTask(nextTask, onSuccess, onError);
+        })
+        .catch((error) => {
+          const nextTask = onErr(error.message);
+          executeTask(nextTask, onSuccess, onError);
+        });
+    }
+  });
+}
+
+/**
+ * Интерпретирует и выполняет команду (Cmd)
+ * @param {Object} cmd - Scott-encoded Cmd
+ * @param {Function} dispatch - функция отправки сообщений
+ */
+function executeCmd(cmd, dispatch) {
+  cmd({
+    // ε - пустая команда
+    'ε': () => {},
+
+    // _<>_ - композиция команд (параллельное выполнение)
+    '_<>_': (cmd1, cmd2) => {
+      executeCmd(cmd1, dispatch);
+      executeCmd(cmd2, dispatch);
+    },
+
+    // httpGet - HTTP GET запрос (простой API)
+    'httpGet': (url, onSuccess, onError) => {
+      fetch(url)
+        .then(async (response) => {
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          return response.text();
+        })
+        .then((text) => dispatch(onSuccess(text)))
+        .catch((error) => dispatch(onError(error.message)));
+    },
+
+    // httpPost - HTTP POST запрос (простой API)
+    'httpPost': (url, body, onSuccess, onError) => {
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          return response.text();
+        })
+        .then((text) => dispatch(onSuccess(text)))
+        .catch((error) => dispatch(onError(error.message)));
+    },
+
+    // attempt - запуск Task (монадический API)
+    // Result: ok(value) или err(error)
+    'attempt': (task, handler) => {
+      executeTask(
+        task,
+        // onSuccess: Result.ok
+        (value) => {
+          const result = (cb) => cb['ok'](value);
+          dispatch(handler(result));
+        },
+        // onError: Result.err
+        (error) => {
+          const result = (cb) => cb['err'](error);
+          dispatch(handler(result));
+        }
+      );
+    }
+  });
+}
 
 /**
  * Запуск приложения
@@ -17,7 +147,7 @@ export function runApp(app, container) {
   let model = app.init;
   let currentVdom = null;
   let currentDom = null;
-  let activeSubscriptions = new Map();
+  let currentSubscription = null;
   let isUpdating = false;
   let pendingMessages = [];
 
@@ -32,8 +162,14 @@ export function runApp(app, container) {
     isUpdating = true;
 
     try {
+      // Получаем команду ДО обновления модели (чтобы command имел доступ к старой модели)
+      const cmd = app.command(msg)(model);
+
       // Обновляем модель
       model = app.update(msg)(model);
+
+      // Выполняем команду
+      executeCmd(cmd, dispatch);
 
       // Перерисовываем
       render();
@@ -44,7 +180,9 @@ export function runApp(app, container) {
       // Обрабатываем накопленные сообщения
       while (pendingMessages.length > 0) {
         const nextMsg = pendingMessages.shift();
+        const nextCmd = app.command(nextMsg)(model);
         model = app.update(nextMsg)(model);
+        executeCmd(nextCmd, dispatch);
         render();
         updateSubscriptions();
       }
@@ -70,66 +208,24 @@ export function runApp(app, container) {
   }
 
   // Обновление подписок на события
+  // Простая стратегия: отписаться от всего, подписаться заново
+  // (Event AST immutable, поэтому это безопасно)
   function updateSubscriptions() {
-    const newEvents = app.events(model);
-    const diff = diffEvents(activeSubscriptions, newEvents);
-
     // Отписываемся от старых
-    for (const [key, sub] of diff.removed) {
-      unsubscribe(sub);
-      activeSubscriptions.delete(key);
+    if (currentSubscription) {
+      unsubscribe(currentSubscription);
     }
 
-    // Подписываемся на новые
-    for (const [key, eventSpec] of diff.added) {
-      const sub = subscribe(eventSpec, dispatch);
-      activeSubscriptions.set(key, sub);
-    }
-  }
+    // Получаем новый Event AST (subs = subscriptions)
+    const eventSpec = app.subs(model);
 
-  // Получение событий из Signal (List Msg)
-  function processEventSignal(eventSignal) {
-    // Event = Signal (List Msg)
-    // now : List Msg — события на текущем такте
-    const messages = eventSignal.now;
-
-    if (Array.isArray(messages)) {
-      for (const msg of messages) {
-        dispatch(msg);
-      }
-    }
-
-    return eventSignal.next;
-  }
-
-  // Запуск тиков (requestAnimationFrame или setInterval)
-  let tickHandle = null;
-  let eventSignal = null;
-
-  function startTicking() {
-    eventSignal = app.events(model);
-
-    function tick() {
-      if (eventSignal) {
-        eventSignal = processEventSignal(eventSignal);
-      }
-      tickHandle = requestAnimationFrame(tick);
-    }
-
-    tickHandle = requestAnimationFrame(tick);
-  }
-
-  function stopTicking() {
-    if (tickHandle !== null) {
-      cancelAnimationFrame(tickHandle);
-      tickHandle = null;
-    }
+    // Интерпретируем и подписываемся
+    currentSubscription = interpretEvent(eventSpec, dispatch);
   }
 
   // Инициализация
   render();
   updateSubscriptions();
-  // startTicking(); // Включить для автоматических тиков
 
   // Публичный API
   return {
@@ -145,52 +241,17 @@ export function runApp(app, container) {
     // Принудительный ререндер
     forceRender: render,
 
-    // Управление тиками
-    start: startTicking,
-    stop: stopTicking,
-
     // Уничтожение приложения
     destroy: () => {
-      stopTicking();
-      for (const sub of activeSubscriptions.values()) {
-        unsubscribe(sub);
+      if (currentSubscription) {
+        unsubscribe(currentSubscription);
+        currentSubscription = null;
       }
-      activeSubscriptions.clear();
       container.innerHTML = '';
     }
   };
 }
 
-/**
- * Инициализация приложения при загрузке DOM
- */
-export function mount(app, selector = '#app') {
-  const container = document.querySelector(selector);
-  if (!container) {
-    throw new Error(`Container not found: ${selector}`);
-  }
-  return runApp(app, container);
-}
-
-/**
- * Горячая перезагрузка (для разработки)
- */
-export function hotReload(appInstance, newApp) {
-  const model = appInstance.getModel();
-  const container = appInstance.getContainer();
-
-  appInstance.destroy();
-
-  // Создаём новое приложение с сохранённой моделью
-  const modifiedApp = {
-    ...newApp,
-    init: model
-  };
-
-  return runApp(modifiedApp, container);
-}
-
-// Экспорт для использования в браузере
-if (typeof window !== 'undefined') {
-  window.Agdelte = { runApp, mount, hotReload };
-}
+// Re-export для удобства
+export { createElement, patch } from './dom.js';
+export { interpretEvent, subscribe, unsubscribe, debounce, throttle } from './events.js';

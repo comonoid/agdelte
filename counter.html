@@ -132,7 +132,7 @@
 
   <div class="info">
     <p>Source: <code>examples/Counter.agda</code></p>
-    <p>Compiled: <code>build/jAgda.Counter.mjs</code></p>
+    <p>Compiled: <code>_build/jAgda.Counter.mjs</code></p>
   </div>
 
   <script type="module">
@@ -145,7 +145,7 @@
       runApp = runtimeModule.runApp;
       console.log('Runtime loaded');
 
-      const counterModule = await import('./build/jAgda.Counter.mjs');
+      const counterModule = await import('./_build/jAgda.Counter.mjs');
       Counter = counterModule.default;
       console.log('Counter module loaded:', Object.keys(Counter));
     } catch (e) {
@@ -179,7 +179,11 @@
         return Counter.view(BigInt(model));
       },
 
-      events: () => ({ now: [], next: null })
+      // Subscriptions: Counter.events возвращает Scott-encoded `never`
+      subs: (model) => Counter.events(BigInt(model)),
+
+      // Commands: no commands for Counter (ε = empty)
+      command: (msg) => (model) => (cb) => cb['ε']()
     };
 
     // Mount
