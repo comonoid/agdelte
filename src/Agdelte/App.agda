@@ -178,7 +178,43 @@ mapModel get set initial app = mkCmdApp
 -- Добавление функциональности
 ------------------------------------------------------------------------
 
--- Добавить внешние события к приложению
+-- Заменить view (для кастомизации отображения)
+withView : ∀ {Model Msg : Set}
+         → (Model → Html Msg)
+         → App Model Msg
+         → App Model Msg
+withView v app = mkCmdApp
+  (init app)
+  (update app)
+  v
+  (subs app)
+  (command app)
+
+-- Заменить update
+withUpdate : ∀ {Model Msg : Set}
+           → (Msg → Model → Model)
+           → App Model Msg
+           → App Model Msg
+withUpdate u app = mkCmdApp
+  (init app)
+  u
+  (view app)
+  (subs app)
+  (command app)
+
+-- Заменить subs
+withSubs : ∀ {Model Msg : Set}
+         → (Model → Event Msg)
+         → App Model Msg
+         → App Model Msg
+withSubs s app = mkCmdApp
+  (init app)
+  (update app)
+  (view app)
+  s
+  (command app)
+
+-- Добавить внешние события к приложению (merge)
 withEvents : ∀ {Model Msg : Set}
            → (Model → Event Msg)
            → App Model Msg
@@ -190,7 +226,7 @@ withEvents extraEvents app = mkCmdApp
   (λ m → merge (subs app m) (extraEvents m))
   (command app)
 
--- Добавить команды к приложению
+-- Добавить команды к приложению (merge)
 withCommand : ∀ {Model Msg : Set}
             → (Msg → Model → Cmd Msg)
             → App Model Msg

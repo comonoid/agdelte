@@ -131,7 +131,28 @@ function applyAttribute(el, attr, dispatch) {
       break;
 
     case 'style':
-      el.style[name] = value;
+      // Handle case where value contains multiple CSS properties
+      // e.g., styles "background" "none; border: none; color: red"
+      // Use setProperty for kebab-case CSS property names
+      if (value && value.includes(';')) {
+        // Set the first property by name
+        const firstSemi = value.indexOf(';');
+        el.style.setProperty(name, value.substring(0, firstSemi).trim());
+        // Parse and apply remaining properties
+        const remaining = value.substring(firstSemi + 1).trim();
+        if (remaining) {
+          for (const decl of remaining.split(';')) {
+            const colonIdx = decl.indexOf(':');
+            if (colonIdx > 0) {
+              const prop = decl.substring(0, colonIdx).trim();
+              const val = decl.substring(colonIdx + 1).trim();
+              if (prop && val) el.style.setProperty(prop, val);
+            }
+          }
+        }
+      } else {
+        el.style.setProperty(name, value);
+      }
       break;
 
     case 'on':
@@ -143,6 +164,21 @@ function applyAttribute(el, attr, dispatch) {
         el._listenersAttached[`on:${name}`] = true;
         el.addEventListener(name, (e) => {
           const h = el._handlers[`on:${name}`];
+          if (h) dispatch(h);
+        });
+      }
+      break;
+
+    case 'onPrevent':
+      // Like 'on' but with preventDefault (for navigation links)
+      el._handlers = el._handlers || {};
+      el._handlers[`onPrevent:${name}`] = value;
+      if (!el._listenersAttached?.[`onPrevent:${name}`]) {
+        el._listenersAttached = el._listenersAttached || {};
+        el._listenersAttached[`onPrevent:${name}`] = true;
+        el.addEventListener(name, (e) => {
+          e.preventDefault();
+          const h = el._handlers[`onPrevent:${name}`];
           if (h) dispatch(h);
         });
       }
@@ -202,7 +238,7 @@ function removeAttribute(el, attr) {
       break;
 
     case 'style':
-      el.style[name] = '';
+      el.style.removeProperty(name);
       break;
 
     case 'on':
@@ -437,7 +473,16 @@ export function renderToString(vnode) {
     } else if (attr.type === 'boolAttr') {
       html += ` ${attr.name}`;
     } else if (attr.type === 'style') {
-      html += ` style="${attr.name}: ${escapeHtml(attr.value)}"`;
+      // Handle case where value contains multiple CSS properties
+      if (attr.value && attr.value.includes(';')) {
+        const firstSemi = attr.value.indexOf(';');
+        let styleStr = `${attr.name}: ${attr.value.substring(0, firstSemi).trim()}`;
+        const remaining = attr.value.substring(firstSemi + 1).trim();
+        if (remaining) styleStr += '; ' + remaining;
+        html += ` style="${escapeHtml(styleStr)}"`;
+      } else {
+        html += ` style="${attr.name}: ${escapeHtml(attr.value)}"`;
+      }
     }
     // События не рендерим в HTML
   }

@@ -4,7 +4,7 @@
  */
 
 import { createElement, patch } from './dom.js';
-import { interpretEvent, unsubscribe } from './events.js';
+import { interpretEvent, unsubscribe, wsConnections } from './events.js';
 
 /**
  * Интерпретирует и выполняет Task (монадическую цепочку)
@@ -132,6 +132,82 @@ function executeCmd(cmd, dispatch) {
           dispatch(handler(result));
         }
       );
+    },
+
+    // === DOM эффекты ===
+    'focus': (selector) => {
+      const el = document.querySelector(selector);
+      if (el) el.focus();
+    },
+
+    'blur': (selector) => {
+      const el = document.querySelector(selector);
+      if (el) el.blur();
+    },
+
+    'scrollTo': (x, y) => {
+      const xNum = typeof x === 'bigint' ? Number(x) : x;
+      const yNum = typeof y === 'bigint' ? Number(y) : y;
+      window.scrollTo(xNum, yNum);
+    },
+
+    'scrollIntoView': (selector) => {
+      const el = document.querySelector(selector);
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    },
+
+    // === Clipboard ===
+    'writeClipboard': (text) => {
+      navigator.clipboard.writeText(text).catch(console.error);
+    },
+
+    'readClipboard': (handler) => {
+      navigator.clipboard.readText()
+        .then((text) => dispatch(handler(text)))
+        .catch(() => dispatch(handler('')));
+    },
+
+    // === LocalStorage ===
+    'getItem': (key, handler) => {
+      const value = localStorage.getItem(key);
+      // Maybe: just(x) or nothing
+      const maybe = value !== null
+        ? (cb) => cb['just'](value)
+        : (cb) => cb['nothing']();
+      dispatch(handler(maybe));
+    },
+
+    'setItem': (key, value) => {
+      localStorage.setItem(key, value);
+    },
+
+    'removeItem': (key) => {
+      localStorage.removeItem(key);
+    },
+
+    // === WebSocket ===
+    'wsSend': (url, message) => {
+      const ws = wsConnections.get(url);
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(message);
+      }
+    },
+
+    // === Routing ===
+    'pushUrl': (url) => {
+      history.pushState(null, '', url);
+    },
+
+    'replaceUrl': (url) => {
+      history.replaceState(null, '', url);
+    },
+
+    'back': () => {
+      history.back();
+    },
+
+    'forward': () => {
+      history.forward();
     }
   });
 }
@@ -196,7 +272,8 @@ export function runApp(app, container) {
     const newVdom = app.view(model);
 
     if (currentDom === null) {
-      // Первый рендер
+      // Первый рендер - очищаем контейнер
+      container.innerHTML = '';
       currentDom = createElement(newVdom, dispatch);
       container.appendChild(currentDom);
     } else {
@@ -207,20 +284,49 @@ export function runApp(app, container) {
     currentVdom = newVdom;
   }
 
+  // Сериализация Event AST для сравнения
+  function serializeEvent(event) {
+    if (!event) return 'null';
+
+    return event({
+      never: () => 'never',
+      interval: (ms, msg) => `interval(${ms})`,
+      timeout: (ms, msg) => `timeout(${ms})`,
+      onKeyDown: (handler) => 'onKeyDown',
+      onKeyUp: (handler) => 'onKeyUp',
+      httpGet: (url, onSuccess, onError) => `httpGet(${url})`,
+      httpPost: (url, body, onSuccess, onError) => `httpPost(${url})`,
+      merge: (e1, e2) => `merge(${serializeEvent(e1)},${serializeEvent(e2)})`,
+      debounce: (ms, inner) => `debounce(${ms},${serializeEvent(inner)})`,
+      throttle: (ms, inner) => `throttle(${ms},${serializeEvent(inner)})`,
+      wsConnect: (url, handler) => `wsConnect(${url})`,
+      onUrlChange: (handler) => 'onUrlChange'
+    });
+  }
+
+  // Текущий "fingerprint" подписки
+  let currentEventFingerprint = null;
+
   // Обновление подписок на события
-  // Простая стратегия: отписаться от всего, подписаться заново
-  // (Event AST immutable, поэтому это безопасно)
+  // Стратегия: сравниваем fingerprints, переподписываемся только при изменении
   function updateSubscriptions() {
+    // Получаем новый Event AST
+    const eventSpec = app.subs(model);
+    const newFingerprint = serializeEvent(eventSpec);
+
+    // Если подписка не изменилась, ничего не делаем
+    if (newFingerprint === currentEventFingerprint) {
+      return;
+    }
+
     // Отписываемся от старых
     if (currentSubscription) {
       unsubscribe(currentSubscription);
     }
 
-    // Получаем новый Event AST (subs = subscriptions)
-    const eventSpec = app.subs(model);
-
     // Интерпретируем и подписываемся
     currentSubscription = interpretEvent(eventSpec, dispatch);
+    currentEventFingerprint = newFingerprint;
   }
 
   // Инициализация
@@ -250,6 +356,108 @@ export function runApp(app, container) {
       container.innerHTML = '';
     }
   };
+}
+
+/**
+ * Extract App fields from Scott-encoded record
+ *
+ * Agda records compile to: { "record": f => f["record"](field1, field2, ...) }
+ * Access pattern: app["record"]({"record": (f1,f2,f3,f4,f5) => f1})
+ */
+function extractApp(compiledApp) {
+  return {
+    init:    compiledApp["record"]({"record": (i,u,v,s,c) => i}),
+    update:  compiledApp["record"]({"record": (i,u,v,s,c) => u}),
+    view:    compiledApp["record"]({"record": (i,u,v,s,c) => v}),
+    subs:    compiledApp["record"]({"record": (i,u,v,s,c) => s}),
+    command: compiledApp["record"]({"record": (i,u,v,s,c) => c})
+  };
+}
+
+/**
+ * Mount a compiled Agda App
+ *
+ * @param {Object|Function} appOrModule - Either a Scott-encoded App, or a module with .app
+ * @param {HTMLElement|string} container - DOM element or selector
+ * @returns {Object} App instance with dispatch, getModel, destroy, etc.
+ *
+ * @example
+ * // With imported module
+ * import Counter from './_build/jAgda.Counter.mjs';
+ * mount(Counter.app, '#app');
+ *
+ * @example
+ * // With module object
+ * import Counter from './_build/jAgda.Counter.mjs';
+ * mount(Counter, '#app');  // auto-extracts .app
+ */
+export function mount(appOrModule, container) {
+  // Resolve container
+  const containerEl = typeof container === 'string'
+    ? document.querySelector(container)
+    : container;
+
+  if (!containerEl) {
+    throw new Error(`Container not found: ${container}`);
+  }
+
+  // Extract app - handle both Module.app and raw App
+  const compiledApp = typeof appOrModule === 'function'
+    ? appOrModule  // Already a Scott-encoded App
+    : appOrModule.app;  // Module with .app export
+
+  if (!compiledApp) {
+    throw new Error('No app found. Ensure module exports `app : App Model Msg`');
+  }
+
+  // Extract fields via Scott encoding
+  const app = extractApp(compiledApp);
+
+  // Run the app
+  return runApp(app, containerEl);
+}
+
+/**
+ * Mount with dynamic import (async)
+ *
+ * @param {string} moduleName - Module name (e.g., "Counter", "KeyboardDemo")
+ * @param {HTMLElement|string} container - DOM element or selector
+ * @param {Object} [options] - Configuration
+ * @param {string} [options.buildDir="../_build"] - Build directory path
+ * @param {string} [options.prefix="jAgda."] - Module filename prefix
+ * @returns {Promise<Object>} App instance
+ *
+ * @example
+ * mountModule('Counter', '#app');
+ * mountModule('KeyboardDemo', '#app', { buildDir: './_build' });
+ */
+export async function mountModule(moduleName, container, options = {}) {
+  const {
+    buildDir = '../_build',
+    prefix = 'jAgda.'
+  } = options;
+
+  const modulePath = `${buildDir}/${prefix}${moduleName}.mjs`;
+
+  try {
+    const module = await import(modulePath);
+    return mount(module.default, container);
+  } catch (e) {
+    // Provide helpful error
+    const containerEl = typeof container === 'string'
+      ? document.querySelector(container)
+      : container;
+
+    if (containerEl) {
+      containerEl.innerHTML = `
+        <div style="background:rgba(233,69,96,0.2);border:1px solid #e94560;padding:1rem;border-radius:8px;">
+          <strong>Failed to load ${moduleName}:</strong> ${e.message}
+          <pre style="margin-top:0.5rem;font-size:0.85rem;overflow-x:auto;">${e.stack}</pre>
+        </div>
+      `;
+    }
+    throw e;
+  }
 }
 
 // Re-export для удобства

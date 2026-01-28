@@ -19,6 +19,10 @@ private
 onClick : Msg → Attr Msg
 onClick = on "click"
 
+-- onClick с preventDefault (для навигационных ссылок)
+onClickPrevent : Msg → Attr Msg
+onClickPrevent = onPrevent "click"
+
 onDoubleClick : Msg → Attr Msg
 onDoubleClick = on "dblclick"
 
@@ -214,12 +218,7 @@ onPaste = on "paste"
 
 ------------------------------------------------------------------------
 -- Utility: prevent default and stop propagation
--- Реализуется в runtime
 ------------------------------------------------------------------------
 
--- Версии с preventDefault
--- onClickPrevent : Msg → Attr Msg
--- onSubmitPrevent : Msg → Attr Msg
-
--- Версии с stopPropagation
--- onClickStop : Msg → Attr Msg
+onSubmitPrevent : Msg → Attr Msg
+onSubmitPrevent = onPrevent "submit"

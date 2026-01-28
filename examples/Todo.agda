@@ -133,7 +133,7 @@ viewTodo item =
         (text "×" ∷ [])
     ∷ [] )
   where
-    itemStyle = styles "display" "flex; align-items: center; padding: 8px; border-bottom: 1px solid #eee"
+    itemStyle = styles "display" "flex; align-items: center; padding: 8px"
     checkboxAttrs = if completed item then checked else class ""
     textStyle = if completed item
                 then styles "text-decoration" "line-through; color: #999; flex: 1"
@@ -152,7 +152,7 @@ clearBtn m' =
          (text "Clear completed" ∷ [])
   else empty
   where
-    clearStyle = styles "background" "none; border: none; color: #b83f45; cursor: pointer"
+    clearStyle = styles "padding" "6px 12px; background: #b83f45; color: white; border: none; border-radius: 4px; cursor: pointer"
 
 viewFooter : Model → Html Msg
 viewFooter m' =
@@ -189,9 +189,9 @@ view m =
     appStyle = styles "max-width" "500px; margin: 40px auto; font-family: sans-serif"
     headerStyle = styles "text-align" "center; color: #b83f45; font-size: 80px; font-weight: 200"
     inputSectionStyle = styles "display" "flex; gap: 8px; margin-bottom: 16px"
-    inputStyle = styles "flex" "1; padding: 12px; font-size: 16px; border: 1px solid #ddd"
+    inputStyle = styles "flex" "1; padding: 12px; font-size: 16px; border: none; outline: none"
     addBtnStyle = styles "padding" "12px 24px; background: #b83f45; color: white; border: none; cursor: pointer"
-    listStyle = styles "list-style" "none; padding: 0; margin: 0; border: 1px solid #ddd"
+    listStyle = styles "list-style" "none; padding: 0; margin: 0"
 
     handleKey : String → Msg
     handleKey "Enter" = AddTodo
@@ -210,3 +210,7 @@ events _ = never
 
 todoApp : App.App Model Msg
 todoApp = App.mkApp initialModel update view events
+
+-- Export for demo-loader.js
+app : App.App Model Msg
+app = todoApp

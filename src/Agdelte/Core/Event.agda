@@ -19,6 +19,16 @@ private
     A B C : Set
 
 ------------------------------------------------------------------------
+-- WebSocket Message
+------------------------------------------------------------------------
+
+data WsMsg : Set where
+  WsConnected : WsMsg
+  WsMessage   : String → WsMsg
+  WsClosed    : WsMsg
+  WsError     : String → WsMsg
+
+------------------------------------------------------------------------
 -- KeyboardEvent
 ------------------------------------------------------------------------
 
@@ -55,8 +65,18 @@ data Event (A : Set) : Set where
   httpGet  : String → (String → A) → (String → A) → Event A
   httpPost : String → String → (String → A) → (String → A) → Event A
 
-  -- === Комбинатор ===
-  merge : Event A → Event A → Event A
+  -- === WebSocket ===
+  -- wsConnect url → Event с сообщениями о состоянии соединения
+  wsConnect : String → (WsMsg → A) → Event A
+
+  -- === Routing ===
+  -- Событие при изменении URL (popstate)
+  onUrlChange : (String → A) → Event A
+
+  -- === Комбинаторы ===
+  merge    : Event A → Event A → Event A
+  debounce : ℕ → Event A → Event A    -- задержка после паузы
+  throttle : ℕ → Event A → Event A    -- ограничение частоты
 
 ------------------------------------------------------------------------
 -- mapE — функция, не конструктор (чтобы Event ∈ Set)
@@ -72,7 +92,11 @@ mapE f (onKeyUp h) = onKeyUp (λ e → Data.Maybe.map f (h e))
   where import Data.Maybe
 mapE f (httpGet url onOk onErr) = httpGet url (f ∘ onOk) (f ∘ onErr)
 mapE f (httpPost url body onOk onErr) = httpPost url body (f ∘ onOk) (f ∘ onErr)
+mapE f (wsConnect url h) = wsConnect url (f ∘ h)
+mapE f (onUrlChange h) = onUrlChange (f ∘ h)
 mapE f (merge e₁ e₂) = merge (mapE f e₁) (mapE f e₂)
+mapE f (debounce n e) = debounce n (mapE f e)
+mapE f (throttle n e) = throttle n (mapE f e)
 
 ------------------------------------------------------------------------
 -- filterE — через mapE с Maybe
@@ -94,7 +118,11 @@ filterE p (onKeyUp h) = onKeyUp (λ e → filterMaybe p (h e))
     filterMaybe p (just a) = if p a then just a else nothing
 filterE p (httpGet url onOk onErr) = httpGet url onOk onErr  -- фильтр применится в runtime
 filterE p (httpPost url body onOk onErr) = httpPost url body onOk onErr
+filterE p (wsConnect url h) = wsConnect url h  -- фильтр на WsMsg не имеет смысла
+filterE p (onUrlChange h) = onUrlChange h      -- фильтр на URL не имеет смысла
 filterE p (merge e₁ e₂) = merge (filterE p e₁) (filterE p e₂)
+filterE p (debounce n e) = debounce n (filterE p e)
+filterE p (throttle n e) = throttle n (filterE p e)
 
 ------------------------------------------------------------------------
 -- Удобные конструкторы для клавиатуры

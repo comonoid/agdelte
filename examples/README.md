@@ -1,5 +1,7 @@
 # Agdelte Examples
 
+> See [doc/examples.md](../doc/examples.md) for detailed guide.
+
 Примеры демонстрируют возможности Agdelte:
 
 | Пример | Описание | Особенности |
@@ -8,7 +10,11 @@
 | Timer | Секундомер | Event subs (interval) |
 | Todo | Список задач | Списки, фильтрация, input handling |
 | Keyboard | Управление стрелками | onKeyDown, global keyboard events |
-| HttpDemo | HTTP запросы | Cmd (httpGet), one-shot effects |
+| HttpDemo | HTTP запросы | Cmd (httpGet) |
+| TaskDemo | Цепочка HTTP | Task с do-нотацией |
+| WebSocketDemo | Echo-клиент | wsConnect, wsSend |
+| RouterDemo | SPA роутинг | pushUrl, onUrlChange |
+| CompositionDemo | Два счётчика | _∥_ параллельная композиция |
 
 ## Компиляция
 
@@ -21,6 +27,10 @@ npm run build:timer
 npm run build:todo
 npm run build:keyboard
 npm run build:http
+npm run build:task
+npm run build:websocket
+npm run build:router
+npm run build:composition
 
 # Все сразу
 npm run build:all
@@ -56,11 +66,15 @@ agda Todo.agda
 
 2. Открыть в браузере:
    - http://localhost:8080/ — главная страница
-   - http://localhost:8080/counter.html — Counter
-   - http://localhost:8080/timer.html — Timer
-   - http://localhost:8080/todo.html — Todo
-   - http://localhost:8080/keyboard.html — Keyboard
-   - http://localhost:8080/http.html — HTTP
+   - http://localhost:8080/examples_html/counter.html — Counter
+   - http://localhost:8080/examples_html/timer.html — Timer
+   - http://localhost:8080/examples_html/todo.html — Todo
+   - http://localhost:8080/examples_html/keyboard.html — Keyboard
+   - http://localhost:8080/examples_html/http.html — HTTP
+   - http://localhost:8080/examples_html/task.html — Task Chain
+   - http://localhost:8080/examples_html/websocket.html — WebSocket
+   - http://localhost:8080/examples_html/router.html — Router
+   - http://localhost:8080/examples_html/composition.html — Composition
 
 ## Структура примера
 
@@ -82,7 +96,7 @@ view : Model → Html Msg
 -- subs: подписки на события (interval, keyboard)
 subs : Model → Event Msg
 
--- command: команды (HTTP, one-shot effects) — опционально
+-- command: команды (HTTP) — опционально
 command : Msg → Model → Cmd Msg
 
 -- app: сборка приложения

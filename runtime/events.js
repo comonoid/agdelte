@@ -10,6 +10,23 @@
  *   Event.merge     = e1 => e2 => cb => cb.merge(e1, e2)
  */
 
+// WebSocket connections pool (shared with commands)
+export const wsConnections = new Map();
+
+/**
+ * Создаёт WsMsg (Scott-encoded)
+ */
+function mkWsMsg(tag, value) {
+  return (cb) => {
+    switch (tag) {
+      case 'WsConnected': return cb.WsConnected();
+      case 'WsMessage': return cb.WsMessage(value);
+      case 'WsClosed': return cb.WsClosed();
+      case 'WsError': return cb.WsError(value);
+    }
+  };
+}
+
 /**
  * Интерпретирует Event AST и создаёт подписки
  * @param {Object} event - Event (Scott-encoded)
@@ -138,6 +155,118 @@ export function interpretEvent(event, dispatch) {
           sub1.unsubscribe();
           sub2.unsubscribe();
         }
+      };
+    },
+
+    // debounce: задержка после паузы
+    debounce: (ms, innerEvent) => {
+      const msNum = typeof ms === 'bigint' ? Number(ms) : ms;
+      let timeoutId = null;
+      let lastMsg = null;
+
+      const debouncedDispatch = (msg) => {
+        lastMsg = msg;
+        if (timeoutId) clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => {
+          dispatch(lastMsg);
+          timeoutId = null;
+        }, msNum);
+      };
+
+      const sub = interpretEvent(innerEvent, debouncedDispatch);
+      return {
+        unsubscribe: () => {
+          if (timeoutId) clearTimeout(timeoutId);
+          sub.unsubscribe();
+        }
+      };
+    },
+
+    // throttle: ограничение частоты
+    throttle: (ms, innerEvent) => {
+      const msNum = typeof ms === 'bigint' ? Number(ms) : ms;
+      let lastCall = 0;
+      let timeoutId = null;
+      let pendingMsg = null;
+
+      const throttledDispatch = (msg) => {
+        const now = Date.now();
+        const remaining = msNum - (now - lastCall);
+
+        if (remaining <= 0) {
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+          }
+          lastCall = now;
+          dispatch(msg);
+        } else {
+          pendingMsg = msg;
+          if (!timeoutId) {
+            timeoutId = setTimeout(() => {
+              lastCall = Date.now();
+              timeoutId = null;
+              if (pendingMsg !== null) {
+                dispatch(pendingMsg);
+                pendingMsg = null;
+              }
+            }, remaining);
+          }
+        }
+      };
+
+      const sub = interpretEvent(innerEvent, throttledDispatch);
+      return {
+        unsubscribe: () => {
+          if (timeoutId) clearTimeout(timeoutId);
+          sub.unsubscribe();
+        }
+      };
+    },
+
+    // wsConnect: WebSocket соединение
+    wsConnect: (url, handler) => {
+      const ws = new WebSocket(url);
+
+      ws.onopen = () => {
+        dispatch(handler(mkWsMsg('WsConnected')));
+      };
+
+      ws.onmessage = (e) => {
+        dispatch(handler(mkWsMsg('WsMessage', e.data)));
+      };
+
+      ws.onerror = (e) => {
+        dispatch(handler(mkWsMsg('WsError', e.message || 'Unknown error')));
+      };
+
+      ws.onclose = () => {
+        dispatch(handler(mkWsMsg('WsClosed')));
+      };
+
+      // Регистрируем для wsSend
+      wsConnections.set(url, ws);
+
+      return {
+        unsubscribe: () => {
+          wsConnections.delete(url);
+          if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+            ws.close();
+          }
+        }
+      };
+    },
+
+    // onUrlChange: изменение URL (popstate)
+    onUrlChange: (handler) => {
+      const listener = () => {
+        dispatch(handler(window.location.pathname + window.location.search));
+      };
+
+      window.addEventListener('popstate', listener);
+
+      return {
+        unsubscribe: () => window.removeEventListener('popstate', listener)
       };
     }
   });

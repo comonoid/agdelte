@@ -76,5 +76,6 @@ events = const never
 counterApp : App.App Model Msg
 counterApp = App.mkApp initialModel update view events
 
--- Или используя simpleApp:
--- counterApp = App.simpleApp initialModel update view
+-- Export for demo-loader.js
+app : App.App Model Msg
+app = counterApp

@@ -35,7 +35,7 @@ record Model : Set where
 open Model public
 
 initialModel : Model
-initialModel = mkModel (+ 200) (+ 200) "Press arrow keys!"
+initialModel = mkModel (+ 225) (+ 215) "Press arrow keys!"
 
 ------------------------------------------------------------------------
 -- Messages

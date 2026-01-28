@@ -1,0 +1,475 @@
+/* Agdelte Examples - Common Styles */
+
+:root {
+  --primary: #4a9eff;
+  --bg: #1a1a2e;
+  --card: #16213e;
+  --text: #eee;
+  --accent: #e94560;
+  --success: #4ade80;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem;
+}
+
+.back {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  color: var(--primary);
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+.back:hover { text-decoration: underline; }
+
+h1 {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.subtitle { color: #888; margin-bottom: 2rem; }
+
+#app {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 2rem;
+  min-width: 400px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+}
+
+.btn {
+  background: var(--primary);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  font-size: 1.25rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.1s, background 0.2s;
+}
+.btn:hover { background: #3a8eef; transform: translateY(-2px); }
+.btn:active { transform: translateY(0); }
+
+.info {
+  margin-top: 2rem;
+  text-align: center;
+  color: #666;
+  font-size: 0.9rem;
+}
+.info code {
+  background: rgba(255,255,255,0.1);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.error {
+  background: rgba(233, 69, 96, 0.2);
+  border: 1px solid var(--accent);
+  padding: 1rem;
+  border-radius: 8px;
+  text-align: left;
+}
+.error pre {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  overflow-x: auto;
+}
+
+.loading {
+  color: #888;
+  font-style: italic;
+}
+
+/* ============================================
+   Demo-specific styles (supports Agda-generated classes)
+   ============================================ */
+
+/* Common demo content wrapper - works with Agda class names */
+.demo, .counter, .timer, .todo-app, .keyboard-demo,
+.http-demo, .task-demo, .ws-demo, .router-demo, .composition-demo {
+  text-align: center;
+}
+.demo h1, .counter h1, .timer h1, .http-demo h1, .task-demo h1,
+.ws-demo h1, .router-demo h1, .composition-demo h1 {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+  background: none;
+  -webkit-text-fill-color: var(--text);
+}
+.demo p, .http-demo p, .task-demo p, .ws-demo p {
+  color: #aaa;
+  margin-bottom: 0.75rem;
+}
+
+/* Large display (counter, timer) */
+.demo .display, .counter .display, .timer .display {
+  font-size: 3rem;
+  font-weight: bold;
+  margin: 1.5rem 0;
+  color: var(--primary);
+}
+.counter .display { font-size: 4rem; margin: 1rem 0; }
+.timer .display { font-family: 'SF Mono', Monaco, monospace; }
+
+/* Button row */
+.demo .controls, .demo .buttons,
+.counter .buttons, .timer .controls {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+.timer .btn { min-width: 100px; }
+
+/* Status/output block */
+.demo .status, .http-demo .status, .task-demo .status, .ws-demo .status {
+  background: rgba(0,0,0,0.2);
+  padding: 1rem;
+  border-radius: 8px;
+  font-family: monospace;
+  font-size: 0.85rem;
+  word-break: break-all;
+  max-height: 250px;
+  overflow-y: auto;
+  margin: 1rem 0;
+  text-align: left;
+}
+.demo .status pre, .task-demo .status pre {
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+/* Action button (fetch, connect, etc.) - supports Agda class names */
+.demo .action-btn, .http-demo .fetch-btn, .task-demo .fetch-btn,
+.ws-demo button, .router-demo button {
+  background: var(--primary);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.1s, background 0.2s;
+}
+.demo .action-btn:hover:not(:disabled), .http-demo .fetch-btn:hover:not(:disabled),
+.task-demo .fetch-btn:hover:not(:disabled), .ws-demo button:hover:not(:disabled) {
+  background: #3a8eef;
+  transform: translateY(-2px);
+}
+.demo .action-btn:disabled, .http-demo .fetch-btn:disabled,
+.task-demo .fetch-btn:disabled, .ws-demo button:disabled {
+  background: #555;
+  cursor: not-allowed;
+}
+.demo .action-btn.danger, .ws-demo .disconnect-btn {
+  background: var(--accent);
+}
+.demo .action-btn.danger:hover:not(:disabled), .ws-demo .disconnect-btn:hover:not(:disabled) {
+  background: #d13550;
+}
+
+/* Navigation links */
+.demo .nav-link {
+  color: #888;
+  text-decoration: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+.demo .nav-link:hover {
+  background: rgba(74,158,255,0.1);
+  color: var(--primary);
+}
+.demo .nav-link.active {
+  background: var(--primary);
+  color: white;
+}
+
+/* Messages list (websocket) */
+.demo .messages, .ws-demo .messages {
+  background: rgba(0,0,0,0.2);
+  border-radius: 8px;
+  padding: 1rem;
+  max-height: 300px;
+  overflow-y: auto;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.ws-demo .message {
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  max-width: 80%;
+}
+.ws-demo .message .label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.ws-demo .message .text { word-break: break-word; }
+.ws-demo .message.sent {
+  align-self: flex-end;
+  background: var(--primary);
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+.ws-demo .message.sent .label { color: rgba(255,255,255,0.7); text-align: right; }
+.ws-demo .message.received {
+  align-self: flex-start;
+  background: rgba(74,222,128,0.2);
+  color: var(--success);
+  border-bottom-left-radius: 4px;
+}
+.ws-demo .message.received .label { color: rgba(74,222,128,0.7); }
+.ws-demo .input-section { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+.ws-demo .messages-section h3 { color: #888; font-size: 0.9rem; margin-bottom: 0.5rem; }
+
+/* Connection status (websocket) */
+.demo .connection-status, .ws-demo .status {
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+.ws-demo .status.disconnected { background: rgba(150,150,150,0.2); color: #888; }
+.ws-demo .status.connecting { background: rgba(251,191,36,0.2); color: #fbbf24; }
+.ws-demo .status.connected { background: rgba(74,222,128,0.2); color: var(--success); }
+.ws-demo .status.error { background: rgba(233,69,96,0.2); color: var(--accent); }
+
+/* Input field */
+.demo input[type="text"] {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background: #1a1a2e;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+.demo input[type="text"]:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+/* Counters side by side (composition) */
+.demo .counters-container {
+  display: flex;
+  gap: 2rem;
+}
+.demo .counter-component {
+  flex: 1;
+  background: rgba(0,0,0,0.2);
+  border-radius: 8px;
+  padding: 1.5rem;
+  text-align: center;
+}
+.demo .counter-component h3 {
+  color: var(--primary);
+  margin-bottom: 1rem;
+}
+.demo .count {
+  font-size: 2rem;
+  font-weight: bold;
+  min-width: 60px;
+  display: inline-block;
+}
+
+/* Round button (for +/-) - composition */
+.demo .round-btn, .composition-demo .btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: var(--primary);
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: transform 0.1s, background 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+}
+.demo .round-btn:hover, .composition-demo .btn:hover {
+  background: #3a8eef;
+  transform: scale(1.1);
+}
+.composition-demo .counters-container { display: flex; gap: 2rem; justify-content: center; }
+.composition-demo .counter-component { background: rgba(0,0,0,0.2); border-radius: 8px; padding: 1.5rem; }
+.composition-demo .description { color: #888; margin-bottom: 0.5rem; }
+.composition-demo .total { color: var(--success); font-size: 1.2rem; font-weight: 600; margin-bottom: 1.5rem; }
+.composition-demo .counter-controls { display: flex; align-items: center; justify-content: center; gap: 0.75rem; }
+.composition-demo .reset-btn {
+  background: var(--accent);
+  border: none;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  margin-left: 0.5rem;
+}
+.composition-demo .reset-btn:hover { background: #d83550; }
+
+/* Router demo */
+.router-demo { width: 25vw; min-width: 320px; }
+.router-demo .stats { color: #888; margin-bottom: 1rem; }
+.router-demo .main-nav {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 1.5rem;
+  background: rgba(0,0,0,0.3);
+  border-radius: 8px;
+  padding: 4px;
+}
+.router-demo .nav-link {
+  flex: 1;
+  text-align: center;
+  padding: 0.6rem 1rem;
+  color: #888;
+  text-decoration: none;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+.router-demo .nav-link:hover {
+  color: var(--primary);
+  background: rgba(74,158,255,0.15);
+}
+.router-demo .nav-link.active {
+  background: var(--primary);
+  color: white;
+}
+.router-demo .content { height: 120px; }
+.router-demo .page h2 { color: var(--primary); margin-bottom: 1rem; }
+.router-demo .page p { color: #aaa; margin-bottom: 0.5rem; }
+.router-demo .not-found h2 { color: var(--accent); }
+.router-demo .not-found button {
+  margin-top: 1rem;
+  background: var(--primary);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* Keyboard demo */
+.keyboard-demo {
+  position: relative;
+  width: 100%;
+  height: 400px;
+}
+.keyboard-demo p { margin-bottom: 0.5rem; color: #aaa; }
+.keyboard-demo .box {
+  background: var(--primary);
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(74, 158, 255, 0.4);
+}
+.keyboard-demo .instructions {
+  position: absolute;
+  bottom: 1rem;
+  left: 1rem;
+  font-size: 0.85rem;
+  color: #666;
+}
+.keyboard-demo .reset-btn {
+  position: absolute;
+  bottom: 1rem;
+  right: 1rem;
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.keyboard-demo .reset-btn:hover { background: #d83550; }
+
+/* Todo demo (TodoMVC style) */
+.todo-app { max-width: 500px; margin: 0 auto; text-align: left; }
+.todo-app h1 {
+  text-align: center;
+  color: #b83f45 !important;
+  font-size: 80px !important;
+  font-weight: 200;
+  background: none !important;
+  -webkit-text-fill-color: #b83f45 !important;
+}
+.todo-app .input-section { display: flex; gap: 8px; margin-bottom: 16px; }
+.todo-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border: 1px solid #444;
+  border-radius: 4px;
+}
+.todo-item {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  border-bottom: 1px solid #333;
+}
+.todo-item:last-child { border-bottom: none; }
+.todo-item input[type="checkbox"] { width: 20px; height: 20px; margin-right: 12px; cursor: pointer; }
+.todo-item span { flex: 1; }
+.todo-app .delete-btn {
+  background: none;
+  border: none;
+  color: #cc9a9a;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0 8px;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+.todo-app .delete-btn:hover { opacity: 1; }
+.todo-app .footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px;
+  color: #888;
+  font-size: 14px;
+}
+.todo-app .footer button { background: none; border: none; color: var(--accent); cursor: pointer; }
+.todo-app .footer button:hover { text-decoration: underline; }
+.todo-app input[type="text"] {
+  flex: 1;
+  padding: 12px;
+  font-size: 16px;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: #0f0f23;
+  color: var(--text);
+}
+.todo-app input[type="text"]:focus { outline: none; border-color: var(--primary); }
+.todo-app > .input-section button {
+  padding: 12px 24px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+}
+.todo-app > .input-section button:hover { background: #d13550; }

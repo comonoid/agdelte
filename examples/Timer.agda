@@ -102,3 +102,7 @@ events m = if running m
 
 timerApp : App.App Model Msg
 timerApp = App.mkApp initialModel update view events
+
+-- Export for demo-loader.js
+app : App.App Model Msg
+app = timerApp

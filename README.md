@@ -17,12 +17,13 @@ record App (Model Msg : Set) : Set where
     update  : Msg → Model → Model      -- pure state transition (simple!)
     view    : Model → Html Msg         -- pure rendering
     subs    : Model → Event Msg        -- subscriptions (continuous)
-    command : Msg → Model → Cmd Msg    -- commands (one-shot effects)
+    command : Msg → Model → Cmd Msg    -- commands (HTTP, etc.)
 ```
 
 Key insight: **separation of concerns**:
 - `Event` (subs) — subscriptions to continuous sources (timers, keyboard)
-- `Cmd` (command) — one-shot effects (HTTP requests)
+- `Cmd` (command) — commands (HTTP requests)
+- `Task` — monadic chains with do-notation (sequential HTTP)
 - `update` — stays simple: `Msg → Model → Model`
 
 ```agda
@@ -110,6 +111,26 @@ app = mkCmdApp
 - `subs` is for **continuous** subscriptions (timers, keyboard)
 - `update` stays **simple**: `Msg → Model → Model`
 
+### Task for HTTP Chains
+
+For sequential HTTP requests, use `Task` with do-notation:
+
+```agda
+-- Chain of requests with do-notation
+fetchChain : Task String
+fetchChain = do
+  user ← http "/api/user"
+  posts ← http ("/api/users/" ++ user ++ "/posts")
+  comments ← http ("/api/posts/" ++ posts ++ "/comments")
+  pure (combine user posts comments)
+
+-- Use in command via attempt
+command Fetch _ = attempt fetchChain GotResult
+command _ _ = ε
+```
+
+`Task` is a monad — compose with `>>=` or do-notation, run via `attempt`.
+
 ## Why Agdelte?
 
 | | Svelte 5 | Agdelte |
@@ -128,10 +149,11 @@ app = mkCmdApp
 │  mkApp { init, update, view, subs }      -- simple apps    │
 │  mkCmdApp { ..., command }               -- with HTTP      │
 ├─────────────────────────────────────────────────────────────┤
-│  Core          │  Event (subs), Cmd (commands)              │
+│  Core          │  Event (subs), Cmd (commands), Task (chains)│
 ├─────────────────────────────────────────────────────────────┤
 │  Primitives    │  interval, keyboard (Event)                │
 │                │  httpGet, httpPost (Cmd)                   │
+│                │  http, attempt (Task → Cmd)                │
 ├─────────────────────────────────────────────────────────────┤
 │  App           │  init, update, view, subs, command         │
 ├─────────────────────────────────────────────────────────────┤
@@ -140,7 +162,6 @@ app = mkCmdApp
 │  Runtime       │  Event loop, subscriptions, commands       │
 ├─────────────────────────────────────────────────────────────┤
 │  Theory/       │  Poly, Coalg, Lens (isolated, optional)    │
-│                │  Phase 2+: used internally for guarantees  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -153,14 +174,14 @@ record App (Model Msg : Set) : Set where
     update  : Msg → Model → Model      -- pure state transition (simple!)
     view    : Model → Html Msg         -- pure rendering
     subs    : Model → Event Msg        -- subscriptions (continuous)
-    command : Msg → Model → Cmd Msg    -- commands (one-shot effects)
+    command : Msg → Model → Cmd Msg    -- commands (HTTP, etc.)
 ```
 
 - **init** — initial state
 - **update** — pure function, stays simple: `Msg → Model → Model`
 - **view** — pure function, returns typed Html
 - **subs** — subscriptions to continuous events (timers, keyboard)
-- **command** — one-shot effects (HTTP requests)
+- **command** — commands (HTTP requests)
 
 DOM events from `view` are handled automatically by runtime.
 
@@ -172,26 +193,22 @@ DOM events from `view` are handled automatically by runtime.
 
 | Document | Description |
 |----------|-------------|
-| [description.md](description.md) | Concise overview of the core idea |
-| [examples/README.md](examples/README.md) | Running examples (Counter, Timer, Todo) |
-| [architecture/](architecture/) | Full architecture documentation |
+| [doc/](doc/) | Main documentation |
+| [doc/architecture.md](doc/architecture.md) | Core architecture and design |
+| [doc/api.md](doc/api.md) | API reference (Event, Cmd, Task, App, Html) |
+| [doc/runtime.md](doc/runtime.md) | JavaScript runtime implementation |
+| [doc/examples.md](doc/examples.md) | Guide to all examples |
 
-### Architecture
-
-| Document | Description |
-|----------|-------------|
-| [architecture/README.md](architecture/README.md) | Three-layer architecture (Poly foundation + Elm-like DSL) |
-| [architecture/concurrency.md](architecture/concurrency.md) | Concurrency extension — Phase 3 (planned) |
-| [architecture/vs-svelte.md](architecture/vs-svelte.md) | Detailed comparison with Svelte 5 |
-| [architecture/vs-vue3.md](architecture/vs-vue3.md) | Feature comparison with Vue 3 |
-
-### Reference
+### Additional Notes
 
 | Document | Description |
 |----------|-------------|
-| [architecture/time-model.md](architecture/time-model.md) | Time model: ticks, animationFrame, fixed timestep |
-| [architecture/combinators.md](architecture/combinators.md) | All combinators with types and examples |
-| [architecture/ffi.md](architecture/ffi.md) | JavaScript FFI implementations (reference) |
+| [architecture/combinators.md](architecture/combinators.md) | All combinators with types |
+| [architecture/time-model.md](architecture/time-model.md) | Time model: ticks, dt |
+| [architecture/ffi.md](architecture/ffi.md) | JavaScript FFI reference |
+| [architecture/concurrency.md](architecture/concurrency.md) | Phase 3 concurrency (planned) |
+| [architecture/vs-svelte.md](architecture/vs-svelte.md) | Comparison with Svelte 5 |
+| [architecture/vs-vue3.md](architecture/vs-vue3.md) | Comparison with Vue 3 |
 
 ## Project Structure
 
@@ -201,7 +218,8 @@ src/
     ├── Core/                    -- Простые определения (для пользователя)
     │   ├── Signal.agda          -- Coinductive stream
     │   ├── Event.agda           -- Event — подписки (interval, keyboard)
-    │   └── Cmd.agda             -- Cmd — команды (httpGet, httpPost)
+    │   ├── Cmd.agda             -- Cmd — команды (httpGet, httpPost)
+    │   └── Task.agda            -- Task — монадические цепочки (do-notation)
     │
     ├── Theory/                  -- Теоретическое обоснование (опционально)
     │   ├── Poly.agda            -- Polynomial functors, Coalg, Lens
@@ -225,6 +243,9 @@ examples/
     Counter.agda                 -- Simple counter
     Timer.agda                   -- Stopwatch with interval
     Todo.agda                    -- TodoMVC-style app
+    KeyboardDemo.agda            -- Keyboard events
+    HttpDemo.agda                -- HTTP via Cmd
+    TaskDemo.agda                -- HTTP chains via Task (do-notation)
 
 runtime/
     index.js                     -- runApp, event loop
@@ -339,14 +360,15 @@ Runtime: ✅
 Examples: ✅
 - Counter, Timer, Todo
 
-**Phase 2: Extensions** — separate concepts requiring dedicated learning
+**Phase 2: Extensions** ✅ — separate concepts requiring dedicated learning
 
-- websocket (complex state, reconnection) — via Cmd
-- localStorage (persistence) — via Cmd
-- routing (URL, history) — via Event + Cmd
-- More combinators: filterE, merge, snapshot, debounce, throttle
-- touch, focus management
-- More Cmd effects: focus, scrollTo, copy to clipboard
+- ✅ websocket (wsConnect, wsSend)
+- ✅ localStorage (getItem, setItem, removeItem)
+- ✅ routing (onUrlChange, pushUrl, replaceUrl, back, forward)
+- ✅ Combinators: filterE, merge, debounce, throttle
+- ✅ DOM effects: focus, blur, scrollTo, scrollIntoView
+- ✅ Clipboard: readClipboard, writeClipboard
+- ✅ App composition: _∥_, _⊕ᵃ_, mapMsg, mapModel
 
 **Phase 3: Concurrency** — separate module
 

@@ -24,6 +24,8 @@ data Attr (Msg : Set) : Set where
   style : String → String → Attr Msg
   -- Обработчик событий
   on : String → Msg → Attr Msg
+  -- Обработчик с preventDefault (для навигации)
+  onPrevent : String → Msg → Attr Msg
   -- Обработчик с данными (для input)
   onInput : (String → Msg) → Attr Msg
   -- Обработчик клавиш
@@ -37,6 +39,7 @@ data Attr (Msg : Set) : Set where
 {-# COMPILE JS boolAttr = name => ({ type: 'boolAttr', name }) #-}
 {-# COMPILE JS style = name => value => ({ type: 'style', name, value }) #-}
 {-# COMPILE JS on = name => value => ({ type: 'on', name, value }) #-}
+{-# COMPILE JS onPrevent = name => value => ({ type: 'onPrevent', name, value }) #-}
 {-# COMPILE JS onInput = handler => ({ type: 'onInput', handler }) #-}
 {-# COMPILE JS onKey = name => handler => ({ type: 'onKey', name, handler }) #-}
 {-# COMPILE JS key = value => ({ type: 'key', value }) #-}
@@ -72,9 +75,22 @@ mapAttr f (attr name value) = attr name value
 mapAttr f (boolAttr name) = boolAttr name
 mapAttr f (style prop value) = style prop value
 mapAttr f (on event msg) = on event (f msg)
+mapAttr f (onPrevent event msg) = onPrevent event (f msg)
 mapAttr f (onInput handler) = onInput (f ∘ handler)
 mapAttr f (onKey event handler) = onKey event (f ∘ handler)
 mapAttr f (key k) = key k
+
+-- FFI для mapAttr (работает с plain objects)
+{-# COMPILE JS mapAttr = _ => _ => f => attr => {
+  if (!attr) return attr;
+  switch (attr.type) {
+    case 'on': return { type: 'on', name: attr.name, value: f(attr.value) };
+    case 'onPrevent': return { type: 'onPrevent', name: attr.name, value: f(attr.value) };
+    case 'onInput': return { type: 'onInput', handler: x => f(attr.handler(x)) };
+    case 'onKey': return { type: 'onKey', name: attr.name, handler: x => f(attr.handler(x)) };
+    default: return attr;
+  }
+} #-}
 
 -- Преобразование сообщений в Html
 {-# TERMINATING #-}
@@ -84,6 +100,33 @@ mapHtml f (node tag attrs children) =
 mapHtml f (text s) = text s
 mapHtml f (keyed tag attrs children) =
   keyed tag (map (mapAttr f) attrs) (map (λ p → proj₁ p , mapHtml f (proj₂ p)) children)
+
+-- FFI для mapHtml (работает с plain objects)
+{-# COMPILE JS mapHtml = _ => _ => f => html => {
+  if (!html) return html;
+  if (html.tag === 'TEXT') return html;
+  const mapA = attr => {
+    if (!attr) return attr;
+    switch (attr.type) {
+      case 'on': return { type: 'on', name: attr.name, value: f(attr.value) };
+      case 'onPrevent': return { type: 'onPrevent', name: attr.name, value: f(attr.value) };
+      case 'onInput': return { type: 'onInput', handler: x => f(attr.handler(x)) };
+      case 'onKey': return { type: 'onKey', name: attr.name, handler: x => f(attr.handler(x)) };
+      default: return attr;
+    }
+  };
+  const mapH = h => {
+    if (!h) return h;
+    if (h.tag === 'TEXT') return h;
+    return {
+      tag: h.tag,
+      attrs: Array.isArray(h.attrs) ? h.attrs.map(mapA) : h.attrs,
+      children: Array.isArray(h.children) ? h.children.map(mapH) : h.children,
+      keyed: h.keyed
+    };
+  };
+  return mapH(html);
+} #-}
 
 ------------------------------------------------------------------------
 -- Утилиты
