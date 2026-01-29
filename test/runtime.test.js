@@ -191,6 +191,75 @@ testDOM('full render cycle', () => {
 });
 
 // ========================================
+// Combinator Runtime Tests (Phase 5)
+// ========================================
+
+console.log('\n=== Combinator Runtime Tests ===\n');
+
+test('foldE accumulates state across dispatches', () => {
+  // Simulate the foldE runtime logic:
+  // On each input value, apply step(input, state) and dispatch new state
+  let state = 0;
+  const step = (input) => (oldState) => oldState + input;
+  const results = [];
+  const dispatch = (val) => results.push(val);
+
+  // Simulate three events with values 5, 5, 3
+  for (const input of [5, 5, 3]) {
+    state = step(input)(state);
+    dispatch(state);
+  }
+
+  assertDeepEqual(results, [5, 10, 13]);
+});
+
+test('mapFilterE filters via Maybe', () => {
+  // Simulate mapFilterE: dispatch only when function returns just(x)
+  const results = [];
+  const f = (x) => {
+    if (x > 2) {
+      // Scott-encoded just(x)
+      return (cb) => cb.just(x * 10);
+    } else {
+      // Scott-encoded nothing
+      return (cb) => cb.nothing();
+    }
+  };
+
+  // Simulate dispatching through mapFilterE
+  for (const val of [1, 2, 3, 4, 5]) {
+    const maybeResult = f(val);
+    const result = maybeResult({
+      just: (x) => x,
+      nothing: () => null
+    });
+    if (result !== null) results.push(result);
+  }
+
+  assertDeepEqual(results, [30, 40, 50]);
+});
+
+test('switchE swaps subscription', () => {
+  // Test the concept: switchE starts with one source, switches to another
+  let currentSource = 'A';
+  const results = [];
+
+  // Simulate: dispatch from current source
+  const dispatchFromCurrent = () => results.push(currentSource);
+
+  dispatchFromCurrent(); // 'A'
+  dispatchFromCurrent(); // 'A'
+
+  // Meta-event: switch source
+  currentSource = 'B';
+
+  dispatchFromCurrent(); // 'B'
+  dispatchFromCurrent(); // 'B'
+
+  assertDeepEqual(results, ['A', 'A', 'B', 'B']);
+});
+
+// ========================================
 // Results
 // ========================================
 

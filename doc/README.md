@@ -5,24 +5,29 @@
 | Document | Description |
 |----------|-------------|
 | [architecture.md](architecture.md) | Core architecture and design principles |
-| [api.md](api.md) | API reference (Event, Cmd, Task, App, Html) |
+| [api.md](api.md) | API reference (Node, Event, Cmd, Task, Optic) |
 | [runtime.md](runtime.md) | JavaScript runtime implementation |
 | [examples.md](examples.md) | Guide to all examples |
+| [roadmap.md](roadmap.md) | **Roadmap: all phases with detailed descriptions** |
+
+## Additional Documents
+
+| Document | Description |
+|----------|-------------|
+| [polynomials.md](polynomials.md) | Polynomial functors: theory and phase planning |
+| [combinators.md](combinators.md) | All combinators with types and examples |
+| [time-model.md](time-model.md) | Time model: ticks, dt |
+| [vs-svelte.md](vs-svelte.md) | Detailed comparison with Svelte 5 |
+| [vs-vue3.md](vs-vue3.md) | Feature comparison with Vue 3 |
+
+## Planned (Phase 7+)
+
+| Document | Description |
+|----------|-------------|
+| [concurrency.md](../architecture/concurrency.md) | Concurrency + Protocols (Phase 7, planned) |
 
 ## Quick Links
 
 - [Main README](../README.md) — project overview and quick start
 - [Examples](../examples/) — working code examples
 - [Theory](../src/Agdelte/Theory/) — formal foundations (optional)
-
-## Architecture Notes
-
-The `architecture/` directory contains additional design documents:
-
-| Document | Description |
-|----------|-------------|
-| [combinators.md](../architecture/combinators.md) | All combinators with types |
-| [time-model.md](../architecture/time-model.md) | Time model: ticks, dt |
-| [concurrency.md](../architecture/concurrency.md) | Concurrency + Protocols (Phase 7, planned) |
-| [vs-svelte.md](../architecture/vs-svelte.md) | Comparison with Svelte 5 |
-| [vs-vue3.md](../architecture/vs-vue3.md) | Comparison with Vue 3 |

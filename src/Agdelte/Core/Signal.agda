@@ -1,13 +1,13 @@
 {-# OPTIONS --without-K --guardedness #-}
 
--- Signal: дискретный поток значений (коиндуктивный)
+-- Signal: discrete stream of values (coinductive)
 -- Signal A ≅ Coalg (Mono A ⊤) = ν X. A × X
 --
--- Полином Mono A ⊤ имеет:
---   Pos = A (что выдаём)
---   Dir = λ _ → ⊤ (один вход для перехода к следующему)
+-- Polynomial Mono A ⊤ has:
+--   Pos = A (what we output)
+--   Dir = λ _ → ⊤ (one input for transition to next)
 --
--- Интерпретация: ⟦Mono A ⊤⟧(X) = Σ A (λ _ → ⊤ → X) ≅ A × X
+-- Interpretation: ⟦Mono A ⊤⟧(X) = Σ A (λ _ → ⊤ → X) ≅ A × X
 
 module Agdelte.Core.Signal where
 
@@ -23,27 +23,27 @@ private
     A B C : Set
 
 ------------------------------------------------------------------------
--- Signal: коиндуктивный дискретный поток
+-- Signal: coinductive discrete stream
 ------------------------------------------------------------------------
 
 record Signal (A : Set) : Set where
   coinductive
   field
-    now  : A           -- Текущее значение
-    next : Signal A    -- Следующий момент времени
+    now  : A           -- Current value
+    next : Signal A    -- Next time step
 
 open Signal public
 
 ------------------------------------------------------------------------
--- Конструкторы
+-- Constructors
 ------------------------------------------------------------------------
 
--- Константный сигнал
+-- Constant signal
 constant : A → Signal A
 now  (constant a) = a
 next (constant a) = constant a
 
--- Синоним для ясности
+-- Synonym for clarity
 pure : A → Signal A
 pure = constant
 
@@ -51,12 +51,12 @@ pure = constant
 -- Functor
 ------------------------------------------------------------------------
 
--- map для Signal (ленивый)
+-- map for Signal (lazy)
 mapS : (A → B) → Signal A → Signal B
 now  (mapS f s) = f (now s)
 next (mapS f s) = mapS f (next s)
 
--- Инфиксная версия
+-- Infix version
 _<$>_ : (A → B) → Signal A → Signal B
 _<$>_ = mapS
 
@@ -66,7 +66,7 @@ infixl 4 _<$>_
 -- Applicative
 ------------------------------------------------------------------------
 
--- Применение функции из сигнала к значению из сигнала
+-- Applying function from signal to value from signal
 _<*>_ : Signal (A → B) → Signal A → Signal B
 now  (sf <*> sa) = now sf (now sa)
 next (sf <*> sa) = next sf <*> next sa
@@ -82,51 +82,51 @@ liftA3 : ∀ {D : Set} → (A → B → C → D) → Signal A → Signal B → S
 liftA3 f sa sb sc = liftA2 f sa sb <*> sc
 
 ------------------------------------------------------------------------
--- Временные комбинаторы
+-- Temporal combinators
 ------------------------------------------------------------------------
 
--- Задержка на один такт (pre с начальным значением)
+-- Delay by one tick (pre with initial value)
 pre : A → Signal A → Signal A
 now  (pre a s) = a
 next (pre a s) = pre (now s) (next s)
 
--- Сдвиг назад (delay)
+-- Shift backward (delay)
 delay : A → Signal A → Signal A
 delay = pre
 
--- Zip двух сигналов
+-- Zip two signals
 zipS : Signal A → Signal B → Signal (A × B)
 zipS sa sb = liftA2 _,_ sa sb
 
--- Scan (foldl через время)
+-- Scan (foldl through time)
 scanS : (B → A → B) → B → Signal A → Signal B
 now  (scanS f b s) = b
 next (scanS f b s) = scanS f (f b (now s)) (next s)
 
 ------------------------------------------------------------------------
--- Выборка значений
+-- Sampling values
 ------------------------------------------------------------------------
 
--- Взять n значений из сигнала (для отладки)
+-- Take n values from signal (for debugging)
 takeS : ℕ → Signal A → List A
 takeS zero    s = []
 takeS (suc n) s = now s ∷ takeS n (next s)
 
--- Пропустить n значений
+-- Skip n values
 dropS : ℕ → Signal A → Signal A
 dropS zero    s = s
 dropS (suc n) s = dropS n (next s)
 
 ------------------------------------------------------------------------
--- Комбинирование
+-- Combining
 ------------------------------------------------------------------------
 
--- Выбор между двумя сигналами по условию
+-- Choose between two signals by condition
 switch : Signal Bool → Signal A → Signal A → Signal A
 now  (switch c t f) = if now c then now t else now f
 next (switch c t f) = switch (next c) (next t) (next f)
 
--- Слияние с предпочтением первого
+-- Merge with preference for first
 merge : Signal (Maybe A) → Signal (Maybe A) → Signal (Maybe A)
 now (merge s₁ s₂) with now s₁
 ... | just a  = just a
@@ -134,42 +134,42 @@ now (merge s₁ s₂) with now s₁
 next (merge s₁ s₂) = merge (next s₁) (next s₂)
 
 ------------------------------------------------------------------------
--- Интеграция с полиномами
+-- Integration with polynomials
 ------------------------------------------------------------------------
 
--- Signal A как коалгебра полинома Mono A ⊤:
+-- Signal A as coalgebra of polynomial Mono A ⊤:
 --   State   = Signal A
 --   observe = now  : Signal A → A
 --   update  = λ s _ → next s : Signal A → ⊤ → Signal A
 --
--- Структура record Signal напрямую реализует эту коалгебру:
---   now  соответствует observe
---   next соответствует update (с тривиальным аргументом ⊤)
+-- The record Signal structure directly implements this coalgebra:
+--   now  corresponds to observe
+--   next corresponds to update (with trivial argument ⊤)
 
 ------------------------------------------------------------------------
--- Утилиты
+-- Utilities
 ------------------------------------------------------------------------
 
--- Индексация по времени
+-- Indexing by time
 _!!_ : Signal A → ℕ → A
 s !! zero    = now s
 s !! suc n   = next s !! n
 
 infixl 9 _!!_
 
--- Сравнение с предыдущим значением
+-- Comparing with previous value
 changed : {A : Set} → (A → A → Bool) → Signal A → Signal Bool
-now  (changed eq s) = false  -- В первый момент нет предыдущего
+now  (changed eq s) = false  -- At first moment there is no previous
 next (changed eq s) = changed' eq (now s) (next s)
   where
     changed' : (A → A → Bool) → A → Signal A → Signal Bool
     now  (changed' eq prev s) = if eq prev (now s) then false else true
     next (changed' eq prev s) = changed' eq (now s) (next s)
 
--- Создание счётчика (вызывать с начальным значением)
--- Примечание: не определяем глобальный counter, так как JS backend
--- вычисляет его сразу (eager), что вызывает бесконечную рекурсию.
--- Используй: mkCounter 0 там, где нужен счётчик.
+-- Creating a counter (call with initial value)
+-- Note: we don't define global counter, since JS backend
+-- evaluates it immediately (eager), which causes infinite recursion.
+-- Use: mkCounter 0 where you need a counter.
 mkCounter : ℕ → Signal ℕ
 now  (mkCounter n) = n
 next (mkCounter n) = mkCounter (suc n)

@@ -1,40 +1,42 @@
 # Combinator Reference
 
-> API reference. For conceptual understanding: [README.md](README.md)
+> API reference. For conceptual understanding: [README.md](../README.md)
 >
-> **Note:** This document describes the target API. The current MVP implements a basic subset (`mapE`). Other combinators are reference documentation for future phases.
+> **Note:** This document describes the full target API. Items marked ✅ are implemented. Others are planned for future phases.
 
 **Legend:**
-- 🟢 MVP — intuitive, included in Phase 1
-- 🟡 Phase 2 — requires separate study
+- ✅ Implemented
+- ⬚ Planned
 
-## Basic 🟢
+## Basic
 
-| Combinator | Type | Description |
-|------------|------|-------------|
-| `never` | `Event A` | Never occurs |
-| `occur` | `A → Event A` | One event now |
-| `merge` | `Event A → Event A → Event A` | Combine streams |
-| `mapE` | `(A → B) → Event A → Event B` | Transform |
-| `filterE` | `(A → Bool) → Event A → Event A` | Filter |
-| `filterMap` | `(A → Maybe B) → Event A → Event B` | Map + filter |
-| `partitionE` | `(A → Bool) → Event A → Event A × Event A` | Split by predicate |
-| `split` | `Event (Either A B) → Event A × Event B` | Split Either |
-| `leftmost` | `List (Event A) → Event A` | First event (priority) |
-| `difference` | `Event A → Event A → Event A` | Set difference |
+| Combinator | Type | Description | Status |
+|------------|------|-------------|--------|
+| `never` | `Event A` | Never occurs | ✅ |
+| `merge` | `Event A → Event A → Event A` | Combine streams | ✅ |
+| `mapE` | `(A → B) → Event A → Event B` | Transform | ✅ |
+| `filterE` | `(A → Bool) → Event A → Event A` | Filter | ✅ |
+| `mapFilterE` | `(B → Maybe A) → Event B → Event A` | Map + filter | ✅ |
+| `mergeAll` | `List (Event A) → Event A` | Merge list | ✅ |
+| `occur` | `A → Event A` | One event now | ⬚ |
+| `partitionE` | `(A → Bool) → Event A → Event A × Event A` | Split by predicate | ⬚ |
+| `split` | `Event (Either A B) → Event A × Event B` | Split Either | ⬚ |
+| `leftmost` | `List (Event A) → Event A` | First event (priority) | ⬚ |
+| `difference` | `Event A → Event A → Event A` | Set difference | ⬚ |
 
 ---
 
-## Sampling (Event + Signal) 🟢
+## Sampling (Event + Signal)
 
-| Combinator | Type | Description |
-|------------|------|-------------|
-| `snapshot` | `(A → B → C) → Event A → Signal B → Event C` | Sample Signal |
-| `attach` | `Event A → Signal B → Event (A × B)` | Attach Signal |
-| `tag` | `Signal A → Event B → Event A` | Take Signal value |
-| `sample` | `Event A → Signal B → Event B` | Synonym for tag |
-| `gate` | `Event A → Signal Bool → Event A` | Filter by Signal |
-| `changes` | `Signal A → Event A` | Change events |
+> In ReactiveApp, `subs : Model → Event Msg` provides model access via closure — `snapshot` is implicit.
+
+| Combinator | Type | Description | Status |
+|------------|------|-------------|--------|
+| `gate` | `(A → Bool) → Event A → Event A` | Filter by predicate | ✅ |
+| `snapshot` | `(A → B → C) → Event A → Signal B → Event C` | Sample Signal | ⬚ (implicit via subs) |
+| `attach` | `Event A → Signal B → Event (A × B)` | Attach Signal | ⬚ |
+| `tag` | `Signal A → Event B → Event A` | Take Signal value | ⬚ |
+| `changes` | `Signal A → Event A` | Change events | ⬚ |
 
 ### Examples
 
@@ -57,15 +59,16 @@ activeClicks = gate rawClicks isEnabled
 
 ---
 
-## Time-based 🟢
+## Time-based
 
-| Combinator | Type | Description |
-|------------|------|-------------|
-| `debounce` | `ℕ → Event A → Event A` | After N ms pause |
-| `throttle` | `ℕ → Event A → Event A` | At most once per N ms |
-| `delay` | `ℕ → Event A → Event A` | Delay by N ms |
-| `timeout` | `ℕ → Event A → Event ⊤` | Event if silence for N ms |
-| `after` | `ℕ → Event A → Event A` | N ms after |
+| Combinator | Type | Description | Status |
+|------------|------|-------------|--------|
+| `interval` | `ℕ → A → Event A` | Tick every N ms | ✅ |
+| `timeout` | `ℕ → A → Event A` | Single event after N ms | ✅ |
+| `debounce` | `ℕ → Event A → Event A` | After N ms pause | ✅ |
+| `throttle` | `ℕ → Event A → Event A` | At most once per N ms | ✅ |
+| `delay` | `ℕ → Event A → Event A` | Delay by N ms | ⬚ |
+| `after` | `ℕ → Event A → Event A` | N ms after | ⬚ |
 
 ### Debounce semantics
 
@@ -112,13 +115,13 @@ events m =
 
 ---
 
-## Switching 🟡
+## Switching
 
-| Combinator | Type | Description |
-|------------|------|-------------|
-| `switchE` | `Event A → Event (Event A) → Event A` | Switch Event |
-| `switchS` | `Signal A → Event (Signal A) → Signal A` | Switch Signal |
-| `coincidence` | `Event (Event A) → Event A` | Join for Event |
+| Combinator | Type | Description | Status |
+|------------|------|-------------|--------|
+| `switchE` | `Event A → Event (Event A) → Event A` | Switch Event | ✅ |
+| `switchS` | `Signal A → Event (Signal A) → Signal A` | Switch Signal | ⬚ |
+| `coincidence` | `Event (Event A) → Event A` | Join for Event | ⬚ |
 
 ### Example: tabs with different sources
 
@@ -144,12 +147,12 @@ currentWs serverUrl = switchE
 
 ## Merging
 
-| Combinator | Type | Description | Phase |
-|------------|------|-------------|-------|
-| `mergeWith` | `(A → A → A) → Event A → Event A → Event A` | Merge with function | 🟢 |
-| `mergeAll` | `(A → A → A) → A → Event A → Event A` | Fold all in tick | 🟢 |
-| `alignWith` | `(These A B → C) → Event A → Event B → Event C` | Combine different types | 🟡 |
-| `align` | `Event A → Event B → Event (These A B)` | Align events | 🟡 |
+| Combinator | Type | Description | Status |
+|------------|------|-------------|--------|
+| `mergeAll` | `List (Event A) → Event A` | Merge list | ✅ |
+| `mergeWith` | `(A → A → A) → Event A → Event A → Event A` | Merge with function | ⬚ |
+| `alignWith` | `(These A B → C) → Event A → Event B → Event C` | Combine different types | ⬚ |
+| `align` | `Event A → Event B → Event (These A B)` | Align events | ⬚ |
 
 ```agda
 data These A B = This A | That B | Both A B
@@ -178,15 +181,16 @@ syncedUpdates = alignWith toUpdate userUpdates profileUpdates
 
 ---
 
-## Accumulators 🟢
+## Accumulators
 
-| Combinator | Type | Description |
-|------------|------|-------------|
-| `foldp` | `(A → B → B) → B → Event A → Signal B` | Fold into Signal |
-| `hold` | `A → Event A → Signal A` | Remember last |
-| `accumE` | `A → Event (A → A) → Event A` | Fold into Event |
-| `accumB` | `A → Event (A → A) → Signal A` | foldp with functions |
-| `mapAccum` | `(A → S → S × B) → S → Event A → Event B` | Map + accumulate |
+| Combinator | Type | Description | Status |
+|------------|------|-------------|--------|
+| `foldE` | `A → (B → A → A) → Event B → Event A` | Accumulate state across events | ✅ |
+| `accumE` | `A → Event (A → A) → Event A` | Apply function events to accumulator | ✅ |
+| `mapAccum` | `(B → S → S × A) → S → Event B → Event A` | Map with state | ✅ |
+| `foldp` | `(A → B → B) → B → Event A → Signal B` | Fold into Signal | ⬚ (update IS foldp) |
+| `hold` | `A → Event A → Signal A` | Remember last | ⬚ |
+| `accumB` | `A → Event (A → A) → Signal A` | foldp with functions | ⬚ |
 
 ### Example: click counter
 
@@ -228,7 +232,7 @@ numberEvents = mapAccum (λ a n → (suc n, (n, a))) 0
 
 ---
 
-## Deferred 🟢
+## Deferred
 
 | Combinator | Type | Description |
 |------------|------|-------------|
@@ -252,7 +256,7 @@ feedback = map suc (pre 0 feedback)
 
 ---
 
-## Error Handling 🟢
+## Error Handling
 
 | Combinator | Type | Description |
 |------------|------|-------------|
@@ -278,29 +282,30 @@ events m = case m.status of λ where
 
 ---
 
-## Testing 🟡
+## Testing (Phase 5) ✅
 
-| Combinator | Type | Description |
-|------------|------|-------------|
-| `interpret` | `(Event A → Event B) → List (List A) → List (List B)` | Test Event |
-| `interpretS` | `(Signal A → Signal B) → List A → List B` | Test Signal |
-| `interpretApp` | `App Msg Model → List (List Msg) → List Model` | Test App |
-| `collectN` | `ℕ → Event A → List (List A)` | Collect N ticks |
+Implemented in `Agdelte.Test.Interpret`. Uses `SimEvent A = List (List A)` — pure list-based event streams.
 
-### Test examples
+| Function | Type | Description | Status |
+|----------|------|-------------|--------|
+| `simMapE` | `(A → B) → SimEvent A → SimEvent B` | Map | ✅ |
+| `simFilterE` | `(A → Bool) → SimEvent A → SimEvent A` | Filter | ✅ |
+| `simFoldE` | `A → (B → A → A) → SimEvent B → SimEvent A` | Fold | ✅ |
+| `simAccumE` | `A → SimEvent (A → A) → SimEvent A` | Accumulate | ✅ |
+| `simMerge` | `SimEvent A → SimEvent A → SimEvent A` | Merge | ✅ |
+| `simMapFilterE` | `(A → Maybe B) → SimEvent A → SimEvent B` | Map + filter | ✅ |
+| `interpretApp` | `(B → A → A) → A → SimEvent B → List A` | Test update | ✅ |
+| `collectN` | `ℕ → SimEvent A → SimEvent A` | Collect N ticks | ✅ |
+
+6 propositional equality proofs (`refl`) type-checked by Agda:
 
 ```agda
-test_mapE : interpret (mapE suc) [[1,2], [], [3]] ≡ [[2,3], [], [4]]
-test_mapE = refl
-
-test_filterE : interpret (filterE (_> 2)) [[1,2,3], [4,1], []] ≡ [[3], [4], []]
-test_filterE = refl
-
-test_merge : interpret (λ e → merge e (mapE (*10) e)) [[1], [2]] ≡ [[1,10], [2,20]]
-test_merge = refl
-
-test_counter : interpretApp counterApp [[Inc], [Inc], [Inc]] ≡ [1, 2, 3]
-test_counter = refl
+test-mapE    : simMapE suc (...) ≡ (...)           -- refl
+test-filterE : simFilterE (...) ≡ (...)             -- refl
+test-foldE   : simFoldE 0 (λ _ n → suc n) (...) ≡ (...)  -- refl
+test-accumE  : simAccumE 0 (...) ≡ (...)            -- refl
+test-app     : interpretApp (...) ≡ (...)           -- refl
+test-merge   : simMerge (...) ≡ (...)               -- refl
 ```
 
 ---

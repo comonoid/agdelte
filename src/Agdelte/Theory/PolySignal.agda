@@ -1,7 +1,7 @@
 {-# OPTIONS --without-K --guardedness #-}
 
--- PolySignal: явная связь между Signal и Polynomial Functors
--- Демонстрирует, что Signal A ≅ Coalg (Mono A ⊤)
+-- PolySignal: explicit connection between Signal and Polynomial Functors
+-- Demonstrates that Signal A ≅ Coalg (Mono A ⊤)
 
 module Agdelte.Theory.PolySignal where
 
@@ -17,24 +17,24 @@ private
     A B : Set
 
 ------------------------------------------------------------------------
--- Signal как коалгебра полинома Mono A ⊤
+-- Signal as coalgebra of polynomial Mono A ⊤
 ------------------------------------------------------------------------
 
--- Полином для Signal A
--- Pos = A (наблюдаемое значение)
--- Dir = λ _ → ⊤ (тривиальный вход для перехода)
+-- Polynomial for Signal A
+-- Pos = A (observable value)
+-- Dir = λ _ → ⊤ (trivial input for transition)
 SignalPoly : Set → Poly
 SignalPoly A = Mono A ⊤
 
--- Проверка: интерпретация SignalPoly даёт A × X
+-- Check: interpretation of SignalPoly gives A × X
 -- ⟦SignalPoly A⟧ X = Σ A (λ _ → ⊤ → X) ≅ A × X
 
 ------------------------------------------------------------------------
--- Преобразование Signal в Coalg
+-- Converting Signal to Coalg
 ------------------------------------------------------------------------
 
--- Signal A можно рассматривать как коалгебру SignalPoly A
--- где State = Signal A
+-- Signal A can be viewed as coalgebra SignalPoly A
+-- where State = Signal A
 signalToCoalg : ∀ {A} → Coalg (SignalPoly A)
 signalToCoalg {A} = mkCoalg
   (Signal A)           -- State
@@ -42,11 +42,11 @@ signalToCoalg {A} = mkCoalg
   (λ s _ → next s)     -- update  : Signal A → ⊤ → Signal A
 
 ------------------------------------------------------------------------
--- Операции на Signal через Poly
+-- Operations on Signal through Poly
 ------------------------------------------------------------------------
 
--- map для Signal через mapPoly
--- Это показывает, что mapS соответствует функториальности полинома
+-- map for Signal through mapPoly
+-- This shows that mapS corresponds to functoriality of polynomial
 mapS-via-Poly : ∀ {A B : Set} → (A → B) → Signal A → Signal B
 mapS-via-Poly {A} {B} f s = go s
   where
@@ -54,38 +54,38 @@ mapS-via-Poly {A} {B} f s = go s
     now  (go s') = f (now s')
     next (go s') = go (next s')
 
--- Линза между SignalPoly A и SignalPoly B индуцируется функцией A → B
+-- Lens between SignalPoly A and SignalPoly B induced by function A → B
 signalLens : (A → B) → Lens (SignalPoly A) (SignalPoly B)
 signalLens f = mkLens f (λ _ _ → tt)
 
 ------------------------------------------------------------------------
--- Константный сигнал как коалгебра
+-- Constant signal as coalgebra
 ------------------------------------------------------------------------
 
--- Константный сигнал — это коалгебра с одноточечным состоянием
+-- Constant signal is a coalgebra with single-point state
 constSignalCoalg : A → Coalg (SignalPoly A)
 constSignalCoalg a = mkCoalg
-  ⊤                    -- State = ⊤ (одно состояние)
+  ⊤                    -- State = ⊤ (one state)
   (λ _ → a)            -- observe : ⊤ → A
   (λ _ _ → tt)         -- update  : ⊤ → ⊤ → ⊤
 
--- Разворачивание коалгебры в Signal
+-- Unfolding coalgebra into Signal
 unfoldSignal : ∀ {S : Set} {A : Set} → (S → A) → (S → S) → S → Signal A
 now  (unfoldSignal {S} {A} obs step s) = obs s
 next (unfoldSignal {S} {A} obs step s) = unfoldSignal {S} {A} obs step (step s)
 
--- Любая коалгебра SignalPoly A разворачивается в Signal A
+-- Any coalgebra SignalPoly A unfolds into Signal A
 coalgToSignal : ∀ {A} → (c : Coalg (SignalPoly A)) → State c → Signal A
 coalgToSignal {A} c s₀ = unfoldSignal {State c} {A} (observe c) (λ s → update c s tt) s₀
 
 ------------------------------------------------------------------------
--- Изоморфизм между Signal и Coalg (неформально)
+-- Isomorphism between Signal and Coalg (informally)
 ------------------------------------------------------------------------
 
--- Формально, Signal A и Coalg (SignalPoly A) с State = Signal A
--- образуют эквивалентные структуры. Функции now/next напрямую
--- соответствуют observe/update.
+-- Formally, Signal A and Coalg (SignalPoly A) with State = Signal A
+-- form equivalent structures. Functions now/next directly
+-- correspond to observe/update.
 
--- Signal → Coalg → Signal должен давать исходный сигнал:
--- coalgToSignal signalToCoalg s ≡ s  (требует bisimilarity)
+-- Signal → Coalg → Signal should give original signal:
+-- coalgToSignal signalToCoalg s ≡ s  (requires bisimilarity)
 

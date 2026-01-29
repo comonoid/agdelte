@@ -1,8 +1,8 @@
 {-# OPTIONS --without-K #-}
 
--- Task: композируемые асинхронные операции (монада)
--- Используется для цепочек запросов и сложной логики эффектов
--- Простые случаи используют Cmd напрямую
+-- Task: composable asynchronous operations (monad)
+-- Used for request chains and complex effect logic
+-- Simple cases use Cmd directly
 
 module Agdelte.Core.Task where
 
@@ -14,7 +14,7 @@ private
     A B C : Set
 
 ------------------------------------------------------------------------
--- Result — результат с возможной ошибкой
+-- Result — result with possible error
 ------------------------------------------------------------------------
 
 data Result (E A : Set) : Set where
@@ -26,7 +26,7 @@ mapResult f (ok a)  = ok (f a)
 mapResult f (err e) = err e
 
 ------------------------------------------------------------------------
--- HttpError — ошибки HTTP
+-- HttpError — HTTP errors
 ------------------------------------------------------------------------
 
 data HttpError : Set where
@@ -45,17 +45,17 @@ showHttpError (parseError msg) = "Parse error: " Data.String.++ msg
   where open import Data.String
 
 ------------------------------------------------------------------------
--- Task — монада асинхронных операций (CPS-style)
+-- Task — monad of asynchronous operations (CPS-style)
 ------------------------------------------------------------------------
 
--- Task использует continuation-passing style для композиции
--- Это позволяет избежать проблем с universe levels
+-- Task uses continuation-passing style for composition
+-- This avoids problems with universe levels
 
 data Task (A : Set) : Set where
-  -- Чистое значение
+  -- Pure value
   pure : A → Task A
 
-  -- Ошибка
+  -- Error
   fail : String → Task A
 
   -- HTTP GET: url, onSuccess continuation, onError continuation
@@ -65,7 +65,7 @@ data Task (A : Set) : Set where
   httpPost : String → String → (String → Task A) → (String → Task A) → Task A
 
 ------------------------------------------------------------------------
--- Монадические операции
+-- Monadic operations
 ------------------------------------------------------------------------
 
 -- bind (>>=)
@@ -90,10 +90,10 @@ ta >> tb = ta >>= λ _ → tb
 infixl 1 _>>_
 
 ------------------------------------------------------------------------
--- HTTP комбинаторы
+-- HTTP combinators
 ------------------------------------------------------------------------
 
--- Простой HTTP GET (возвращает результат или fail)
+-- Simple HTTP GET (returns result or fail)
 http : String → Task String
 http url = httpGet url pure fail
 
@@ -102,10 +102,10 @@ httpPost′ : String → String → Task String
 httpPost′ url body = httpPost url body pure fail
 
 ------------------------------------------------------------------------
--- Обработка ошибок
+-- Error handling
 ------------------------------------------------------------------------
 
--- Альтернатива при ошибке
+-- Alternative on error
 _<|>_ : Task A → Task A → Task A
 pure a <|> _ = pure a
 fail _ <|> t₂ = t₂
@@ -114,7 +114,7 @@ httpPost url body onOk onErr <|> t₂ = httpPost url body onOk (λ _ → t₂)
 
 infixl 3 _<|>_
 
--- Recover: превратить ошибку в значение
+-- Recover: turn error into value
 recover : Task A → (String → A) → Task A
 recover (pure a) _ = pure a
 recover (fail e) f = pure (f e)
@@ -125,8 +125,7 @@ recover (httpPost url body onOk onErr) f = httpPost url body onOk (λ e → pure
 -- Result conversion
 ------------------------------------------------------------------------
 
--- Получить Result вместо fail
+-- Get Result instead of fail
 toResult : Task A → Task (Result String A)
 toResult t = (ok <$> t) <|> (recover (fail "") (λ e → err e))
-  -- Упрощённая версия
-
+  -- Simplified version

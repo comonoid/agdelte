@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K --guardedness #-}
 
--- Interval: периодические события
+-- Interval: periodic events
 
 module Agdelte.Primitive.Interval where
 
@@ -12,10 +12,10 @@ open import Agdelte.Core.Event
 ------------------------------------------------------------------------
 
 postulate
-  -- Событие каждые n миллисекунд
+  -- Event every n milliseconds
   interval : ∀ {A : Set} → ℕ → A → Event A
 
-  -- Однократное событие через n миллисекунд
+  -- Single event after n milliseconds
   timeout : ∀ {A : Set} → ℕ → A → Event A
 
 {-# COMPILE JS interval = _ => ms => msg => ({
@@ -33,18 +33,18 @@ postulate
 }) #-}
 
 ------------------------------------------------------------------------
--- Удобные обёртки
+-- Convenient wrappers
 ------------------------------------------------------------------------
 
--- Каждую секунду
+-- Every second
 everySecond : ∀ {A : Set} → A → Event A
 everySecond = interval 1000
 
--- Каждую минуту
+-- Every minute
 everyMinute : ∀ {A : Set} → A → Event A
 everyMinute = interval 60000
 
--- Каждые n секунд
+-- Every n seconds
 everyNSeconds : ∀ {A : Set} → ℕ → A → Event A
 everyNSeconds n = interval (n * 1000)
   where open import Data.Nat using (_*_)

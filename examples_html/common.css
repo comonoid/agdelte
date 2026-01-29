@@ -43,6 +43,25 @@ h1 {
 
 .subtitle { color: #888; margin-bottom: 2rem; }
 
+.instructions {
+  max-width: 600px;
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.5rem;
+  background: rgba(74, 158, 255, 0.08);
+  border-left: 3px solid var(--primary);
+  border-radius: 0 8px 8px 0;
+  color: #bbb;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.instructions code {
+  background: rgba(0,0,0,0.3);
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.85rem;
+}
+
 #app {
   background: var(--card);
   border-radius: 12px;
@@ -101,11 +120,13 @@ h1 {
 
 /* Common demo content wrapper - works with Agda class names */
 .demo, .counter, .timer, .todo-app, .keyboard-demo,
-.http-demo, .task-demo, .ws-demo, .router-demo, .composition-demo {
+.http-demo, .task-demo, .ws-demo, .router-demo, .composition-demo,
+.transitions-demo, .combinators-demo {
   text-align: center;
 }
 .demo h1, .counter h1, .timer h1, .http-demo h1, .task-demo h1,
-.ws-demo h1, .router-demo h1, .composition-demo h1 {
+.ws-demo h1, .router-demo h1, .composition-demo h1,
+.transitions-demo h1, .combinators-demo h1 {
   font-size: 1.5rem;
   margin-bottom: 1rem;
   background: none;
@@ -315,12 +336,12 @@ h1 {
   background: #3a8eef;
   transform: scale(1.1);
 }
-.composition-demo .counters-container { display: flex; gap: 2rem; justify-content: center; }
-.composition-demo .counter-component { background: rgba(0,0,0,0.2); border-radius: 8px; padding: 1.5rem; }
-.composition-demo .description { color: #888; margin-bottom: 0.5rem; }
-.composition-demo .total { color: var(--success); font-size: 1.2rem; font-weight: 600; margin-bottom: 1.5rem; }
-.composition-demo .counter-controls { display: flex; align-items: center; justify-content: center; gap: 0.75rem; }
-.composition-demo .reset-btn {
+.composition-demo .counters-container, .optic-demo .counters-container { display: flex; gap: 2rem; justify-content: center; }
+.composition-demo .counter-component, .optic-demo .counter-component { background: rgba(0,0,0,0.2); border-radius: 8px; padding: 1.5rem; }
+.composition-demo .description, .optic-demo .description { color: #888; margin-bottom: 0.5rem; }
+.composition-demo .total, .optic-demo .total { color: var(--success); font-size: 1.2rem; font-weight: 600; margin-bottom: 1.5rem; }
+.composition-demo .counter-controls, .optic-demo .counter-controls { display: flex; align-items: center; justify-content: center; gap: 0.75rem; }
+.composition-demo .reset-btn, .optic-demo .reset-btn {
   background: var(--accent);
   border: none;
   color: white;
@@ -330,7 +351,7 @@ h1 {
   font-size: 0.85rem;
   margin-left: 0.5rem;
 }
-.composition-demo .reset-btn:hover { background: #d83550; }
+.composition-demo .reset-btn:hover, .optic-demo .reset-btn:hover { background: #d83550; }
 
 /* Router demo */
 .router-demo { width: 25vw; min-width: 320px; }
@@ -473,3 +494,242 @@ h1 {
   font-size: 16px;
 }
 .todo-app > .input-section button:hover { background: #d13550; }
+
+/* Transitions demo */
+.transitions-demo .section {
+  margin: 1.5rem 0;
+}
+.transitions-demo .section .btn {
+  margin-bottom: 1rem;
+}
+.transitions-demo .panel {
+  background: rgba(74,158,255,0.1);
+  border: 1px solid rgba(74,158,255,0.3);
+  border-radius: 8px;
+  padding: 1.5rem;
+  text-align: left;
+  overflow: hidden;
+}
+.transitions-demo .panel h3 {
+  color: var(--primary);
+  margin-bottom: 0.75rem;
+}
+.transitions-demo .panel p {
+  color: #aaa;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+.transitions-demo .notification {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: rgba(74,222,128,0.15);
+  border: 1px solid rgba(74,222,128,0.3);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+.transitions-demo .notif-text {
+  flex: 1;
+  color: var(--success);
+}
+.transitions-demo .dismiss-btn {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0 0.25rem;
+}
+.transitions-demo .dismiss-btn:hover { color: var(--text); }
+.transitions-demo .notif-btn {
+  background: var(--success) !important;
+}
+.transitions-demo .notif-btn:hover {
+  background: #3ac070 !important;
+}
+.transitions-demo .counter-text {
+  color: #666;
+  font-size: 0.85rem;
+}
+.transitions-demo .description {
+  color: #888;
+  margin-bottom: 1rem;
+}
+
+/* Combinators demo */
+.combinators-demo .description {
+  color: #888;
+  margin-bottom: 1.5rem;
+}
+.combinators-demo .controls {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+}
+.combinators-demo .reset-btn {
+  background: var(--accent) !important;
+}
+.combinators-demo .reset-btn:hover {
+  background: #d83550 !important;
+}
+.combinators-demo .stats {
+  display: flex;
+  gap: 1.5rem;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+}
+.combinators-demo .stat {
+  background: rgba(0,0,0,0.2);
+  border-radius: 8px;
+  padding: 1rem 1.5rem;
+  text-align: center;
+  min-width: 120px;
+}
+.combinators-demo .stat-label {
+  display: block;
+  color: #888;
+  font-size: 0.8rem;
+  margin-bottom: 0.5rem;
+}
+.combinators-demo .stat-value {
+  display: block;
+  font-size: 2rem;
+  font-weight: bold;
+  color: var(--primary);
+}
+.combinators-demo .batch-stat .stat-value {
+  color: var(--success);
+}
+.combinators-demo .batch-value {
+  color: var(--success);
+}
+.combinators-demo .explanation {
+  background: rgba(0,0,0,0.15);
+  border-radius: 8px;
+  padding: 1rem;
+  text-align: left;
+}
+.combinators-demo .explanation p {
+  color: #777;
+  font-size: 0.85rem;
+  font-family: monospace;
+  margin-bottom: 0.3rem;
+}
+
+/* ================================================================
+   OpticDynamic: Dynamic optics with ixList + Traversal
+   ================================================================ */
+
+.optic-dynamic-demo {
+  text-align: center;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.optic-dynamic-demo .info-panel {
+  background: rgba(0,0,0,0.2);
+  border-radius: 10px;
+  padding: 1rem 1.5rem;
+  margin: 1rem 0;
+  display: flex;
+  justify-content: space-around;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.optic-dynamic-demo .info-panel p {
+  font-size: 0.9rem;
+  color: #bbb;
+}
+
+.optic-dynamic-demo .total {
+  color: var(--primary) !important;
+  font-weight: bold;
+  font-size: 1.1rem !important;
+}
+
+.optic-dynamic-demo .selected-info {
+  color: var(--accent) !important;
+}
+
+.optic-dynamic-demo .controls {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 1rem 0;
+}
+
+.optic-dynamic-demo .add-btn {
+  background: var(--success);
+  color: #000;
+}
+
+.optic-dynamic-demo .add-btn:hover {
+  background: #22c55e;
+}
+
+.optic-dynamic-demo .reset-btn {
+  background: var(--accent);
+}
+
+.optic-dynamic-demo .reset-btn:hover {
+  background: #d63851;
+}
+
+.optic-dynamic-demo .items-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+
+.optic-dynamic-demo .item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  margin: 0.25rem 0;
+  background: rgba(255,255,255,0.05);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  border: 2px solid transparent;
+}
+
+.optic-dynamic-demo .item:hover {
+  background: rgba(255,255,255,0.1);
+}
+
+.optic-dynamic-demo .item.selected {
+  background: rgba(74, 158, 255, 0.15);
+  border-color: var(--primary);
+}
+
+.optic-dynamic-demo .item-label {
+  font-weight: 500;
+}
+
+.optic-dynamic-demo .item-value {
+  font-size: 1.3rem;
+  font-weight: bold;
+  color: var(--primary);
+  min-width: 3ch;
+  text-align: right;
+}
+
+.optic-dynamic-demo .explanation {
+  margin-top: 1.5rem;
+  background: rgba(0,0,0,0.15);
+  border-radius: 8px;
+  padding: 1rem;
+  text-align: left;
+}
+
+.optic-dynamic-demo .explanation p {
+  color: #777;
+  font-size: 0.85rem;
+  font-family: monospace;
+  margin-bottom: 0.3rem;
+}

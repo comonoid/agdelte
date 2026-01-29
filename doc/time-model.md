@@ -1,6 +1,6 @@
 # Time Model
 
-> Reference. For conceptual understanding: [README.md](README.md)
+> Reference. For conceptual understanding: [README.md](../README.md)
 >
 > **Status:** `interval` and `animationFrame` are implemented in MVP. Fixed timestep is a usage pattern, not built-in functionality.
 

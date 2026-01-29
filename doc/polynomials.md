@@ -86,7 +86,7 @@ not compiler magic.
 
 ## Current State (Implicit Polynomials)
 
-Elm Architecture is already a **special case of polynomial machines**:
+The ReactiveApp pattern is already a **special case of polynomial machines**:
 
 ```
 App Model Msg ≅ P(y) = y^Msg
@@ -258,7 +258,7 @@ the structure is always correct.
 - Same performance characteristics as Svelte now achieved!
 - Direct DOM updates via reactive bindings
 
-**Current implementation**: See [doc/api.md](../doc/api.md) for full ReactiveApp/Node/Binding API.
+**Current implementation**: See [api.md](api.md) for full ReactiveApp/Node/Binding API.
 
 **Advantages over Svelte**:
 - (+) Type-safe: bindings verified by Agda
@@ -281,53 +281,49 @@ the structure is always correct.
 - [x] `Binding` record with `extract` and `equals`
 - [x] `Node` data type with `text`, `bind`, `elem`, `empty`, `when`, `foreach`
 - [x] `Attr` with events in attributes (no manual paths!)
-- [x] `ReactiveApp` record, `focusNode` composition
-- [x] All 9 examples migrated to ReactiveApp
+- [x] `ReactiveApp` record, `zoomNode` composition
+- [x] All 12 examples using ReactiveApp
 - [x] Runtime with direct DOM updates (no VDOM)
 
-See [doc/architecture.md](../doc/architecture.md) for full API details.
+See [architecture.md](architecture.md) for full API details.
 
-### Phase 3: Incremental Updates
+### Phase 3: Incremental Updates ✅ DONE
 
 **Focus**: Efficient dynamic lists and conditional rendering.
 
 **Deliverables**:
-- [ ] Keyed `foreach` — update by key, not by index
-- [ ] Nested bindings inside `foreach` elements
-- [ ] `when` with enter/leave animations
+- [x] Keyed `foreach` — `foreachKeyed` with key-based reconciliation
+- [x] Binding scopes — each `when`/`foreach` block gets its own scope
+- [x] `whenT` with CSS enter/leave animations via `Transition` record
 
-### Phase 4: Widget Lenses
+### Phase 4: Widget Lenses ✅ DONE
 
 **Focus**: Full lens-based model navigation within widgets.
 
 **Deliverables**:
-- [ ] `Lens Outer Inner` with get/set/modify
-- [ ] Lens composition `_∘L_`
-- [ ] Integration with Node/Binding (`focusNode` → full `Lens`)
-- [ ] Bidirectional data flow through lenses
+- [x] `Lens Outer Inner` with get/set/modify
+- [x] Lens composition `_∘L_`
+- [x] `fstLens`, `sndLens` — product lenses
+- [x] `zoomNode` — maps both model AND messages
 
-### Phase 5: Combinators and Testing
+### Phase 5: Combinators and Testing ✅ DONE
 
 **Focus**: Event combinators and pure testing. See [combinators.md](combinators.md).
 
 **Deliverables**:
-- [ ] Event transformations: filterE, snapshot, foldp, switchE
-- [ ] Accumulators: accumE, accumB, mapAccum
-- [ ] Testing: interpret, collectN
+- [x] `foldE`, `mapFilterE`, `switchE` — stateful combinators
+- [x] `accumE`, `mapAccum` — derived combinators
+- [x] Pure testing: `SimEvent`, `interpretApp`, 6 proofs
 
-### Phase 6: Widget Networks + Big Lens
+### Phase 6: Optics + Widget Networks ✅ DONE
 
-**Focus**: Polynomial wiring diagrams, declarative widget topology.
-
-```
-Lens (inner)  →  Network of Lenses  →  Big Lens (navigate all)
-```
+**Focus**: Optics hierarchy and typed widget composition.
 
 **Deliverables**:
-- [ ] Wiring diagrams (`_⊗_`, `_⊕_`, `wire`)
-- [ ] Declarative widget network DSL
-- [ ] Big Lens — navigate/modify entire network
-- [ ] Demo: Composed app with inspectable network
+- [x] `Prism`, `Traversal`, `Affine`, unified `Optic` with `_∘O_`
+- [x] `zoomNodeL` — typed component composition with Lens + Prism
+- [x] `routeMsg` — automatic message routing via Prism
+- [x] 16 propositional equality proofs in OpticTest
 
 ### Phase 7: Concurrency + Protocols
 

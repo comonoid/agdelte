@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transitions - Agdelte</title>
+  <link rel="stylesheet" href="common.css">
+  <style>
+    /* Panel transition */
+    .panel-enter {
+      animation: slideDown 300ms ease-out forwards;
+    }
+    .panel-leave {
+      animation: slideUp 300ms ease-in forwards;
+    }
+    @keyframes slideDown {
+      from { opacity: 0; max-height: 0; transform: translateY(-10px); }
+      to   { opacity: 1; max-height: 200px; transform: translateY(0); }
+    }
+    @keyframes slideUp {
+      from { opacity: 1; max-height: 200px; transform: translateY(0); }
+      to   { opacity: 0; max-height: 0; transform: translateY(-10px); }
+    }
+
+    /* Notification transition */
+    .notif-enter {
+      animation: notifIn 400ms ease-out forwards;
+    }
+    .notif-leave {
+      animation: notifOut 400ms ease-in forwards;
+    }
+    @keyframes notifIn {
+      from { opacity: 0; transform: translateX(30px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes notifOut {
+      from { opacity: 1; transform: translateX(0); }
+      to   { opacity: 0; transform: translateX(30px); }
+    }
+  </style>
+</head>
+<body>
+  <a href="../index.html" class="back">&larr; Back to examples</a>
+
+  <h1>Transitions</h1>
+  <p class="subtitle">whenT: conditional rendering with CSS enter/leave animations</p>
+
+  <div id="app" data-agdelte="Transitions">
+    <p class="loading">Loading compiled Agda...</p>
+  </div>
+
+  <div class="info">
+    <p>Source: <code>examples/Transitions.agda</code></p>
+    <p>Compiled: <code>_build/jAgda.Transitions.mjs</code></p>
+  </div>
+
+  <script type="module" src="../runtime/reactive-auto.js"></script>
+</body>
+</html>

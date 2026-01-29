@@ -9,12 +9,15 @@ All examples use **Reactive Bindings** (like Svelte) — no Virtual DOM.
 | [Counter](#counter) | Reactive bindings, onClick | Simple |
 | [Timer](#timer) | Event subs (interval) | Simple |
 | [Todo](#todo) | foreach, when, input | Medium |
-| [KeyboardDemo](#keyboarddemo) | Global keyboard events, styleBind | Medium |
-| [HttpDemo](#httpdemo) | Cmd (httpGet), disabledBind | Medium |
-| [TaskDemo](#taskdemo) | Task chains, do-notation | Medium |
-| [WebSocketDemo](#websocketdemo) | wsConnect, wsSend, foreach | Medium |
-| [RouterDemo](#routerdemo) | SPA routing, when | Medium |
-| [CompositionDemo](#compositiondemo) | focusNode, shared total | Advanced |
+| [Keyboard](#keyboard) | Global keyboard events, styleBind | Medium |
+| [Http](#http) | Cmd (httpGet), disabledBind | Medium |
+| [Task](#task) | Task chains, do-notation | Medium |
+| [WebSocket](#websocket) | wsConnect, wsSend, foreach | Medium |
+| [Router](#router) | SPA routing, when | Medium |
+| [Transitions](#transitions) | whenT, CSS enter/leave animations | Medium |
+| [Composition](#composition) | zoomNode, shared total | Advanced |
+| [Combinators](#combinators) | foldE, mapFilterE pipeline | Advanced |
+| [Dynamic Optics](#dynamic-optics) | ixList, Traversal, runtime _∘O_, routeMsg | Advanced |
 
 ---
 
@@ -75,7 +78,7 @@ app = mkReactiveApp initModel updateModel timerTemplate
 
 ## Todo
 
-**Demonstrates:** `foreach` for dynamic lists, `when` for conditional rendering, input handling.
+**Demonstrates:** `foreachKeyed` for keyed list reconciliation (Phase 3), `when` for conditional rendering, input handling.
 
 ```agda
 record Todo : Set where
@@ -88,18 +91,18 @@ todoTemplate : Node Model Msg
 todoTemplate = div [ class "todo-app" ]
   ( ...
   ∷ ul [ class "todo-list" ]
-      [ foreach todos viewTodoItem ]   -- reactive list!
+      [ foreachKeyed todos todoKey viewTodoItem ]  -- keyed reconciliation!
   ∷ when hasTodos (
       div [ class "footer" ] [ ... ]   -- conditional footer
     )
   ∷ [] )
 ```
 
-**Key point:** `foreach` renders list items reactively. `when` conditionally shows/hides elements.
+**Key point:** `foreachKeyed` uses keys for efficient reconciliation — same key reuses DOM node, removed key destroys node. No full list rebuild.
 
 ---
 
-## KeyboardDemo
+## Keyboard
 
 **Demonstrates:** Global keyboard event handling, `styleBind` for dynamic styles.
 
@@ -124,7 +127,7 @@ styles (name "top")  (λ m → showNat (posY m) ++ "px")
 
 ---
 
-## HttpDemo
+## Http
 
 **Demonstrates:** HTTP requests via Cmd, `disabledBind` for reactive button state.
 
@@ -145,7 +148,7 @@ updateModel (GotError e) m = record m { status = "Error: " ++ e }
 
 ---
 
-## TaskDemo
+## Task
 
 **Demonstrates:** Sequential HTTP chains with do-notation.
 
@@ -165,7 +168,7 @@ cmd _ _ = ε
 
 ---
 
-## WebSocketDemo
+## WebSocket
 
 **Demonstrates:** WebSocket connection, `foreach` for message list, `when` for conditional UI.
 
@@ -187,7 +190,7 @@ when isConnected (div [ class "status" ] [ text "Connected" ])
 
 ---
 
-## RouterDemo
+## Router
 
 **Demonstrates:** SPA routing with `when` for conditional page rendering.
 
@@ -210,9 +213,36 @@ when isAbout (div [] [ text "About page" ])
 
 ---
 
-## CompositionDemo
+## Transitions
 
-**Demonstrates:** Two counters composed with shared total via `focusNode`.
+**Demonstrates:** `whenT` with CSS enter/leave transitions (Phase 3). Auto-dismiss via `timeout`.
+
+```agda
+panelTrans : Transition
+panelTrans = mkTransition "panel-enter" "panel-leave" 300
+
+notifTrans : Transition
+notifTrans = mkTransition "notif-enter" "notif-leave" 400
+
+-- Toggle panel with slide transition
+whenT panelOpen panelTrans
+    (div [ class "panel" ] [ ... ])
+
+-- Notification toast with auto-dismiss
+whenT notifVisible notifTrans
+    (div [ class "notification" ] [ ... ])
+
+subs : Model → Event Msg
+subs m = if notifVisible m then timeout 3000 AutoDismiss else never
+```
+
+**Key point:** `whenT` adds CSS enter/leave classes. Runtime waits `duration` ms before removing DOM node on leave. `Transition` record: `enterClass`, `leaveClass`, `duration`.
+
+---
+
+## Composition
+
+**Demonstrates:** Two counters composed with shared total via `zoomNode` (Phase 4).
 
 ```agda
 -- Shared model
@@ -221,15 +251,64 @@ record Model : Set where
     counter1 : ℕ
     counter2 : ℕ
 
--- Reuse counter template with focusNode
-focusNode counter1 counterTemplate  -- maps Inner→Outer
-focusNode counter2 counterTemplate
+data Msg = LeftMsg CounterMsg | RightMsg CounterMsg
+
+-- Reuse counter template with zoomNode (maps model AND messages)
+zoomNode counter1 LeftMsg counterTemplate
+zoomNode counter2 RightMsg counterTemplate
 
 -- Shared total binding
 bindF (λ m → show (counter1 m + counter2 m))
 ```
 
-**Key point:** `focusNode` allows reusing templates with different model slices. Shared state via parent model.
+**Key point:** `zoomNode` maps both model AND messages — child templates are fully reusable without manual wrapping.
+
+---
+
+## Combinators
+
+**Demonstrates:** `foldE` + `mapFilterE` stateful event pipeline (Phase 5).
+
+```agda
+-- Pipeline: interval 300ms → foldE (count internally) → mapFilterE (classify)
+subs : Model → Event Msg
+subs m = if running m
+  then mapFilterE classify (foldE 0 (λ _ n → suc n) (interval 300 tt))
+  else never
+  where
+    classify : ℕ → Maybe Msg
+    classify n = if isBatch n then just (BatchTick n) else just Tick
+
+isBatch : ℕ → Bool
+isBatch n = (n % 5) ≡ᵇ 0
+```
+
+**Key point:** `foldE` maintains internal state (tick counter) invisible to the model. `mapFilterE` classifies each tick into `Tick` or `BatchTick`. The pipeline demonstrates stateful event transformation.
+
+---
+
+## Dynamic Optics
+
+**Demonstrates:** Runtime optic composition with `ixList`, `Traversal`, `_∘O_`, `peek` (Phase 6 advanced).
+
+```agda
+-- Dynamic optic: target depends on runtime state (selected index)
+nthItemOptic : ℕ → Optic Model Item
+nthItemOptic n = fromAffine (ixList n) ∘O fromLens itemsLens
+
+-- Inc selected item: optic composed at runtime
+updateModel IncSelected m = over (nthItemOptic (selected m)) incValue m
+
+-- Reset ALL items: traversal for batch operation
+updateModel ResetAll m = over (fromTraversal allItemsTraversal) resetValue m
+
+-- Safe peek: Affine may fail (index out of bounds)
+selectedText m with peek (nthItemOptic (selected m)) m
+... | nothing   = "Selected: (none)"
+... | just item = "Selected: " ++ itemLabel item
+```
+
+**Key point:** Unlike static `Lens` (always succeeds), `ixList` returns `Affine` (may fail). Optics compose at runtime via `_∘O_` — the navigation target changes based on user interaction. `Traversal.overAll` enables batch operations over the entire collection.
 
 ---
 
@@ -252,7 +331,10 @@ http://localhost:8080/examples_html/http.html
 http://localhost:8080/examples_html/task.html
 http://localhost:8080/examples_html/websocket.html
 http://localhost:8080/examples_html/router.html
+http://localhost:8080/examples_html/transitions.html
 http://localhost:8080/examples_html/composition.html
+http://localhost:8080/examples_html/combinators.html
+http://localhost:8080/examples_html/optic-dynamic.html
 ```
 
 ## Structure Pattern
@@ -260,7 +342,7 @@ http://localhost:8080/examples_html/composition.html
 Every example follows this pattern:
 
 ```agda
-module Examples.MyExample where
+module MyExample where
 
 -- 1. Imports
 open import Agdelte.Reactive.Node

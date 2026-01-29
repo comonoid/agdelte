@@ -225,10 +225,10 @@ For completeness — combinators used in examples:
 delay : ℕ → Event ⊤
 -- Note: implemented via oneshot variant of interval
 
--- One event now (see combinators.md)
+-- One event now (see ../doc/combinators.md)
 occur : A → Event A
 
--- Monadic operations for Event (see combinators.md for full list)
+-- Monadic operations for Event (see ../doc/combinators.md for full list)
 _>>=_ : Event A → (A → Event B) → Event B  -- flatMap/bind
 _>>_  : Event A → Event B → Event B        -- sequence
 e1 >> e2 = e1 >>= const e2
@@ -236,7 +236,7 @@ e1 >> e2 = e1 >>= const e2
 -- Switch to new Event on each event
 switchMap : (A → Event B) → Event A → Event B
 
--- Discrete events of Signal change (see combinators.md)
+-- Discrete events of Signal change (see ../doc/combinators.md)
 changes : Signal A → Event A
 ```
 
@@ -1116,7 +1116,7 @@ websocket                pattern:   channel, pool
 
 ## Roadmap
 
-> Concurrency is an **independent track** (see polynomials.md).
+> Concurrency is an **independent track** (see [../doc/polynomials.md](../doc/polynomials.md)).
 > Can be developed in parallel with Widget Lenses.
 
 **Concurrency Phase A: Basic**

@@ -1,7 +1,7 @@
 {-# OPTIONS --without-K #-}
 
--- Event: дискретные события как AST (описание подписок)
--- Runtime интерпретирует это описание и создаёт реальные подписки
+-- Event: discrete events as AST (description of subscriptions)
+-- Runtime interprets this description and creates real subscriptions
 
 module Agdelte.Core.Event where
 
@@ -17,6 +17,17 @@ open import Function using (_∘_; id)
 private
   variable
     A B C : Set
+
+  -- Filter Maybe by predicate (used by filterE)
+  filterMaybe : {A : Set} → (A → Bool) → Maybe A → Maybe A
+  filterMaybe p nothing  = nothing
+  filterMaybe p (just a) = if p a then just a else nothing
+
+  -- Lookup key in association list (used by onKeys, onKeysUp)
+  lookupKey : {A : Set} → String → List (String × A) → Maybe A
+  lookupKey _ []              = nothing
+  lookupKey k ((k' , v) ∷ rest) =
+    if primStringEquality k k' then just v else lookupKey k rest
 
 ------------------------------------------------------------------------
 -- WebSocket Message
@@ -45,19 +56,38 @@ record KeyboardEvent : Set where
 open KeyboardEvent public
 
 ------------------------------------------------------------------------
--- Event как data type (AST) — остаётся в Set
+-- Event as data type (AST) - stays in Set
 ------------------------------------------------------------------------
 
+-- Design notes (Phase 5):
+--
+-- NO_UNIVERSE_CHECK: foldE and mapFilterE quantify over a hidden type B
+-- (∀ {B : Set} → ...), which lifts the constructor to Set₁. But Event
+-- must stay in Set so that existing code (records, lists of events) works.
+-- Since Event compiles to JS (Scott encoding), universe levels are erased.
+--
+-- NO_POSITIVITY_CHECK: switchE uses Event (Event A) - Event appears as
+-- an argument to itself, violating strict positivity. This is safe here:
+-- the runtime interprets the AST, never unfolds it recursively in Agda.
+--
+-- Why no snapshot or foldp constructors:
+-- In ReactiveApp, the model IS the signal, and subs : Model → Event Msg
+-- provides model access via closure - snapshot is implicit.
+-- The update function IS foldp: update : Msg → Model → Model.
+-- Adding separate constructors would duplicate what the architecture
+-- already provides, with no runtime benefit.
+{-# NO_POSITIVITY_CHECK #-}
+{-# NO_UNIVERSE_CHECK #-}
 data Event (A : Set) : Set where
-  -- Пустое событие
+  -- Empty event
   never : Event A
 
-  -- === Примитивы времени ===
+  -- === Time primitives ===
   interval : ℕ → A → Event A
   timeout  : ℕ → A → Event A
 
-  -- === Клавиатура ===
-  -- Обработчик возвращает Maybe A (nothing = игнорировать)
+  -- === Keyboard ===
+  -- Handler returns Maybe A (nothing = ignore)
   onKeyDown : (KeyboardEvent → Maybe A) → Event A
   onKeyUp   : (KeyboardEvent → Maybe A) → Event A
 
@@ -66,22 +96,36 @@ data Event (A : Set) : Set where
   httpPost : String → String → (String → A) → (String → A) → Event A
 
   -- === WebSocket ===
-  -- wsConnect url → Event с сообщениями о состоянии соединения
+  -- wsConnect url → Event with messages about connection state
   wsConnect : String → (WsMsg → A) → Event A
 
   -- === Routing ===
-  -- Событие при изменении URL (popstate)
+  -- Event on URL change (popstate)
   onUrlChange : (String → A) → Event A
 
-  -- === Комбинаторы ===
+  -- === Combinators ===
   merge    : Event A → Event A → Event A
-  debounce : ℕ → Event A → Event A    -- задержка после паузы
-  throttle : ℕ → Event A → Event A    -- ограничение частоты
+  debounce : ℕ → Event A → Event A    -- delay after pause
+  throttle : ℕ → Event A → Event A    -- rate limiting
+
+  -- === Stateful combinators (Phase 5) ===
+  -- foldE: accumulate state across event occurrences
+  -- Runtime maintains internal state A; on each B from inner event,
+  -- computes new A = step(B, oldA), dispatches new A
+  foldE : ∀ {B : Set} → A → (B → A → A) → Event B → Event A
+
+  -- mapFilterE: map + filter in one step (Nothing = skip, Just b = dispatch b)
+  mapFilterE : ∀ {B : Set} → (B → Maybe A) → Event B → Event A
+
+  -- switchE: start with first event, switch to new source on each meta-event
+  -- Runtime manages current subscription, swaps on meta-event occurrence
+  switchE : Event A → Event (Event A) → Event A
 
 ------------------------------------------------------------------------
--- mapE — функция, не конструктор (чтобы Event ∈ Set)
+-- mapE - function, not constructor (to keep Event ∈ Set)
 ------------------------------------------------------------------------
 
+{-# TERMINATING #-}
 mapE : (A → B) → Event A → Event B
 mapE f never = never
 mapE f (interval n a) = interval n (f a)
@@ -97,57 +141,55 @@ mapE f (onUrlChange h) = onUrlChange (f ∘ h)
 mapE f (merge e₁ e₂) = merge (mapE f e₁) (mapE f e₂)
 mapE f (debounce n e) = debounce n (mapE f e)
 mapE f (throttle n e) = throttle n (mapE f e)
+mapE f (foldE a₀ step inner) = mapFilterE (λ a → just (f a)) (foldE a₀ step inner)
+mapE f (mapFilterE g inner) = mapFilterE (λ x → Data.Maybe.map f (g x)) inner
+  where import Data.Maybe
+mapE f (switchE initial meta) = switchE (mapE f initial) (mapE (mapE f) meta)
 
 ------------------------------------------------------------------------
--- filterE — через mapE с Maybe
+-- filterE - through mapE with Maybe
 ------------------------------------------------------------------------
 
+{-# TERMINATING #-}
 filterE : (A → Bool) → Event A → Event A
 filterE p never = never
 filterE p (interval n a) = if p a then interval n a else never
 filterE p (timeout n a) = if p a then timeout n a else never
 filterE p (onKeyDown h) = onKeyDown (λ e → filterMaybe p (h e))
-  where
-    filterMaybe : (A → Bool) → Maybe A → Maybe A
-    filterMaybe p nothing = nothing
-    filterMaybe p (just a) = if p a then just a else nothing
 filterE p (onKeyUp h) = onKeyUp (λ e → filterMaybe p (h e))
-  where
-    filterMaybe : (A → Bool) → Maybe A → Maybe A
-    filterMaybe p nothing = nothing
-    filterMaybe p (just a) = if p a then just a else nothing
-filterE p (httpGet url onOk onErr) = httpGet url onOk onErr  -- фильтр применится в runtime
+filterE p (httpGet url onOk onErr) = httpGet url onOk onErr  -- filter applied in runtime
 filterE p (httpPost url body onOk onErr) = httpPost url body onOk onErr
-filterE p (wsConnect url h) = wsConnect url h  -- фильтр на WsMsg не имеет смысла
-filterE p (onUrlChange h) = onUrlChange h      -- фильтр на URL не имеет смысла
+filterE p (wsConnect url h) = wsConnect url h  -- filter on WsMsg makes no sense
+filterE p (onUrlChange h) = onUrlChange h      -- filter on URL makes no sense
 filterE p (merge e₁ e₂) = merge (filterE p e₁) (filterE p e₂)
 filterE p (debounce n e) = debounce n (filterE p e)
 filterE p (throttle n e) = throttle n (filterE p e)
+filterE p (foldE a₀ step inner) =
+  mapFilterE (λ a → if p a then just a else nothing) (foldE a₀ step inner)
+filterE p (mapFilterE g inner) =
+  mapFilterE (λ x → filterMaybe p (g x)) inner
+filterE p (switchE initial meta) =
+  switchE (filterE p initial) (mapE (filterE p) meta)
 
 ------------------------------------------------------------------------
--- Удобные конструкторы для клавиатуры
+-- Convenient constructors for keyboard
 ------------------------------------------------------------------------
 
--- Подписка на конкретную клавишу (создаёт один listener)
+-- Subscribe to specific key (creates one listener)
 onKey : String → A → Event A
 onKey k msg = onKeyDown (λ e → if primStringEquality k (KeyboardEvent.key e) then just msg else nothing)
 
--- Подписка на несколько клавиш (ОДИН listener, эффективно!)
--- Использование: onKeys (("ArrowUp" , MoveUp) ∷ ("ArrowDown" , MoveDown) ∷ [])
+-- Subscribe to multiple keys (ONE listener, efficient!)
+-- Usage: onKeys (("ArrowUp" , MoveUp) ∷ ("ArrowDown" , MoveDown) ∷ [])
 onKeys : List (String × A) → Event A
 onKeys pairs = onKeyDown (λ e → lookupKey (KeyboardEvent.key e) pairs)
-  where
-    lookupKey : String → List (String × A) → Maybe A
-    lookupKey _ [] = nothing
-    lookupKey k ((k' , v) ∷ rest) =
-      if primStringEquality k k' then just v else lookupKey k rest
 
--- Гибкая подписка с предикатом (для сочетаний клавиш)
--- Использование: onKeyWhen (λ e → ctrl e ∧ key e ≡ᵇ "s") Save
+-- Flexible subscription with predicate (for key combinations)
+-- Usage: onKeyWhen (λ e → ctrl e ∧ key e ≡ᵇ "s") Save
 onKeyWhen : (KeyboardEvent → Bool) → A → Event A
 onKeyWhen pred msg = onKeyDown (λ e → if pred e then just msg else nothing)
 
--- Сочетания с модификаторами
+-- Combinations with modifiers
 onCtrlKey : String → A → Event A
 onCtrlKey k msg = onKeyWhen (λ e → ctrl e ∧ primStringEquality k (key e)) msg
   where open import Data.Bool using (_∧_)
@@ -164,7 +206,7 @@ onMetaKey : String → A → Event A
 onMetaKey k msg = onKeyWhen (λ e → meta e ∧ primStringEquality k (key e)) msg
   where open import Data.Bool using (_∧_)
 
--- Стрелки (для удобства, но лучше использовать onKeys для множества)
+-- Arrows (for convenience, but better to use onKeys for multiple)
 onArrowUp : A → Event A
 onArrowUp msg = onKey "ArrowUp" msg
 
@@ -177,7 +219,7 @@ onArrowLeft msg = onKey "ArrowLeft" msg
 onArrowRight : A → Event A
 onArrowRight msg = onKey "ArrowRight" msg
 
--- Специальные клавиши
+-- Special keys
 onEnter : A → Event A
 onEnter msg = onKey "Enter" msg
 
@@ -188,49 +230,69 @@ onSpace : A → Event A
 onSpace msg = onKey " " msg
 
 ------------------------------------------------------------------------
--- Хелперы для keyUp (для отслеживания одновременных нажатий)
+-- Helpers for keyUp (for tracking simultaneous presses)
 ------------------------------------------------------------------------
 
--- Подписка на отпускание конкретной клавиши
+-- Subscribe to releasing specific key
 onKeyReleased : String → A → Event A
 onKeyReleased k msg = onKeyUp (λ e → if primStringEquality k (KeyboardEvent.key e) then just msg else nothing)
 
--- Подписка на отпускание нескольких клавиш (один listener)
+-- Subscribe to releasing multiple keys (one listener)
 onKeysUp : List (String × A) → Event A
 onKeysUp pairs = onKeyUp (λ e → lookupKey (KeyboardEvent.key e) pairs)
-  where
-    lookupKey : String → List (String × A) → Maybe A
-    lookupKey _ [] = nothing
-    lookupKey k ((k' , v) ∷ rest) =
-      if primStringEquality k k' then just v else lookupKey k rest
 
--- Гибкая подписка на keyUp с предикатом
+-- Flexible subscription to keyUp with predicate
 onKeyUpWhen : (KeyboardEvent → Bool) → A → Event A
 onKeyUpWhen pred msg = onKeyUp (λ e → if pred e then just msg else nothing)
 
 ------------------------------------------------------------------------
--- Комбинаторы
+-- Combinators
 ------------------------------------------------------------------------
 
--- Слияние списка событий
+-- Merge list of events
 mergeAll : List (Event A) → Event A
 mergeAll [] = never
 mergeAll (e ∷ es) = merge e (mergeAll es)
 
--- Инфиксный merge
+-- Infix merge
 _<|>_ : Event A → Event A → Event A
 _<|>_ = merge
 
 infixr 3 _<|>_
 
--- Инфиксный mapE
+-- Infix mapE
 _<$>_ : (A → B) → Event A → Event B
 _<$>_ = mapE
 
 infixl 4 _<$>_
 
 ------------------------------------------------------------------------
--- Периодические события
+-- Stateful combinators (Phase 5)
+------------------------------------------------------------------------
+
+-- accumE: apply function events to accumulator, emit result
+-- accumE 0 [suc, suc, suc] → [1, 2, 3]
+accumE : A → Event (A → A) → Event A
+accumE a₀ e = foldE a₀ (λ f a → f a) e
+
+-- mapAccum: map with state, emit projected value
+-- On each B from inner, compute (newState, output) = step(B, oldState), emit output
+mapAccum : ∀ {S : Set} → (B → S → S × A) → S → Event B → Event A
+mapAccum step s₀ e = mapFilterE proj (foldE (s₀ , nothing) step' e)
+  where
+    open Data.Product using (proj₂)
+    step' : _ → _ → _
+    step' b (s , _) with step b s
+    ... | (s' , a) = (s' , just a)
+    proj : _ → Maybe _
+    proj (_ , ma) = ma
+
+-- gate: filter event by a predicate on event values (synonym for filterE)
+gate : (A → Bool) → Event A → Event A
+gate = filterE
+
+------------------------------------------------------------------------
+-- Periodic events
 ------------------------------------------------------------------------
 
 everySecond : A → Event A

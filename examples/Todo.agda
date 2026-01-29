@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K #-}
 
--- Todo: классический TodoMVC пример
+-- Todo: classic TodoMVC example
 -- Reactive approach: no Virtual DOM, direct bindings
 
 module Todo where
@@ -61,7 +61,7 @@ data Msg : Set where
 -- Update
 ------------------------------------------------------------------------
 
--- Переключить completed для задачи с данным id
+-- Toggle completed for task with given id
 toggleItem : ℕ → TodoItem → TodoItem
 toggleItem targetId item =
   if todoId item ≡ᵇ targetId
@@ -70,17 +70,17 @@ toggleItem targetId item =
   where
     open import Data.Nat using (_≡ᵇ_)
 
--- Удалить задачу с данным id
+-- Remove task with given id
 removeItem : ℕ → List TodoItem → List TodoItem
 removeItem targetId = filterᵇ (λ item → not (todoId item ≡ᵇ targetId))
   where
     open import Data.Nat using (_≡ᵇ_)
 
--- Оставить только незавершённые
+-- Keep only uncompleted tasks
 keepActive : List TodoItem → List TodoItem
 keepActive = filterᵇ (λ item → not (completed item))
 
--- Проверка пустой строки
+-- Check for empty string
 isEmpty : String → Bool
 isEmpty s with s ≟ ""
 ... | yes _ = true
@@ -97,7 +97,7 @@ updateModel AddTodo m =
   else record m
     { todos  = todos m ∷ʳ mkTodo (nextId m) (inputText m) false
     ; nextId = suc (nextId m)
-    }  -- inputText сохраняется для быстрого добавления дубликатов
+    }  -- inputText is preserved for quick addition of duplicates
   where
     open import Data.List using (_∷ʳ_)
 updateModel (ToggleTodo id') m = record m { todos = map (toggleItem id') (todos m) }
@@ -108,11 +108,11 @@ updateModel ClearCompleted m = record m { todos = keepActive (todos m) }
 -- Helper functions
 ------------------------------------------------------------------------
 
--- Количество незавершённых задач
+-- Number of uncompleted tasks
 activeCount : List TodoItem → ℕ
 activeCount items = length (filterᵇ (λ item → not (completed item)) items)
 
--- Есть ли завершённые задачи?
+-- Are there any completed tasks?
 hasCompleted : List TodoItem → Bool
 hasCompleted items = not (null (filterᵇ completed items))
 
@@ -196,7 +196,7 @@ todoTemplate =
             [ text "Add" ]
         ∷ [] )
     ∷ ul (class "todo-list" ∷ listStyle ∷ [])
-        [ foreach todos viewTodoItem ]  -- reactive list!
+        [ foreachKeyed todos (λ item → show (todoId item)) viewTodoItem ]  -- keyed reactive list!
     ∷ when hasTodos (
         div (class "footer" ∷ footerStyle ∷ [])
           ( span [] [ bindF itemsLeftStr ]  -- auto-updates!

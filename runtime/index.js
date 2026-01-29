@@ -420,7 +420,7 @@ export function mount(appOrModule, container) {
 /**
  * Mount with dynamic import (async)
  *
- * @param {string} moduleName - Module name (e.g., "Counter", "KeyboardDemo")
+ * @param {string} moduleName - Module name (e.g., "Counter", "Keyboard")
  * @param {HTMLElement|string} container - DOM element or selector
  * @param {Object} [options] - Configuration
  * @param {string} [options.buildDir="../_build"] - Build directory path
@@ -429,7 +429,7 @@ export function mount(appOrModule, container) {
  *
  * @example
  * mountModule('Counter', '#app');
- * mountModule('KeyboardDemo', '#app', { buildDir: './_build' });
+ * mountModule('Keyboard', '#app', { buildDir: './_build' });
  */
 export async function mountModule(moduleName, container, options = {}) {
   const {

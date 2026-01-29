@@ -2,6 +2,8 @@
  * Agdelte Reactive Runtime
  * Renders ReactiveApp with direct DOM updates (no Virtual DOM)
  * Like Svelte - bindings track which DOM nodes need updating
+ *
+ * Phase 3: Binding scopes, keyed foreach, when transitions
  */
 
 import { interpretEvent, unsubscribe, wsConnections } from './events.js';
@@ -105,6 +107,43 @@ async function loadNodeModule() {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// Binding Scopes
+// ─────────────────────────────────────────────────────────────────────
+
+function createScope(parent) {
+  const scope = {
+    bindings: [],       // { node, binding }
+    attrBindings: [],   // { node, binding, attrName }
+    styleBindings: [],  // { node, binding, styleName }
+    conditionals: [],   // { cond, innerNode, node, rendered, scope }
+    lists: [],          // { marker, getList, render, renderedItems, keyed, keyFn }
+    children: [],       // child scopes
+    parent: parent || null
+  };
+  if (parent) parent.children.push(scope);
+  return scope;
+}
+
+function destroyScope(scope) {
+  // Recursively destroy children
+  for (const child of scope.children) {
+    destroyScope(child);
+  }
+  // Remove from parent
+  if (scope.parent) {
+    const idx = scope.parent.children.indexOf(scope);
+    if (idx !== -1) scope.parent.children.splice(idx, 1);
+  }
+  // Clear all arrays
+  scope.bindings.length = 0;
+  scope.attrBindings.length = 0;
+  scope.styleBindings.length = 0;
+  scope.conditionals.length = 0;
+  scope.lists.length = 0;
+  scope.children.length = 0;
+}
+
 /**
  * Create reactive app runner
  */
@@ -123,16 +162,24 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
   // State
   let model = init;
-  const bindings = [];       // text bindings: { node, binding }
-  const attrBindings = [];   // attr bindings: { node, binding, attrName }
-  const styleBindings = [];  // style bindings: { node, binding, styleName }
-  const conditionals = [];   // when: { node, parent, placeholder, cond, rendered }
-  const lists = [];          // foreach: { node, parent, getList, render, items }
+  const rootScope = createScope(null);
+  let currentScope = rootScope;
 
   let currentSubscription = null;
   let currentEventFingerprint = null;
   let isUpdating = false;
   let pendingMessages = [];
+
+  /**
+   * Execute renderNode within a specific scope
+   */
+  function withScope(scope, fn) {
+    const prev = currentScope;
+    currentScope = scope;
+    const result = fn();
+    currentScope = prev;
+    return result;
+  }
 
   /**
    * Dispatch message
@@ -157,7 +204,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       model = update(msg)(oldModel);
 
       // Update bindings
-      updateBindings(oldModel, model);
+      updateScope(rootScope, oldModel, model);
 
       // Update subscriptions
       updateSubscriptions();
@@ -171,7 +218,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           executeCmd(nextCmd, dispatch);
         }
         model = update(nextMsg)(nextOld);
-        updateBindings(nextOld, model);
+        updateScope(rootScope, nextOld, model);
         updateSubscriptions();
       }
     } finally {
@@ -190,20 +237,18 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         const extract = NodeModule.Binding.extract(binding);
         const value = extract(model);
         const textNode = document.createTextNode(value);
-        bindings.push({ node: textNode, binding });
+        currentScope.bindings.push({ node: textNode, binding });
         return textNode;
       },
 
       elem: (tag, attrs, children) => {
         const el = document.createElement(tag);
 
-        // Apply attributes (convert Agda list to JS array)
         const attrArray = listToArray(attrs);
         for (const attr of attrArray) {
           applyAttr(el, attr);
         }
 
-        // Render children (convert Agda list to JS array)
         const childArray = listToArray(children);
         for (const child of childArray) {
           const childNode = renderNode(child);
@@ -216,15 +261,54 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       empty: () => null,
 
       when: (cond, innerNode) => {
-        const shouldShow = !!cond(model);  // Bool is native JS boolean
+        const shouldShow = !!cond(model);
 
         if (shouldShow) {
-          const rendered = renderNode(innerNode);
-          conditionals.push({ cond, innerNode, node: rendered, rendered: true });
+          const childScope = createScope(currentScope);
+          const rendered = withScope(childScope, () => renderNode(innerNode));
+          currentScope.conditionals.push({
+            cond, innerNode, node: rendered, rendered: true, scope: childScope
+          });
           return rendered;
         } else {
           const placeholder = document.createComment('when');
-          conditionals.push({ cond, innerNode, node: placeholder, rendered: false, placeholder });
+          currentScope.conditionals.push({
+            cond, innerNode, node: placeholder, rendered: false, scope: null
+          });
+          return placeholder;
+        }
+      },
+
+      whenT: (cond, transition, innerNode) => {
+        const shouldShow = !!cond(model);
+        // Extract transition fields
+        const enterClass = NodeModule.Transition.enterClass(transition);
+        const leaveClass = NodeModule.Transition.leaveClass(transition);
+        const duration = Number(NodeModule.Transition.duration(transition));
+
+        if (shouldShow) {
+          const childScope = createScope(currentScope);
+          const rendered = withScope(childScope, () => renderNode(innerNode));
+          // Apply enter class, remove on next frame
+          if (rendered && rendered.classList) {
+            rendered.classList.add(enterClass);
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                if (rendered.classList) rendered.classList.remove(enterClass);
+              });
+            });
+          }
+          currentScope.conditionals.push({
+            cond, innerNode, node: rendered, rendered: true, scope: childScope,
+            transition: { enterClass, leaveClass, duration }
+          });
+          return rendered;
+        } else {
+          const placeholder = document.createComment('whenT');
+          currentScope.conditionals.push({
+            cond, innerNode, node: placeholder, rendered: false, scope: null,
+            transition: { enterClass, leaveClass, duration }
+          });
           return placeholder;
         }
       },
@@ -236,19 +320,52 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
         const items = getList(model);
         const renderedItems = [];
-
-        // Convert list
         const itemArray = listToArray(items);
 
         itemArray.forEach((item, idx) => {
-          const itemNode = renderNode(render(item)(BigInt(idx)));
+          const itemScope = createScope(currentScope);
+          const itemNode = withScope(itemScope, () =>
+            renderNode(render(item)(BigInt(idx)))
+          );
           if (itemNode) {
-            renderedItems.push({ item, node: itemNode });
+            renderedItems.push({ item, node: itemNode, scope: itemScope });
             container.appendChild(itemNode);
           }
         });
 
-        lists.push({ marker, getList, render, renderedItems });
+        currentScope.lists.push({
+          marker, getList, render, renderedItems,
+          keyed: false, keyFn: null
+        });
+
+        return container;
+      },
+
+      foreachKeyed: (_typeA, getList, keyFn, render) => {
+        const container = document.createDocumentFragment();
+        const marker = document.createComment('foreachKeyed');
+        container.appendChild(marker);
+
+        const items = getList(model);
+        const renderedItems = [];
+        const itemArray = listToArray(items);
+
+        itemArray.forEach((item, idx) => {
+          const key = keyFn(item);
+          const itemScope = createScope(currentScope);
+          const itemNode = withScope(itemScope, () =>
+            renderNode(render(item)(BigInt(idx)))
+          );
+          if (itemNode) {
+            renderedItems.push({ key, item, node: itemNode, scope: itemScope });
+            container.appendChild(itemNode);
+          }
+        });
+
+        currentScope.lists.push({
+          marker, getList, render, renderedItems,
+          keyed: true, keyFn
+        });
 
         return container;
       }
@@ -263,7 +380,6 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       attr: (name, value) => {
         if (name === 'disabled' || name === 'checked') {
           if (value === 'true') el.setAttribute(name, '');
-          // if empty, don't set
         } else {
           el.setAttribute(name, value);
         }
@@ -277,11 +393,10 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         } else {
           el.setAttribute(name, value);
         }
-        attrBindings.push({ node: el, binding, attrName: name });
+        currentScope.attrBindings.push({ node: el, binding, attrName: name });
       },
       on: (event, msg) => {
         el.addEventListener(event, (e) => {
-          // Prevent default for links with onClick
           if (el.tagName === 'A' && event === 'click') {
             e.preventDefault();
           }
@@ -302,7 +417,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       styleBind: (name, binding) => {
         const extract = NodeModule.Binding.extract(binding);
         el.style.setProperty(name, extract(model));
-        styleBindings.push({ node: el, binding, styleName: name });
+        currentScope.styleBindings.push({ node: el, binding, styleName: name });
       }
     });
   }
@@ -311,7 +426,6 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
    * Convert Agda list to JS array
    */
   function listToArray(list) {
-    // Handle edge cases
     if (!list) return [];
     if (Array.isArray(list)) return list;
     if (typeof list !== 'function') {
@@ -339,27 +453,29 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     return result;
   }
 
+  // ─────────────────────────────────────────────────────────────────
+  // Scoped update
+  // ─────────────────────────────────────────────────────────────────
+
   /**
-   * Update all bindings
+   * Recursively update all bindings in a scope tree
    */
-  function updateBindings(oldModel, newModel) {
-    // Text bindings - use simple JS equality (Agda's equals causes stack overflow)
-    for (const { node, binding } of bindings) {
+  function updateScope(scope, oldModel, newModel) {
+    // Text bindings
+    for (const { node, binding } of scope.bindings) {
       const extract = NodeModule.Binding.extract(binding);
       const oldVal = extract(oldModel);
       const newVal = extract(newModel);
-
       if (oldVal !== newVal) {
         node.textContent = newVal;
       }
     }
 
     // Attribute bindings
-    for (const { node, binding, attrName } of attrBindings) {
+    for (const { node, binding, attrName } of scope.attrBindings) {
       const extract = NodeModule.Binding.extract(binding);
       const oldVal = extract(oldModel);
       const newVal = extract(newModel);
-
       if (oldVal !== newVal) {
         if (attrName === 'disabled' || attrName === 'checked') {
           if (newVal === 'true') node.setAttribute(attrName, '');
@@ -371,64 +487,207 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     }
 
     // Style bindings
-    for (const { node, binding, styleName } of styleBindings) {
+    for (const { node, binding, styleName } of scope.styleBindings) {
       const extract = NodeModule.Binding.extract(binding);
       const oldVal = extract(oldModel);
       const newVal = extract(newModel);
-
       if (oldVal !== newVal) {
         node.style.setProperty(styleName, newVal);
       }
     }
 
-    // Conditional (when) - simple re-render when condition changes
-    for (const cond of conditionals) {
-      const showBool = !!cond.cond(newModel);  // Bool is native JS boolean
+    // Conditionals (when / whenT)
+    for (const cond of scope.conditionals) {
+      const showBool = !!cond.cond(newModel);
 
       if (showBool !== cond.rendered) {
         if (showBool) {
-          // Render and insert
-          const newNode = renderNode(cond.innerNode);
+          // Show: render into new child scope
+          const childScope = createScope(scope);
+          const newNode = withScope(childScope, () => renderNode(cond.innerNode));
+
+          // Enter transition
+          if (cond.transition && newNode && newNode.classList) {
+            newNode.classList.add(cond.transition.enterClass);
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                if (newNode.classList) newNode.classList.remove(cond.transition.enterClass);
+              });
+            });
+          }
+
           cond.node.replaceWith(newNode);
           cond.node = newNode;
           cond.rendered = true;
+          cond.scope = childScope;
         } else {
-          // Remove and put placeholder
-          const placeholder = document.createComment('when');
-          cond.node.replaceWith(placeholder);
-          cond.node = placeholder;
-          cond.rendered = false;
-        }
-      }
-    }
+          // Hide: destroy child scope
+          if (cond.scope) destroyScope(cond.scope);
 
-    // Lists (foreach) - simple re-render
-    for (const list of lists) {
-      const newItems = listToArray(list.getList(newModel));
-      const oldItems = list.renderedItems;
-
-      // Simple approach: if length changed, rebuild
-      if (newItems.length !== oldItems.length) {
-        // Remove old items
-        for (const { node } of oldItems) {
-          node.remove();
-        }
-
-        // Render new items
-        list.renderedItems = [];
-        const parent = list.marker.parentNode;
-        let insertBefore = list.marker.nextSibling;
-
-        newItems.forEach((item, idx) => {
-          const itemNode = renderNode(list.render(item)(BigInt(idx)));
-          if (itemNode) {
-            list.renderedItems.push({ item, node: itemNode });
-            parent.insertBefore(itemNode, insertBefore);
+          if (cond.transition && cond.transition.duration > 0 && cond.node.classList) {
+            // Leave transition: add class, wait, then remove
+            const leaving = cond.node;
+            leaving.classList.add(cond.transition.leaveClass);
+            const placeholder = document.createComment(cond.transition ? 'whenT' : 'when');
+            setTimeout(() => {
+              if (leaving.parentNode) {
+                leaving.replaceWith(placeholder);
+                // Update tracking if this cond still points to leaving
+                if (cond.node === leaving) cond.node = placeholder;
+              }
+            }, cond.transition.duration);
+            // Immediately update tracking to placeholder for logic
+            // but keep DOM node until transition ends
+            cond.rendered = false;
+            cond.scope = null;
+          } else {
+            const placeholder = document.createComment('when');
+            cond.node.replaceWith(placeholder);
+            cond.node = placeholder;
+            cond.rendered = false;
+            cond.scope = null;
           }
-        });
+        }
+      } else if (showBool && cond.scope) {
+        // Condition unchanged, but update child scope bindings
+        updateScope(cond.scope, oldModel, newModel);
       }
-      // TODO: more efficient diffing for lists
     }
+
+    // Lists (foreach / foreachKeyed)
+    for (const list of scope.lists) {
+      if (list.keyed) {
+        updateKeyedList(scope, list, oldModel, newModel);
+      } else {
+        updateUnkeyedList(scope, list, oldModel, newModel);
+      }
+    }
+
+    // Recurse into child scopes (that aren't managed by conditionals/lists)
+    // Note: conditional and list scopes are updated above, so children
+    // array contains only "structural" children from elem nesting.
+    // Actually, all child scopes are created by when/foreach, so
+    // we don't need extra recursion here — it's handled above.
+  }
+
+  /**
+   * Update unkeyed foreach list
+   */
+  function updateUnkeyedList(parentScope, list, oldModel, newModel) {
+    const newItems = listToArray(list.getList(newModel));
+    const oldItems = list.renderedItems;
+
+    if (newItems.length !== oldItems.length) {
+      // Length changed: destroy old scopes, rebuild
+      for (const entry of oldItems) {
+        entry.node.remove();
+        if (entry.scope) destroyScope(entry.scope);
+      }
+
+      list.renderedItems = [];
+      const parent = list.marker.parentNode;
+      const insertBefore = list.marker.nextSibling;
+
+      newItems.forEach((item, idx) => {
+        const itemScope = createScope(parentScope);
+        const itemNode = withScope(itemScope, () =>
+          renderNode(list.render(item)(BigInt(idx)))
+        );
+        if (itemNode) {
+          list.renderedItems.push({ item, node: itemNode, scope: itemScope });
+          parent.insertBefore(itemNode, insertBefore);
+        }
+      });
+    } else {
+      // Same length: update bindings within each item's scope
+      for (const entry of oldItems) {
+        if (entry.scope) {
+          updateScope(entry.scope, oldModel, newModel);
+        }
+      }
+    }
+  }
+
+  /**
+   * Update keyed foreach list — key-based reconciliation
+   */
+  function updateKeyedList(parentScope, list, oldModel, newModel) {
+    const newItems = listToArray(list.getList(newModel));
+    const oldItems = list.renderedItems;
+
+    // Build old key map
+    const oldKeyMap = new Map();
+    for (let i = 0; i < oldItems.length; i++) {
+      oldKeyMap.set(oldItems[i].key, oldItems[i]);
+    }
+
+    // Build new key set
+    const newKeys = newItems.map(item => list.keyFn(item));
+
+    // Check if anything changed
+    const keysChanged = newKeys.length !== oldItems.length ||
+      newKeys.some((key, i) => oldItems[i]?.key !== key);
+
+    if (!keysChanged) {
+      // Same keys in same order: just update bindings
+      for (const entry of oldItems) {
+        if (entry.scope) {
+          updateScope(entry.scope, oldModel, newModel);
+        }
+      }
+      return;
+    }
+
+    // Keys changed: reconcile
+    const parent = list.marker.parentNode;
+    const newRendered = [];
+    const newKeySet = new Set(newKeys);
+
+    // Remove items whose keys are no longer present
+    for (const entry of oldItems) {
+      if (!newKeySet.has(entry.key)) {
+        entry.node.remove();
+        if (entry.scope) destroyScope(entry.scope);
+      }
+    }
+
+    // Build/reuse items in new order
+    let insertBefore = list.marker.nextSibling;
+    // First, remove all old items from DOM (we'll re-insert in order)
+    for (const entry of oldItems) {
+      if (newKeySet.has(entry.key) && entry.node.parentNode) {
+        entry.node.remove();
+      }
+    }
+
+    // Now insert in correct order
+    insertBefore = list.marker.nextSibling;
+    for (let i = 0; i < newItems.length; i++) {
+      const key = newKeys[i];
+      const oldEntry = oldKeyMap.get(key);
+
+      if (oldEntry) {
+        // Reuse existing DOM node
+        parent.insertBefore(oldEntry.node, insertBefore);
+        // Update bindings in existing scope
+        if (oldEntry.scope) {
+          updateScope(oldEntry.scope, oldModel, newModel);
+        }
+        newRendered.push(oldEntry);
+      } else {
+        // New item: render fresh
+        const itemScope = createScope(parentScope);
+        const itemNode = withScope(itemScope, () =>
+          renderNode(list.render(newItems[i])(BigInt(i)))
+        );
+        if (itemNode) {
+          parent.insertBefore(itemNode, insertBefore);
+          newRendered.push({ key, item: newItems[i], node: itemNode, scope: itemScope });
+        }
+      }
+    }
+
+    list.renderedItems = newRendered;
   }
 
   /**
@@ -449,7 +708,10 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       debounce: (ms, inner) => `debounce(${ms})`,
       throttle: (ms, inner) => `throttle(${ms})`,
       wsConnect: (url, handler) => `wsConnect(${url})`,
-      onUrlChange: (handler) => 'onUrlChange'
+      onUrlChange: (handler) => 'onUrlChange',
+      foldE: (_typeB, init, step, inner) => `foldE(${serializeEvent(inner)})`,
+      mapFilterE: (_typeB, f, inner) => `mapFilterE(${serializeEvent(inner)})`,
+      switchE: (initial, meta) => `switchE(${serializeEvent(initial)},${serializeEvent(meta)})`
     });
   }
 
@@ -472,21 +734,32 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     currentEventFingerprint = newFingerprint;
   }
 
+  // Count bindings for logging
+  function countBindings(scope) {
+    let text = scope.bindings.length;
+    let attr = scope.attrBindings.length;
+    let style = scope.styleBindings.length;
+    for (const child of scope.children) {
+      const c = countBindings(child);
+      text += c.text;
+      attr += c.attr;
+      style += c.style;
+    }
+    return { text, attr, style };
+  }
+
   // Initial render
   container.innerHTML = '';
   const dom = renderNode(template);
   if (dom) {
-    if (dom.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
-      container.appendChild(dom);
-    } else {
-      container.appendChild(dom);
-    }
+    container.appendChild(dom);
   }
 
   // Initial subscriptions
   updateSubscriptions();
 
-  console.log(`Reactive app mounted: ${bindings.length} text bindings, ${attrBindings.length} attr bindings, ${styleBindings.length} style bindings`);
+  const counts = countBindings(rootScope);
+  console.log(`Reactive app mounted: ${counts.text} text bindings, ${counts.attr} attr bindings, ${counts.style} style bindings`);
 
   return {
     dispatch,
@@ -496,6 +769,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       if (currentSubscription) {
         unsubscribe(currentSubscription);
       }
+      destroyScope(rootScope);
       container.innerHTML = '';
     }
   };

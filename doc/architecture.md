@@ -56,23 +56,37 @@ This is exactly what Svelte does at compile time, but with explicit bindings.
 ## Event — Subscriptions
 
 ```agda
+{-# NO_POSITIVITY_CHECK #-}
+{-# NO_UNIVERSE_CHECK #-}
 data Event (A : Set) : Set where
+  -- Primitives
   never      : Event A
   interval   : ℕ → A → Event A
   timeout    : ℕ → A → Event A
-  merge      : Event A → Event A → Event A
+  -- Keyboard
   onKeyDown  : (KeyboardEvent → Maybe A) → Event A
   onKeyUp    : (KeyboardEvent → Maybe A) → Event A
+  -- HTTP
+  httpGet    : String → (String → A) → (String → A) → Event A
+  httpPost   : String → String → (String → A) → (String → A) → Event A
+  -- WebSocket
   wsConnect  : String → (WsMsg → A) → Event A
+  -- Routing
   onUrlChange : (String → A) → Event A
+  -- Combinators
+  merge      : Event A → Event A → Event A
   debounce   : ℕ → Event A → Event A
   throttle   : ℕ → Event A → Event A
+  -- Stateful (Phase 5) — runtime maintains internal state
+  foldE      : ∀ {B} → A → (B → A → A) → Event B → Event A
+  mapFilterE : ∀ {B} → (B → Maybe A) → Event B → Event A
+  switchE    : Event A → Event (Event A) → Event A
 ```
 
 Events are **data** (AST), interpreted by runtime. This enables:
-- Diffing subscriptions
-- Automatic cleanup
-- Fingerprint comparison (no unnecessary resubscription)
+- Diffing subscriptions via fingerprints
+- Automatic cleanup on unsubscribe
+- Stateful combinators with runtime-managed state (foldE, switchE)
 
 ## Cmd — Commands
 
@@ -126,35 +140,57 @@ fetchChain = do
 command Fetch _ = attempt fetchChain GotResult
 ```
 
-## App Composition
+## Component Composition
 
-### Parallel Composition
-
-```agda
-_∥_ : App M₁ A₁ → App M₂ A₂ → App (M₁ × M₂) (A₁ ⊎ A₂)
-```
-
-Two apps run independently, model is a pair, messages are tagged.
-
-### Component Composition (focusNode)
+### zoomNode (model + messages) — Phase 4
 
 ```agda
-focusNode : (Outer → Inner) → Node Inner Msg → Node Outer Msg
-focusBinding : (Outer → Inner) → Binding Inner A → Binding Outer A
+zoomNode : (M → M') → (Msg' → Msg) → Node M' Msg' → Node M Msg
+zoomAttr : (M → M') → (Msg' → Msg) → Attr M' Msg' → Attr M Msg
 ```
 
-This allows reusing templates with different model slices — similar to Svelte's component props but with type-safe lenses.
+Full component composition — child templates are reusable without manual wrapping:
+
+```agda
+zoomNode proj₁ LeftMsg counterTemplate
+zoomNode proj₂ RightMsg counterTemplate
+```
+
+### zoomNodeL (typed optics) — Phase 6
+
+```agda
+zoomNodeL : Lens M M' → Prism Msg Msg' → Node M' Msg' → Node M Msg
+zoomAttrL : Lens M M' → Prism Msg Msg' → Attr M' Msg' → Attr M Msg
+```
+
+Same as `zoomNode` but with typed `Lens` + `Prism` instead of raw functions.
+
+### Lens (Phase 4)
+
+```agda
+record Lens (Outer Inner : Set) : Set where
+  field
+    get : Outer → Inner
+    set : Inner → Outer → Outer
+  modify : (Inner → Inner) → Outer → Outer
+
+_∘L_ : Lens B C → Lens A B → Lens A C   -- compose
+fstLens : Lens (A × B) A
+sndLens : Lens (A × B) B
+```
 
 ## Node — Reactive Template
 
 ```agda
 data Node (Model Msg : Set) : Set₁ where
-  text    : String → Node Model Msg                                                -- static text
-  bind    : Binding Model String → Node Model Msg                                  -- reactive binding!
-  elem    : String → List (Attr Model Msg) → List (Node Model Msg) → Node Model Msg
-  empty   : Node Model Msg                                                         -- nothing
-  when    : (Model → Bool) → Node Model Msg → Node Model Msg                      -- conditional
-  foreach : ∀ {A} → (Model → List A) → (A → ℕ → Node Model Msg) → Node Model Msg -- dynamic list
+  text         : String → Node Model Msg                                                -- static text
+  bind         : Binding Model String → Node Model Msg                                  -- reactive binding!
+  elem         : String → List (Attr Model Msg) → List (Node Model Msg) → Node Model Msg
+  empty        : Node Model Msg                                                         -- nothing
+  when         : (Model → Bool) → Node Model Msg → Node Model Msg                      -- conditional
+  foreach      : ∀ {A} → (Model → List A) → (A → ℕ → Node Model Msg) → Node Model Msg -- dynamic list
+  foreachKeyed : ∀ {A} → (Model → List A) → (A → String) → (A → ℕ → Node Model Msg) → Node Model Msg -- keyed reconciliation (Phase 3)
+  whenT        : (Model → Bool) → Transition → Node Model Msg → Node Model Msg         -- with CSS transitions (Phase 3)
 
 data Attr (Model Msg : Set) : Set₁ where
   attr      : String → String → Attr Model Msg             -- static attribute

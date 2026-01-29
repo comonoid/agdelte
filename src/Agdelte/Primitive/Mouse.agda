@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K --guardedness #-}
 
--- Mouse: события мыши
+-- Mouse: mouse events
 
 module Agdelte.Primitive.Mouse where
 
@@ -25,7 +25,7 @@ record MouseEvent : Set where
 
 open MouseEvent public
 
--- Позиция мыши
+-- Mouse position
 Position : Set
 Position = ℕ × ℕ
 
@@ -34,13 +34,13 @@ Position = ℕ × ℕ
 ------------------------------------------------------------------------
 
 postulate
-  -- Движение мыши
+  -- Mouse movement
   onMouseMove : ∀ {A : Set} → (MouseEvent → A) → Event A
 
-  -- Позиция мыши (упрощённо)
+  -- Mouse position (simplified)
   mousePosition : ∀ {A : Set} → (Position → A) → Event A
 
-  -- Клики
+  -- Clicks
   onMouseDown : ∀ {A : Set} → (MouseEvent → A) → Event A
   onMouseUp : ∀ {A : Set} → (MouseEvent → A) → Event A
   onGlobalClick : ∀ {A : Set} → (MouseEvent → A) → Event A
@@ -124,18 +124,18 @@ postulate
 }) #-}
 
 ------------------------------------------------------------------------
--- Утилиты
+-- Utilities
 ------------------------------------------------------------------------
 
--- Вспомогательные предикаты (фильтрация по button будет в runtime)
+-- Helper predicates (button filtering will be in runtime)
 private
   alwaysTrue : ∀ {A : Set} → A → Bool
   alwaysTrue _ = true
 
--- Только левый клик
+-- Left click only
 onLeftClick : ∀ {A : Set} → A → Event A
 onLeftClick msg = filterE alwaysTrue (onMouseDown (λ _ → msg))
 
--- Только правый клик
+-- Right click only
 onRightClick : ∀ {A : Set} → A → Event A
 onRightClick msg = filterE alwaysTrue (onMouseDown (λ _ → msg))

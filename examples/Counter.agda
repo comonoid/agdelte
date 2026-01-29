@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K #-}
 
--- Counter: простейший пример приложения Agdelte (Reactive, без Virtual DOM)
+-- Counter: simplest example of Agdelte application (Reactive, without Virtual DOM)
 
 module Counter where
 

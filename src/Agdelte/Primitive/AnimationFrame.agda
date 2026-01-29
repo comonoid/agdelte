@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K --guardedness #-}
 
--- AnimationFrame: события анимации (60fps)
+-- AnimationFrame: animation events (60fps)
 
 module Agdelte.Primitive.AnimationFrame where
 
@@ -13,10 +13,10 @@ open import Agdelte.Core.Event
 ------------------------------------------------------------------------
 
 postulate
-  -- Событие на каждый кадр
+  -- Event on every frame
   animationFrame : ∀ {A : Set} → A → Event A
 
-  -- Событие с timestamp (время в ms)
+  -- Event with timestamp (time in ms)
   animationFrameWithTime : ∀ {A : Set} → (Float → A) → Event A
 
 {-# COMPILE JS animationFrame = _ => msg => ({
@@ -34,13 +34,13 @@ postulate
 }) #-}
 
 ------------------------------------------------------------------------
--- Утилиты для анимации
+-- Animation utilities
 ------------------------------------------------------------------------
 
--- Количество кадров в секунду (приблизительно)
+-- Frames per second (approximately)
 fps : ℕ
 fps = 60
 
--- Интервал между кадрами в ms
+-- Interval between frames in ms
 frameInterval : ℕ
 frameInterval = 16

@@ -18,10 +18,11 @@ The runtime interprets Scott-encoded Agda data structures and executes them in t
 │  ├─ dispatch(msg) — event loop                               │
 │  └─ updateBindings(oldModel, newModel) — direct DOM updates  │
 ├─────────────────────────────────────────────────────────────┤
-│  Bindings                                                    │
-│  List of { domNode, binding }                                │
+│  Binding Scopes (Phase 3)                                    │
+│  Tree of scopes, each with own bindings                      │
 │  On model change: check binding.extract(old) vs extract(new) │
 │  If changed → update domNode directly (NO diffing!)          │
+│  Destroyed scope → all child bindings cleaned up             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -30,10 +31,10 @@ The runtime interprets Scott-encoded Agda data structures and executes them in t
 ```javascript
 function runReactiveApp(app, container) {
   let model = app.init;
-  const bindings = [];  // Track all reactive bindings
+  const rootScope = createScope();  // Binding scopes (Phase 3)
 
-  // 1. Initial render: create DOM, collect bindings
-  const dom = renderNode(app.template);
+  // 1. Initial render: create DOM, collect bindings in scopes
+  const dom = renderNode(app.template, rootScope);
   container.appendChild(dom);
 
   function dispatch(msg) {
@@ -43,14 +44,9 @@ function runReactiveApp(app, container) {
     model = app.update(msg)(oldModel);
 
     // 3. Update only changed bindings (NO VDOM DIFF!)
-    for (const { node, binding } of bindings) {
-      const oldVal = binding.extract(oldModel);
-      const newVal = binding.extract(model);
-
-      if (oldVal !== newVal) {        // Simple JS comparison
-        node.textContent = newVal;    // Direct DOM update!
-      }
-    }
+    updateBindings(rootScope, oldModel, model);
+    // Each scope updates its own bindings
+    // Destroyed scopes (when condition false) clean up all child bindings
   }
 }
 ```
@@ -125,6 +121,18 @@ function renderNode(node) {
       items.forEach((item, idx) => {
         container.appendChild(renderNode(render(item)(BigInt(idx))));
       });
+    },
+
+    // Phase 3: keyed list reconciliation
+    foreachKeyed: (_typeA, getList, keyFn, render) => {
+      // Same key → reuse DOM node; new key → create; removed → destroy
+      // Uses data-key attribute for O(n) reconciliation
+    },
+
+    // Phase 3: conditional with CSS transitions
+    whenT: (cond, transition, innerNode) => {
+      // On enter: add enterClass, render node
+      // On leave: add leaveClass, remove after duration ms
     }
   });
 }
@@ -257,6 +265,9 @@ Events are AST nodes interpreted by runtime:
 | `merge` | Interpret both children |
 | `debounce` | Wrap inner with debounce logic |
 | `throttle` | Wrap inner with throttle logic |
+| `foldE` | Maintain internal state; on inner event: `state = step(val, state)`, dispatch state |
+| `mapFilterE` | On inner event: apply `f`, dispatch if `just`, skip if `nothing` |
+| `switchE` | Subscribe to initial; on meta-event: unsubscribe old, subscribe new |
 
 ## Files
 

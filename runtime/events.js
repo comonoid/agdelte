@@ -257,6 +257,61 @@ export function interpretEvent(event, dispatch) {
       };
     },
 
+    // foldE: accumulate state across event occurrences
+    // Scott: foldE(_typeB, init, step, innerEvent)
+    foldE: (_typeB, init, step, innerEvent) => {
+      let state = init;
+      const wrappedDispatch = (inputVal) => {
+        state = step(inputVal)(state);
+        dispatch(state);
+      };
+      const sub = interpretEvent(innerEvent, wrappedDispatch);
+      return {
+        unsubscribe: () => sub.unsubscribe()
+      };
+    },
+
+    // mapFilterE: map + filter via Maybe
+    // Scott: mapFilterE(_typeB, f, innerEvent)
+    mapFilterE: (_typeB, f, innerEvent) => {
+      const wrappedDispatch = (inputVal) => {
+        const maybeResult = f(inputVal);
+        // Extract Maybe: just(x) → dispatch(x), nothing → skip
+        if (maybeResult) {
+          const result = maybeResult({
+            just: (x) => x,
+            nothing: () => null
+          });
+          if (result !== null) dispatch(result);
+        }
+      };
+      const sub = interpretEvent(innerEvent, wrappedDispatch);
+      return {
+        unsubscribe: () => sub.unsubscribe()
+      };
+    },
+
+    // switchE: start with initial event, switch on meta-event
+    // Scott: switchE(initialEvent, metaEvent)
+    switchE: (initialEvent, metaEvent) => {
+      let currentSub = interpretEvent(initialEvent, dispatch);
+
+      const metaDispatch = (newEvent) => {
+        // Unsubscribe from current, switch to new
+        currentSub.unsubscribe();
+        currentSub = interpretEvent(newEvent, dispatch);
+      };
+
+      const metaSub = interpretEvent(metaEvent, metaDispatch);
+
+      return {
+        unsubscribe: () => {
+          currentSub.unsubscribe();
+          metaSub.unsubscribe();
+        }
+      };
+    },
+
     // onUrlChange: изменение URL (popstate)
     onUrlChange: (handler) => {
       const listener = () => {

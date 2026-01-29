@@ -2,26 +2,29 @@
 
 > See [doc/examples.md](../doc/examples.md) for detailed guide.
 
-Примеры демонстрируют возможности Agdelte:
+Examples demonstrate Agdelte features:
 
-| Пример | Описание | Особенности |
-|--------|----------|-------------|
-| ReactiveCounter | Счётчик | Reactive bindings (no VDOM) |
-| Timer | Секундомер | Event subs (interval) |
-| Todo | Список задач | Списки, фильтрация, input handling |
-| Keyboard | Управление стрелками | onKeyDown, global keyboard events |
-| HttpDemo | HTTP запросы | Cmd (httpGet) |
-| TaskDemo | Цепочка HTTP | Task с do-нотацией |
-| WebSocketDemo | Echo-клиент | wsConnect, wsSend |
-| RouterDemo | SPA роутинг | pushUrl, onUrlChange |
-| CompositionDemo | Два счётчика | _∥_ параллельная композиция |
+| Example | Description | Features |
+|---------|-------------|----------|
+| Counter | Counter | Reactive bindings (no VDOM) |
+| Timer | Stopwatch | Event subs (interval) |
+| Todo | Task list | Lists, filtering, input handling |
+| Keyboard | Arrow key control | onKeyDown, global keyboard events |
+| Http | HTTP requests | Cmd (httpGet) |
+| Task | HTTP chain | Task with do-notation |
+| WebSocket | Echo client | wsConnect, wsSend |
+| Router | SPA routing | pushUrl, onUrlChange |
+| Transitions | CSS animations | whenT, enter/leave transitions |
+| Composition | Two counters | zoomNode, shared total |
+| Combinators | Event pipeline | foldE, mapFilterE |
+| OpticDynamic | Dynamic optics | ixList, Traversal, runtime _∘O_ |
 
-## Компиляция
+## Building
 
-### Из корня проекта (рекомендуется)
+### From project root (recommended)
 
 ```bash
-# Отдельные примеры
+# Individual examples
 npm run build:counter
 npm run build:timer
 npm run build:todo
@@ -31,12 +34,15 @@ npm run build:task
 npm run build:websocket
 npm run build:router
 npm run build:composition
+npm run build:transitions
+npm run build:combinators
+npm run build:optic-dynamic
 
-# Все сразу
+# All at once
 npm run build:all
 ```
 
-### Из директории examples
+### From examples directory
 
 ```bash
 # Counter
@@ -49,7 +55,7 @@ agda --js --js-es6 --js-optimize --compile-dir=../build Timer.agda
 agda --js --js-es6 --js-optimize --compile-dir=../build Todo.agda
 ```
 
-### Только проверка типов (без JS)
+### Type checking only (no JS)
 
 ```bash
 agda Counter.agda
@@ -57,15 +63,15 @@ agda Timer.agda
 agda Todo.agda
 ```
 
-## Запуск в браузере
+## Running in browser
 
-1. Запустить сервер из корня проекта:
+1. Start server from project root:
    ```bash
    npm run dev
    ```
 
-2. Открыть в браузере:
-   - http://localhost:8080/ — главная страница
+2. Open in browser:
+   - http://localhost:8080/ — main page
    - http://localhost:8080/examples_html/counter.html — Counter
    - http://localhost:8080/examples_html/timer.html — Timer
    - http://localhost:8080/examples_html/todo.html — Todo
@@ -74,24 +80,27 @@ agda Todo.agda
    - http://localhost:8080/examples_html/task.html — Task Chain
    - http://localhost:8080/examples_html/websocket.html — WebSocket
    - http://localhost:8080/examples_html/router.html — Router
+   - http://localhost:8080/examples_html/transitions.html — Transitions
    - http://localhost:8080/examples_html/composition.html — Composition
+   - http://localhost:8080/examples_html/combinators.html — Combinators
+   - http://localhost:8080/examples_html/optic-dynamic.html — Dynamic Optics
 
-## Структура примера
+## Example structure
 
-Каждый пример использует Reactive Bindings (как Svelte):
+Every example uses Reactive Bindings (like Svelte):
 
 ```agda
--- Model: состояние приложения
-Model = ℕ  -- или record
+-- Model: application state
+Model = ℕ  -- or record
 
--- Msg: сообщения (события)
+-- Msg: messages (events)
 data Msg : Set where
   Inc Dec : Msg
 
--- update: обновление состояния
+-- update: state transition
 update : Msg → Model → Model
 
--- template: декларативный шаблон с привязками
+-- template: declarative template with bindings
 template : Node Model Msg
 template =
   div [ class "counter" ]
@@ -100,9 +109,9 @@ template =
     ∷ button [ onClick Inc ] [ text "+" ]
     ∷ [] )
 
--- app: сборка приложения
+-- app: assemble application
 app : ReactiveApp Model Msg
 app = mkReactiveApp init update template
 ```
 
-**Ключевое отличие от Virtual DOM**: `template` — это данные, не функция. Биндинги отслеживают, какие DOM-узлы нужно обновить.
+**Key difference from Virtual DOM**: `template` is data, not a function. Bindings track which DOM nodes need updating.

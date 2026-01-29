@@ -1,7 +1,7 @@
 {-# OPTIONS --without-K #-}
 
--- Cmd: команды (side effects)
--- В отличие от Event (подписки), Cmd выполняется при dispatch сообщения
+-- Cmd: commands (side effects)
+-- Unlike Event (subscriptions), Cmd executes when a message is dispatched
 
 module Agdelte.Core.Cmd where
 
@@ -18,24 +18,24 @@ private
     A B : Set
 
 ------------------------------------------------------------------------
--- Cmd — команды для побочных эффектов
+-- Cmd — commands for side effects
 ------------------------------------------------------------------------
 
 data Cmd (A : Set) : Set where
-  -- Пустая команда
+  -- Empty command
   ε : Cmd A
 
-  -- Композиция команд (выполняются параллельно)
+  -- Command composition (executed in parallel)
   _<>_ : Cmd A → Cmd A → Cmd A
 
-  -- HTTP запросы (простой API)
+  -- HTTP requests (simple API)
   httpGet  : String → (String → A) → (String → A) → Cmd A
   httpPost : String → String → (String → A) → (String → A) → Cmd A
 
-  -- Запуск Task (монадический API)
+  -- Run Task (monadic API)
   attempt : Task String → (Result String String → A) → Cmd A
 
-  -- === DOM эффекты ===
+  -- === DOM effects ===
   focus     : String → Cmd A                    -- CSS selector
   blur      : String → Cmd A                    -- CSS selector
   scrollTo  : ℕ → ℕ → Cmd A                     -- x, y
@@ -62,7 +62,7 @@ data Cmd (A : Set) : Set where
 infixr 5 _<>_
 
 ------------------------------------------------------------------------
--- Функторные операции
+-- Functor operations
 ------------------------------------------------------------------------
 
 mapCmd : (A → B) → Cmd A → Cmd B
@@ -71,7 +71,7 @@ mapCmd f (c₁ <> c₂) = mapCmd f c₁ <> mapCmd f c₂
 mapCmd f (httpGet url onOk onErr) = httpGet url (f ∘ onOk) (f ∘ onErr)
 mapCmd f (httpPost url body onOk onErr) = httpPost url body (f ∘ onOk) (f ∘ onErr)
 mapCmd f (attempt task handler) = attempt task (f ∘ handler)
--- DOM эффекты (no message)
+-- DOM effects (no message)
 mapCmd f (focus sel) = focus sel
 mapCmd f (blur sel) = blur sel
 mapCmd f (scrollTo x y) = scrollTo x y
@@ -92,15 +92,15 @@ mapCmd f back = back
 mapCmd f forward = forward
 
 ------------------------------------------------------------------------
--- Комбинаторы
+-- Combinators
 ------------------------------------------------------------------------
 
--- Batch из списка команд
+-- Batch from list of commands
 batch : List (Cmd A) → Cmd A
 batch [] = ε
 batch (c ∷ cs) = c <> batch cs
 
--- Проверка на пустоту (для оптимизации runtime)
+-- Check for emptiness (for runtime optimization)
 isEmpty : Cmd A → Set
 isEmpty ε = ⊤
   where open import Data.Unit using (⊤)

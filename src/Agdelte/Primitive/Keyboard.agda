@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K --guardedness #-}
 
--- Keyboard: события клавиатуры
+-- Keyboard: keyboard events
 
 module Agdelte.Primitive.Keyboard where
 
@@ -21,7 +21,7 @@ record KeyEvent : Set where
     ctrl  : Bool
     alt   : Bool
     shift : Bool
-    meta  : Bool      -- Cmd на Mac, Win на Windows
+    meta  : Bool      -- Cmd on Mac, Win on Windows
 
 open KeyEvent public
 
@@ -30,19 +30,19 @@ open KeyEvent public
 ------------------------------------------------------------------------
 
 postulate
-  -- Подписка на нажатие клавиш
+  -- Subscribe to key presses
   onKeyDown : ∀ {A : Set} → (KeyEvent → A) → Event A
 
-  -- Подписка на отпускание клавиш
+  -- Subscribe to key releases
   onKeyUp : ∀ {A : Set} → (KeyEvent → A) → Event A
 
-  -- Подписка на конкретную клавишу
+  -- Subscribe to specific key
   onKey : ∀ {A : Set} → String → A → Event A
 
-  -- Подписка на стрелки (возвращает событие когда нажата любая стрелка)
+  -- Subscribe to arrow keys (returns event when any arrow is pressed)
   onArrowKeys : ∀ {A : Set} → A → A → A → A → Event A  -- up, down, left, right
 
-  -- Подписка на стрелки + Escape
+  -- Subscribe to arrow keys + Escape
   onArrowKeysWithEscape : ∀ {A : Set} → A → A → A → A → A → Event A  -- up, down, left, right, escape
 
 {-# COMPILE JS onKeyDown = _ => handler => ({
@@ -127,10 +127,10 @@ postulate
 }) #-}
 
 ------------------------------------------------------------------------
--- Удобные обёртки
+-- Convenient wrappers
 ------------------------------------------------------------------------
 
--- Стрелки
+-- Arrows
 onArrowUp : ∀ {A : Set} → A → Event A
 onArrowUp = onKey "ArrowUp"
 
@@ -143,7 +143,7 @@ onArrowLeft = onKey "ArrowLeft"
 onArrowRight : ∀ {A : Set} → A → Event A
 onArrowRight = onKey "ArrowRight"
 
--- Специальные клавиши
+-- Special keys
 onEnter : ∀ {A : Set} → A → Event A
 onEnter = onKey "Enter"
 
@@ -162,7 +162,7 @@ onBackspace = onKey "Backspace"
 onDelete : ∀ {A : Set} → A → Event A
 onDelete = onKey "Delete"
 
--- WASD для игр
+-- WASD for games
 onW : ∀ {A : Set} → A → Event A
 onW = onKey "w"
 

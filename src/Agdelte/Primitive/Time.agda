@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K --guardedness #-}
 
--- Time: события времени
+-- Time: time events
 
 module Agdelte.Primitive.Time where
 
@@ -14,11 +14,11 @@ open import Agdelte.Core.Signal
 -- Time Types
 ------------------------------------------------------------------------
 
--- Время в миллисекундах (с эпохи Unix)
+-- Time in milliseconds (since Unix epoch)
 Time : Set
 Time = ℕ
 
--- Timestamp (высокоточный)
+-- Timestamp (high precision)
 Timestamp : Set
 Timestamp = Float
 
@@ -27,13 +27,13 @@ Timestamp = Float
 ------------------------------------------------------------------------
 
 postulate
-  -- Текущее время (один раз при подписке)
+  -- Current time (once on subscription)
   currentTime : ∀ {A : Set} → (Time → A) → Event A
 
-  -- Периодическое время
+  -- Periodic time
   every : ∀ {A : Set} → ℕ → (Time → A) → Event A
 
-  -- Высокоточное время (performance.now)
+  -- High precision time (performance.now)
   performanceNow : ∀ {A : Set} → (Timestamp → A) → Event A
 
 {-# COMPILE JS currentTime = _ => handler => ({
@@ -58,40 +58,40 @@ postulate
 }) #-}
 
 ------------------------------------------------------------------------
--- Удобные обёртки
+-- Convenient wrappers
 ------------------------------------------------------------------------
 
--- Текущее время как сигнал (обновляется каждую секунду)
+-- Current time as signal (updates every second)
 timePerSecond : ∀ {A : Set} → (Time → A) → Event A
 timePerSecond = every 1000
 
--- Каждый тик (16ms ≈ 60fps)
+-- Every tick (16ms ≈ 60fps)
 everyTick : ∀ {A : Set} → (Time → A) → Event A
 everyTick = every 16
 
--- Каждые n миллисекунд
+-- Every n milliseconds
 everyMs : ∀ {A : Set} → ℕ → (Time → A) → Event A
 everyMs = every
 
 ------------------------------------------------------------------------
--- Форматирование времени (через FFI)
+-- Time formatting (via FFI)
 ------------------------------------------------------------------------
 
 postulate
-  -- Форматирование времени в строку
+  -- Format time to string
   formatTime : Time → String
 
-  -- Парсинг времени из строки
+  -- Parse time from string
   parseTime : String → Time
 
 {-# COMPILE JS formatTime = t => new Date(t).toISOString() #-}
 {-# COMPILE JS parseTime = s => Date.parse(s) #-}
 
 ------------------------------------------------------------------------
--- Таймеры
+-- Timers
 ------------------------------------------------------------------------
 
--- Задержка выполнения
+-- Delayed execution
 postulate
   timeout : ∀ {A : Set} → ℕ → A → Event A
 
@@ -104,11 +104,11 @@ postulate
   }
 }) #-}
 
--- Debounce: событие после паузы
+-- Debounce: event after pause
 postulate
   debounce : ∀ {A : Set} → ℕ → Event A → Event A
 
--- Throttle: не чаще чем раз в n ms
+-- Throttle: no more often than once per n ms
 postulate
   throttle : ∀ {A : Set} → ℕ → Event A → Event A
 

@@ -1,9 +1,9 @@
 {-# OPTIONS --without-K --safe #-}
 
--- Polynomial Functors - теоретическое основание Agdelte
--- На базе работ Дэвида Спивака и Нельсона Ниу
+-- Polynomial Functors - theoretical foundation of Agdelte
+-- Based on work by David Spivak and Nelson Niu
 -- Poly = ∑(i : Pos) (Dir i → -)
--- MVP версия: без universe polymorphism
+-- MVP version: without universe polymorphism
 
 module Agdelte.Theory.Poly where
 
@@ -17,32 +17,32 @@ open import Function using (_∘_; id)
 -- Polynomial Functor
 ------------------------------------------------------------------------
 
--- Полином: набор позиций (выходов) и направлений (входов) для каждой позиции
+-- Polynomial: set of positions (outputs) and directions (inputs) for each position
 record Poly : Set₁ where
   constructor mkPoly
   field
-    Pos : Set             -- Позиции (возможные выходы)
-    Dir : Pos → Set       -- Направления для каждой позиции (входы)
+    Pos : Set             -- Positions (possible outputs)
+    Dir : Pos → Set       -- Directions for each position (inputs)
 
 open Poly public
 
 ------------------------------------------------------------------------
--- Interpretation: Poly как функтор Set → Set
+-- Interpretation: Poly as functor Set → Set
 ------------------------------------------------------------------------
 
--- Применение полинома к множеству
+-- Applying polynomial to a set
 ⟦_⟧ : Poly → Set → Set
 ⟦ P ⟧ X = Σ (Pos P) λ p → Dir P p → X
 
--- map для функтора
+-- map for functor
 mapPoly : (P : Poly) {A B : Set} → (A → B) → ⟦ P ⟧ A → ⟦ P ⟧ B
 mapPoly P f (p , k) = p , f ∘ k
 
 ------------------------------------------------------------------------
--- Lens: морфизм между полиномами
+-- Lens: morphism between polynomials
 ------------------------------------------------------------------------
 
--- Линза — это пара функций: вперёд по позициям, назад по направлениям
+-- Lens is a pair of functions: forward on positions, backward on directions
 record Lens (P Q : Poly) : Set where
   constructor mkLens
   field
@@ -51,74 +51,74 @@ record Lens (P Q : Poly) : Set where
 
 open Lens public
 
--- Идентичная линза
+-- Identity lens
 idLens : {P : Poly} → Lens P P
 idLens = mkLens id (λ _ → id)
 
--- Композиция линз
+-- Composition of lenses
 _∘L_ : {P Q R : Poly} → Lens Q R → Lens P Q → Lens P R
 (mkLens f g) ∘L (mkLens h k) = mkLens (f ∘ h) (λ p → k p ∘ g (h p))
 
 ------------------------------------------------------------------------
--- Coalgebra: система с состоянием
+-- Coalgebra: system with state
 ------------------------------------------------------------------------
 
--- Коалгебра полинома P — это тип с состоянием, реализующий интерфейс P
+-- Coalgebra of polynomial P is a type with state, implementing interface P
 record Coalg (P : Poly) : Set₁ where
   constructor mkCoalg
   field
     State : Set
-    observe : State → Pos P                           -- Что выдаём
-    update : (s : State) → Dir P (observe s) → State  -- Как обновляемся
+    observe : State → Pos P                           -- What we output
+    update : (s : State) → Dir P (observe s) → State  -- How we update
 
 open Coalg public
 
 ------------------------------------------------------------------------
--- Стандартные полиномы
+-- Standard polynomials
 ------------------------------------------------------------------------
 
--- Тождественный полином: y (один вход, один выход)
+-- Identity polynomial: y (one input, one output)
 𝕪 : Poly
 𝕪 = mkPoly ⊤ (λ _ → ⊤)
 
--- Константный полином: A (только выходы, без входов)
+-- Constant polynomial: A (only outputs, no inputs)
 Const : Set → Poly
 Const A = mkPoly A (λ _ → ⊥)
 
--- Мономиальный полином: A · y^B
+-- Monomial polynomial: A · y^B
 Mono : Set → Set → Poly
 Mono A B = mkPoly A (λ _ → B)
 
 ------------------------------------------------------------------------
--- Моноидальные структуры
+-- Monoidal structures
 ------------------------------------------------------------------------
 
--- Параллельная композиция (тензорное произведение): P ⊗ Q
--- (p, q) позиция, направления раздельные
+-- Parallel composition (tensor product): P ⊗ Q
+-- (p, q) position, separate directions
 _⊗_ : Poly → Poly → Poly
 P ⊗ Q = mkPoly
   (Pos P × Pos Q)
   (λ { (p , q) → Dir P p ⊎ Dir Q q })
 
--- Сумма (выбор): P ⊕ Q
+-- Sum (choice): P ⊕ Q
 _⊕_ : Poly → Poly → Poly
 P ⊕ Q = mkPoly
   (Pos P ⊎ Pos Q)
   (λ { (inj₁ p) → Dir P p ; (inj₂ q) → Dir Q q })
 
--- Последовательная композиция: P ◁ Q
--- Позиция — пара (p, функция из Dir P p в Pos Q)
--- Направление — зависимая пара
+-- Sequential composition: P ◁ Q
+-- Position is a pair (p, function from Dir P p to Pos Q)
+-- Direction is a dependent pair
 _◁_ : Poly → Poly → Poly
 P ◁ Q = mkPoly
   (Σ (Pos P) λ p → Dir P p → Pos Q)
   (λ { (p , f) → Σ (Dir P p) λ d → Dir Q (f d) })
 
 ------------------------------------------------------------------------
--- Wiring diagrams (связующие диаграммы)
+-- Wiring diagrams (connecting diagrams)
 ------------------------------------------------------------------------
 
--- Параллельное соединение коалгебр
+-- Parallel connection of coalgebras
 parallel : {P Q : Poly} → Coalg P → Coalg Q → Coalg (P ⊗ Q)
 parallel C D = mkCoalg
   (State C × State D)
@@ -126,7 +126,7 @@ parallel C D = mkCoalg
   (λ { (s , t) (inj₁ d) → update C s d , t
      ; (s , t) (inj₂ d) → s , update D t d })
 
--- Выбор между коалгебрами
+-- Choice between coalgebras
 choice : {P Q : Poly} → Coalg P → Coalg Q → Coalg (P ⊕ Q)
 choice C D = mkCoalg
   (State C ⊎ State D)
@@ -134,10 +134,10 @@ choice C D = mkCoalg
   (λ { (inj₁ s) d → inj₁ (update C s d) ; (inj₂ t) d → inj₂ (update D t d) })
 
 ------------------------------------------------------------------------
--- Утилиты
+-- Utilities
 ------------------------------------------------------------------------
 
--- Трансформация коалгебры через линзу
+-- Transforming coalgebra through lens
 transformCoalg : {P Q : Poly} → Lens P Q → Coalg P → Coalg Q
 transformCoalg (mkLens f g) C = mkCoalg
   (State C)

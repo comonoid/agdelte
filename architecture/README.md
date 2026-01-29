@@ -1,25 +1,22 @@
 # Architecture Notes
 
-> **Main documentation moved to [doc/](../doc/).**
+> **Main documentation: [doc/](../doc/)**
 >
-> This directory contains supplementary design documents.
+> This directory contains design documents for **planned phases** (Phase 7+).
+> Completed phase documentation has been moved to [doc/](../doc/).
 
 ## Documents
 
 | Document | Description |
 |----------|-------------|
-| [polynomials.md](polynomials.md) | **Polynomial functors roadmap and phases** |
-| [combinators.md](combinators.md) | All combinators with types and examples |
-| [time-model.md](time-model.md) | Time model: ticks, animationFrame, dt |
 | [concurrency.md](concurrency.md) | Concurrency + Protocols (Phase 7, planned) |
-| [vs-svelte.md](vs-svelte.md) | Detailed comparison with Svelte 5 |
-| [vs-vue3.md](vs-vue3.md) | Feature comparison with Vue 3 |
 
-## Core Documentation
+## Completed Phase Documentation (in doc/)
 
-See [doc/](../doc/) for:
-
-- **[architecture.md](../doc/architecture.md)** — Core architecture and design
-- **[api.md](../doc/api.md)** — API reference
-- **[runtime.md](../doc/runtime.md)** — JavaScript runtime
-- **[examples.md](../doc/examples.md)** — Examples guide
+| Document | Description |
+|----------|-------------|
+| [polynomials.md](../doc/polynomials.md) | Polynomial functors: theory and phase planning |
+| [combinators.md](../doc/combinators.md) | All combinators with types and examples |
+| [time-model.md](../doc/time-model.md) | Time model: ticks, dt |
+| [vs-svelte.md](../doc/vs-svelte.md) | Detailed comparison with Svelte 5 |
+| [vs-vue3.md](../doc/vs-vue3.md) | Feature comparison with Vue 3 |

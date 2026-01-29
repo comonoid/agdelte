@@ -34,12 +34,25 @@ From `Agdelte.Reactive.Node`:
 
 ```agda
 data Node (Model Msg : Set) : Set₁ where
-  text    : String → Node Model Msg
-  bind    : Binding Model String → Node Model Msg
-  elem    : String → List (Attr Model Msg) → List (Node Model Msg) → Node Model Msg
-  empty   : Node Model Msg
-  when    : (Model → Bool) → Node Model Msg → Node Model Msg
-  foreach : ∀ {A : Set} → (Model → List A) → (A → ℕ → Node Model Msg) → Node Model Msg
+  text         : String → Node Model Msg
+  bind         : Binding Model String → Node Model Msg
+  elem         : String → List (Attr Model Msg) → List (Node Model Msg) → Node Model Msg
+  empty        : Node Model Msg
+  when         : (Model → Bool) → Node Model Msg → Node Model Msg
+  foreach      : ∀ {A} → (Model → List A) → (A → ℕ → Node Model Msg) → Node Model Msg
+  foreachKeyed : ∀ {A} → (Model → List A) → (A → String) → (A → ℕ → Node Model Msg) → Node Model Msg
+  whenT        : (Model → Bool) → Transition → Node Model Msg → Node Model Msg
+```
+
+### Transition (Phase 3)
+
+```agda
+record Transition : Set where
+  constructor mkTransition
+  field
+    enterClass : String    -- CSS class on enter
+    leaveClass : String    -- CSS class on leave
+    duration   : ℕ         -- ms before DOM removal on leave
 ```
 
 ### Binding
@@ -96,13 +109,43 @@ data Attr (Model Msg : Set) : Set₁ where
 | `checkedBind` | `(Model → Bool) → Attr Model Msg` | Reactive checked |
 | `keyAttr` | `String → Attr Model Msg` | data-key |
 | `styles` | `String → String → Attr Model Msg` | Static style |
+| `vmodel` | `(Model → String) → (String → Msg) → List (Attr Model Msg)` | Two-way binding (valueBind + onInput) |
 
-### Component Composition
+### Component Composition (Phase 4)
 
 ```agda
-focusNode : (Outer → Inner) → Node Inner Msg → Node Outer Msg
-focusBinding : (Outer → Inner) → Binding Inner A → Binding Outer A
+zoomNode : (M → M') → (Msg' → Msg) → Node M' Msg' → Node M Msg
+zoomAttr : (M → M') → (Msg' → Msg) → Attr M' Msg' → Attr M Msg
 ```
+
+`zoomNode` maps both model AND messages — child components are fully reusable:
+
+```agda
+zoomNode proj₁ LeftMsg counterTemplate
+zoomNode proj₂ RightMsg counterTemplate
+```
+
+---
+
+## Lens (Phase 4)
+
+From `Agdelte.Reactive.Lens`:
+
+```agda
+record Lens (Outer Inner : Set) : Set where
+  constructor mkLens
+  field
+    get : Outer → Inner
+    set : Inner → Outer → Outer
+  modify : (Inner → Inner) → Outer → Outer
+```
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `idLens` | `Lens A A` | Identity lens |
+| `_∘L_` | `Lens B C → Lens A B → Lens A C` | Composition |
+| `fstLens` | `Lens (A × B) A` | First of pair |
+| `sndLens` | `Lens (A × B) B` | Second of pair |
 
 ---
 
@@ -129,6 +172,19 @@ record KeyboardEvent : Set where
     key, code : String
     ctrl, alt, shift, meta : Bool
 ```
+
+#### Keyboard Helpers
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `onKey` | `String → A → Event A` | Single key |
+| `onKeys` | `List (String × A) → Event A` | Multiple keys (one listener) |
+| `onKeyWhen` | `(KeyboardEvent → Bool) → A → Event A` | Custom predicate |
+| `onCtrlKey` | `String → A → Event A` | Ctrl+key |
+| `onEnter` | `A → Event A` | Enter key |
+| `onEscape` | `A → Event A` | Escape key |
+| `onArrowUp/Down/Left/Right` | `A → Event A` | Arrow keys |
+| `onKeyReleased` | `String → A → Event A` | Key release |
 
 ### WebSocket
 
@@ -159,6 +215,117 @@ data WsMsg : Set where
 | `filterE` | `(A → Bool) → Event A → Event A` | Filter |
 | `debounce` | `ℕ → Event A → Event A` | After N ms pause |
 | `throttle` | `ℕ → Event A → Event A` | Max once per N ms |
+| `mergeAll` | `List (Event A) → Event A` | Merge list |
+| `_<\|>_` | `Event A → Event A → Event A` | Infix merge |
+| `_<$>_` | `(A → B) → Event A → Event B` | Infix mapE |
+
+### Stateful Combinators (Phase 5)
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `foldE` | `A → (B → A → A) → Event B → Event A` | Accumulate state across events |
+| `mapFilterE` | `(B → Maybe A) → Event B → Event A` | Map + filter in one step |
+| `switchE` | `Event A → Event (Event A) → Event A` | Dynamic event source switching |
+
+### Derived Combinators (Phase 5)
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `accumE` | `A → Event (A → A) → Event A` | Apply function events to accumulator |
+| `mapAccum` | `(B → S → S × A) → S → Event B → Event A` | Map with state |
+| `gate` | `(A → Bool) → Event A → Event A` | Synonym for filterE |
+
+---
+
+## Optics (Phase 6)
+
+From `Agdelte.Reactive.Optic`:
+
+### Prism
+
+```agda
+record Prism (S A : Set) : Set where
+  field
+    match : S → Maybe A
+    build : A → S
+
+_∘P_ : Prism B C → Prism A B → Prism A C
+```
+
+### Traversal
+
+```agda
+record Traversal (S A : Set) : Set where
+  field
+    toList  : S → List A
+    overAll : (A → A) → S → S
+```
+
+### Affine
+
+```agda
+record Affine (S A : Set) : Set where
+  field
+    preview : S → Maybe A
+    set     : A → S → S
+
+_∘A_ : Affine B C → Affine A B → Affine A C
+ixList : ℕ → Affine (List A) A
+lensToAffine : Lens S A → Affine S A
+prismToAffine : Prism S A → Affine S A
+```
+
+### Unified Optic
+
+```agda
+record Optic (S A : Set) : Set where
+  field
+    peek : S → Maybe A
+    over : (A → A) → S → S
+
+_∘O_ : Optic B C → Optic A B → Optic A C
+fromLens : Lens S A → Optic S A
+fromPrism : Prism S A → Optic S A
+fromAffine : Affine S A → Optic S A
+fromTraversal : Traversal S A → Optic S A
+```
+
+### Message Routing
+
+```agda
+routeMsg : Prism Msg Msg' → Lens M M' → (Msg' → M' → M') → Msg → M → M
+```
+
+### Typed Component Composition
+
+In `Agdelte.Reactive.Node`:
+
+```agda
+zoomNodeL : Lens M M' → Prism Msg Msg' → Node M' Msg' → Node M Msg
+zoomAttrL : Lens M M' → Prism Msg Msg' → Attr M' Msg' → Attr M Msg
+```
+
+---
+
+## Testing (Phase 5)
+
+From `Agdelte.Test.Interpret`:
+
+```agda
+SimEvent : Set → Set
+SimEvent A = List (List A)   -- outer = ticks, inner = simultaneous events
+```
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `simMapE` | `(A → B) → SimEvent A → SimEvent B` | Map |
+| `simFilterE` | `(A → Bool) → SimEvent A → SimEvent A` | Filter |
+| `simFoldE` | `A → (B → A → A) → SimEvent B → SimEvent A` | Fold |
+| `simAccumE` | `A → SimEvent (A → A) → SimEvent A` | Accumulate |
+| `simMerge` | `SimEvent A → SimEvent A → SimEvent A` | Merge |
+| `simMapFilterE` | `(A → Maybe B) → SimEvent A → SimEvent B` | Map + filter |
+| `interpretApp` | `(B → A → A) → A → SimEvent B → List A` | Test update logic |
+| `collectN` | `ℕ → SimEvent A → SimEvent A` | Collect N ticks |
 
 ---
 

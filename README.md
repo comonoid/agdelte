@@ -183,19 +183,20 @@ The key difference from Virtual DOM: `template` is **data**, not a function. Bin
 |----------|-------------|
 | [doc/](doc/) | Main documentation |
 | [doc/architecture.md](doc/architecture.md) | Core architecture and design |
-| [doc/api.md](doc/api.md) | API reference (Event, Cmd, Task, App, Html) |
+| [doc/api.md](doc/api.md) | API reference (Node, Event, Cmd, Task, Optic) |
 | [doc/runtime.md](doc/runtime.md) | JavaScript runtime implementation |
 | [doc/examples.md](doc/examples.md) | Guide to all examples |
 
-### Additional Notes
+### Additional Documents
 
 | Document | Description |
 |----------|-------------|
-| [architecture/combinators.md](architecture/combinators.md) | All combinators with types |
-| [architecture/time-model.md](architecture/time-model.md) | Time model: ticks, dt |
-| [architecture/concurrency.md](architecture/concurrency.md) | Concurrency design (planned) |
-| [architecture/vs-svelte.md](architecture/vs-svelte.md) | Comparison with Svelte 5 |
-| [architecture/vs-vue3.md](architecture/vs-vue3.md) | Comparison with Vue 3 |
+| [doc/combinators.md](doc/combinators.md) | All combinators with types |
+| [doc/time-model.md](doc/time-model.md) | Time model: ticks, dt |
+| [doc/polynomials.md](doc/polynomials.md) | Polynomial functors: theory and phases |
+| [doc/vs-svelte.md](doc/vs-svelte.md) | Comparison with Svelte 5 |
+| [doc/vs-vue3.md](doc/vs-vue3.md) | Comparison with Vue 3 |
+| [architecture/concurrency.md](architecture/concurrency.md) | Concurrency design (Phase 7, planned) |
 
 ## Project Structure
 
@@ -203,7 +204,9 @@ The key difference from Virtual DOM: `template` is **data**, not a function. Bin
 src/
   Agdelte/
     ├── Reactive/                -- Reactive templates (Svelte-style)
-    │   └── Node.agda            -- Node, Binding, ReactiveApp
+    │   ├── Node.agda            -- Node, Binding, ReactiveApp
+    │   ├── Lens.agda            -- Lens, fstLens, sndLens
+    │   └── Optic.agda           -- Prism, Traversal, Affine, Optic, routeMsg
     │
     ├── Core/                    -- Effects
     │   ├── Signal.agda          -- Coinductive stream
@@ -213,23 +216,25 @@ src/
     │
     ├── Theory/                  -- Mathematical foundation (optional)
     │   ├── Poly.agda            -- Polynomial functors, Coalg, Lens
-    │   ├── PolySignal.agda      -- Signal ≅ Coalg (Mono A ⊤)
-    │   └── PolyApp.agda         -- App ≅ Coalg (AppPoly)
+    │   └── PolySignal.agda      -- Signal ≅ Coalg (Mono A ⊤)
     │
-    └── Html/                    -- Typed HTML elements
-        ├── Types.agda           -- Html, Attr types
-        └── Elements.agda        -- div, span, button, etc.
+    └── Test/                    -- Tests
+        ├── Interpret.agda       -- Pure event testing (SimEvent)
+        └── OpticTest.agda       -- 16 optic proofs
 
 examples/
     Counter.agda                 -- Counter with reactive bindings
     Timer.agda                   -- Stopwatch with interval
     Todo.agda                    -- TodoMVC-style app
-    KeyboardDemo.agda            -- Global keyboard events
-    HttpDemo.agda                -- HTTP requests
-    TaskDemo.agda                -- Task chains (do-notation)
-    WebSocketDemo.agda           -- WebSocket communication
-    RouterDemo.agda              -- SPA routing
-    CompositionDemo.agda         -- App composition (focusNode)
+    Keyboard.agda            -- Global keyboard events
+    Http.agda                -- HTTP requests
+    Task.agda                -- Task chains (do-notation)
+    WebSocket.agda           -- WebSocket communication
+    Router.agda              -- SPA routing
+    Composition.agda         -- App composition (zoomNode)
+    Transitions.agda         -- CSS enter/leave animations (whenT)
+    Combinators.agda         -- Event pipeline (foldE, mapFilterE)
+    OpticDynamic.agda        -- Dynamic optics (ixList, Traversal, _∘O_)
 
 runtime/
     reactive.js                  -- Main: runReactiveApp, renderNode, updateBindings
@@ -324,9 +329,8 @@ See [examples/README.md](examples/README.md) for details.
 
 **Phase 1: MVP** ✅
 
-- Core: Signal, Event, Cmd, Task, App
+- Core: Signal, Event, Cmd, Task
 - Primitives: interval, animationFrame, keyboard, mouse, HTTP
-- Html: elements, attributes, events
 - Runtime: event loop
 
 **Phase 2: Reactive Architecture** ✅
@@ -334,50 +338,51 @@ See [examples/README.md](examples/README.md) for details.
 - ReactiveApp, Node, Binding — Svelte-style, no Virtual DOM
 - All 9 examples migrated (Counter, Timer, Todo, Keyboard, HTTP, Task, WebSocket, Router, Composition)
 - Runtime with direct DOM updates via reactive bindings
-- focusNode for component composition
+- zoomNode for component composition
 
-**Phase 3: Incremental updates**
+**Phase 3: Incremental Updates** ✅
 
-- Keyed foreach — update by key, not by index
-- Nested bindings inside foreach elements
-- `when` with enter/leave animations
+- Binding scopes — each `when`/`foreach` block gets its own scope; cleanup on destroy
+- `foreachKeyed` — key-based list reconciliation (add/remove/reorder without rebuild)
+- `whenT` — conditional rendering with CSS enter/leave transitions
 
-**Phase 4: Widget Lenses**
+**Phase 4: Widget Lenses** ✅
 
 - `Lens Outer Inner` with get/set/modify
-- Lens composition `_∘L_`
-- Integration with Node/Binding (focusNode → full Lens)
+- Lens composition `_∘L_`, `fstLens`, `sndLens`
+- `zoomNode` — maps both model AND messages for full component composition
 
-**Phase 5: Combinators and testing**
+**Phase 5: Combinators & Testing** ✅
 
-- Event transformations: filterE, snapshot, foldp, switchE
-- Accumulators: accumE, accumB, mapAccum
-- Testing: interpret, collectN — pure event testing without browser
-- See [architecture/combinators.md](architecture/combinators.md)
+- Stateful Event constructors: `foldE`, `mapFilterE`, `switchE` (runtime maintains state)
+- Derived combinators: `accumE`, `mapAccum`, `gate`
+- Pure testing: `Agdelte.Test.Interpret` — `SimEvent`, `simFoldE`, `interpretApp`, propositional equality proofs
 
-**Phase 6: Widget Networks + Big Lens**
+**Phase 6: Optics + Widget Networks** ✅
 
-- Polynomial wiring diagrams (`_⊗_`, `_⊕_`, `wire`)
-- Declarative widget topology
-- Big Lens — navigate/modify entire network
+- Optics hierarchy: `Prism`, `Traversal`, `Affine`, unified `Optic` with `_∘O_`
+- `zoomNodeL` / `zoomAttrL` — typed component composition via Lens + Prism
+- `routeMsg` — automatic message routing via Prism + Lens
+- `ixList` — indexed list access as Affine
+- 16 propositional equality proofs, Optic example
 
-**Phase 7: Concurrency + Protocols**
+**Phase 7: Concurrency + Distribution**
 
-- Workers as agents in polynomial network
-- Channels = polynomial directions (Dir)
-- Protocol Lens — typed agent communication
+- Agents as polynomial coalgebras, channels, structured concurrency
+- `ProcessOptic` / `RemoteOptic` — same `Optic` interface across processes and hosts
+- Big Optic spans local widgets, processes, and remote hosts uniformly
 - See [architecture/concurrency.md](architecture/concurrency.md)
 
 **Phase 8: Developer Experience**
 
-- DevTools via Big Lens (network inspection)
+- DevTools via Big Optic (network inspection across processes/hosts)
 - Time-travel debugging
 - Hot reload
 
 **Phase 9: Formal properties + Session types**
 
+- `Optic ≅ Poly.Lens` for monomial case — formal connection
 - Lens laws proofs
-- Dependent protocols
 - ReactiveApp ↔ Coalg formal connection
 
 ## Philosophy

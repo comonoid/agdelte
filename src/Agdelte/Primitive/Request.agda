@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K --guardedness #-}
 
--- Request: HTTP запросы
+-- Request: HTTP requests
 
 module Agdelte.Primitive.Request where
 
@@ -14,11 +14,11 @@ open import Agdelte.Core.Event
 -- HTTP Request Types
 ------------------------------------------------------------------------
 
--- Метод запроса
+-- Request method
 data Method : Set where
   GET POST PUT DELETE PATCH : Method
 
--- Конфигурация запроса
+-- Request configuration
 record RequestConfig : Set where
   constructor mkRequest
   field
@@ -29,7 +29,7 @@ record RequestConfig : Set where
 
 open RequestConfig public
 
--- Результат запроса
+-- Request result
 data Response (A : Set) : Set where
   success : A → Response A
   failure : String → Response A
@@ -39,21 +39,21 @@ data Response (A : Set) : Set where
 ------------------------------------------------------------------------
 
 postulate
-  -- Выполнить HTTP запрос
+  -- Execute HTTP request
   httpRequest : ∀ {A B : Set}
               → RequestConfig
               → (String → A)    -- onSuccess (JSON string)
               → (String → A)    -- onError
               → Event A
 
-  -- GET запрос
+  -- GET request
   httpGet : ∀ {A : Set}
           → String           -- URL
           → (String → A)     -- onSuccess
           → (String → A)     -- onError
           → Event A
 
-  -- POST запрос
+  -- POST request
   httpPost : ∀ {A : Set}
            → String          -- URL
            → String          -- Body (JSON)
@@ -102,14 +102,14 @@ postulate
 }) #-}
 
 ------------------------------------------------------------------------
--- Утилиты
+-- Utilities
 ------------------------------------------------------------------------
 
--- Простой GET без обработки ошибок (возвращает Maybe)
+-- Simple GET without error handling (returns Maybe)
 simpleGet : ∀ {A : Set}
           → String
           → (String → A)
-          → A              -- Значение при ошибке
+          → A              -- Value on error
           → Event A
 simpleGet url onSuccess onError =
   httpGet url onSuccess (λ _ → onError)

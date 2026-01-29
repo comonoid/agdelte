@@ -6,6 +6,10 @@ _build/
 MAlonzo/
 build/
 
+# Agda JS backend intermediate files (use --compile-dir=_build instead)
+jAgda.*.js
+jAgda.*.mjs
+
 # Node
 node_modules/
 

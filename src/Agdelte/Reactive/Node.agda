@@ -32,14 +32,33 @@ record Binding (Model : Set) (A : Set) : Set where
 
 open Binding public
 
+-- String equality as Bool (used by all string bindings)
+private
+  eqStr : String → String → Bool
+  eqStr a b with a ≟ b
+  ... | yes _ = true
+  ... | no _  = false
+
 -- String binding with string equality
 stringBinding : ∀ {Model} → (Model → String) → Binding Model String
-stringBinding f = mkBinding f eqString
-  where
-    eqString : String → String → Bool
-    eqString a b with a ≟ b
-    ... | yes _ = true
-    ... | no _  = false
+stringBinding f = mkBinding f eqStr
+
+-- Bool-to-String binding (for disabled, checked, etc.)
+boolBinding : ∀ {Model} → (Model → Bool) → Binding Model String
+boolBinding f = mkBinding (λ m → if f m then "true" else "") eqStr
+
+------------------------------------------------------------------------
+-- Transition: enter/leave animations for when
+------------------------------------------------------------------------
+
+record Transition : Set where
+  constructor mkTransition
+  field
+    enterClass : String    -- CSS class added on enter
+    leaveClass : String    -- CSS class added on leave
+    duration   : ℕ         -- ms to wait before removing DOM on leave
+
+open Transition public
 
 ------------------------------------------------------------------------
 -- Node: Reactive template structure
@@ -81,6 +100,13 @@ data Node (Model Msg : Set) : Set₁ where
   -- Dynamic list of children (for Todo-like lists)
   -- Runtime rebuilds this section when list changes
   foreach : ∀ {A : Set} → (Model → List A) → (A → ℕ → Node Model Msg) → Node Model Msg
+
+  -- Keyed dynamic list: key-based reconciliation (add/remove/reorder)
+  -- Items with same key reuse DOM nodes; new keys get fresh renders
+  foreachKeyed : ∀ {A : Set} → (Model → List A) → (A → String) → (A → ℕ → Node Model Msg) → Node Model Msg
+
+  -- Conditional rendering with enter/leave CSS transitions
+  whenT : (Model → Bool) → Transition → Node Model Msg → Node Model Msg
 
 ------------------------------------------------------------------------
 -- Smart constructors for common patterns
@@ -176,29 +202,24 @@ disabled : ∀ {Model Msg} → Attr Model Msg
 disabled = attr "disabled" "true"
 
 disabledBind : ∀ {Model Msg} → (Model → Bool) → Attr Model Msg
-disabledBind f = attrBind "disabled" (mkBinding (λ m → if f m then "true" else "") eqStr)
-  where
-    eqStr : String → String → Bool
-    eqStr a b with a ≟ b
-    ... | yes _ = true
-    ... | no _  = false
+disabledBind f = attrBind "disabled" (boolBinding f)
 
 checked : ∀ {Model Msg} → Attr Model Msg
 checked = attr "checked" "true"
 
 checkedBind : ∀ {Model Msg} → (Model → Bool) → Attr Model Msg
-checkedBind f = attrBind "checked" (mkBinding (λ m → if f m then "true" else "") eqStr)
-  where
-    eqStr : String → String → Bool
-    eqStr a b with a ≟ b
-    ... | yes _ = true
-    ... | no _  = false
+checkedBind f = attrBind "checked" (boolBinding f)
 
 keyAttr : ∀ {Model Msg} → String → Attr Model Msg
 keyAttr = attr "data-key"
 
 styles : ∀ {Model Msg} → String → String → Attr Model Msg
 styles = style
+
+-- Two-way binding: valueBind + onInput in one step
+-- Usage: input (vmodel getText SetText) []
+vmodel : ∀ {Model Msg} → (Model → String) → (String → Msg) → List (Attr Model Msg)
+vmodel get msg = valueBind get ∷ onInput msg ∷ []
 
 ------------------------------------------------------------------------
 -- ReactiveApp: Application with reactive template
@@ -220,32 +241,56 @@ open ReactiveApp public
 --   subs : Model → Event Msg
 
 ------------------------------------------------------------------------
--- Focus: zoom into part of model (like lens)
+-- Internal: transform binding to work with larger model
 ------------------------------------------------------------------------
 
--- Transform binding to work with larger model
 focusBinding : ∀ {Model Model' A} → (Model → Model') → Binding Model' A → Binding Model A
 focusBinding get b = mkBinding (extract b ∘ get) (equals b)
 
--- Transform node to work with larger model
-{-# TERMINATING #-}  -- mutual recursion with lists
-focusNode : ∀ {Model Model' Msg} → (Model → Model') → Node Model' Msg → Node Model Msg
-focusNode get (text s) = text s
-focusNode get (bind b) = bind (focusBinding get b)
-focusNode get (elem tag attrs children) =
-  elem tag (map (focusAttr get) attrs) (map (focusNode get) children)
-  where
-    focusAttr : ∀ {Model Model' Msg} → (Model → Model') → Attr Model' Msg → Attr Model Msg
-    focusAttr get (attr name val) = attr name val
-    focusAttr get (attrBind name b) = attrBind name (focusBinding get b)
-    focusAttr get (on event msg) = on event msg
-    focusAttr get (onValue event handler) = onValue event handler
-    focusAttr get (style name val) = style name val
-    focusAttr get (styleBind name b) = styleBind name (focusBinding get b)
-focusNode get empty = empty
-focusNode get (when cond node) = when (cond ∘ get) (focusNode get node)
-focusNode get (foreach {A} getList render) =
-  foreach (getList ∘ get) (λ a i → focusNode get (render a i))
+------------------------------------------------------------------------
+-- Zoom: transform both Model AND Msg (full lens composition)
+------------------------------------------------------------------------
+
+-- Transform attribute: remap model and messages
+zoomAttr : ∀ {M M' Msg Msg'} → (M → M') → (Msg' → Msg) → Attr M' Msg' → Attr M Msg
+zoomAttr get wrap (attr name val) = attr name val
+zoomAttr get wrap (attrBind name b) = attrBind name (focusBinding get b)
+zoomAttr get wrap (on event msg) = on event (wrap msg)
+zoomAttr get wrap (onValue event handler) = onValue event (wrap ∘ handler)
+zoomAttr get wrap (style name val) = style name val
+zoomAttr get wrap (styleBind name b) = styleBind name (focusBinding get b)
+
+-- Transform node: remap both model extraction and message dispatching
+-- This is the key for proper component composition!
+{-# TERMINATING #-}
+zoomNode : ∀ {M M' Msg Msg'} → (M → M') → (Msg' → Msg) → Node M' Msg' → Node M Msg
+zoomNode get wrap (text s) = text s
+zoomNode get wrap (bind b) = bind (focusBinding get b)
+zoomNode get wrap (elem tag attrs children) =
+  elem tag (map (zoomAttr get wrap) attrs) (map (zoomNode get wrap) children)
+zoomNode get wrap empty = empty
+zoomNode get wrap (when cond node) = when (cond ∘ get) (zoomNode get wrap node)
+zoomNode get wrap (foreach {A} getList render) =
+  foreach (getList ∘ get) (λ a i → zoomNode get wrap (render a i))
+zoomNode get wrap (foreachKeyed {A} getList keyFn render) =
+  foreachKeyed (getList ∘ get) keyFn (λ a i → zoomNode get wrap (render a i))
+zoomNode get wrap (whenT cond trans node) =
+  whenT (cond ∘ get) trans (zoomNode get wrap node)
+
+------------------------------------------------------------------------
+-- Zoom with Lens + Prism (Phase 6: typed component composition)
+------------------------------------------------------------------------
+
+open import Agdelte.Reactive.Optic using (Prism; Lens; get; build)
+
+-- zoomNode with explicit Lens (model) + Prism (messages)
+-- Same as zoomNode but with structured optic types
+zoomNodeL : ∀ {M M' Msg Msg'} → Lens M M' → Prism Msg Msg' → Node M' Msg' → Node M Msg
+zoomNodeL l p = zoomNode (get l) (build p)
+
+-- zoomAttr with Lens + Prism
+zoomAttrL : ∀ {M M' Msg Msg'} → Lens M M' → Prism Msg Msg' → Attr M' Msg' → Attr M Msg
+zoomAttrL l p = zoomAttr (get l) (build p)
 
 ------------------------------------------------------------------------
 -- How the runtime works (conceptually):

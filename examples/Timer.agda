@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K #-}
 
--- Timer: пример с внешними событиями (interval)
+-- Timer: example with external events (interval)
 -- Reactive approach: no Virtual DOM, direct bindings
 
 module Timer where
@@ -21,7 +21,7 @@ open import Agdelte.Reactive.Node
 record Model : Set where
   constructor mkModel
   field
-    tenths  : ℕ    -- Десятые доли секунды
+    tenths  : ℕ    -- Tenths of a second
     running : Bool
 
 open Model public
@@ -45,7 +45,7 @@ data Msg : Set where
 updateModel : Msg → Model → Model
 updateModel Tick m = if running m then record m { tenths = suc (tenths m) } else m
 updateModel Toggle m = record m { running = not (running m) }
-updateModel Reset m = record m { tenths = 0 }  -- Не останавливает таймер!
+updateModel Reset m = record m { tenths = 0 }  -- Does not stop the timer!
 
 ------------------------------------------------------------------------
 -- Formatting
@@ -94,7 +94,7 @@ timerTemplate =
 
 subs : Model → Event Msg
 subs m = if running m
-         then interval 100 Tick  -- Каждые 0.1 секунды
+         then interval 100 Tick  -- Every 0.1 seconds
          else never
 
 ------------------------------------------------------------------------
