@@ -13,6 +13,131 @@
 // WebSocket connections pool (shared with commands)
 export const wsConnections = new Map();
 
+// Worker channel connections (shared with commands for channelSend)
+export const channelConnections = new Map();
+
+// ─── Worker Pool ────────────────────────────────────────────────────
+const POOL_IDLE_TIMEOUT = 30000; // 30s without tasks → cleanup
+const POOL_CHECK_INTERVAL = 5000;
+
+class WorkerPool {
+  constructor(maxSize, scriptUrl) {
+    this.maxSize = maxSize;
+    this.scriptUrl = scriptUrl;
+    this.idle = [];      // idle Worker instances
+    this.active = 0;     // count of active tasks
+    this.queue = [];     // pending tasks: { input, onMessage, onError, resolve }
+    this.lastUsed = Date.now();
+    this._cleanupTimer = setInterval(() => this._cleanup(), POOL_CHECK_INTERVAL);
+  }
+
+  submit(input, onMessage, onError) {
+    this.lastUsed = Date.now();
+    let cancelled = false;
+    let activeWorker = null;
+
+    const task = { input, onMessage, onError, cancelled: false };
+
+    const tryRun = () => {
+      if (task.cancelled) return;
+      if (this.idle.length > 0) {
+        activeWorker = this.idle.pop();
+      } else if (this.active + this.idle.length < this.maxSize) {
+        try {
+          activeWorker = new Worker(this.scriptUrl, { type: 'module' });
+        } catch (e) {
+          onError(e.message || 'Failed to create worker');
+          return;
+        }
+      } else {
+        // All busy — enqueue
+        this.queue.push({ task, tryRun });
+        return;
+      }
+
+      this.active++;
+      activeWorker.onmessage = (e) => {
+        if (task.cancelled) return;
+        onMessage(e);
+        this.active--;
+        this._returnWorker(activeWorker);
+        this._processQueue();
+      };
+      activeWorker.onerror = (e) => {
+        if (task.cancelled) return;
+        onError(e.message || 'Worker error');
+        this.active--;
+        // Don't reuse errored worker — create fresh
+        try { activeWorker.terminate(); } catch(_) {}
+        this._processQueue();
+      };
+      activeWorker.postMessage(input);
+    };
+
+    tryRun();
+
+    return {
+      cancel: () => {
+        task.cancelled = true;
+        cancelled = true;
+        if (activeWorker) {
+          this.active--;
+          // Terminate and don't return to pool (task was mid-flight)
+          try { activeWorker.terminate(); } catch(_) {}
+          this._processQueue();
+        }
+        // Remove from queue if still there
+        this.queue = this.queue.filter(q => q.task !== task);
+      }
+    };
+  }
+
+  _returnWorker(w) {
+    // Reset handlers before returning to pool
+    w.onmessage = null;
+    w.onerror = null;
+    this.idle.push(w);
+    this.lastUsed = Date.now();
+  }
+
+  _processQueue() {
+    while (this.queue.length > 0 && (this.idle.length > 0 || this.active + this.idle.length < this.maxSize)) {
+      const next = this.queue.shift();
+      if (!next.task.cancelled) {
+        next.tryRun();
+        break;
+      }
+    }
+  }
+
+  _cleanup() {
+    if (this.active === 0 && this.queue.length === 0 &&
+        Date.now() - this.lastUsed > POOL_IDLE_TIMEOUT) {
+      this.idle.forEach(w => w.terminate());
+      this.idle = [];
+    }
+  }
+
+  destroy() {
+    clearInterval(this._cleanupTimer);
+    this.idle.forEach(w => w.terminate());
+    this.idle = [];
+    this.queue = [];
+  }
+}
+
+// Global pool registry: key = "poolSize:scriptUrl"
+const workerPools = new Map();
+
+function getPool(poolSize, scriptUrl) {
+  const poolSizeNum = typeof poolSize === 'bigint' ? Number(poolSize) : poolSize;
+  const key = `${poolSizeNum}:${scriptUrl}`;
+  if (!workerPools.has(key)) {
+    workerPools.set(key, new WorkerPool(poolSizeNum, scriptUrl));
+  }
+  return workerPools.get(key);
+}
+
 /**
  * Создаёт WsMsg (Scott-encoded)
  */
@@ -340,6 +465,234 @@ export function interpretEvent(event, dispatch) {
       };
     },
 
+    // workerWithProgress: worker that sends progress, result, and error events
+    workerWithProgress: (scriptUrl, input, onProgress, onResult, onError) => {
+      let w;
+      try {
+        w = new Worker(scriptUrl, { type: 'module' });
+      } catch (e) {
+        dispatch(onError(e.message || 'Failed to create worker'));
+        return { unsubscribe: () => {} };
+      }
+
+      w.onmessage = (e) => {
+        const data = e.data;
+        if (data && typeof data === 'object') {
+          if (data.type === 'progress') {
+            dispatch(onProgress(String(data.value)));
+          } else if (data.type === 'done') {
+            dispatch(onResult(typeof data.result === 'string' ? data.result : JSON.stringify(data.result)));
+          } else if (data.type === 'error') {
+            dispatch(onError(data.message || 'Worker error'));
+          } else {
+            // Default: treat as result
+            dispatch(onResult(JSON.stringify(data)));
+          }
+        } else {
+          dispatch(onResult(typeof data === 'string' ? data : JSON.stringify(data)));
+        }
+      };
+
+      w.onerror = (e) => {
+        dispatch(onError(e.message || 'Worker error'));
+      };
+
+      w.postMessage(input);
+
+      return {
+        unsubscribe: () => {
+          w.terminate();
+        }
+      };
+    },
+
+    // parallel: subscribe to all events in list, collect first result from each
+    // Scott: parallel(_typeB, eventList, mapFn)
+    parallel: (_typeB, eventList, mapFn) => {
+      const events = agdaListToArray(eventList);
+      const total = events.length;
+      if (total === 0) {
+        // Empty list: dispatch mapped empty list immediately
+        dispatch(mapFn(mkAgdaList([])));
+        return { unsubscribe: () => {} };
+      }
+
+      const results = new Array(total);
+      const done = new Array(total).fill(false);
+      let remaining = total;
+      let finished = false;
+      const subs = [];
+
+      events.forEach((evt, i) => {
+        const sub = interpretEvent(evt, (val) => {
+          if (finished || done[i]) return;
+          results[i] = val;
+          done[i] = true;
+          remaining--;
+          if (remaining === 0) {
+            finished = true;
+            dispatch(mapFn(mkAgdaList(results)));
+            // Unsubscribe all after completion
+            subs.forEach(s => s.unsubscribe());
+          }
+        });
+        subs.push(sub);
+      });
+
+      return {
+        unsubscribe: () => {
+          finished = true;
+          subs.forEach(s => s.unsubscribe());
+        }
+      };
+    },
+
+    // race: subscribe to all events in list, first to fire wins
+    race: (eventList) => {
+      const events = agdaListToArray(eventList);
+      if (events.length === 0) {
+        return { unsubscribe: () => {} };
+      }
+
+      let finished = false;
+      const subs = [];
+
+      events.forEach((evt) => {
+        const sub = interpretEvent(evt, (val) => {
+          if (finished) return;
+          finished = true;
+          dispatch(val);
+          // Unsubscribe all (including self)
+          subs.forEach(s => s.unsubscribe());
+        });
+        subs.push(sub);
+      });
+
+      return {
+        unsubscribe: () => {
+          finished = true;
+          subs.forEach(s => s.unsubscribe());
+        }
+      };
+    },
+
+    // poolWorker: worker from pool (one-shot task)
+    // Scott: poolWorker(poolSize, scriptUrl, input, onResult, onError)
+    poolWorker: (poolSize, scriptUrl, input, onResult, onError) => {
+      const pool = getPool(poolSize, scriptUrl);
+      const handle = pool.submit(
+        input,
+        (e) => {
+          dispatch(onResult(typeof e.data === 'string' ? e.data : JSON.stringify(e.data)));
+        },
+        (errMsg) => {
+          dispatch(onError(errMsg));
+        }
+      );
+      return { unsubscribe: () => handle.cancel() };
+    },
+
+    // poolWorkerWithProgress: pool worker with progress protocol
+    // Scott: poolWorkerWithProgress(poolSize, scriptUrl, input, onProgress, onResult, onError)
+    poolWorkerWithProgress: (poolSize, scriptUrl, input, onProgress, onResult, onError) => {
+      const pool = getPool(poolSize, scriptUrl);
+      const handle = pool.submit(
+        input,
+        (e) => {
+          const data = e.data;
+          if (data && typeof data === 'object') {
+            if (data.type === 'progress') {
+              dispatch(onProgress(String(data.value)));
+            } else if (data.type === 'done') {
+              dispatch(onResult(typeof data.result === 'string' ? data.result : JSON.stringify(data.result)));
+            } else if (data.type === 'error') {
+              dispatch(onError(data.message || 'Worker error'));
+            } else {
+              dispatch(onResult(JSON.stringify(data)));
+            }
+          } else {
+            dispatch(onResult(typeof data === 'string' ? data : JSON.stringify(data)));
+          }
+        },
+        (errMsg) => {
+          dispatch(onError(errMsg));
+        }
+      );
+      return { unsubscribe: () => handle.cancel() };
+    },
+
+    // allocShared: allocate SharedArrayBuffer
+    // Scott: allocShared(numBytes, handler)
+    allocShared: (numBytes, handler) => {
+      const n = typeof numBytes === 'bigint' ? Number(numBytes) : numBytes;
+      try {
+        const buffer = new SharedArrayBuffer(n);
+        dispatch(handler(buffer));
+      } catch (e) {
+        console.error('allocShared failed (COOP/COEP headers required):', e.message);
+      }
+      return { unsubscribe: () => {} };
+    },
+
+    // workerShared: worker with SharedArrayBuffer access
+    // Scott: workerShared(buffer, scriptUrl, input, onResult, onError)
+    workerShared: (buffer, scriptUrl, input, onResult, onError) => {
+      let w;
+      try {
+        w = new Worker(scriptUrl, { type: 'module' });
+      } catch (e) {
+        dispatch(onError(e.message || 'Failed to create worker'));
+        return { unsubscribe: () => {} };
+      }
+
+      w.onmessage = (e) => {
+        dispatch(onResult(typeof e.data === 'string' ? e.data : JSON.stringify(e.data)));
+      };
+
+      w.onerror = (e) => {
+        dispatch(onError(e.message || 'Worker error'));
+      };
+
+      // Send input + shared buffer to worker
+      w.postMessage({ input, buffer }, []);
+
+      return {
+        unsubscribe: () => {
+          w.terminate();
+        }
+      };
+    },
+
+    // workerChannel: long-lived bidirectional worker connection
+    // Scott: workerChannel(scriptUrl, onMessage, onError)
+    workerChannel: (scriptUrl, onMessage, onError) => {
+      let w;
+      try {
+        w = new Worker(scriptUrl, { type: 'module' });
+      } catch (e) {
+        dispatch(onError(e.message || 'Failed to create worker'));
+        return { unsubscribe: () => {} };
+      }
+
+      w.onmessage = (e) => {
+        dispatch(onMessage(typeof e.data === 'string' ? e.data : JSON.stringify(e.data)));
+      };
+
+      w.onerror = (e) => {
+        dispatch(onError(e.message || 'Worker error'));
+      };
+
+      // Register for channelSend
+      channelConnections.set(scriptUrl, w);
+
+      return {
+        unsubscribe: () => {
+          channelConnections.delete(scriptUrl);
+          w.terminate();
+        }
+      };
+    },
+
     // onUrlChange: изменение URL (popstate)
     onUrlChange: (handler) => {
       const listener = () => {
@@ -353,6 +706,39 @@ export function interpretEvent(event, dispatch) {
       };
     }
   });
+}
+
+/**
+ * Convert Agda List (Scott-encoded) to JS Array
+ * [] = cb => cb['[]']()
+ * x ∷ xs = cb => cb['_∷_'](x, xs)
+ */
+function agdaListToArray(list) {
+  const arr = [];
+  let current = list;
+  while (current) {
+    const result = current({
+      '[]': () => null,
+      '_∷_': (head, tail) => ({ head, tail })
+    });
+    if (result === null) break;
+    arr.push(result.head);
+    current = result.tail;
+  }
+  return arr;
+}
+
+/**
+ * Convert JS Array to Agda List (Scott-encoded)
+ */
+function mkAgdaList(arr) {
+  let list = (cb) => cb['[]']();
+  for (let i = arr.length - 1; i >= 0; i--) {
+    const elem = arr[i];
+    const tail = list;
+    list = (cb) => cb['_∷_'](elem, tail);
+  }
+  return list;
 }
 
 /**

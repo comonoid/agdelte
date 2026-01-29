@@ -187,8 +187,12 @@ Agent coalgebra:
 
 Browser-side concurrency:
 - `worker` Event primitive — runs Agda-compiled JS in a Web Worker, result as discrete event
+- `workerWithProgress` — worker with progress reporting via `{type:'progress'}` / `{type:'done'}` protocol
+- `parallel` — subscribe to all events, collect first result from each, apply mapping function
+- `race` — subscribe to all, first to fire wins, cancel rest
+- `parallelAll`, `raceTimeout` — convenience combinators
 - Runtime interpreter in `runtime/events.js` — creates Worker, posts script + input, receives result
-- File: `examples/Worker.agda`
+- Files: `examples/Worker.agda`, `examples/Parallel.agda`
 
 Haskell HTTP server:
 - Raw-socket HTTP server (`hs/Agdelte/Http.hs`) — no warp/wai, just `Network.Socket`
@@ -217,12 +221,18 @@ Build commands:
 **Key architecture decision:** Haskell via MAlonzo for server (real concurrency, STM, green threads), JS for browser (DOM, Web Workers). Same Agda source, two compilation targets.
 
 **Not yet implemented (deferred to Phase 8+):**
-- `ProcessOptic` — Optic over Unix sockets (IPC)
-- `RemoteOptic` — Optic over HTTP
 - Wiring diagrams — polynomial composition of agent networks
-- Structured concurrency — parent cancellation cascading
 
-See [architecture/dual-backend.md](../architecture/dual-backend.md), [architecture/concurrency.md](../architecture/concurrency.md).
+**Implemented (all Phase 7):**
+- ~~ProcessOptic~~ — `Reactive/ProcessOptic.agda` + `FFI/Server.agda` IPC bindings + `Process.hs`
+- ~~RemoteOptic~~ — `Reactive/RemoteOptic.agda` + Cmd-based HTTP optic + `Transport.hs`
+- ~~Worker pools, channels~~ — `poolWorker`, `poolWorkerWithProgress`, `workerChannel`, `channelSend`
+- ~~SharedArrayBuffer~~ — `allocShared`, `workerShared`
+- ~~Serialize record~~ — `FFI/Shared.agda`
+- ~~FFI split~~ — `FFI/Browser.agda`, `FFI/Shared.agda`
+- ~~Haskell runtime modules~~ — `Runtime.hs`, `Transport.hs`, `Process.hs`, `STM.hs`
+
+See [research.md](research.md) for remaining research-level ideas.
 
 **Files:**
 | File | Role |
@@ -230,10 +240,13 @@ See [architecture/dual-backend.md](../architecture/dual-backend.md), [architectu
 | `src/Agdelte/Concurrent/Agent.agda` | Pure Agent coalgebra (both backends) |
 | `src/Agdelte/FFI/Server.agda` | Haskell FFI: IO, IORef, HTTP, AgentDef |
 | `src/Agdelte/Core/Cmd.agda` | `agentQuery`/`agentStep!` combinators |
+| `server/Main.agda` | Echo agent CLI (MAlonzo demo) |
 | `server/HttpAgent.agda` | Single-agent HTTP server |
 | `server/MultiAgent.agda` | Multi-agent HTTP + WS server |
 | `examples/RemoteAgent.agda` | Browser client for Agent server |
 | `examples/Worker.agda` | Browser-side Web Worker |
+| `examples/Parallel.agda` | Parallel, race, workerWithProgress demos |
+| `runtime/workers/fibonacci-progress.js` | Worker with progress reporting |
 | `hs/Agdelte/Http.hs` | Raw-socket HTTP server |
 | `hs/Agdelte/WebSocket.hs` | Manual WS framing |
 | `hs/Agdelte/AgentServer.hs` | Multi-agent server with STM broadcast |

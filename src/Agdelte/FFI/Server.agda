@@ -108,6 +108,64 @@ postulate
 -- Multi-Agent Server with WebSocket
 ------------------------------------------------------------------------
 
+------------------------------------------------------------------------
+-- Unix Socket IPC (ProcessOptic)
+------------------------------------------------------------------------
+
+{-# FOREIGN GHC import qualified Agdelte.Process as Proc #-}
+
+-- Opaque IPC handle
+postulate
+  IpcHandle : Set
+
+{-# COMPILE GHC IpcHandle = type Proc.IpcClient #-}
+
+-- Serve agent on Unix socket (ProcessOptic protocol: "peek" / "step:INPUT")
+postulate
+  serveAgentProcess : String → IO String → (String → IO String) → IO ⊤
+
+{-# FOREIGN GHC
+  serveAgentProcessImpl :: T.Text -> IO T.Text -> (T.Text -> IO T.Text) -> IO ()
+  serveAgentProcessImpl path observe step = do
+    _ <- Proc.serveAgentProcess (T.unpack path) observe step
+    return ()
+  #-}
+
+{-# COMPILE GHC serveAgentProcess = serveAgentProcessImpl #-}
+
+-- Connect to remote agent via Unix socket
+postulate
+  connectProcess : String → IO IpcHandle
+
+{-# FOREIGN GHC
+  connectProcessImpl :: T.Text -> IO Proc.IpcClient
+  connectProcessImpl path = Proc.connectUnix (T.unpack path)
+  #-}
+
+{-# COMPILE GHC connectProcess = connectProcessImpl #-}
+
+-- Query remote agent state (peek)
+postulate
+  queryProcess : IpcHandle → IO String
+
+{-# COMPILE GHC queryProcess = Proc.queryProcess #-}
+
+-- Step remote agent (over)
+postulate
+  stepProcess : IpcHandle → String → IO String
+
+{-# COMPILE GHC stepProcess = Proc.stepProcess #-}
+
+-- Close IPC connection
+postulate
+  closeProcess : IpcHandle → IO ⊤
+
+{-# COMPILE GHC closeProcess = Proc.ipcClose #-}
+
+------------------------------------------------------------------------
+-- Multi-Agent Server with WebSocket
+------------------------------------------------------------------------
+
 {-# FOREIGN GHC import qualified Agdelte.AgentServer as AS #-}
 {-# FOREIGN GHC import qualified Agdelte.WebSocket as WS #-}
 

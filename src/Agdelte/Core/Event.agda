@@ -6,12 +6,13 @@
 module Agdelte.Core.Event where
 
 open import Data.Nat using (ℕ)
-open import Data.Bool using (Bool; if_then_else_)
+open import Data.Bool using (Bool; if_then_else_; not)
 open import Data.String using (String)
 open import Agda.Builtin.String using (primStringEquality)
 open import Data.Maybe using (Maybe; just; nothing)
-open import Data.List using (List; []; _∷_)
+open import Data.List using (List; []; _∷_; map)
 open import Data.Product using (_×_; _,_)
+open import Data.Unit using (⊤; tt)
 open import Function using (_∘_; id)
 
 private
@@ -54,6 +55,14 @@ record KeyboardEvent : Set where
     meta  : Bool
 
 open KeyboardEvent public
+
+------------------------------------------------------------------------
+-- SharedArrayBuffer (opaque handle)
+------------------------------------------------------------------------
+
+-- At JS level: SharedArrayBuffer object passed to/from workers
+-- At Agda level: opaque type, only used by Event constructors
+postulate SharedBuffer : Set
 
 ------------------------------------------------------------------------
 -- Event as data type (AST) - stays in Set
@@ -109,6 +118,35 @@ data Event (A : Set) : Set where
   -- Structured concurrency: unsubscribe terminates the worker
   worker : String → String → (String → A) → (String → A) → Event A
 
+  -- === Concurrency combinators ===
+  -- Worker with progress: onProgress, onResult, onError (all get String)
+  workerWithProgress : String → String → (String → A) → (String → A) → (String → A) → Event A
+
+  -- Parallel: subscribe to all, collect first result from each, apply mapping
+  parallel : ∀ {B : Set} → List (Event B) → (List B → A) → Event A
+
+  -- Race: subscribe to all, first to fire wins, cancel rest
+  race : List (Event A) → Event A
+
+  -- Pool worker: reuses workers from a pool (poolSize, scriptUrl, input, onResult, onError)
+  poolWorker : ℕ → String → String → (String → A) → (String → A) → Event A
+
+  -- Pool worker with progress
+  poolWorkerWithProgress : ℕ → String → String → (String → A) → (String → A) → (String → A) → Event A
+
+  -- Worker channel: long-lived worker connection (like wsConnect for workers)
+  -- scriptUrl, onMessage, onError
+  workerChannel : String → (String → A) → (String → A) → Event A
+
+  -- === SharedArrayBuffer ===
+  -- Allocate shared buffer of N bytes, dispatch handle
+  -- Requires COOP/COEP headers on the page
+  allocShared : ℕ → (SharedBuffer → A) → Event A
+
+  -- Worker with shared buffer access
+  -- buffer, scriptUrl, input, onResult, onError
+  workerShared : SharedBuffer → String → String → (String → A) → (String → A) → Event A
+
   -- === Combinators ===
   merge    : Event A → Event A → Event A
   debounce : ℕ → Event A → Event A    -- delay after pause
@@ -145,6 +183,16 @@ mapE f (httpPost url body onOk onErr) = httpPost url body (f ∘ onOk) (f ∘ on
 mapE f (wsConnect url h) = wsConnect url (f ∘ h)
 mapE f (onUrlChange h) = onUrlChange (f ∘ h)
 mapE f (worker url input onOk onErr) = worker url input (f ∘ onOk) (f ∘ onErr)
+mapE f (workerWithProgress url input onProg onRes onErr) =
+  workerWithProgress url input (f ∘ onProg) (f ∘ onRes) (f ∘ onErr)
+mapE f (parallel es g) = parallel es (f ∘ g)
+mapE f (race es) = race (map (mapE f) es)
+mapE f (poolWorker n url input onOk onErr) = poolWorker n url input (f ∘ onOk) (f ∘ onErr)
+mapE f (poolWorkerWithProgress n url input onProg onRes onErr) =
+  poolWorkerWithProgress n url input (f ∘ onProg) (f ∘ onRes) (f ∘ onErr)
+mapE f (workerChannel url onMsg onErr) = workerChannel url (f ∘ onMsg) (f ∘ onErr)
+mapE f (allocShared n h) = allocShared n (f ∘ h)
+mapE f (workerShared buf url input onOk onErr) = workerShared buf url input (f ∘ onOk) (f ∘ onErr)
 mapE f (merge e₁ e₂) = merge (mapE f e₁) (mapE f e₂)
 mapE f (debounce n e) = debounce n (mapE f e)
 mapE f (throttle n e) = throttle n (mapE f e)
@@ -169,6 +217,23 @@ filterE p (httpPost url body onOk onErr) = httpPost url body onOk onErr
 filterE p (wsConnect url h) = wsConnect url h  -- filter on WsMsg makes no sense
 filterE p (onUrlChange h) = onUrlChange h      -- filter on URL makes no sense
 filterE p (worker url input onOk onErr) = worker url input onOk onErr  -- filter applied in runtime
+filterE p (workerWithProgress url input onProg onRes onErr) =
+  mapFilterE (λ a → if p a then just a else nothing)
+             (workerWithProgress url input onProg onRes onErr)
+filterE p (parallel es g) =
+  mapFilterE (λ a → if p a then just a else nothing) (parallel es g)
+filterE p (race es) = race (map (filterE p) es)
+filterE p (poolWorker n url input onOk onErr) =
+  mapFilterE (λ a → if p a then just a else nothing) (poolWorker n url input onOk onErr)
+filterE p (poolWorkerWithProgress n url input onProg onRes onErr) =
+  mapFilterE (λ a → if p a then just a else nothing)
+             (poolWorkerWithProgress n url input onProg onRes onErr)
+filterE p (workerChannel url onMsg onErr) =
+  mapFilterE (λ a → if p a then just a else nothing) (workerChannel url onMsg onErr)
+filterE p (allocShared n h) =
+  mapFilterE (λ a → if p a then just a else nothing) (allocShared n h)
+filterE p (workerShared buf url input onOk onErr) =
+  mapFilterE (λ a → if p a then just a else nothing) (workerShared buf url input onOk onErr)
 filterE p (merge e₁ e₂) = merge (filterE p e₁) (filterE p e₂)
 filterE p (debounce n e) = debounce n (filterE p e)
 filterE p (throttle n e) = throttle n (filterE p e)
@@ -299,6 +364,27 @@ mapAccum step s₀ e = mapFilterE proj (foldE (s₀ , nothing) step' e)
 gate : (A → Bool) → Event A → Event A
 gate = filterE
 
+-- partitionE: split event by predicate into (matches, non-matches)
+partitionE : (A → Bool) → Event A → Event A × Event A
+partitionE p e = (filterE p e , filterE (not ∘ p) e)
+
+-- leftmost: priority merge — first non-empty event wins
+-- In async runtime, equivalent to mergeAll (no simultaneous dispatch)
+leftmost : List (Event A) → Event A
+leftmost = mergeAll
+
+------------------------------------------------------------------------
+-- Concurrency combinators
+------------------------------------------------------------------------
+
+-- Collect all results into a list
+parallelAll : List (Event A) → Event (List A)
+parallelAll es = parallel es id
+
+-- Race with timeout: run event, if no result within N ms, fire fallback
+raceTimeout : ℕ → A → Event A → Event A
+raceTimeout ms fallback e = race (e ∷ timeout ms fallback ∷ [])
+
 ------------------------------------------------------------------------
 -- Periodic events
 ------------------------------------------------------------------------
@@ -308,3 +394,31 @@ everySecond msg = interval 1000 msg
 
 everyMinute : A → Event A
 everyMinute msg = interval 60000 msg
+
+------------------------------------------------------------------------
+-- Sequential / monadic combinators
+------------------------------------------------------------------------
+
+-- Immediate one-shot event: fires once with value, then done
+-- Equivalent to timeout 0 — dispatches on next tick
+occur : A → Event A
+occur a = timeout 0 a
+
+-- Delay by N ms, then fire unit
+delay : ℕ → Event ⊤
+delay ms = timeout ms tt
+
+-- Event bind: on each value from e, switch to f(value)
+-- For one-shot events (timeout, worker, httpGet): sequential composition
+-- For repeated events (interval): switches to latest f(a), canceling previous
+infixl 1 _>>=E_
+
+_>>=E_ : Event A → (A → Event B) → Event B
+e >>=E f = switchE never (mapE f e)
+
+-- Sequential execution of one-shot events, collecting results in order
+-- sequence [e₁, e₂, e₃] fires e₁, then e₂, then e₃, dispatches [r₁, r₂, r₃]
+{-# TERMINATING #-}
+sequenceE : List (Event A) → Event (List A)
+sequenceE []       = occur []
+sequenceE (e ∷ es) = e >>=E λ a → mapE (a ∷_) (sequenceE es)

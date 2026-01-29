@@ -4,7 +4,7 @@
  */
 
 import { createElement, patch } from './dom.js';
-import { interpretEvent, unsubscribe, wsConnections } from './events.js';
+import { interpretEvent, unsubscribe, wsConnections, channelConnections } from './events.js';
 
 /**
  * Интерпретирует и выполняет Task (монадическую цепочку)
@@ -193,6 +193,14 @@ function executeCmd(cmd, dispatch) {
       }
     },
 
+    // === Worker channel ===
+    'channelSend': (scriptUrl, message) => {
+      const w = channelConnections.get(scriptUrl);
+      if (w) {
+        w.postMessage(message);
+      }
+    },
+
     // === Routing ===
     'pushUrl': (url) => {
       history.pushState(null, '', url);
@@ -300,7 +308,19 @@ export function runApp(app, container) {
       debounce: (ms, inner) => `debounce(${ms},${serializeEvent(inner)})`,
       throttle: (ms, inner) => `throttle(${ms},${serializeEvent(inner)})`,
       wsConnect: (url, handler) => `wsConnect(${url})`,
-      onUrlChange: (handler) => 'onUrlChange'
+      onUrlChange: (handler) => 'onUrlChange',
+      worker: (url, input) => `worker(${url},${input})`,
+      workerWithProgress: (url, input) => `workerWithProgress(${url},${input})`,
+      parallel: (_typeB, eventList, mapFn) => 'parallel',
+      race: (eventList) => 'race',
+      poolWorker: (poolSize, url, input) => `poolWorker(${poolSize},${url},${input})`,
+      poolWorkerWithProgress: (poolSize, url, input) => `poolWorkerWithProgress(${poolSize},${url},${input})`,
+      workerChannel: (url) => `workerChannel(${url})`,
+      allocShared: (n) => `allocShared(${n})`,
+      workerShared: (buf, url, input) => `workerShared(${url},${input})`,
+      foldE: (_typeB, init, step, inner) => `foldE(${serializeEvent(inner)})`,
+      mapFilterE: (_typeB, f, inner) => `mapFilterE(${serializeEvent(inner)})`,
+      switchE: (initial, meta) => `switchE(${serializeEvent(initial)},${serializeEvent(meta)})`
     });
   }
 

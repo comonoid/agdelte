@@ -6,6 +6,10 @@ _build/
 MAlonzo/
 build/
 
+# Haskell build artifacts
+*.hi
+*.o
+
 # Agda JS backend intermediate files (use --compile-dir=_build instead)
 jAgda.*.js
 jAgda.*.mjs
@@ -22,3 +26,6 @@ Thumbs.db
 *.swp
 .vscode/
 .idea/
+
+# Claude Code
+.claude/

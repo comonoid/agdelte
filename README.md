@@ -196,7 +196,7 @@ The key difference from Virtual DOM: `template` is **data**, not a function. Bin
 | [doc/polynomials.md](doc/polynomials.md) | Polynomial functors: theory and phases |
 | [doc/vs-svelte.md](doc/vs-svelte.md) | Comparison with Svelte 5 |
 | [doc/vs-vue3.md](doc/vs-vue3.md) | Comparison with Vue 3 |
-| [architecture/concurrency.md](architecture/concurrency.md) | Concurrency design (Phase 7, planned) |
+| [doc/research.md](doc/research.md) | Research: wiring diagrams, linear types, session types |
 
 ## Project Structure
 
@@ -307,7 +307,7 @@ events m = if m.computing
 -- Event disappears → worker cancelled (automatic cleanup)
 ```
 
-Structured concurrency, automatic resource management, no leaks. See [architecture/concurrency.md](architecture/concurrency.md).
+Structured concurrency, automatic resource management, no leaks. See [doc/api.md](doc/api.md).
 
 ## Quick Start
 
@@ -371,7 +371,7 @@ See [examples/README.md](examples/README.md) for details.
 - Agents as polynomial coalgebras, channels, structured concurrency
 - `ProcessOptic` / `RemoteOptic` — same `Optic` interface across processes and hosts
 - Big Optic spans local widgets, processes, and remote hosts uniformly
-- See [architecture/concurrency.md](architecture/concurrency.md)
+- See [doc/research.md](doc/research.md)
 
 **Phase 8: Developer Experience**
 

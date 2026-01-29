@@ -53,6 +53,9 @@ data Cmd (A : Set) : Set where
   -- === WebSocket ===
   wsSend : String → String → Cmd A              -- url, message
 
+  -- === Worker channel ===
+  channelSend : String → String → Cmd A         -- scriptUrl, message
+
   -- === Routing ===
   pushUrl    : String → Cmd A
   replaceUrl : String → Cmd A
@@ -85,6 +88,8 @@ mapCmd f (setItem key val) = setItem key val
 mapCmd f (removeItem key) = removeItem key
 -- WebSocket
 mapCmd f (wsSend url msg) = wsSend url msg
+-- Worker channel
+mapCmd f (channelSend url msg) = channelSend url msg
 -- Routing
 mapCmd f (pushUrl url) = pushUrl url
 mapCmd f (replaceUrl url) = replaceUrl url

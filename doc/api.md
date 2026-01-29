@@ -234,6 +234,53 @@ data WsMsg : Set where
 | `accumE` | `A → Event (A → A) → Event A` | Apply function events to accumulator |
 | `mapAccum` | `(B → S → S × A) → S → Event B → Event A` | Map with state |
 | `gate` | `(A → Bool) → Event A → Event A` | Synonym for filterE |
+| `partitionE` | `(A → Bool) → Event A → Event A × Event A` | Split by predicate |
+| `leftmost` | `List (Event A) → Event A` | Priority merge (= mergeAll in async) |
+
+### Sequential / Monadic Combinators
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `occur` | `A → Event A` | Immediate one-shot event (= timeout 0) |
+| `delay` | `ℕ → Event ⊤` | Delay N ms, fire unit |
+| `_>>=E_` | `Event A → (A → Event B) → Event B` | Event bind via switchE |
+| `sequenceE` | `List (Event A) → Event (List A)` | Sequential execution, collect results |
+
+### Web Workers (Phase 7)
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `worker` | `String → String → (String → A) → (String → A) → Event A` | Spawn worker (scriptUrl, input, onResult, onError) |
+| `workerWithProgress` | `String → String → (String → A) → (String → A) → (String → A) → Event A` | Worker with progress protocol |
+
+### Worker Pools
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `poolWorker` | `ℕ → String → String → (String → A) → (String → A) → Event A` | Pool worker (poolSize, scriptUrl, input, onOk, onErr) |
+| `poolWorkerWithProgress` | `ℕ → String → String → (String → A) → (String → A) → (String → A) → Event A` | Pool worker with progress |
+
+### Worker Channels
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `workerChannel` | `String → (String → A) → (String → A) → Event A` | Long-lived bidirectional worker (scriptUrl, onMsg, onErr) |
+
+### Concurrency Combinators
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `parallel` | `∀ {B} → List (Event B) → (List B → A) → Event A` | Subscribe to all, collect results |
+| `race` | `List (Event A) → Event A` | First to fire wins, cancel rest |
+| `parallelAll` | `List (Event A) → Event (List A)` | Collect all results into list |
+| `raceTimeout` | `ℕ → A → Event A → Event A` | Race with timeout fallback |
+
+### SharedArrayBuffer
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `allocShared` | `ℕ → (SharedBuffer → A) → Event A` | Allocate shared buffer (requires COOP/COEP) |
+| `workerShared` | `SharedBuffer → String → String → (String → A) → (String → A) → Event A` | Worker with shared buffer access |
 
 ---
 
@@ -305,6 +352,106 @@ zoomNodeL : Lens M M' → Prism Msg Msg' → Node M' Msg' → Node M Msg
 zoomAttrL : Lens M M' → Prism Msg Msg' → Attr M' Msg' → Attr M Msg
 ```
 
+### ProcessOptic (Phase 7)
+
+From `Agdelte.Reactive.ProcessOptic` — server-to-server optic over Unix sockets:
+
+```agda
+record ProcessOptic (A : Set) : Set where
+  field
+    socketPath : String
+    {{serial}} : Serialize A
+```
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `serveProcessOptic` | `ProcessOptic A → IO String → (String → IO String) → IO ⊤` | Expose agent on Unix socket |
+| `connectProcessOptic` | `ProcessOptic A → IO IpcHandle` | Connect to remote agent |
+| `peekProcess` | `IpcHandle → IO (TransportResult A)` | Read remote state |
+| `stepProcessOptic` | `IpcHandle → String → IO (TransportResult String)` | Step remote agent |
+| `peekOnce` | `ProcessOptic A → IO (TransportResult A)` | One-shot peek (connect + read + close) |
+| `stepOnce` | `ProcessOptic A → String → IO (TransportResult String)` | One-shot step |
+
+Protocol: `"peek"` → state, `"step:INPUT"` → new state (over Unix domain socket).
+
+### RemoteOptic (Phase 7)
+
+From `Agdelte.Reactive.RemoteOptic` — browser-to-server optic over HTTP:
+
+```agda
+record RemoteOptic (A : Set) : Set where
+  field
+    baseUrl    : String
+    {{serial}} : Serialize A
+```
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `queryRemote` | `RemoteOptic A → (TransportResult A → Msg) → (String → Msg) → Cmd Msg` | GET /state |
+| `stepRemote` | `RemoteOptic A → String → (TransportResult A → Msg) → (String → Msg) → Cmd Msg` | POST /step |
+| `queryRemoteRaw` | `String → (String → Msg) → (String → Msg) → Cmd Msg` | Raw string query |
+| `stepRemoteRaw` | `String → String → (String → Msg) → (String → Msg) → Cmd Msg` | Raw string step |
+
+---
+
+## Agent (Phase 7)
+
+From `Agdelte.Concurrent.Agent` — polynomial coalgebra for concurrent processes:
+
+```agda
+record Agent (S I O : Set) : Set where
+  field
+    state   : S
+    observe : S → O
+    step    : S → I → S
+```
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `mkAgent` | `S → (S → O) → (S → I → S) → Agent S I O` | Create agent |
+| `stepAgent` | `Agent S I O → I → Agent S I O × O` | Step and observe |
+| `mapObserve` | `(O → O') → Agent S I O → Agent S I O'` | Map output |
+| `mapInput` | `(I' → I) → Agent S I O → Agent S I' O` | Contravariant input map |
+
+---
+
+## FFI (Phase 7)
+
+### Shared Types (`FFI.Shared`)
+
+```agda
+record Serialize (A : Set) : Set where
+  field
+    encode : A → String
+    decode : String → Maybe A
+
+record Envelope : Set where
+  field
+    tag     : String
+    payload : String
+
+data TransportResult (A : Set) : Set where
+  success : A → TransportResult A
+  failure : String → TransportResult A
+```
+
+### Browser FFI (`FFI.Browser`)
+
+Postulates for browser-specific primitives: `Element`, `SharedBuffer`, `TimerHandle`, DOM, clipboard, storage, URL/history.
+
+### Server FFI (`FFI.Server`)
+
+Haskell-only postulates via MAlonzo:
+
+| Function | Description |
+|----------|-------------|
+| `putStrLn`, `getLine` | Basic IO |
+| `_>>=_`, `_>>_`, `pure` | IO combinators |
+| `IORef`, `newIORef`, `readIORef`, `writeIORef` | Mutable references |
+| `listen` | HTTP server |
+| `IpcHandle`, `serveAgentProcess`, `connectProcess`, `queryProcess`, `stepProcess`, `closeProcess` | Unix socket IPC |
+| `mkAgentDef`, `runAgentServer1`, `runAgentServer2` | Multi-agent server + WebSocket |
+
 ---
 
 ## Testing (Phase 5)
@@ -373,6 +520,20 @@ SimEvent A = List (List A)   -- outer = ticks, inner = simultaneous events
 | Function | Type | Description |
 |----------|------|-------------|
 | `wsSend` | `String → String → Cmd A` | Send message (url, message) |
+
+### Worker Channels
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `channelSend` | `String → String → Cmd A` | Send to worker channel (scriptUrl, message) |
+
+### Agent Interaction
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `agentQuery` | `String → (String → A) → (String → A) → Cmd A` | GET agent state |
+| `agentStep` | `String → String → (String → A) → (String → A) → Cmd A` | POST step to agent |
+| `agentStep!` | `String → (String → A) → (String → A) → Cmd A` | POST step (empty body) |
 
 ### Routing
 
