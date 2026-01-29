@@ -1,6 +1,11 @@
 # Concurrency in Agdelte
 
-> **Status:** Planned (Phase 7). This document describes the architecture extension for concurrent computations.
+> **Status:** Partially implemented (Phase 7).
+>
+> **Implemented (Phase 7A):** Basic `worker` Event primitive — runs Agda-compiled JS in a Web Worker,
+> result comes back as a discrete event. See `examples/Worker.agda` and `runtime/events.js`.
+>
+> **Planned:** Progress reporting, parallel/race combinators, worker pools, channels, SharedArrayBuffer.
 >
 > **Extension:** optional extension of the base architecture. See [doc/architecture.md](../doc/architecture.md).
 >

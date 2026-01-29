@@ -1,12 +1,35 @@
 # Dual-Backend Architecture: JS (Browser) + Haskell (Server)
 
-> **Status:** Planned (Phase 7). Architecture decision for client-server split.
+> **Status:** ✅ Implemented (Phase 7). All sub-phases 7A–7D done.
 >
 > **Key decision:** Server uses **Haskell via MAlonzo** (Agda's Haskell backend), NOT Node.js.
 > Client uses **JS backend** (as now). Same Agda source, two compilation targets.
 >
 > **Context:** [concurrency.md](concurrency.md) describes browser-side concurrency (Web Workers).
 > This document describes the overall dual-backend architecture.
+>
+> **What was implemented:**
+> - **Phase 7A:** Agent coalgebra (`src/Agdelte/Concurrent/Agent.agda`) — compiles to both JS and Haskell
+> - **Phase 7B:** Web Worker runtime (`examples/Worker.agda`, `runtime/events.js` worker interpreter)
+> - **Phase 7C:** Haskell HTTP server (`server/HttpAgent.agda`, `hs/Agdelte/Http.hs`, `src/Agdelte/FFI/Server.agda`)
+> - **Phase 7D:** Browser ↔ Server communication (`examples/RemoteAgent.agda` using `agentQuery`/`agentStep!` Cmd combinators)
+> - **Phase 7+:** WebSocket broadcast (`hs/Agdelte/WebSocket.hs`), Multi-Agent routing (`server/MultiAgent.agda`, `hs/Agdelte/AgentServer.hs`), Live Dashboard (`examples_html/live-agent.html`)
+>
+> **Key files:**
+> | File | Role |
+> |------|------|
+> | `src/Agdelte/Concurrent/Agent.agda` | Pure Agent coalgebra (both backends) |
+> | `src/Agdelte/FFI/Server.agda` | Haskell FFI: IO, IORef, HTTP, AgentDef |
+> | `src/Agdelte/Core/Cmd.agda` | Cmd with `agentQuery`/`agentStep!` combinators |
+> | `server/HttpAgent.agda` | Single-agent HTTP server |
+> | `server/MultiAgent.agda` | Multi-agent HTTP+WS server (counter + toggle) |
+> | `examples/RemoteAgent.agda` | Browser client talking to Agent server via Cmd |
+> | `examples/Worker.agda` | Browser-side Web Worker example |
+> | `hs/Agdelte/Http.hs` | Raw-socket HTTP server (no warp dependency) |
+> | `hs/Agdelte/WebSocket.hs` | Manual WS framing (no websockets library, uses crypton) |
+> | `hs/Agdelte/AgentServer.hs` | Multi-agent server with STM broadcast |
+> | `examples_html/live-agent.html` | Live dashboard: WS + HTTP real-time UI |
+> | `examples_html/remote-agent.html` | RemoteAgent browser UI |
 
 ---
 
@@ -361,59 +384,87 @@ connectAgent socketPath = do
 
 ## GHC Dependencies
 
-Server runtime needs these Haskell packages:
+Server runtime uses minimal dependencies — **no warp, no wai, no aeson, no websockets library**.
+HTTP and WebSocket are implemented from raw sockets to avoid C library dependencies (e.g. `libz`).
 
 ```
--- For a cabal file or stack.yaml
+-- Actual dependencies (as of Phase 7 implementation)
+-- All available via GHC's built-in package environment
 dependencies:
   - base >= 4.14
-  - stm >= 2.5              -- STM (TVar, TChan)
-  - async >= 2.2            -- Structured concurrency
-  - warp >= 3.3             -- HTTP server
-  - wai >= 3.2              -- WAI interface
-  - wai-websockets >= 3.0   -- WebSocket support
-  - aeson >= 2.0            -- JSON serialization
-  - network >= 3.1          -- Unix sockets, TCP
-  - process >= 1.6          -- Child processes
-  - bytestring >= 0.11
-  - text >= 2.0
+  - network >= 3.1          -- Raw TCP sockets
+  - text >= 2.0             -- Text type
+  - bytestring >= 0.11      -- ByteString for wire protocol
+  - stm >= 2.5              -- STM (TChan for WS broadcast)
+  - crypton                  -- SHA1 for WebSocket handshake
+  - base64-bytestring       -- Base64 for WebSocket handshake
+  - memory                   -- ByteArray (used by crypton)
+  - containers               -- Data.Map for agent routing
+
+-- NOT needed (implemented manually):
+-- warp, wai                -- Http.hs does raw socket HTTP
+-- websockets               -- WebSocket.hs does manual framing
+-- aeson                    -- Agent state is Text, no JSON needed
+```
+
+Build command (all flags required by GHC):
+```bash
+agda --compile --compile-dir=_build --ghc-flag=-ihs \
+  --ghc-flag="-package network" \
+  --ghc-flag="-package text" \
+  --ghc-flag="-package bytestring" \
+  --ghc-flag="-package crypton" \
+  --ghc-flag="-package base64-bytestring" \
+  --ghc-flag="-package stm" \
+  --ghc-flag="-package memory" \
+  --ghc-flag="-package containers" \
+  server/MultiAgent.agda
 ```
 
 ---
 
 ## Implementation Phases
 
-### Phase 7A: Basic dual-backend (start here)
+### Phase 7A: Basic dual-backend ✅
 
-1. Verify MAlonzo works: compile a simple pure Agda module to Haskell, run it
-2. Create `hs/` directory with minimal `Runtime.hs`
-3. Create `server/Main.agda` — simplest possible server (echo agent)
-4. Create `src/Agdelte/FFI/Server.agda` with basic IO postulates
-5. Build script: `agda --compile server/Main.agda`
-6. Test: run the binary, send a message, get response
+1. ✅ Verified MAlonzo: compiled pure Agda Agent coalgebra to Haskell
+2. ✅ Created `hs/Agdelte/Http.hs` — raw-socket HTTP server (no warp, no external deps except network)
+3. ✅ Created `server/HttpAgent.agda` — single counter agent exposed via HTTP GET/POST
+4. ✅ Created `src/Agdelte/FFI/Server.agda` — IO, IORef, HTTP, `_>>=_`, `pure`, `putStrLn`
+5. ✅ Build: `agda --compile --ghc-flag=-ihs --ghc-flag="-package network" --ghc-flag="-package text" --ghc-flag="-package bytestring" server/HttpAgent.agda`
+6. ✅ Tested: `curl http://localhost:3000/state` → `"0"`, `curl -X POST /step` → `"1"`
 
-### Phase 7B: Agent + channels
+**Key lesson:** All `{-# FOREIGN GHC import ... #-}` must be consolidated at the top of Server.agda — MAlonzo emits them inline, and Haskell requires all imports before definitions.
 
-1. Define `Agent` coalgebra in `src/Agdelte/Concurrent/Agent.agda` (pure Agda)
-2. Implement `runAgent` in `hs/Agdelte/Runtime.hs` (Haskell, STM-based)
-3. Implement `worker` in `runtime/events.js` (JS, Web Worker-based)
-4. Same Agent type → runs on both platforms
-5. Example: computation agent (server) + UI (browser)
+### Phase 7B: Agent + Web Workers ✅
 
-### Phase 7C: ProcessOptic + RemoteOptic
+1. ✅ `Agent S I O` coalgebra in `src/Agdelte/Concurrent/Agent.agda` — pure Agda, compiles to both
+2. ✅ `worker` Event primitive in `runtime/events.js` — runs Agda-compiled JS in Web Worker
+3. ✅ `examples/Worker.agda` — browser-side worker demo
+4. ✅ Same Agent definition runs on server (Haskell green thread + IORef) and browser (Worker)
 
-1. Extend Optic to support serialized operations
-2. `ProcessOptic`: Haskell runtime interprets via Unix socket
-3. `RemoteOptic`: Haskell runtime interprets via HTTP
-4. JS client uses `fetch` to talk to Haskell server via RemoteOptic
-5. Example: browser UI → HTTP → Haskell server → agent state
+### Phase 7C: HTTP server + RemoteAgent ✅
 
-### Phase 7D: Wiring diagrams
+1. ✅ Haskell HTTP server with path-based routing (`with`-patterns in Agda, not `if_then_else_`)
+2. ✅ `examples/RemoteAgent.agda` — browser client using `Cmd` to talk to server
+3. ✅ `agentQuery`/`agentStep!` combinators in `Cmd.agda` — semantic wrappers for Agent interaction
+4. ✅ Browser UI (`examples_html/remote-agent.html`) talks to Haskell Agent via fetch
 
-1. Compose agents via polynomial wiring diagrams
-2. Channel topology defined in Agda, interpreted by Haskell runtime
-3. Structured concurrency: parent agent cancellation → child cancellation
-4. Example: chat system with multiple agents
+### Phase 7D: Multi-Agent + WebSocket ✅
+
+1. ✅ `hs/Agdelte/WebSocket.hs` — manual WS framing (SHA1 via crypton, base64-bytestring, no websockets lib — avoids missing libz)
+2. ✅ `hs/Agdelte/AgentServer.hs` — multi-agent server: path-based HTTP routing + STM `TChan` broadcast to all WS clients
+3. ✅ `server/MultiAgent.agda` — counter + toggle agents, `wireAgent` bridges pure Agent to Haskell runtime
+4. ✅ `examples_html/live-agent.html` — real-time dashboard: WS subscription + HTTP step buttons
+5. ✅ Broadcast format: `"agentName:value"` on each step
+
+### Not yet implemented (deferred)
+
+- `ProcessOptic` — Optic operations via Unix sockets (IPC between OS processes)
+- `RemoteOptic` — Optic operations via HTTP (cross-host)
+- Wiring diagrams — polynomial composition of agents
+- Structured concurrency — parent cancellation cascading to children
+- Serialization interface (`Serialize` record for cross-process data)
 
 ---
 
