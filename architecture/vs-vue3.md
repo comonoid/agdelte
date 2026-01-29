@@ -2,7 +2,8 @@
 
 > Сравнение фич и подходов. Архитектура Agdelte: [README.md](README.md)
 >
-> **Примечание:** Agdelte находится в стадии MVP. Этот документ анализирует сложность реализации фич Vue 3 в архитектуре Agdelte — не все фичи ещё реализованы.
+> **Примечание:** Agdelte использует **ReactiveApp** с шаблонами и биндингами (Svelte-style, без Virtual DOM).
+> Некоторые примеры ниже используют старый `App` с `view` для иллюстрации паттернов — актуальный API см. в [doc/api.md](../doc/api.md).
 
 ## Полный список необходимых фич
 
@@ -272,59 +273,23 @@ onClickOutside : Msg → Attr Msg
 
 Если реализовывать в правильном порядке, каждая следующая фича опирается на предыдущие:
 
-### Phase 1: Ядро (всё тривиально)
+### Phase 1-2: Завершено ✅
 
-```
-1. Signal, Event (основа всего)
-2. Html, Attr, view (рендеринг)
-3. App record (структура приложения)
-4. Runtime: event loop, render (запуск)
-5. DOM events: onClick, onInput (интерактивность)
-```
+Core, примитивы IO, ReactiveApp, 9 примеров, рантайм без VDOM.
 
-**После Phase 1:** Можно писать приложения типа TodoMVC.
+### Phase 3-4: Комбинаторы и формальные свойства
 
-### Phase 2: Примитивы IO
+Расширение Event API, доказательства линз.
 
-```
-6. interval (таймеры)
-7. request (HTTP)
-8. websocket (real-time)
-9. keyboard (глобальные события)
-```
+### Phase 5: Инкрементальные обновления
 
-**После Phase 2:** Полноценные веб-приложения.
+Keyed foreach, вложенные биндинги, анимации.
 
-### Phase 3: Улучшения рендеринга
+### Phase 6-7: Concurrency и DX
 
-```
-10. Keyed diff (оптимизация списков)
-11. Teleport (модалки, тултипы)
-12. Transition CSS (анимации)
-13. focus/blur Events (управление фокусом)
-```
+Worker pools, DevTools, hot reload.
 
-**После Phase 3:** Продакшн-качество UI.
-
-### Phase 4: DX (Developer Experience)
-
-```
-14. Библиотека линз (удобство с вложенным состоянием)
-15. Паттерны композиции (документация)
-16. DevTools (минимум: getModel, dispatch)
-17. HMR (быстрая разработка)
-```
-
-**После Phase 4:** Удобная разработка.
-
-### Phase 5: Продвинутое
-
-```
-18. SSR + Hydration
-19. TransitionGroup (FLIP)
-20. DevTools полные (UI)
-21. Scoped CSS (tooling)
-```
+Полный roadmap: [README.md](../README.md#roadmap).
 
 ---
 
@@ -397,8 +362,8 @@ onClickOutside : Msg → Attr Msg
 
 **Преимущество Agdelte:** теоретический фундамент (Polynomial Functors) в изолированном модуле `Theory/` гарантирует, что архитектура не приведёт в тупик:
 
-- **MVP:** простые определения для пользователя
-- **Phase 2+:** Poly используется внутри комбинаторов (гарантии by construction)
-- **Phase 3+:** Wiring diagrams для сложных систем
+- **Phase 1-2 (done):** простые определения для пользователя, ReactiveApp
+- **Phase 3+:** Poly используется внутри комбинаторов (гарантии by construction)
+- **Phase 6+:** Wiring diagrams для сложных систем
 
 Комбинаторы композируются корректно по построению.

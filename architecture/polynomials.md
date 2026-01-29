@@ -258,20 +258,7 @@ the structure is always correct.
 - Same performance characteristics as Svelte now achieved!
 - Direct DOM updates via reactive bindings
 
-**Current implementation** (Agdelte.Reactive.Node):
-```agda
--- Binding tracks reactive connection
-record Binding (Model : Set) (A : Set) : Set where
-  field
-    extract : Model → A
-    equals  : A → A → Bool
-
--- Node is template with bindings
-data Node (Model Msg : Set) : Set₁ where
-  text : String → Node Model Msg
-  bind : Binding Model String → Node Model Msg  -- reactive!
-  elem : String → List (Attr Model Msg) → List (Node Model Msg) → Node Model Msg
-```
+**Current implementation**: See [doc/api.md](../doc/api.md) for full ReactiveApp/Node/Binding API.
 
 **Advantages over Svelte**:
 - (+) Type-safe: bindings verified by Agda
@@ -286,50 +273,41 @@ data Node (Model Msg : Set) : Set₁ where
 > **Priority**: Widget Lenses (eliminating Virtual DOM) is the primary goal.
 > Other polynomial applications are secondary and can be deferred.
 
-### Phase 3: Reactive Architecture ✅ DONE
+### Phase 2: Reactive Architecture ✅ DONE
 
 **Focus**: Direct DOM updates through reactive bindings. This is the original Agdelte vision.
 
-```
-Agdelte.Reactive.Node    -- Node, Binding, ReactiveApp ✅
-```
+**Deliverables** (all complete):
+- [x] `Binding` record with `extract` and `equals`
+- [x] `Node` data type with `text`, `bind`, `elem`, `empty`, `when`, `foreach`
+- [x] `Attr` with events in attributes (no manual paths!)
+- [x] `ReactiveApp` record, `focusNode` composition
+- [x] All 9 examples migrated to ReactiveApp
+- [x] Runtime with direct DOM updates (no VDOM)
+
+See [doc/architecture.md](../doc/architecture.md) for full API details.
+
+### Phase 3: Combinators
+
+**Focus**: Event combinators and API completeness. See [combinators.md](combinators.md).
 
 **Deliverables**:
-- [x] `Binding` record with `extract` and `equals`
-- [x] `Node` data type with `text`, `bind`, `elem`
-- [x] `Attr` with events in attributes (no manual paths!)
-- [x] `ReactiveApp` record
-- [x] **Demo: ReactiveCounter without Virtual DOM** ✅
-- [x] Runtime that tracks bindings and updates DOM directly
-
-**Key insight**: Virtual DOM does `diff(view(oldModel), view(newModel))`.
-Reactive bindings do `for each binding: if changed → update DOM node` — no diffing needed.
-
-**Achieved**: Counter demo renders updates without `patch()` function. Same approach as Svelte!
+- [ ] Event transformations: filterE, snapshot, foldp, switchE
+- [ ] Accumulators: accumE, accumB, mapAccum
+- [ ] Testing: interpret, collectN
 
 ### Phase 4: Proofs & Protocols
 
-**Focus**: Mathematical rigor and protocol examples. Not blocking for Widget Lenses.
-
-```
-Agdelte.Poly.Laws        -- Lens laws proofs
-Agdelte.Poly.Examples    -- ReqResp, Stream, State protocols
-```
+**Focus**: Mathematical rigor and protocol examples.
 
 **Deliverables**:
 - [ ] Prove lens laws in Agda (identity, composition)
 - [ ] Coproduct `_⊕_` of polynomials
 - [ ] Protocol examples (typed WebSocket, HTTP)
 
-### Phase 5: Agent Networks
+### Phase 6: Agent Networks
 
 **Focus**: Wiring diagrams, multi-agent composition.
-
-```
-Agdelte.Poly.Agent       -- Agent coalgebras
-Agdelte.Poly.Wiring      -- Wiring diagrams
-Agdelte.Poly.Network     -- Network composition
-```
 
 **Deliverables**:
 - [ ] `Agent` as polynomial coalgebra
@@ -337,15 +315,9 @@ Agdelte.Poly.Network     -- Network composition
 - [ ] Runtime interpreter for networks
 - [ ] Demo: Chat system with multiple agents
 
-### Phase 6: Mega-Lens & Navigation
+### Phase 8: Mega-Lens & Navigation
 
 **Focus**: Global state navigation, debugging tools.
-
-```
-Agdelte.Poly.MegaLens    -- Global lenses
-Agdelte.Poly.Traversal   -- Network traversal
-Agdelte.Debug            -- Inspector, time travel
-```
 
 **Deliverables**:
 - [ ] Focus/zoom into any agent
@@ -353,7 +325,7 @@ Agdelte.Debug            -- Inspector, time travel
 - [ ] Time-travel debugging
 - [ ] Demo: Visual network editor
 
-### Phase 7: Dependent Protocols
+### Phase 9: Dependent Protocols
 
 **Focus**: Session types, history-dependent protocols.
 
@@ -409,8 +381,8 @@ This track extends it with cancellation, racing, and worker support.
    - Events in attributes: `onClick Dec` — no manual paths!
 
 4. **Migration**: How to incrementally adopt Widget Lenses?
-   - In progress: migrate all examples to ReactiveApp
-   - Old VDOM-based examples being replaced
+   - ✅ **RESOLVED**: All 9 examples migrated to ReactiveApp
+   - Old VDOM-based code removed
 
 ---
 

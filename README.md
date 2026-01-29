@@ -193,8 +193,7 @@ The key difference from Virtual DOM: `template` is **data**, not a function. Bin
 |----------|-------------|
 | [architecture/combinators.md](architecture/combinators.md) | All combinators with types |
 | [architecture/time-model.md](architecture/time-model.md) | Time model: ticks, dt |
-| [architecture/ffi.md](architecture/ffi.md) | JavaScript FFI reference |
-| [architecture/concurrency.md](architecture/concurrency.md) | Phase 3 concurrency (planned) |
+| [architecture/concurrency.md](architecture/concurrency.md) | Concurrency design (planned) |
 | [architecture/vs-svelte.md](architecture/vs-svelte.md) | Comparison with Svelte 5 |
 | [architecture/vs-vue3.md](architecture/vs-vue3.md) | Comparison with Vue 3 |
 
@@ -222,14 +221,20 @@ src/
         └── Elements.agda        -- div, span, button, etc.
 
 examples/
-    ReactiveCounter.agda         -- Counter with reactive bindings
+    Counter.agda                 -- Counter with reactive bindings
     Timer.agda                   -- Stopwatch with interval
     Todo.agda                    -- TodoMVC-style app
-    ...
+    KeyboardDemo.agda            -- Global keyboard events
+    HttpDemo.agda                -- HTTP requests
+    TaskDemo.agda                -- Task chains (do-notation)
+    WebSocketDemo.agda           -- WebSocket communication
+    RouterDemo.agda              -- SPA routing
+    CompositionDemo.agda         -- App composition (focusNode)
 
 runtime/
-    index.js                     -- runApp, event loop
-    reactive.js                  -- Reactive binding runtime (no VDOM!)
+    reactive.js                  -- Main: runReactiveApp, renderNode, updateBindings
+    reactive-auto.js             -- Auto-loader (data-agdelte attribute)
+    events.js                    -- Event interpretation, subscribe/unsubscribe
 ```
 
 ## Key Properties
@@ -317,65 +322,48 @@ See [examples/README.md](examples/README.md) for details.
 
 ## Roadmap
 
-**Phase 1: MVP** ✅ — all intuitively understandable concepts
+**Phase 1: MVP** ✅
 
-Core: ✅
-- Signal, Event, Poly foundation
-- Basic combinators: mapE
-- App record with init, update, view, events
+- Core: Signal, Event, Cmd, Task, App
+- Primitives: interval, animationFrame, keyboard, mouse, HTTP
+- Html: elements, attributes, events
+- Runtime: event loop
 
-Primitives: ✅
-- interval, animationFrame
+**Phase 2: Reactive Architecture** ✅
 
-Html: ✅
-- Elements: div, span, button, input, ul, li, etc.
-- Attributes: className, style, value, checked, disabled
-- Events: onClick, onInput, onKey
+- ReactiveApp, Node, Binding — Svelte-style, no Virtual DOM
+- All 9 examples migrated (Counter, Timer, Todo, Keyboard, HTTP, Task, WebSocket, Router, Composition)
+- Runtime with direct DOM updates via reactive bindings
+- focusNode for component composition
 
-Runtime: ✅
-- Event loop, VDOM patching, efficient handler updates
+**Phase 3: Combinators and API completeness**
 
-Examples: ✅
-- Counter, Timer, Todo
+- Event transformations: filterE, snapshot, foldp, switchE
+- Accumulators: accumE, accumB, mapAccum
+- Testing: interpret, collectN — pure event testing without browser
+- See [architecture/combinators.md](architecture/combinators.md)
 
-**Phase 2: Extensions** ✅ — separate concepts requiring dedicated learning
+**Phase 4: Formal properties**
 
-- ✅ websocket (wsConnect, wsSend)
-- ✅ localStorage (getItem, setItem, removeItem)
-- ✅ routing (onUrlChange, pushUrl, replaceUrl, back, forward)
-- ✅ Combinators: filterE, merge, debounce, throttle
-- ✅ DOM effects: focus, blur, scrollTo, scrollIntoView
-- ✅ Clipboard: readClipboard, writeClipboard
-- ✅ App composition: _∥_, _⊕ᵃ_, mapMsg, mapModel
+- Lens laws proofs (identity, composition)
+- ReactiveApp ↔ Coalg formal connection
+- Protocol examples (typed WebSocket, HTTP)
 
-**Phase 3: Reactive Architecture** — no Virtual DOM, lenses for everything
+**Phase 5: Incremental updates**
 
-- ✅ Reactive Nodes: `bind`, declarative events in attributes
-- Migrate all examples to reactive approach
-- Widget network via lenses ("Big Lens")
-- Static verification + dynamic flexibility via lenses
+- Keyed foreach — update by key, not by index
+- Incremental DOM for foreach — add/remove without recreation
+- Nested bindings inside foreach elements
 
-Multi-level architecture:
-```
-Level 3: Declarative DSL    — button [ onClick Dec ] [ bindF show ]
-Level 2: Lenses             — navigation, modification, composition
-Level 1: Polynomials        — mathematical foundation
-```
-
-**Phase 4: Concurrency** — builds on lens architecture
+**Phase 6: Concurrency**
 
 - worker, parallel, race, channel
-- Process = position in polynomial
-- Channel = direction
-- Lens = rerouting, transformation
-- Worker pools, SharedArrayBuffer
+- Worker pools, structured concurrency
+- See [architecture/concurrency.md](architecture/concurrency.md)
 
-**Phase 5: Advanced** — for experts
+**Phase 7: Developer Experience**
 
-- Incremental (patches for large collections)
-- Indexed types for UI states
-- Session types for protocols
-- Linear types for resources
+- Hot reload, time-travel debugging, DevTools
 
 ## Philosophy
 

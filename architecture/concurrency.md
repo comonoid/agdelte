@@ -1,10 +1,10 @@
 # Concurrency in Agdelte
 
-> **Status:** Planned. This document describes the architecture extension for concurrent computations. Not implemented in MVP.
+> **Status:** Planned (Phase 6). This document describes the architecture extension for concurrent computations.
 >
-> **Extension:** optional extension of the base architecture from [README.md](README.md).
+> **Extension:** optional extension of the base architecture. See [doc/architecture.md](../doc/architecture.md).
 >
-> **Prerequisite:** familiarity with Signal, Event, App. See [README.md](README.md).
+> **Prerequisite:** familiarity with ReactiveApp, Event, Cmd. See [doc/api.md](../doc/api.md).
 >
 > **Key principle:** Worker generates **discrete events**, like all other primitives. No "continuity" — result, progress, cancellation — all are separate discrete events.
 
@@ -626,7 +626,7 @@ const worker = (fnName) => (input) => ({
 
 ## 9. Typing Concurrency
 
-### Linear types for resources (Phase 3+)
+### Linear types for resources (future)
 
 Worker is a resource that must be freed. Linear types guarantee this.
 
@@ -1031,22 +1031,21 @@ retryWorker maxRetries fn a = go 0 100
 Workers integrate through standard `events` — no App extensions required:
 
 ```agda
-record App (Msg : Set) (Model : Set) : Set where
+record ReactiveApp (Model Msg : Set) : Set₁ where
   field
-    init    : Model
-    update  : Msg → Model → Model
-    view    : Model → Html Msg
-    events  : Model → Event Msg
-    -- Workers are just another Event in events
+    init     : Model
+    update   : Msg → Model → Model
+    template : Node Model Msg
+-- Workers integrate via subs : Model → Event Msg (exported separately)
 ```
 
 ### Automatic management
 
-`events` is enough for all cases:
+`subs` is enough for all cases:
 
 ```agda
-events m = merge
-  (domEvents m)
+subs : Model → Event Msg
+subs m = merge
   (if m.computing then worker heavy m.data else never)
   (if m.fetching then request (get "/api") else never)
 ```

@@ -4,6 +4,9 @@
 >
 > **Ключевое сходство:** И Svelte, и Agdelte используют **прямые обновления DOM без Virtual DOM**.
 > Разница в том, что Svelte достигает этого компиляцией, а Agdelte — явными биндингами.
+>
+> **Примечание:** Примеры ниже используют **ReactiveApp** (шаблон с биндингами).
+> Для полного API см. [doc/api.md](../doc/api.md).
 
 10 примеров с анализом достоинств и недостатков обоих подходов.
 
@@ -69,23 +72,20 @@ app = mkReactiveApp 0 (λ { Inc n → suc n }) template
 ```agda
 data Msg = SetName String
 
-app : App Msg String
-app = record
-  { init   = ""
-  ; update = λ { (SetName s) _ → s }
-  ; view   = λ name → div []
-      [ input [ value name, onInput SetName ] []
-      , p [] [ text ("Hello, " ++ name ++ "!") ]
-      ]
-  ; events = λ _ → never
-  }
+template : Node String Msg
+template = div []
+  ( input [ valueBind id, onInput SetName ] []
+  ∷ p [] [ bindF (λ name → "Hello, " ++ name ++ "!") ]
+  ∷ [] )
+
+app = mkReactiveApp "" (λ { (SetName s) _ → s }) template
 ```
 
 ### Анализ
 
 | | Svelte | Agdelte |
 |--|--------|---------|
-| **Синтаксис** | ✅ `bind:value` — одна строка | ❌ Явный `value` + `onInput` |
+| **Синтаксис** | ✅ `bind:value` — одна строка | ⚠️ `valueBind` + `onInput` |
 | **Направление данных** | ⚠️ Двунаправленное (магия) | ✅ Однонаправленное (явное) |
 | **Отладка** | ⚠️ Сложнее отследить источник | ✅ Всегда видно откуда данные |
 | **Валидация** | ⚠️ Нужен отдельный `$effect` | ✅ В `update` естественно |
@@ -123,12 +123,9 @@ total m = sum (m .items)
 average : Model → ℕ
 average m = total m / length (m .items)
 
-app : App Msg Model
-app = record
-  { ...
-  ; view = λ m → p []
-      [ text ("Total: " ++ show (total m) ++ ", Average: " ++ show (average m)) ]
-  }
+template : Node Model Msg
+template = p []
+  [ bindF (λ m → "Total: " ++ show (total m) ++ ", Average: " ++ show (average m)) ]
 ```
 
 ### Анализ
@@ -220,10 +217,11 @@ app = record
 ### Agdelte
 
 ```agda
-view : Model → Html Msg
-view m = if m .loggedIn
-  then mapHtml DashboardMsg (dashboard m.user)
-  else mapHtml LoginMsg loginForm
+template : Node Model Msg
+template = div []
+  ( when loggedIn (focusNode user dashboardTemplate)
+  ∷ when (not ∘ loggedIn) loginTemplate
+  ∷ [] )
 ```
 
 ### Анализ
@@ -265,13 +263,12 @@ view m = if m .loggedIn
 ### Agdelte
 
 ```agda
-view : Model → Html Msg
-view m = ul []
-  (map viewTodo (m .todos))
-  where
-    viewTodo : Todo → Html Msg
-    viewTodo t = li [ className (if t .done then "done" else "") ]
-      [ text (t .text) ]
+template : Node Model Msg
+template = ul []
+  [ foreach todos (λ t _ →
+      li [ classBind (λ _ → if done t then "done" else "") ]
+        [ text (todoText t) ]
+    ) ]
 ```
 
 ### Анализ
@@ -331,31 +328,26 @@ view m = ul []
 ```agda
 data Status = Idle | Loading | Success Data | Failure String
 
-data Msg = LoadData | GotData Response
+data Msg = LoadData | GotData String | GotError String
 
-app = record
-  { init = { status = Idle }
+update : Msg → Model → Model
+update LoadData m = record m { status = Loading }
+update (GotData d) m = record m { status = Success (parse d) }
+update (GotError e) m = record m { status = Failure e }
 
-  ; update = λ where
-      LoadData m → record m { status = Loading }
-      (GotData (ok _ body)) m → record m { status = Success (parse body) }
-      (GotData (error _ msg)) m → record m { status = Failure msg }
+template : Node Model Msg
+template = div []
+  ( button [ onClick LoadData, disabledBind isLoading ]
+      [ bindF (λ m → if isLoading m then "Loading..." else "Load Data") ]
+  ∷ when isFailure (p [ class "error" ] [ bindF showError ])
+  ∷ when isSuccess (pre [] [ bindF showData ])
+  ∷ [] )
 
-  ; view = λ m → div []
-      [ button [ onClick LoadData, disabled (isLoading m) ]
-          [ text (if isLoading m then "Loading..." else "Load Data") ]
-      , case m .status of λ where
-          (Failure msg) → p [ className "error" ] [ text msg ]
-          (Success d) → pre [] [ text (show d) ]
-          _ → empty
-      ]
+cmd : Msg → Model → Cmd Msg
+cmd LoadData _ = httpGet "/api/data" GotData GotError
+cmd _ _ = ε
 
-  ; events = λ m → case m .status of λ where
-      Loading → mapE GotData (request (get "/api/data"))
-      _ → never
-  }
-  where
-    isLoading m = m .status ≡ Loading
+app = mkReactiveApp initModel update template
 ```
 
 ### Анализ
@@ -612,22 +604,21 @@ record Model : Set where
     velocity  : ℕ
     animating : Bool
 
-app = record
-  { init = { position = 0; velocity = 200; animating = true }
+update : Msg → Model → Model
+update (Tick frame) m = record m
+  { position = m .position + m .velocity * frame .dt / 1000 }
+update ToggleAnimation m = record m { animating = not (m .animating) }
 
-  ; update = λ where
-      (Tick frame) m → record m
-        { position = m .position + m .velocity * frame .dt / 1000 }
-      ToggleAnimation m → record m { animating = not (m .animating) }
+template : Node Model Msg
+template = div [ styleBind "transform" (λ m → "translateX(" ++ show (m .position) ++ "px)") ]
+  [ text "●" ]
 
-  ; view = λ m → div [ style [("transform", "translateX(" ++ show (m .position) ++ "px)")] ]
-      [ text "●" ]
+subs : Model → Event Msg
+subs m = if m .animating
+  then mapE Tick animationFrame  -- браузер даёт dt и fps
+  else never                      -- автоматическая отмена RAF
 
-  ; events = λ m →
-      if m .animating
-      then mapE Tick animationFrame  -- браузер даёт dt и fps
-      else never                      -- автоматическая отмена RAF
-  }
+app = mkReactiveApp initModel update template
 ```
 
 ### Анализ
