@@ -2,23 +2,20 @@
 
 -- WebSocketDemo: демонстрация WebSocket
 -- Echo-клиент с отправкой и получением сообщений
+-- Reactive approach: no Virtual DOM, direct bindings
 
 module WebSocketDemo where
 
 open import Data.Nat using (ℕ; zero; suc)
 open import Data.Nat.Show using (show)
 open import Data.String using (String; _++_)
-open import Data.List using (List; []; _∷_; length)
-open import Data.Bool using (Bool; true; false; if_then_else_)
+open import Data.List using (List; []; _∷_; [_]; length)
+open import Data.Bool using (Bool; true; false; if_then_else_; not)
 open import Function using (_∘_; const)
 
 open import Agdelte.Core.Event
 open import Agdelte.Core.Cmd
-import Agdelte.App as App
-open import Agdelte.Html.Types
-open import Agdelte.Html.Elements
-open import Agdelte.Html.Attributes
-open import Agdelte.Html.Events
+open import Agdelte.Reactive.Node
 
 ------------------------------------------------------------------------
 -- Model
@@ -67,18 +64,18 @@ data Msg : Set where
 -- Update
 ------------------------------------------------------------------------
 
-update : Msg → Model → Model
-update Connect m = record m { wantConnected = true ; connStatus = Connecting }
-update Disconnect m = record m { wantConnected = false ; connStatus = Disconnected ; messages = [] }
-update (WsEvent WsConnected) m = record m { connStatus = Connected }
-update (WsEvent (WsMessage s)) m = record m
+updateModel : Msg → Model → Model
+updateModel Connect m = record m { wantConnected = true ; connStatus = Connecting }
+updateModel Disconnect m = record m { wantConnected = false ; connStatus = Disconnected ; messages = [] }
+updateModel (WsEvent WsConnected) m = record m { connStatus = Connected }
+updateModel (WsEvent (WsMessage s)) m = record m
   { messages = Received s ∷ messages m
   ; msgCount = suc (msgCount m)
   }
-update (WsEvent WsClosed) m = record m { connStatus = Disconnected ; wantConnected = false }
-update (WsEvent (WsError e)) m = record m { connStatus = Error e ; wantConnected = false }
-update (UpdateInput s) m = record m { inputText = s }
-update SendMessage m = record m
+updateModel (WsEvent WsClosed) m = record m { connStatus = Disconnected ; wantConnected = false }
+updateModel (WsEvent (WsError e)) m = record m { connStatus = Error e ; wantConnected = false }
+updateModel (UpdateInput s) m = record m { inputText = s }
+updateModel SendMessage m = record m
   { messages = Sent (inputText m) ∷ messages m
   ; inputText = ""
   }
@@ -87,14 +84,14 @@ update SendMessage m = record m
 -- Command
 ------------------------------------------------------------------------
 
-command : Msg → Model → Cmd Msg
-command SendMessage m with connStatus m
+cmd : Msg → Model → Cmd Msg
+cmd SendMessage m with connStatus m
 ... | Connected = wsSend wsUrl (inputText m)
 ... | _ = ε
-command _ _ = ε
+cmd _ _ = ε
 
 ------------------------------------------------------------------------
--- View
+-- Helpers
 ------------------------------------------------------------------------
 
 statusClass : ConnectionStatus → String
@@ -113,52 +110,75 @@ isConnected : ConnectionStatus → Bool
 isConnected Connected = true
 isConnected _ = false
 
-viewMessage : ChatMsg → Html Msg
-viewMessage (Sent s) = li (class "message sent" ∷ [])
-  ( span (class "label" ∷ []) (text "You" ∷ [])
-  ∷ span (class "text" ∷ []) (text s ∷ [])
-  ∷ [])
-viewMessage (Received s) = li (class "message received" ∷ [])
-  ( span (class "label" ∷ []) (text "Echo" ∷ [])
-  ∷ span (class "text" ∷ []) (text s ∷ [])
-  ∷ [])
+modelIsConnected : Model → Bool
+modelIsConnected m = isConnected (connStatus m)
 
-view : Model → Html Msg
-view m = div (class "ws-demo" ∷ [])
-  ( h1 [] (text "WebSocket Demo" ∷ [])
-  ∷ p [] (text ("Echo server: " ++ wsUrl) ∷ [])
+modelStatusClass : Model → String
+modelStatusClass m = "status " ++ statusClass (connStatus m)
 
-  -- Status
-  ∷ div (class ("status " ++ statusClass (connStatus m)) ∷ [])
-      (text (statusText (connStatus m)) ∷ [])
+modelStatusText : Model → String
+modelStatusText m = statusText (connStatus m)
 
-  -- Connect/Disconnect button
-  ∷ (if isConnected (connStatus m)
-      then button (onClick Disconnect ∷ class "disconnect-btn" ∷ [])
-             (text "Disconnect" ∷ [])
-      else button (onClick Connect ∷ class "connect-btn" ∷ [])
-             (text "Connect" ∷ []))
+msgCountText : Model → String
+msgCountText m = "Messages (" ++ show (msgCount m) ++ ")"
 
-  -- Message input (only when connected)
-  ∷ (if isConnected (connStatus m)
-      then div (class "input-section" ∷ [])
-        ( input (type' "text"
-               ∷ value (inputText m)
-               ∷ onInput UpdateInput
-               ∷ placeholder "Type a message..."
-               ∷ [])
-        ∷ button (onClick SendMessage ∷ class "send-btn" ∷ [])
-            (text "Send" ∷ [])
-        ∷ [])
-      else div [] [])
+------------------------------------------------------------------------
+-- Template: reactive bindings (no Virtual DOM)
+------------------------------------------------------------------------
 
-  -- Messages list
-  ∷ div (class "messages-section" ∷ [])
-      ( h3 [] (text ("Messages (" ++ show (msgCount m) ++ ")") ∷ [])
-      ∷ ul (class "messages" ∷ [])
-          (Data.List.map viewMessage (messages m))
-      ∷ [])
-  ∷ [])
+-- View single message (used in foreach)
+viewMessage : ChatMsg → ℕ → Node Model Msg
+viewMessage (Sent s) _ =
+  li [ class "message sent" ]
+    ( span [ class "label" ] [ text "You" ]
+    ∷ span [ class "text" ] [ text s ]
+    ∷ [] )
+viewMessage (Received s) _ =
+  li [ class "message received" ]
+    ( span [ class "label" ] [ text "Echo" ]
+    ∷ span [ class "text" ] [ text s ]
+    ∷ [] )
+
+wsTemplate : Node Model Msg
+wsTemplate =
+  div [ class "ws-demo" ]
+    ( h1 [] [ text "WebSocket Demo" ]
+    ∷ p [] [ text ("Echo server: " ++ wsUrl) ]
+
+    -- Status
+    ∷ div [ classBind modelStatusClass ]
+        [ bindF modelStatusText ]  -- auto-updates!
+
+    -- Connect/Disconnect buttons (conditional)
+    ∷ when modelIsConnected (
+        button (onClick Disconnect ∷ class "disconnect-btn" ∷ [])
+          [ text "Disconnect" ]
+      )
+    ∷ when (not ∘ modelIsConnected) (
+        button (onClick Connect ∷ class "connect-btn" ∷ [])
+          [ text "Connect" ]
+      )
+
+    -- Message input (only when connected)
+    ∷ when modelIsConnected (
+        div [ class "input-section" ]
+          ( input (type' "text"
+                 ∷ valueBind inputText
+                 ∷ onInput UpdateInput
+                 ∷ placeholder "Type a message..."
+                 ∷ [])
+          ∷ button (onClick SendMessage ∷ class "send-btn" ∷ [])
+              [ text "Send" ]
+          ∷ [] )
+      )
+
+    -- Messages list
+    ∷ div [ class "messages-section" ]
+        ( h3 [] [ bindF msgCountText ]  -- auto-updates!
+        ∷ ul [ class "messages" ]
+            [ foreach messages viewMessage ]  -- reactive list!
+        ∷ [] )
+    ∷ [] )
 
 ------------------------------------------------------------------------
 -- Subscriptions
@@ -171,5 +191,7 @@ subs m = if wantConnected m then wsConnect wsUrl WsEvent else never
 -- App
 ------------------------------------------------------------------------
 
-app : App.App Model Msg
-app = App.mkCmdApp initialModel update view subs command
+app : ReactiveApp Model Msg
+app = mkReactiveApp initialModel updateModel wsTemplate
+
+-- cmd and subs are exported separately (see above)

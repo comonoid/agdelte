@@ -2,53 +2,56 @@
 
 ## Core Principle
 
-**Simple definitions + Isolated theory**
+**Svelte-style reactivity + Dependent types + No Virtual DOM**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  USER LAYER                                                  │
-│  Simple record definitions                                   │
-│  App { init, update, view, subs, command }                  │
-│  Clear error messages                                        │
+│  Level 3: Declarative DSL                                   │
+│  button [ onClick Dec ] [ bindF show ]                     │
+│  Aesthetic, readable, statically verified                   │
 ├─────────────────────────────────────────────────────────────┤
-│  LIBRARY LAYER                                               │
-│  Typed combinators                                           │
-│  mapE, merge, _∥_, mapMsg, mapCmd, withView                 │
+│  Level 2: Lenses                                            │
+│  Navigation, modification, composition                      │
+│  Dynamic flexibility at runtime                             │
 ├─────────────────────────────────────────────────────────────┤
-│  THEORY LAYER (Theory/)                                      │
-│  Poly, Coalg, Lens — formal foundations                     │
-│  Proofs: Signal ≅ Coalg, App ≅ Coalg                        │
-│  (isolated, imported on demand)                             │
+│  Level 1: Polynomials                                       │
+│  Mathematical foundation (Spivak, Niu)                      │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Elm Architecture with Explicit Effects
+## Reactive Templates (Svelte-style)
 
 ```agda
-record App (Model Msg : Set) : Set where
+record ReactiveApp (Model Msg : Set) : Set₁ where
   field
-    init    : Model                    -- initial state
-    update  : Msg → Model → Model      -- pure state transition
-    view    : Model → Html Msg         -- pure rendering
-    subs    : Model → Event Msg        -- subscriptions (continuous)
-    command : Msg → Model → Cmd Msg    -- one-shot effects
+    init     : Model                    -- initial state
+    update   : Msg → Model → Model      -- pure state transition
+    template : Node Model Msg           -- reactive template (NOT a function!)
 ```
 
-### Key Separation
+### Key Insight: No Virtual DOM
 
-| Concept | Type | Purpose | Example |
-|---------|------|---------|---------|
-| `Event` | `subs` | Continuous subscriptions | interval, keyboard, websocket |
-| `Cmd` | `command` | One-shot effects | HTTP, focus, clipboard |
-| `Task` | in `Cmd` | Monadic chains | Sequential HTTP |
+| Virtual DOM (React/Elm) | Reactive Bindings (Svelte/Agdelte) |
+|-------------------------|-------------------------------------|
+| `view : Model → Html`   | `template : Node Model Msg`         |
+| Rebuilds tree each time | Static structure with bindings      |
+| Diff old vs new tree    | Check only bound values             |
+| O(tree size) updates    | O(bindings) updates                 |
 
-### Why This Separation?
+### How It Works
 
-**`update` stays simple**: `Msg → Model → Model`
+```
+1. FIRST RENDER:
+   - Walk Node tree, create real DOM
+   - For each `bind`, remember (DOMNode, Binding)
 
-Effects are handled separately:
-- `subs` — what to listen to (declarative)
-- `command` — what to do in response (imperative, but typed)
+2. ON MODEL CHANGE:
+   - For each binding: oldValue vs newValue
+   - If changed → update that DOM node directly
+   - NO tree diffing!
+```
+
+This is exactly what Svelte does at compile time, but with explicit bindings.
 
 ## Event — Subscriptions
 
@@ -133,73 +136,69 @@ _∥_ : App M₁ A₁ → App M₂ A₂ → App (M₁ × M₂) (A₁ ⊎ A₂)
 
 Two apps run independently, model is a pair, messages are tagged.
 
-### Modifiers
+### Component Composition (focusNode)
 
 ```agda
-withView   : (Model → Html Msg) → App Model Msg → App Model Msg
-withUpdate : (Msg → Model → Model) → App Model Msg → App Model Msg
-withSubs   : (Model → Event Msg) → App Model Msg → App Model Msg
-withEvents : (Model → Event Msg) → App Model Msg → App Model Msg  -- merge
-withCommand : (Msg → Model → Cmd Msg) → App Model Msg → App Model Msg  -- merge
+focusNode : (Outer → Inner) → Node Inner Msg → Node Outer Msg
+focusBinding : (Outer → Inner) → Binding Inner A → Binding Outer A
 ```
 
-### Message/Model Transformation
+This allows reusing templates with different model slices — similar to Svelte's component props but with type-safe lenses.
+
+## Node — Reactive Template
 
 ```agda
-mapMsg   : (A → B) → (B → A) → App Model A → App Model B
-mapModel : (M₂ → M₁) → (M₁ → M₂ → M₂) → M₂ → App M₁ Msg → App M₂ Msg
+data Node (Model Msg : Set) : Set₁ where
+  text    : String → Node Model Msg                                                -- static text
+  bind    : Binding Model String → Node Model Msg                                  -- reactive binding!
+  elem    : String → List (Attr Model Msg) → List (Node Model Msg) → Node Model Msg
+  empty   : Node Model Msg                                                         -- nothing
+  when    : (Model → Bool) → Node Model Msg → Node Model Msg                      -- conditional
+  foreach : ∀ {A} → (Model → List A) → (A → ℕ → Node Model Msg) → Node Model Msg -- dynamic list
+
+data Attr (Model Msg : Set) : Set₁ where
+  attr      : String → String → Attr Model Msg             -- static attribute
+  attrBind  : String → Binding Model String → Attr Model Msg -- reactive attribute
+  on        : String → Msg → Attr Model Msg                -- event handler
+  onValue   : String → (String → Msg) → Attr Model Msg     -- event with value
+  style     : String → String → Attr Model Msg
+  styleBind : String → Binding Model String → Attr Model Msg
+
+record Binding (Model : Set) (A : Set) : Set where
+  field
+    extract : Model → A           -- get value from model
+    equals  : A → A → Bool        -- detect changes
 ```
 
-## Html
-
-Type-safe virtual DOM:
+### Smart Constructors
 
 ```agda
-data Html (Msg : Set) : Set where
-  node  : String → List (Attr Msg) → List (Html Msg) → Html Msg
-  text  : String → Html Msg
-  keyed : String → List (Attr Msg) → List (String × Html Msg) → Html Msg
-
-data Attr (Msg : Set) : Set where
-  attr      : String → String → Attr Msg
-  boolAttr  : String → Attr Msg
-  style     : String → String → Attr Msg
-  on        : String → Msg → Attr Msg
-  onPrevent : String → Msg → Attr Msg  -- with preventDefault
-  onInput   : (String → Msg) → Attr Msg
-  onKey     : String → (String → Msg) → Attr Msg
-  key       : String → Attr Msg
+bindF : (Model → String) → Node Model Msg    -- most common: bindF show
+onClick : Msg → Attr Model Msg               -- on "click"
+onInput : (String → Msg) → Attr Model Msg    -- onValue "input"
+class : String → Attr Model Msg              -- attr "class"
 ```
 
-### Navigation
-
-```agda
--- High-level navigation (from Agdelte.Html.Navigation)
-navLink : String → Msg → List (Attr Msg) → List (Html Msg) → Html Msg
-```
-
-Automatically handles `preventDefault` for SPA navigation.
-
-## Runtime Algorithm
+## Runtime Algorithm (No VDOM!)
 
 ```
 1. model := app.init
-2. html := app.view(model)
-3. Render DOM, attach handlers
-4. Subscribe to app.subs(model)
-5. Wait for event (DOM, interval, websocket, ...)
-6. cmd := app.command(msg, model)
-7. model := app.update(msg, model)
-8. Execute cmd
-9. newSubs := app.subs(model)
-10. if fingerprint(newSubs) ≠ fingerprint(oldSubs):
-      unsubscribe(oldSubs)
-      subscribe(newSubs)
-11. Patch DOM with diff(oldHtml, app.view(model))
-12. goto 5
+2. Walk app.template, create real DOM
+3. For each `bind`: remember (DOMNode, Binding)
+4. Attach event handlers from `on` attributes
+5. Subscribe to app.subs(model)
+6. Wait for event (DOM click, interval, websocket, ...)
+7. oldModel := model
+8. model := app.update(msg, oldModel)
+9. For each binding:
+     oldVal := extract(oldModel)
+     newVal := extract(model)
+     if not equals(oldVal, newVal):
+       update DOM node directly
+10. goto 6
 ```
 
-Key optimization: **fingerprint comparison** for subscriptions prevents unnecessary unsubscribe/resubscribe cycles (critical for WebSocket).
+**Key difference from Virtual DOM**: No tree reconstruction, no diffing algorithm. O(bindings) instead of O(tree).
 
 ## Theoretical Foundation
 
@@ -216,6 +215,79 @@ Correspondences:
 
 This provides formal guarantees and enables future optimizations.
 
+## Multi-Level Architecture
+
+The architecture consists of three complementary levels:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Level 3: Declarative DSL                               │
+│  button [ onClick Dec ] [ text "-" ]                   │
+│  Aesthetic, readable, statically verified              │
+└────────────────────────┬────────────────────────────────┘
+                         │ compiles to / represented by
+┌────────────────────────▼────────────────────────────────┐
+│  Level 2: Lenses                                        │
+│  focus : Lens Whole Part                               │
+│  Navigation, modification, composition                  │
+│  Dynamic flexibility at runtime                         │
+└────────────────────────┬────────────────────────────────┘
+                         │ based on
+┌────────────────────────▼────────────────────────────────┐
+│  Level 1: Polynomials                                   │
+│  p(y) = Σ(i : I) y^(B i)                              │
+│  Mathematical foundation                                │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Key Insight: Static Verification + Dynamic Flexibility
+
+These levels are **not mutually exclusive** — they complement each other:
+
+1. **Inductive types (DSL)** provide beautiful declarative syntax. Users write clean, readable code that the type checker verifies.
+
+2. **Lenses** provide navigation and modification capabilities. They work *on* the structures defined by inductive types.
+
+3. **Polynomials** provide the mathematical semantics that make everything composable and predictable.
+
+### The "Big Lens" Principle
+
+A lens can operate at any scale:
+- **Small**: Navigate to a field in a record
+- **Medium**: Transform a subtree of widgets
+- **Large**: Restructure an entire network of widgets
+
+```agda
+-- Same abstraction at every scale:
+fieldLens   : Lens Record Field
+widgetLens  : Lens WidgetTree SubWidget
+networkLens : Lens (Network Widget) (Network Widget')
+```
+
+This principle extends naturally to **concurrency**:
+- Process = position in polynomial
+- Channel = direction
+- Lens = rerouting, transformation
+
+### Static + Dynamic
+
+The type system verifies the *initial* structure statically:
+
+```agda
+-- Type-checked at compile time:
+myWidget : Widget Model Msg
+myNetwork : Network Widget
+```
+
+But lenses allow *controlled* runtime modification:
+
+```agda
+-- At runtime, modify through lens (type-safe!):
+modify networkLens restructure initialNetwork
+```
+
+This is the key: **well-typed programs don't go wrong, but can evolve**.
+
 ## Benefits
 
 | Capability | Why It's Easy |
@@ -229,12 +301,12 @@ This provides formal guarantees and enables future optimizations.
 
 ## Comparison
 
-| | Svelte 5 | Elm | Agdelte |
-|--|----------|-----|---------|
-| Reactivity | Compiler magic | Architecture | Elm-like + Poly theory |
-| Types | TypeScript | ML | Dependent types |
-| Effects | Hidden in $effect | Cmd (opaque) | Event (subs) + Cmd (explicit) |
-| update | Mutations | Model × Cmd | Model (simple!) |
-| Composition | Components | Boilerplate | `_∥_`, `mapMsg` (Poly inside) |
-| Error messages | Good | Good | Good (simple types) |
-| Proofs | No | No | Possible (via Theory/) |
+| | Svelte 5 | Virtual DOM (React/Elm) | Agdelte |
+|--|----------|-------------------------|---------|
+| DOM updates | Direct (compiled) | Diff tree, patch | Direct (bindings) |
+| Performance | Fast | Overhead from diffing | Fast |
+| Reactivity | Compiler magic | Runtime diffing | Explicit bindings |
+| Types | TypeScript | Varies | Dependent types |
+| Template | `.svelte` file | `view : Model → Html` | `template : Node Model Msg` |
+| Composition | Components | Components | Lenses + `_∥_` |
+| Proofs | No | No | Yes (via Theory/) |

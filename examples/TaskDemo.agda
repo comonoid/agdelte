@@ -2,23 +2,20 @@
 
 -- TaskDemo: демонстрация монадических цепочек HTTP-запросов
 -- Показывает do-нотацию для композиции Task
+-- Reactive approach: no Virtual DOM, direct bindings
 
 module TaskDemo where
 
 open import Data.Nat using (ℕ; zero; suc)
 open import Data.Nat.Show using (show)
 open import Data.String using (String; _++_; length)
-open import Data.List using (List; []; _∷_)
+open import Data.List using (List; []; _∷_; [_])
 open import Function using (const)
 
 open import Agdelte.Core.Event
 open import Agdelte.Core.Cmd
 open import Agdelte.Core.Task
-open import Agdelte.Html.Types
-open import Agdelte.Html.Elements
-open import Agdelte.Html.Attributes
-open import Agdelte.Html.Events
-import Agdelte.App as App
+open import Agdelte.Reactive.Node
 
 ------------------------------------------------------------------------
 -- Model
@@ -69,21 +66,21 @@ fetchChain = do
 -- Update
 ------------------------------------------------------------------------
 
-update : Msg → Model → Model
-update FetchChain m = mkModel loading "Starting chain..."
-update (GotResult (ok d)) m = mkModel (success d) "Done!"
-update (GotResult (err e)) m = mkModel (error e) "Error!"
+updateModel : Msg → Model → Model
+updateModel FetchChain m = mkModel loading "Starting chain..."
+updateModel (GotResult (ok d)) m = mkModel (success d) "Done!"
+updateModel (GotResult (err e)) m = mkModel (error e) "Error!"
 
 ------------------------------------------------------------------------
 -- Command
 ------------------------------------------------------------------------
 
-command : Msg → Model → Cmd Msg
-command FetchChain _ = attempt fetchChain GotResult
-command _ _ = ε
+cmd : Msg → Model → Cmd Msg
+cmd FetchChain _ = attempt fetchChain GotResult
+cmd _ _ = ε
 
 ------------------------------------------------------------------------
--- View
+-- Helpers
 ------------------------------------------------------------------------
 
 getBtnText : Status → String
@@ -98,22 +95,35 @@ getStatusText loading = "Fetching..."
 getStatusText (success d) = d
 getStatusText (error e) = "Error: " ++ e
 
-view : Model → Html Msg
-view m =
-  div (class "task-demo" ∷ [])
-    ( h1 [] (text "Task Chain Demo" ∷ [])
-    ∷ p [] (text "Demonstrates monadic HTTP request chains" ∷ [])
-    ∷ button
-        (onClick FetchChain ∷ class "fetch-btn" ∷ [])
-        (text (getBtnText (Model.status m)) ∷ [])
-    ∷ div (class "status" ∷ [])
-        (pre [] (text (getStatusText (Model.status m)) ∷ []) ∷ [])
-    ∷ div (class "step-info" ∷ [])
-        (text ("Step: " ++ Model.stepInfo m) ∷ [])
+-- Model to string functions
+btnTextFromModel : Model → String
+btnTextFromModel m = getBtnText (Model.status m)
+
+statusTextFromModel : Model → String
+statusTextFromModel m = getStatusText (Model.status m)
+
+stepInfoFromModel : Model → String
+stepInfoFromModel m = "Step: " ++ Model.stepInfo m
+
+------------------------------------------------------------------------
+-- Template: reactive bindings (no Virtual DOM)
+------------------------------------------------------------------------
+
+taskTemplate : Node Model Msg
+taskTemplate =
+  div [ class "task-demo" ]
+    ( h1 [] [ text "Task Chain Demo" ]
+    ∷ p [] [ text "Demonstrates monadic HTTP request chains" ]
+    ∷ button (onClick FetchChain ∷ class "fetch-btn" ∷ [])
+        [ bindF btnTextFromModel ]    -- auto-updates!
+    ∷ div [ class "status" ]
+        [ pre [] [ bindF statusTextFromModel ] ]  -- auto-updates!
+    ∷ div [ class "step-info" ]
+        [ bindF stepInfoFromModel ]   -- auto-updates!
     ∷ [] )
 
 ------------------------------------------------------------------------
--- Subs
+-- Subs (none for this demo)
 ------------------------------------------------------------------------
 
 subs : Model → Event Msg
@@ -123,6 +133,7 @@ subs = const never
 -- App
 ------------------------------------------------------------------------
 
-app : App.App Model Msg
-app = App.mkCmdApp initialModel update view subs command
+app : ReactiveApp Model Msg
+app = mkReactiveApp initialModel updateModel taskTemplate
 
+-- cmd and subs are exported separately (see above)

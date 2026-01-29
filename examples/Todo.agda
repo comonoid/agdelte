@@ -1,6 +1,7 @@
 {-# OPTIONS --without-K #-}
 
 -- Todo: классический TodoMVC пример
+-- Reactive approach: no Virtual DOM, direct bindings
 
 module Todo where
 
@@ -8,17 +9,12 @@ open import Data.Nat using (ℕ; zero; suc; _+_; _∸_)
 open import Data.Nat.Show using (show)
 open import Data.Bool using (Bool; true; false; not; if_then_else_)
 open import Data.String using (String; _++_; _≟_)
-open import Data.List using (List; []; _∷_; map; length; null)
+open import Data.List using (List; []; _∷_; [_]; map; length; null)
 open import Data.List.Base using (filterᵇ)
 open import Data.Product using (_×_; _,_)
 open import Relation.Nullary using (yes; no)
 
-open import Agdelte.Core.Event hiding (onKeyDown; onKeyUp)
-open import Agdelte.Html.Types
-open import Agdelte.Html.Elements
-open import Agdelte.Html.Attributes
-open import Agdelte.Html.Events
-import Agdelte.App as App
+open import Agdelte.Reactive.Node
 
 ------------------------------------------------------------------------
 -- TodoItem
@@ -92,10 +88,10 @@ isEmpty s with s ≟ ""
 
 {-# COMPILE JS isEmpty = s => s === "" #-}
 
-update : Msg → Model → Model
-update NoOp m = m
-update (UpdateInput s) m = record m { inputText = s }
-update AddTodo m =
+updateModel : Msg → Model → Model
+updateModel NoOp m = m
+updateModel (UpdateInput s) m = record m { inputText = s }
+updateModel AddTodo m =
   if isEmpty (inputText m)
   then m
   else record m
@@ -104,12 +100,12 @@ update AddTodo m =
     }  -- inputText сохраняется для быстрого добавления дубликатов
   where
     open import Data.List using (_∷ʳ_)
-update (ToggleTodo id) m = record m { todos = map (toggleItem id) (todos m) }
-update (RemoveTodo id) m = record m { todos = removeItem id (todos m) }
-update ClearCompleted m = record m { todos = keepActive (todos m) }
+updateModel (ToggleTodo id') m = record m { todos = map (toggleItem id') (todos m) }
+updateModel (RemoveTodo id') m = record m { todos = removeItem id' (todos m) }
+updateModel ClearCompleted m = record m { todos = keepActive (todos m) }
 
 ------------------------------------------------------------------------
--- View helpers
+-- Helper functions
 ------------------------------------------------------------------------
 
 -- Количество незавершённых задач
@@ -120,17 +116,60 @@ activeCount items = length (filterᵇ (λ item → not (completed item)) items)
 hasCompleted : List TodoItem → Bool
 hasCompleted items = not (null (filterᵇ completed items))
 
+-- Format items count
+itemsLeftStr : Model → String
+itemsLeftStr m = show (activeCount (todos m)) ++ " items left"
+
+-- Has todos?
+hasTodos : Model → Bool
+hasTodos m = not (null (todos m))
+
+-- Has completed todos?
+modelHasCompleted : Model → Bool
+modelHasCompleted m = hasCompleted (todos m)
+
 ------------------------------------------------------------------------
--- View: отдельная задача
+-- Template: reactive bindings (no Virtual DOM)
 ------------------------------------------------------------------------
 
-viewTodo : TodoItem → Html Msg
-viewTodo item =
+-- Style helpers
+appStyle : Attr Model Msg
+appStyle = styles "max-width" "500px; margin: 40px auto; font-family: sans-serif"
+
+headerStyle : Attr Model Msg
+headerStyle = styles "text-align" "center; color: #b83f45; font-size: 80px; font-weight: 200"
+
+inputSectionStyle : Attr Model Msg
+inputSectionStyle = styles "display" "flex; gap: 8px; margin-bottom: 16px"
+
+inputStyle' : Attr Model Msg
+inputStyle' = styles "flex" "1; padding: 12px; font-size: 16px; border: none; outline: none"
+
+addBtnStyle : Attr Model Msg
+addBtnStyle = styles "padding" "12px 24px; background: #b83f45; color: white; border: none; cursor: pointer"
+
+listStyle : Attr Model Msg
+listStyle = styles "list-style" "none; padding: 0; margin: 0"
+
+footerStyle : Attr Model Msg
+footerStyle = styles "display" "flex; justify-content: space-between; padding: 12px; color: #777"
+
+clearStyle : Attr Model Msg
+clearStyle = styles "padding" "6px 12px; background: #b83f45; color: white; border: none; border-radius: 4px; cursor: pointer"
+
+-- Key handler for input
+handleKey : String → Msg
+handleKey "Enter" = AddTodo
+handleKey _       = NoOp
+
+-- View single todo item (used in foreach)
+viewTodoItem : TodoItem → ℕ → Node Model Msg
+viewTodoItem item idx =
   li (keyAttr (show (todoId item)) ∷ class "todo-item" ∷ itemStyle ∷ [])
     ( input (type' "checkbox" ∷ checkboxAttrs ∷ onClick (ToggleTodo (todoId item)) ∷ [])
-    ∷ span (textStyle ∷ []) (text (todoText item) ∷ [])
+    ∷ span (textStyle ∷ []) [ text (todoText item) ]
     ∷ button (onClick (RemoveTodo (todoId item)) ∷ class "delete-btn" ∷ deleteStyle ∷ [])
-        (text "×" ∷ [])
+        [ text "×" ]
     ∷ [] )
   where
     itemStyle = styles "display" "flex; align-items: center; padding: 8px"
@@ -140,77 +179,38 @@ viewTodo item =
                 else styles "flex" "1"
     deleteStyle = styles "background" "none; border: none; color: #cc9a9a; font-size: 20px; cursor: pointer"
 
-------------------------------------------------------------------------
--- View: главная
-------------------------------------------------------------------------
-
--- View helpers для footer
-clearBtn : Model → Html Msg
-clearBtn m' =
-  if hasCompleted (todos m')
-  then button (onClick ClearCompleted ∷ clearStyle ∷ [])
-         (text "Clear completed" ∷ [])
-  else empty
-  where
-    clearStyle = styles "padding" "6px 12px; background: #b83f45; color: white; border: none; border-radius: 4px; cursor: pointer"
-
-viewFooter : Model → Html Msg
-viewFooter m' =
-  if null (todos m')
-  then empty
-  else div (class "footer" ∷ footerStyle ∷ [])
-         ( span [] (text (show (activeCount (todos m')) ++ " items left") ∷ [])
-         ∷ clearBtn m'
-         ∷ [] )
-  where
-    open import Data.List using (null)
-    footerStyle = styles "display" "flex; justify-content: space-between; padding: 12px; color: #777"
-
-view : Model → Html Msg
-view m =
+-- Main template
+todoTemplate : Node Model Msg
+todoTemplate =
   div (class "todo-app" ∷ appStyle ∷ [])
-    ( h1 (headerStyle ∷ []) (text "todos" ∷ [])
+    ( h1 (headerStyle ∷ []) [ text "todos" ]
     ∷ div (class "input-section" ∷ inputSectionStyle ∷ [])
         ( input (type' "text"
                ∷ placeholder "What needs to be done?"
-               ∷ value (inputText m)
-               ∷ onInput' UpdateInput
+               ∷ valueBind inputText
+               ∷ onInput UpdateInput
                ∷ onKeyDown handleKey
-               ∷ inputStyle
+               ∷ inputStyle'
                ∷ [])
         ∷ button (onClick AddTodo ∷ addBtnStyle ∷ [])
-            (text "Add" ∷ [])
+            [ text "Add" ]
         ∷ [] )
     ∷ ul (class "todo-list" ∷ listStyle ∷ [])
-        (map viewTodo (todos m))
-    ∷ viewFooter m
+        [ foreach todos viewTodoItem ]  -- reactive list!
+    ∷ when hasTodos (
+        div (class "footer" ∷ footerStyle ∷ [])
+          ( span [] [ bindF itemsLeftStr ]  -- auto-updates!
+          ∷ when modelHasCompleted (
+              button (onClick ClearCompleted ∷ clearStyle ∷ [])
+                [ text "Clear completed" ]
+            )
+          ∷ [] )
+      )
     ∷ [] )
-  where
-    appStyle = styles "max-width" "500px; margin: 40px auto; font-family: sans-serif"
-    headerStyle = styles "text-align" "center; color: #b83f45; font-size: 80px; font-weight: 200"
-    inputSectionStyle = styles "display" "flex; gap: 8px; margin-bottom: 16px"
-    inputStyle = styles "flex" "1; padding: 12px; font-size: 16px; border: none; outline: none"
-    addBtnStyle = styles "padding" "12px 24px; background: #b83f45; color: white; border: none; cursor: pointer"
-    listStyle = styles "list-style" "none; padding: 0; margin: 0"
-
-    handleKey : String → Msg
-    handleKey "Enter" = AddTodo
-    handleKey _       = NoOp  -- Ignore other keys, onInput handles text
-
-------------------------------------------------------------------------
--- Events (без внешних событий)
-------------------------------------------------------------------------
-
-events : Model → Event Msg
-events _ = never
 
 ------------------------------------------------------------------------
 -- App
 ------------------------------------------------------------------------
 
-todoApp : App.App Model Msg
-todoApp = App.mkApp initialModel update view events
-
--- Export for demo-loader.js
-app : App.App Model Msg
-app = todoApp
+app : ReactiveApp Model Msg
+app = mkReactiveApp initialModel updateModel todoTemplate

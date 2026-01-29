@@ -1,56 +1,56 @@
-# Справочник комбинаторов
+# Combinator Reference
 
-> Справочник API. Концептуальное понимание: [README.md](README.md)
+> API reference. For conceptual understanding: [README.md](README.md)
 >
-> **Примечание:** Этот документ описывает целевой API. Текущий MVP реализует базовое подмножество (`mapE`). Остальные комбинаторы — референсная документация для будущих фаз.
+> **Note:** This document describes the target API. The current MVP implements a basic subset (`mapE`). Other combinators are reference documentation for future phases.
 
-**Условные обозначения:**
-- 🟢 MVP — интуитивно понятно, включено в Phase 1
-- 🟡 Phase 2 — требует отдельного изучения
+**Legend:**
+- 🟢 MVP — intuitive, included in Phase 1
+- 🟡 Phase 2 — requires separate study
 
-## Базовые 🟢
+## Basic 🟢
 
-| Комбинатор | Тип | Описание |
-|------------|-----|----------|
-| `never` | `Event A` | Никогда не происходит |
-| `occur` | `A → Event A` | Одно событие сейчас |
-| `merge` | `Event A → Event A → Event A` | Объединить потоки |
-| `mapE` | `(A → B) → Event A → Event B` | Преобразовать |
-| `filterE` | `(A → Bool) → Event A → Event A` | Отфильтровать |
+| Combinator | Type | Description |
+|------------|------|-------------|
+| `never` | `Event A` | Never occurs |
+| `occur` | `A → Event A` | One event now |
+| `merge` | `Event A → Event A → Event A` | Combine streams |
+| `mapE` | `(A → B) → Event A → Event B` | Transform |
+| `filterE` | `(A → Bool) → Event A → Event A` | Filter |
 | `filterMap` | `(A → Maybe B) → Event A → Event B` | Map + filter |
-| `partitionE` | `(A → Bool) → Event A → Event A × Event A` | Разделить по предикату |
-| `split` | `Event (Either A B) → Event A × Event B` | Разделить Either |
-| `leftmost` | `List (Event A) → Event A` | Первое событие (приоритет) |
-| `difference` | `Event A → Event A → Event A` | Разница множеств |
+| `partitionE` | `(A → Bool) → Event A → Event A × Event A` | Split by predicate |
+| `split` | `Event (Either A B) → Event A × Event B` | Split Either |
+| `leftmost` | `List (Event A) → Event A` | First event (priority) |
+| `difference` | `Event A → Event A → Event A` | Set difference |
 
 ---
 
 ## Sampling (Event + Signal) 🟢
 
-| Комбинатор | Тип | Описание |
-|------------|-----|----------|
-| `snapshot` | `(A → B → C) → Event A → Signal B → Event C` | Семплировать Signal |
-| `attach` | `Event A → Signal B → Event (A × B)` | Приложить Signal |
-| `tag` | `Signal A → Event B → Event A` | Взять значение Signal |
-| `sample` | `Event A → Signal B → Event B` | Синоним tag |
-| `gate` | `Event A → Signal Bool → Event A` | Фильтр по Signal |
-| `changes` | `Signal A → Event A` | События изменения |
+| Combinator | Type | Description |
+|------------|------|-------------|
+| `snapshot` | `(A → B → C) → Event A → Signal B → Event C` | Sample Signal |
+| `attach` | `Event A → Signal B → Event (A × B)` | Attach Signal |
+| `tag` | `Signal A → Event B → Event A` | Take Signal value |
+| `sample` | `Event A → Signal B → Event B` | Synonym for tag |
+| `gate` | `Event A → Signal Bool → Event A` | Filter by Signal |
+| `changes` | `Signal A → Event A` | Change events |
 
-### Примеры
+### Examples
 
 ```agda
--- При клике "Save" взять текущий текст
+-- On "Save" click, take current text
 saveClicks : Event ⊤
 currentText : Signal String
 
 savedText : Event String
 savedText = tag currentText saveClicks
 
--- Собрать форму при отправке
+-- Collect form on submit
 formSubmit : Event FormData
 formSubmit = tag (pure mkForm <*> nameSignal <*> emailSignal) submitEvent
 
--- Клики только когда кнопка активна
+-- Clicks only when button is active
 activeClicks : Event ⊤
 activeClicks = gate rawClicks isEnabled
 ```
@@ -59,45 +59,45 @@ activeClicks = gate rawClicks isEnabled
 
 ## Time-based 🟢
 
-| Комбинатор | Тип | Описание |
-|------------|-----|----------|
-| `debounce` | `ℕ → Event A → Event A` | После паузы N мс |
-| `throttle` | `ℕ → Event A → Event A` | Максимум раз в N мс |
-| `delay` | `ℕ → Event A → Event A` | Задержка на N мс |
-| `timeout` | `ℕ → Event A → Event ⊤` | Событие если тишина N мс |
-| `after` | `ℕ → Event A → Event A` | Через N мс после |
+| Combinator | Type | Description |
+|------------|------|-------------|
+| `debounce` | `ℕ → Event A → Event A` | After N ms pause |
+| `throttle` | `ℕ → Event A → Event A` | At most once per N ms |
+| `delay` | `ℕ → Event A → Event A` | Delay by N ms |
+| `timeout` | `ℕ → Event A → Event ⊤` | Event if silence for N ms |
+| `after` | `ℕ → Event A → Event A` | N ms after |
 
-### Семантика debounce
+### Debounce semantics
 
 ```
-Входные события:  [a]  []  [b]  []  []  []  [c]  []  []  []  []  []
-Время (мс):        0   16   32  48  64  80  96  112 128 144 160 176
+Input events:     [a]  []  [b]  []  []  []  [c]  []  []  []  []  []
+Time (ms):         0   16   32  48  64  80  96  112 128 144 160 176
                    ↑        ↑                ↑
-                   │        │                └─ сброс таймера
-                   │        └─ сброс таймера
-                   └─ старт таймера
+                   │        │                └─ reset timer
+                   │        └─ reset timer
+                   └─ start timer
 
 debounce 50:      []  []  []  []  []  []  []  []  []  []  [c]  []
                                                           ↑
-                                               50мс после последнего
+                                               50ms after last
 ```
 
-### Семантика throttle
+### Throttle semantics
 
 ```
-Входные события:  [a]  [b]  [c]  []  []  []  [d]  [e]  []  []
-Время (мс):        0   16   32  48  64  80  96  112 128 144
+Input events:     [a]  [b]  [c]  []  []  []  [d]  [e]  []  []
+Time (ms):         0   16   32  48  64  80  96  112 128 144
                    ↑    ↓    ↓              ↑    ↓
-                   │    │    │              │    └─ игнорируется
-                   │    │    │              └─ проходит (период истёк)
-                   │    │    └─ игнорируется
-                   │    └─ игнорируется
-                   └─ проходит, старт периода
+                   │    │    │              │    └─ ignored
+                   │    │    │              └─ passes (period expired)
+                   │    │    └─ ignored
+                   │    └─ ignored
+                   └─ passes, start period
 
 throttle 50:      [a]  []  []  []  []  []  [d]  []  []  []
 ```
 
-### Пример: поиск с debounce
+### Example: search with debounce
 
 ```agda
 events m =
@@ -114,13 +114,13 @@ events m =
 
 ## Switching 🟡
 
-| Комбинатор | Тип | Описание |
-|------------|-----|----------|
-| `switchE` | `Event A → Event (Event A) → Event A` | Переключить Event |
-| `switchS` | `Signal A → Event (Signal A) → Signal A` | Переключить Signal |
-| `coincidence` | `Event (Event A) → Event A` | Join для Event |
+| Combinator | Type | Description |
+|------------|------|-------------|
+| `switchE` | `Event A → Event (Event A) → Event A` | Switch Event |
+| `switchS` | `Signal A → Event (Signal A) → Signal A` | Switch Signal |
+| `coincidence` | `Event (Event A) → Event A` | Join for Event |
 
-### Пример: вкладки с разными источниками
+### Example: tabs with different sources
 
 ```agda
 events m =
@@ -131,7 +131,7 @@ events m =
   in mapE TabMsg switched
 ```
 
-### Пример: переключение WebSocket
+### Example: WebSocket switching
 
 ```agda
 currentWs : Signal Url → Event WsEvent
@@ -144,26 +144,26 @@ currentWs serverUrl = switchE
 
 ## Merging
 
-| Комбинатор | Тип | Описание | Phase |
-|------------|-----|----------|-------|
-| `mergeWith` | `(A → A → A) → Event A → Event A → Event A` | Merge с функцией | 🟢 |
-| `mergeAll` | `(A → A → A) → A → Event A → Event A` | Свернуть все в такте | 🟢 |
-| `alignWith` | `(These A B → C) → Event A → Event B → Event C` | Объединить разные типы | 🟡 |
-| `align` | `Event A → Event B → Event (These A B)` | Выровнять события | 🟡 |
+| Combinator | Type | Description | Phase |
+|------------|------|-------------|-------|
+| `mergeWith` | `(A → A → A) → Event A → Event A → Event A` | Merge with function | 🟢 |
+| `mergeAll` | `(A → A → A) → A → Event A → Event A` | Fold all in tick | 🟢 |
+| `alignWith` | `(These A B → C) → Event A → Event B → Event C` | Combine different types | 🟡 |
+| `align` | `Event A → Event B → Event (These A B)` | Align events | 🟡 |
 
 ```agda
 data These A B = This A | That B | Both A B
 ```
 
-### Пример: mergeWith для приоритетов
+### Example: mergeWith for priorities
 
 ```agda
--- Локальные команды приоритетнее удалённых
+-- Local commands have priority over remote
 commands : Event Command
 commands = mergeWith (λ local _ → local) localCommands remoteCommands
 ```
 
-### Пример: alignWith для синхронизации
+### Example: alignWith for synchronization
 
 ```agda
 data Update = UserOnly User | ProfileOnly Profile | Both User Profile
@@ -180,15 +180,15 @@ syncedUpdates = alignWith toUpdate userUpdates profileUpdates
 
 ## Accumulators 🟢
 
-| Комбинатор | Тип | Описание |
-|------------|-----|----------|
-| `foldp` | `(A → B → B) → B → Event A → Signal B` | Свёртка в Signal |
-| `hold` | `A → Event A → Signal A` | Запомнить последнее |
-| `accumE` | `A → Event (A → A) → Event A` | Свёртка в Event |
-| `accumB` | `A → Event (A → A) → Signal A` | foldp с функциями |
+| Combinator | Type | Description |
+|------------|------|-------------|
+| `foldp` | `(A → B → B) → B → Event A → Signal B` | Fold into Signal |
+| `hold` | `A → Event A → Signal A` | Remember last |
+| `accumE` | `A → Event (A → A) → Event A` | Fold into Event |
+| `accumB` | `A → Event (A → A) → Signal A` | foldp with functions |
 | `mapAccum` | `(A → S → S × B) → S → Event A → Event B` | Map + accumulate |
 
-### Пример: счётчик кликов
+### Example: click counter
 
 ```agda
 clicks : Event ⊤
@@ -199,7 +199,7 @@ counter = foldp (λ _ n → suc n) 0 clicks
 -- counter = [0,  0,    1,  1,       3,  ...]
 ```
 
-### Пример: accumE для истории действий
+### Example: accumE for action history
 
 ```agda
 data Action = Increment | Double | Reset
@@ -216,7 +216,7 @@ counterEvents = accumE 0 (mapE toFn actions)
 -- counterEvents = [[], [1],   [3],           [], [0],     ...]
 ```
 
-### Пример: mapAccum для нумерации
+### Example: mapAccum for numbering
 
 ```agda
 numberEvents : Event A → Event (ℕ × A)
@@ -230,21 +230,21 @@ numberEvents = mapAccum (λ a n → (suc n, (n, a))) 0
 
 ## Deferred 🟢
 
-| Комбинатор | Тип | Описание |
-|------------|-----|----------|
-| `pre` | `A → Signal A → Signal A` | Задержка на такт |
-| `delayS` | `ℕ → A → Signal A → Signal A` | Задержка на N тактов |
-| `edge` | `Signal Bool → Event ⊤` | Событие на фронте |
-| `risingEdge` | `Signal Bool → Event ⊤` | Передний фронт |
-| `fallingEdge` | `Signal Bool → Event ⊤` | Задний фронт |
+| Combinator | Type | Description |
+|------------|------|-------------|
+| `pre` | `A → Signal A → Signal A` | Delay by one tick |
+| `delayS` | `ℕ → A → Signal A → Signal A` | Delay by N ticks |
+| `edge` | `Signal Bool → Event ⊤` | Event on edge |
+| `risingEdge` | `Signal Bool → Event ⊤` | Rising edge |
+| `fallingEdge` | `Signal Bool → Event ⊤` | Falling edge |
 
-### Пример: разрыв цикла с pre
+### Example: breaking cycle with pre
 
 ```agda
--- БЕЗ pre: бесконечный цикл!
+-- WITHOUT pre: infinite loop!
 -- bad = map f bad
 
--- С pre: работает
+-- WITH pre: works
 feedback : Signal ℕ
 feedback = map suc (pre 0 feedback)
 -- feedback = [0, 1, 2, 3, 4, ...]
@@ -254,14 +254,14 @@ feedback = map suc (pre 0 feedback)
 
 ## Error Handling 🟢
 
-| Комбинатор | Тип | Описание |
-|------------|-----|----------|
-| `filterOk` | `Event (Result E A) → Event A` | Только успехи |
-| `filterErr` | `Event (Result E A) → Event E` | Только ошибки |
-| `partitionResult` | `Event (Result E A) → Event A × Event E` | Разделить |
-| `catchE` | `Event (Result E A) → (E → A) → Event A` | Обработать ошибку |
+| Combinator | Type | Description |
+|------------|------|-------------|
+| `filterOk` | `Event (Result E A) → Event A` | Only successes |
+| `filterErr` | `Event (Result E A) → Event E` | Only errors |
+| `partitionResult` | `Event (Result E A) → Event A × Event E` | Split |
+| `catchE` | `Event (Result E A) → (E → A) → Event A` | Handle error |
 
-### Пример: HTTP с обработкой ошибок
+### Example: HTTP with error handling
 
 ```agda
 data HttpError = NetworkError String | Timeout | BadStatus ℕ | ParseError String
@@ -280,14 +280,14 @@ events m = case m.status of λ where
 
 ## Testing 🟡
 
-| Комбинатор | Тип | Описание |
-|------------|-----|----------|
-| `interpret` | `(Event A → Event B) → List (List A) → List (List B)` | Тест Event |
-| `interpretS` | `(Signal A → Signal B) → List A → List B` | Тест Signal |
-| `interpretApp` | `App Msg Model → List (List Msg) → List Model` | Тест App |
-| `collectN` | `ℕ → Event A → List (List A)` | Собрать N тактов |
+| Combinator | Type | Description |
+|------------|------|-------------|
+| `interpret` | `(Event A → Event B) → List (List A) → List (List B)` | Test Event |
+| `interpretS` | `(Signal A → Signal B) → List A → List B` | Test Signal |
+| `interpretApp` | `App Msg Model → List (List Msg) → List Model` | Test App |
+| `collectN` | `ℕ → Event A → List (List A)` | Collect N ticks |
 
-### Примеры тестов
+### Test examples
 
 ```agda
 test_mapE : interpret (mapE suc) [[1,2], [], [3]] ≡ [[2,3], [], [4]]
@@ -305,10 +305,10 @@ test_counter = refl
 
 ---
 
-## Примечание
+## Note
 
-`mapE` для Event отличается от `map` для Signal:
-- `map : (A → B) → Signal A → Signal B` — применяет к `now`
-- `mapE : (A → B) → Event A → Event B` — применяет к каждому элементу списка
+`mapE` for Event differs from `map` for Signal:
+- `map : (A → B) → Signal A → Signal B` — applies to `now`
+- `mapE : (A → B) → Event A → Event B` — applies to each element in the list
 
-Можно было бы унифицировать через Functor instance, но явные имена понятнее.
+Could be unified through Functor instance, but explicit names are clearer.

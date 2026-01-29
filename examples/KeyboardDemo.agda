@@ -2,24 +2,20 @@
 
 -- KeyboardDemo: демонстрация глобальных событий клавиатуры
 -- Стрелки перемещают квадрат, Escape сбрасывает позицию
+-- Reactive approach: no Virtual DOM, direct bindings
 
 module KeyboardDemo where
 
 open import Data.Nat using (ℕ; zero; suc; _+_; _∸_)
 open import Data.Integer.Base using (ℤ; +_; -[1+_]) renaming (_+_ to _+ℤ_; _-_ to _-ℤ_)
 open import Data.String using (String; _++_)
-open import Data.List using ([]; _∷_)
+open import Data.List using ([]; _∷_; [_])
 open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.Product using (_×_; _,_)
 open import Function using (_∘_; const)
 
--- Используем новый Event из Core (всё включено!)
 open import Agdelte.Core.Event
-import Agdelte.App as App
-open import Agdelte.Html.Types
-open import Agdelte.Html.Elements
-open import Agdelte.Html.Attributes
-open import Agdelte.Html.Events hiding (onEnter; onEscape)
+open import Agdelte.Reactive.Node
 
 ------------------------------------------------------------------------
 -- Model
@@ -55,15 +51,15 @@ data Msg : Set where
 moveStep : ℤ
 moveStep = + 20
 
-update : Msg → Model → Model
-update MoveUp    m = record m { y = y m -ℤ moveStep ; lastKey = "↑" }
-update MoveDown  m = record m { y = y m +ℤ moveStep ; lastKey = "↓" }
-update MoveLeft  m = record m { x = x m -ℤ moveStep ; lastKey = "←" }
-update MoveRight m = record m { x = x m +ℤ moveStep ; lastKey = "→" }
-update Reset     m = initialModel
+updateModel : Msg → Model → Model
+updateModel MoveUp    m = record m { y = y m -ℤ moveStep ; lastKey = "↑" }
+updateModel MoveDown  m = record m { y = y m +ℤ moveStep ; lastKey = "↓" }
+updateModel MoveLeft  m = record m { x = x m -ℤ moveStep ; lastKey = "←" }
+updateModel MoveRight m = record m { x = x m +ℤ moveStep ; lastKey = "→" }
+updateModel Reset     m = initialModel
 
 ------------------------------------------------------------------------
--- View
+-- Helpers for display
 ------------------------------------------------------------------------
 
 showNat : ℕ → String
@@ -74,36 +70,57 @@ showInt : ℤ → String
 showInt (+ n) = showNat n
 showInt (-[1+ n ]) = "-" ++ showNat (suc n)
 
-view : Model → Html Msg
-view m = div (class "keyboard-demo" ∷ [])
-  ( h1 [] (text "Keyboard Demo" ∷ [])
-  ∷ p [] (text ("Position: (" ++ showInt (x m) ++ ", " ++ showInt (y m) ++ ")") ∷ [])
-  ∷ p [] (text ("Last key: " ++ lastKey m) ∷ [])
-  ∷ div
-      ( class "box"
-      ∷ styles "position" "absolute"
-      ∷ styles "left" (showInt (x m) ++ "px")
-      ∷ styles "top" (showInt (y m) ++ "px")
-      ∷ styles "width" "50px"
-      ∷ styles "height" "50px"
-      ∷ styles "background" "#3b82f6"
-      ∷ styles "border-radius" "8px"
-      ∷ [])
-      []
-  ∷ div (class "instructions" ∷ [])
-      ( p [] (text "Use arrow keys to move" ∷ [])
-      ∷ p [] (text "Press Escape to reset" ∷ [])
-      ∷ [])
-  ∷ button (onClick Reset ∷ class "reset-btn" ∷ [])
-      (text "Reset Position" ∷ [])
-  ∷ [])
+-- Position text
+positionStr : Model → String
+positionStr m = "Position: (" ++ showInt (x m) ++ ", " ++ showInt (y m) ++ ")"
+
+-- Last key text
+lastKeyStr : Model → String
+lastKeyStr m = "Last key: " ++ lastKey m
+
+-- Box left style value
+boxLeft : Model → String
+boxLeft m = showInt (x m) ++ "px"
+
+-- Box top style value
+boxTop : Model → String
+boxTop m = showInt (y m) ++ "px"
 
 ------------------------------------------------------------------------
--- Events (один listener для всех клавиш — эффективно!)
+-- Template: reactive bindings (no Virtual DOM)
 ------------------------------------------------------------------------
 
-events : Model → Event Msg
-events _ = onKeys
+keyboardTemplate : Node Model Msg
+keyboardTemplate =
+  div [ class "keyboard-demo" ]
+    ( h1 [] [ text "Keyboard Demo" ]
+    ∷ p [] [ bindF positionStr ]   -- auto-updates!
+    ∷ p [] [ bindF lastKeyStr ]    -- auto-updates!
+    ∷ div
+        ( class "box"
+        ∷ styles "position" "absolute"
+        ∷ styleBind "left" (stringBinding boxLeft)
+        ∷ styleBind "top" (stringBinding boxTop)
+        ∷ styles "width" "50px"
+        ∷ styles "height" "50px"
+        ∷ styles "background" "#3b82f6"
+        ∷ styles "border-radius" "8px"
+        ∷ [])
+        []
+    ∷ div [ class "instructions" ]
+        ( p [] [ text "Use arrow keys to move" ]
+        ∷ p [] [ text "Press Escape to reset" ]
+        ∷ [] )
+    ∷ button (onClick Reset ∷ class "reset-btn" ∷ [])
+        [ text "Reset Position" ]
+    ∷ [] )
+
+------------------------------------------------------------------------
+-- Subscriptions: global keyboard events
+------------------------------------------------------------------------
+
+subs : Model → Event Msg
+subs _ = onKeys
   ( ("ArrowUp"    , MoveUp)
   ∷ ("ArrowDown"  , MoveDown)
   ∷ ("ArrowLeft"  , MoveLeft)
@@ -115,5 +132,7 @@ events _ = onKeys
 -- App
 ------------------------------------------------------------------------
 
-app : App.App Model Msg
-app = App.mkApp initialModel update view events
+app : ReactiveApp Model Msg
+app = mkReactiveApp initialModel updateModel keyboardTemplate
+
+-- subs is exported separately (see above)

@@ -1,124 +1,167 @@
 {-# OPTIONS --without-K #-}
 
 -- CompositionDemo: демонстрация композиции приложений
--- Два независимых Counter работают параллельно через _∥_
+-- Два независимых Counter работают параллельно
+-- Reactive approach: no Virtual DOM, direct bindings
 
 module CompositionDemo where
 
-open import Data.Nat using (ℕ; zero; suc; pred)
+open import Data.Nat using (ℕ; zero; suc; pred; _+_)
 open import Data.Nat.Show using (show)
 open import Data.String using (String; _++_)
-open import Data.List using (List; []; _∷_)
+open import Data.List using (List; []; _∷_; [_])
 open import Data.Product using (_×_; _,_; proj₁; proj₂)
 open import Data.Sum using (_⊎_; inj₁; inj₂)
 open import Function using (_∘_; const)
 
 open import Agdelte.Core.Event
-open import Agdelte.Core.Cmd
-import Agdelte.App as App
-open import Agdelte.Html.Types
-open import Agdelte.Html.Elements
-open import Agdelte.Html.Attributes
-open import Agdelte.Html.Events
+open import Agdelte.Reactive.Node
 
 ------------------------------------------------------------------------
--- Counter App (переиспользуемый компонент)
+-- Counter Component (переиспользуемый)
 ------------------------------------------------------------------------
 
-module CounterApp where
+module CounterComponent where
   -- Model
-  record Model : Set where
+  record CounterModel : Set where
     constructor mkModel
     field
-      count     : ℕ
-      counterName : String
+      count : ℕ
+      name  : String
 
-  open Model public
+  open CounterModel public
 
   -- Messages
-  data Msg : Set where
-    Inc   : Msg
-    Dec   : Msg
-    Reset : Msg
+  data CounterMsg : Set where
+    Inc   : CounterMsg
+    Dec   : CounterMsg
+    Reset : CounterMsg
 
   -- Update
-  update : Msg → Model → Model
-  update Inc m = record m { count = suc (count m) }
-  update Dec m = record m { count = pred (count m) }
-  update Reset m = record m { count = zero }
+  updateCounter : CounterMsg → CounterModel → CounterModel
+  updateCounter Inc m = record m { count = suc (count m) }
+  updateCounter Dec m = record m { count = pred (count m) }
+  updateCounter Reset m = record m { count = zero }
 
-  -- View
-  view : Model → Html Msg
-  view m = div (class "counter-component" ∷ [])
-    ( h3 [] (text (counterName m) ∷ [])
-    ∷ div (class "counter-controls" ∷ [])
-        ( button (onClick Dec ∷ class "btn" ∷ []) (text "-" ∷ [])
-        ∷ span (class "count" ∷ []) (text (show (count m)) ∷ [])
-        ∷ button (onClick Inc ∷ class "btn" ∷ []) (text "+" ∷ [])
-        ∷ button (onClick Reset ∷ class "reset-btn" ∷ []) (text "Reset" ∷ [])
-        ∷ [])
-    ∷ [])
+  -- Helpers
+  countText : CounterModel → String
+  countText m = show (count m)
 
-  -- App
-  mkCounter : String → ℕ → App.App Model Msg
-  mkCounter n initial = App.mkApp
-    (mkModel initial n)
-    update
-    view
-    (const never)
+  -- Template
+  counterTemplate : Node CounterModel CounterMsg
+  counterTemplate =
+    div [ class "counter-component" ]
+      ( h3 [] [ bindF name ]  -- counter name
+      ∷ div [ class "counter-controls" ]
+          ( button (onClick Dec ∷ class "btn" ∷ []) [ text "-" ]
+          ∷ span [ class "count" ] [ bindF countText ]  -- auto-updates!
+          ∷ button (onClick Inc ∷ class "btn" ∷ []) [ text "+" ]
+          ∷ button (onClick Reset ∷ class "reset-btn" ∷ []) [ text "Reset" ]
+          ∷ [] )
+      ∷ [] )
 
-------------------------------------------------------------------------
--- Composed App: Two Counters
-------------------------------------------------------------------------
-
-open CounterApp using () renaming
-  ( Model to CounterModel
-  ; Msg to CounterMsg
-  ; mkCounter to mkCounter
-  )
-
--- Два независимых счётчика
-counter1 : App.App CounterModel CounterMsg
-counter1 = mkCounter "Left Counter" 0
-
-counter2 : App.App CounterModel CounterMsg
-counter2 = mkCounter "Right Counter" 10
-
--- Композиция через _∥_
--- Результат: App (Model × Model) (Msg ⊎ Msg)
-twoCounters : App.App (CounterModel × CounterModel) (CounterMsg ⊎ CounterMsg)
-twoCounters = counter1 App.∥ counter2
+open CounterComponent using (CounterModel; CounterMsg; counterTemplate; updateCounter; countText)
+  renaming (mkModel to mkCounterModel; count to counterCount; name to counterName)
 
 ------------------------------------------------------------------------
--- Wrapper App (добавляет заголовок и статистику)
+-- Composed Model: Two Counters
 ------------------------------------------------------------------------
-
--- Используем composed app напрямую, но добавим обёртку для лучшего UI
 
 Model : Set
 Model = CounterModel × CounterModel
 
-Msg : Set
-Msg = CounterMsg ⊎ CounterMsg
+initialModel : Model
+initialModel = mkCounterModel 0 "Left Counter" , mkCounterModel 10 "Right Counter"
 
-totalCount : Model → ℕ
-totalCount (m₁ , m₂) = CounterApp.count m₁ Data.Nat.+ CounterApp.count m₂
-  where open import Data.Nat using (_+_)
+------------------------------------------------------------------------
+-- Messages
+------------------------------------------------------------------------
 
--- Кастомный view с заголовком
-customView : Model → Html Msg
-customView m@(m₁ , m₂) = div (class "composition-demo" ∷ [])
-  ( h1 [] (text "Composition Demo" ∷ [])
-  ∷ p (class "description" ∷ [])
-      (text "Two independent counters composed with _∥_" ∷ [])
-  ∷ p (class "total" ∷ [])
-      (text ("Total: " ++ show (totalCount m)) ∷ [])
-  ∷ div (class "counters-container" ∷ [])
-      ( mapHtml inj₁ (CounterApp.view m₁)
-      ∷ mapHtml inj₂ (CounterApp.view m₂)
-      ∷ [])
-  ∷ [])
+data Msg : Set where
+  LeftMsg  : CounterMsg → Msg
+  RightMsg : CounterMsg → Msg
 
--- Финальное приложение: twoCounters с кастомным view
-app : App.App Model Msg
-app = App.withView customView twoCounters
+------------------------------------------------------------------------
+-- Update
+------------------------------------------------------------------------
+
+updateModel : Msg → Model → Model
+updateModel (LeftMsg cm) (l , r) = updateCounter cm l , r
+updateModel (RightMsg cm) (l , r) = l , updateCounter cm r
+
+------------------------------------------------------------------------
+-- Helpers
+------------------------------------------------------------------------
+
+totalCountText : Model → String
+totalCountText (l , r) = "Total: " ++ show (counterCount l + counterCount r)
+
+------------------------------------------------------------------------
+-- Template: composed with focusNode
+------------------------------------------------------------------------
+
+-- Map counter messages to parent messages
+mapLeftMsg : Msg → Msg
+mapLeftMsg = λ m → m  -- identity, already wrapped
+
+mapRightMsg : Msg → Msg
+mapRightMsg = λ m → m  -- identity, already wrapped
+
+-- Unfortunately, focusNode doesn't transform messages (only extracts model part)
+-- So for proper composition with message transformation, we need a different approach
+-- For now, we'll inline the counter templates with message wrapping
+
+-- Left counter helper functions
+leftCountText : Model → String
+leftCountText (l , _) = countText l
+
+leftName : Model → String
+leftName (l , _) = CounterComponent.name l
+
+-- Right counter helper functions
+rightCountText : Model → String
+rightCountText (_ , r) = countText r
+
+rightName : Model → String
+rightName (_ , r) = CounterComponent.name r
+
+compositionTemplate : Node Model Msg
+compositionTemplate =
+  div [ class "composition-demo" ]
+    ( h1 [] [ text "Composition Demo" ]
+    ∷ p [ class "description" ]
+        [ text "Two independent counters with shared total" ]
+    ∷ p [ class "total" ]
+        [ bindF totalCountText ]  -- auto-updates!
+
+    ∷ div [ class "counters-container" ]
+        -- Left counter (inline with LeftMsg wrapping)
+        ( div [ class "counter-component" ]
+            ( h3 [] [ bindF leftName ]
+            ∷ div [ class "counter-controls" ]
+                ( button (onClick (LeftMsg CounterComponent.Dec) ∷ class "btn" ∷ []) [ text "-" ]
+                ∷ span [ class "count" ] [ bindF leftCountText ]  -- auto-updates!
+                ∷ button (onClick (LeftMsg CounterComponent.Inc) ∷ class "btn" ∷ []) [ text "+" ]
+                ∷ button (onClick (LeftMsg CounterComponent.Reset) ∷ class "reset-btn" ∷ []) [ text "Reset" ]
+                ∷ [] )
+            ∷ [] )
+
+        -- Right counter (inline with RightMsg wrapping)
+        ∷ div [ class "counter-component" ]
+            ( h3 [] [ bindF rightName ]
+            ∷ div [ class "counter-controls" ]
+                ( button (onClick (RightMsg CounterComponent.Dec) ∷ class "btn" ∷ []) [ text "-" ]
+                ∷ span [ class "count" ] [ bindF rightCountText ]  -- auto-updates!
+                ∷ button (onClick (RightMsg CounterComponent.Inc) ∷ class "btn" ∷ []) [ text "+" ]
+                ∷ button (onClick (RightMsg CounterComponent.Reset) ∷ class "reset-btn" ∷ []) [ text "Reset" ]
+                ∷ [] )
+            ∷ [] )
+        ∷ [] )
+    ∷ [] )
+
+------------------------------------------------------------------------
+-- App
+------------------------------------------------------------------------
+
+app : ReactiveApp Model Msg
+app = mkReactiveApp initialModel updateModel compositionTemplate

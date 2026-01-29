@@ -1,109 +1,109 @@
-# Конкурентность в Agdelte
+# Concurrency in Agdelte
 
-> **Статус:** 📋 Phase 3 (планируется). Этот документ описывает архитектуру расширения для конкурентных вычислений. Не реализовано в MVP.
+> **Status:** Planned. This document describes the architecture extension for concurrent computations. Not implemented in MVP.
 >
-> **Расширение:** опциональное расширение базовой архитектуры из [README.md](README.md).
+> **Extension:** optional extension of the base architecture from [README.md](README.md).
 >
-> **Предусловие:** знакомство с Signal, Event, App. См. [README.md](README.md).
+> **Prerequisite:** familiarity with Signal, Event, App. See [README.md](README.md).
 >
-> **Ключевой принцип:** Worker генерирует **дискретные события**, как и все остальные примитивы. Никакой "непрерывности" — результат, прогресс, отмена — всё это отдельные дискретные события.
+> **Key principle:** Worker generates **discrete events**, like all other primitives. No "continuity" — result, progress, cancellation — all are separate discrete events.
 
 ---
 
-## Когда НЕ нужна конкурентность
+## When Concurrency is NOT Needed
 
-**Большинство UI-приложений не требуют этого модуля.**
+**Most UI applications don't require this module.**
 
-| Задача | Нужен worker? | Почему |
-|--------|---------------|--------|
-| Формы, валидация | ❌ Нет | Синхронно, < 1мс |
-| Списки, фильтрация (< 1000 элементов) | ❌ Нет | Синхронно, < 16мс |
-| HTTP запросы | ❌ Нет | `request` уже асинхронный |
-| WebSocket | ❌ Нет | `websocket` уже асинхронный |
-| Таймеры, анимации | ❌ Нет | `interval` достаточно |
-| Парсинг большого JSON (> 1MB) | ✅ Да | Блокирует UI |
-| Криптография | ✅ Да | Тяжёлые вычисления |
-| Обработка изображений | ✅ Да | Много вычислений |
-| ML inference | ✅ Да | Очень тяжело |
+| Task | Need worker? | Why |
+|------|--------------|-----|
+| Forms, validation | No | Synchronous, < 1ms |
+| Lists, filtering (< 1000 items) | No | Synchronous, < 16ms |
+| HTTP requests | No | `request` is already async |
+| WebSocket | No | `websocket` is already async |
+| Timers, animations | No | `interval` is enough |
+| Parsing large JSON (> 1MB) | Yes | Blocks UI |
+| Cryptography | Yes | Heavy computation |
+| Image processing | Yes | Lots of computation |
+| ML inference | Yes | Very heavy |
 
-**Правило:** если операция занимает < 16мс — используй синхронный код. Worker добавляет накладные расходы (сериализация, передача, десериализация).
+**Rule:** if operation takes < 16ms — use synchronous code. Worker adds overhead (serialization, transfer, deserialization).
 
 ---
 
-## Мотивация
+## Motivation
 
-Базовая архитектура: всё IO — это Event. Runtime в главном потоке, вычисления синхронные.
+Base architecture: all IO is Event. Runtime in main thread, computations are synchronous.
 
-Проблема: **тяжёлые** вычисления блокируют UI.
+Problem: **heavy** computations block UI.
 
 ```agda
--- Плохо: блокирует рендеринг
+-- Bad: blocks rendering
 events m = if m.needsCompute
-  then map Done (heavyComputation m.data)  -- 5 секунд в main thread
+  then map Done (heavyComputation m.data)  -- 5 seconds in main thread
   else never
 ```
 
-Решение: конкурентные вычисления как Event. Вычисление уходит в worker, результат приходит как событие.
+Solution: concurrent computations as Event. Computation goes to worker, result comes as event.
 
 ---
 
-## Ключевая идея
+## Key Idea
 
-**Worker — это ещё один примитив Event.** Точно как `request` или `interval`:
+**Worker is another Event primitive.** Just like `request` or `interval`:
 
 ```agda
--- Базовые примитивы (все дискретные!)
-interval       : ℕ → Event ⊤              -- дискретные тики
-animationFrame : Event FrameInfo          -- дискретные события каждый кадр
-request        : Request → Event Response -- дискретный ответ
-websocket      : Url → WebSocket          -- дискретные сообщения
+-- Base primitives (all discrete!)
+interval       : ℕ → Event ⊤              -- discrete ticks
+animationFrame : Event FrameInfo          -- discrete events each frame
+request        : Request → Event Response -- discrete response
+websocket      : Url → WebSocket          -- discrete messages
 
--- Примитив конкурентности (тоже дискретный)
-worker         : WorkerFn A B → A → Event B  -- дискретный результат
+-- Concurrency primitive (also discrete)
+worker         : WorkerFn A B → A → Event B  -- discrete result
 ```
 
-**Единая модель (всё — дискретные события):**
+**Unified model (everything is discrete events):**
 
-| Примитив | Подписка | Дискретное событие | Отписка |
-|----------|----------|--------------------|---------|
-| `interval n` | Запустить таймер | `⊤` (тик) | Остановить |
-| `request r` | Отправить HTTP | `Response` (ответ) | Отменить |
-| `worker f x` | Запустить вычисление | `B` (результат) | Отменить |
+| Primitive | Subscribe | Discrete event | Unsubscribe |
+|-----------|-----------|----------------|-------------|
+| `interval n` | Start timer | `⊤` (tick) | Stop |
+| `request r` | Send HTTP | `Response` (response) | Cancel |
+| `worker f x` | Start computation | `B` (result) | Cancel |
 
-Декларативная модель сохраняется:
-- Event появился в `events(model)` → worker запускается
-- Event исчез → worker отменяется (если ещё не завершён)
+Declarative model is preserved:
+- Event appeared in `events(model)` → worker starts
+- Event disappeared → worker is cancelled (if not yet finished)
 
-**Композиция работает одинаково:**
+**Composition works the same:**
 
 ```agda
 events m = merge
-  (mapE Tick (interval 1000))           -- таймер
+  (mapE Tick (interval 1000))           -- timer
   (mapE GotData (request (get "/api"))) -- HTTP
-  (mapE Done (worker heavy m.input))    -- конкурентное вычисление
+  (mapE Done (worker heavy m.input))    -- concurrent computation
 ```
 
 ---
 
-## 1. Базовый Worker
+## 1. Basic Worker
 
-### Определение
+### Definition
 
 ```agda
--- Функция, выполняемая в worker
+-- Function executed in worker
 WorkerFn : Set → Set → Set
-WorkerFn A B = A → B  -- чистая функция
+WorkerFn A B = A → B  -- pure function
 
--- Запустить вычисление в worker
+-- Run computation in worker
 worker : WorkerFn A B → A → Event B
 ```
 
-### Пример: факторизация
+### Example: factorization
 
 ```agda
--- Тяжёлая функция
+-- Heavy function
 factorize : ℕ → List ℕ
-factorize n = ...  -- может занять секунды
+factorize n = ...  -- may take seconds
 
 data Msg = Compute | GotFactors (List ℕ)
 
@@ -125,30 +125,30 @@ app = record
 ```
 
 Runtime:
-1. `computing = true` → spawn worker с `factorize`
-2. Worker вычисляет в отдельном потоке
-3. Результат готов → Event `GotFactors`
-4. `computing = false` → worker больше не нужен
+1. `computing = true` → spawn worker with `factorize`
+2. Worker computes in separate thread
+3. Result ready → Event `GotFactors`
+4. `computing = false` → worker no longer needed
 
 ---
 
-## 2. Прогресс и отмена
+## 2. Progress and Cancellation
 
-### Event с прогрессом
+### Event with progress
 
 ```agda
 data Progress (A : Set) : Set where
-  Running  : ℕ → Progress A      -- дискретное событие: "сейчас на 50%"
-  Done     : A → Progress A       -- дискретное событие: результат
-  Cancelled : Progress A          -- дискретное событие: отменено
-  Failed   : String → Progress A  -- дискретное событие: ошибка
+  Running  : ℕ → Progress A      -- discrete event: "now at 50%"
+  Done     : A → Progress A       -- discrete event: result
+  Cancelled : Progress A          -- discrete event: cancelled
+  Failed   : String → Progress A  -- discrete event: error
 
 workerWithProgress : WorkerFn A B → A → Event (Progress B)
 ```
 
-**Важно:** `Running 50` — это **одно дискретное событие**, не "непрерывный поток прогресса". Worker периодически отправляет дискретные события `Running n`, каждое из которых обрабатывается как отдельный такт.
+**Important:** `Running 50` is **one discrete event**, not a "continuous stream of progress". Worker periodically sends discrete `Running n` events, each processed as a separate tick.
 
-### Пример: обработка большого файла
+### Example: processing large file
 
 ```agda
 data Msg = Process | Progress ℕ | Done Result | Cancel
@@ -159,7 +159,7 @@ app = record
       Process m → record m { processing = true; progress = 0 }
       (Progress p) m → record m { progress = p }
       (Done r) m → record m { processing = false; result = Just r }
-      Cancel m → record m { processing = false }  -- отмена
+      Cancel m → record m { processing = false }  -- cancellation
 
   ; events = λ m →
       if m.processing
@@ -173,39 +173,39 @@ app = record
     toMsg _ = NoOp
 ```
 
-**Отмена:** когда пользователь нажимает Cancel:
-1. `update Cancel` ставит `processing = false`
-2. `events` возвращает `never`
-3. Runtime видит, что Event исчез → отменяет worker
-4. Worker получает сигнал отмены
+**Cancellation:** when user presses Cancel:
+1. `update Cancel` sets `processing = false`
+2. `events` returns `never`
+3. Runtime sees that Event disappeared → cancels worker
+4. Worker receives cancellation signal
 
 ---
 
-## 3. Параллельные вычисления
+## 3. Parallel Computations
 
-### Комбинаторы
+### Combinators
 
 ```agda
--- Запустить параллельно, собрать все результаты
+-- Run in parallel, collect all results
 parallel : List (Event A) → Event (List A)
 
--- Запустить параллельно, взять первый результат
+-- Run in parallel, take first result
 race : List (Event A) → Event A
 
--- Запустить последовательно
+-- Run sequentially
 sequence : List (Event A) → Event (List A)
 ```
 
-### Пример: параллельная обработка чанков
+### Example: parallel chunk processing
 
 ```agda
 processChunks : List Chunk → Event (List Result)
 processChunks chunks = parallel (map (worker processChunk) chunks)
 
--- 4 чанка → 4 worker'а параллельно → один Event со списком результатов
+-- 4 chunks → 4 workers in parallel → one Event with list of results
 ```
 
-### Пример: race для таймаута
+### Example: race for timeout
 
 ```agda
 withTimeout : ℕ → Event A → Event (Maybe A)
@@ -216,27 +216,27 @@ withTimeout ms e = map choose (race [map Just e, map (const Nothing) (delay ms)]
     choose (Right _) = Nothing
 ```
 
-### Дополнительные комбинаторы
+### Additional combinators
 
-Для полноты — комбинаторы, используемые в примерах:
+For completeness — combinators used in examples:
 
 ```agda
--- Задержка на N мс, затем одно дискретное событие
+-- Delay by N ms, then one discrete event
 delay : ℕ → Event ⊤
--- Примечание: реализуется через oneshot-вариант interval
+-- Note: implemented via oneshot variant of interval
 
--- Одно событие сейчас (см. combinators.md)
+-- One event now (see combinators.md)
 occur : A → Event A
 
--- Монадные операции для Event (см. combinators.md для полного списка)
+-- Monadic operations for Event (see combinators.md for full list)
 _>>=_ : Event A → (A → Event B) → Event B  -- flatMap/bind
 _>>_  : Event A → Event B → Event B        -- sequence
 e1 >> e2 = e1 >>= const e2
 
--- Переключиться на новый Event при каждом событии
+-- Switch to new Event on each event
 switchMap : (A → Event B) → Event A → Event B
 
--- Дискретные события изменения Signal (см. combinators.md)
+-- Discrete events of Signal change (see combinators.md)
 changes : Signal A → Event A
 ```
 
@@ -244,41 +244,41 @@ changes : Signal A → Event A
 
 ## 4. Worker Pool
 
-### Проблема
+### Problem
 
-Создание worker'а дорого. Если много мелких задач — накладные расходы.
+Creating workers is expensive. Many small tasks → overhead.
 
-### Решение: пул
+### Solution: pool
 
 ```agda
--- Пул из N worker'ов
+-- Pool of N workers
 WorkerPool : ℕ → Set
 
--- Создать пул (runtime управляет жизненным циклом)
+-- Create pool (runtime manages lifecycle)
 pool : ℕ → WorkerPool
 
--- Выполнить в пуле
+-- Execute in pool
 poolWorker : WorkerPool → WorkerFn A B → A → Event B
 ```
 
 Runtime:
-- Пул создаётся при первом использовании
-- Задачи распределяются по свободным worker'ам
-- Worker'ы переиспользуются
-- Пул уничтожается когда не используется
+- Pool created on first use
+- Tasks distributed to free workers
+- Workers are reused
+- Pool destroyed when not used
 
-**Жизненный цикл пула:**
+**Pool lifecycle:**
 
 ```javascript
-// Runtime отслеживает активные задачи пула
+// Runtime tracks active pool tasks
 poolState = {
-  workers: [...],        // созданные worker'ы
-  queue: [...],          // очередь задач
-  activeTasks: 0,        // сколько задач выполняется
-  lastUsed: timestamp    // когда последний раз использовался
+  workers: [...],        // created workers
+  queue: [...],          // task queue
+  activeTasks: 0,        // how many tasks are running
+  lastUsed: timestamp    // when last used
 }
 
-// Очистка по таймауту
+// Cleanup on timeout
 setInterval(() => {
   if (poolState.activeTasks === 0 &&
       Date.now() - poolState.lastUsed > POOL_IDLE_TIMEOUT) {
@@ -288,70 +288,70 @@ setInterval(() => {
 }, POOL_CHECK_INTERVAL)
 ```
 
-**Константы (настраиваемые):**
-- `POOL_IDLE_TIMEOUT` = 30000 мс (30 сек без задач → очистка)
-- `POOL_CHECK_INTERVAL` = 5000 мс
+**Constants (configurable):**
+- `POOL_IDLE_TIMEOUT` = 30000 ms (30 sec without tasks → cleanup)
+- `POOL_CHECK_INTERVAL` = 5000 ms
 
-### Пример: пакетная обработка
+### Example: batch processing
 
 ```agda
 myPool : WorkerPool
-myPool = pool 4  -- 4 worker'а
+myPool = pool 4  -- 4 workers
 
 processMany : List Item → Event (List Result)
 processMany items = parallel (map (poolWorker myPool processItem) items)
--- До 4 задач выполняются параллельно, остальные ждут в очереди
+-- Up to 4 tasks run in parallel, others wait in queue
 ```
 
-### Идентификация worker'ов
+### Worker identification
 
-Как runtime отличает "тот же worker" от "другого"?
+How does runtime distinguish "same worker" from "different"?
 
 ```agda
--- Это один и тот же worker или два разных?
+-- Is this the same worker or two different ones?
 events m = if m.computing
   then worker factorize m.number
   else never
 ```
 
-**Правило:** структурное сравнение по (функция, аргументы).
+**Rule:** structural comparison by (function, arguments).
 
-- `worker factorize 100` == `worker factorize 100` → тот же (переиспользовать)
-- `worker factorize 100` != `worker factorize 200` → разные (отменить старый, запустить новый)
-- `worker factorize 100` != `worker otherFn 100` → разные
+- `worker factorize 100` == `worker factorize 100` → same (reuse)
+- `worker factorize 100` != `worker factorize 200` → different (cancel old, start new)
+- `worker factorize 100` != `worker otherFn 100` → different
 
-**При изменении аргументов:**
-1. Runtime видит: старый `worker f x` исчез, новый `worker f y` появился
-2. Отменяет старый worker
-3. Запускает новый
+**On argument change:**
+1. Runtime sees: old `worker f x` disappeared, new `worker f y` appeared
+2. Cancels old worker
+3. Starts new
 
-### Гонки: результат vs отмена
+### Races: result vs cancellation
 
-**Сценарий:** worker завершился, но Event уже убран из `events`.
+**Scenario:** worker finished, but Event already removed from `events`.
 
 ```
-Такт N:   events = worker f x     → worker запущен
-Такт N+1: events = never          → отмена отправлена
-          [результат приходит]    → ???
+Tick N:   events = worker f x     → worker started
+Tick N+1: events = never          → cancellation sent
+          [result arrives]        → ???
 ```
 
-**Поведение:** результат игнорируется.
+**Behavior:** result is ignored.
 
 Runtime:
-1. При отписке помечает worker как "отменённый"
-2. Если результат приходит после отмены — не вызывает `emit`
-3. Гарантия: после `events = never` никаких событий от этого worker'а
+1. On unsubscribe marks worker as "cancelled"
+2. If result arrives after cancellation — don't call `emit`
+3. Guarantee: after `events = never` no events from this worker
 
 ```javascript
 unsubscribe: (w) => {
-  w._cancelled = true  // пометить
+  w._cancelled = true  // mark
   w.postMessage({ type: 'cancel' })
   w.terminate()
 }
 
-// В subscribe:
+// In subscribe:
 w.onmessage = (e) => {
-  if (w._cancelled) return  // игнорировать
+  if (w._cancelled) return  // ignore
   emit([...])
 }
 ```
@@ -360,49 +360,49 @@ w.onmessage = (e) => {
 
 ## 5. Structured Concurrency
 
-### Принцип
+### Principle
 
-Дочерние задачи не переживают родительские. Если родитель отменён — дети тоже.
+Child tasks don't outlive parents. If parent is cancelled — children too.
 
-### В Agdelte
+### In Agdelte
 
-Естественно следует из декларативной модели:
+Naturally follows from declarative model:
 
 ```agda
 events m =
   if m.parentTask
   then merge
-    (worker taskA m.dataA)      -- дочерняя задача 1
-    (worker taskB m.dataB)      -- дочерняя задача 2
+    (worker taskA m.dataA)      -- child task 1
+    (worker taskB m.dataB)      -- child task 2
   else never
 ```
 
-Когда `parentTask = false`:
-- Оба Event исчезают из `events`
-- Runtime отменяет оба worker'а
-- Structured concurrency без явного управления
+When `parentTask = false`:
+- Both Events disappear from `events`
+- Runtime cancels both workers
+- Structured concurrency without explicit management
 
 ### Scope
 
 ```agda
--- Явный scope для группы задач
+-- Explicit scope for task group
 scope : (Scope → Event A) → Event A
 
 record Scope : Set where
   field
-    -- Запустить задачу в этом scope
+    -- Launch task in this scope
     launch : Event B → Event B
-    -- Проверить, отменён ли scope
+    -- Check if scope is cancelled
     cancelled : Signal Bool
 ```
 
-**Семантика:**
-- `scope` создаёт контекст для группы задач
-- Все `launch`-нутые Event'ы привязаны к scope
-- Когда внешний Event исчезает из `events` → scope отменяется → все дочерние отменяются
+**Semantics:**
+- `scope` creates context for task group
+- All `launch`-ed Events are bound to scope
+- When outer Event disappears from `events` → scope cancelled → all children cancelled
 
 ```agda
--- Пример: загрузить несколько ресурсов, отменить всё при уходе со страницы
+-- Example: load several resources, cancel all on page leave
 events m = if m.onResourcePage
   then scope λ s →
     merge
@@ -410,37 +410,37 @@ events m = if m.onResourcePage
       (s.launch (worker loadB m.idB))
       (s.launch (worker loadC m.idC))
   else never
--- Уход со страницы → scope отменён → все три worker'а отменены
+-- Leave page → scope cancelled → all three workers cancelled
 ```
 
 ---
 
-## 6. Каналы и потоки
+## 6. Channels and Streams
 
-### Для сложных сценариев: двунаправленная связь
+### For complex scenarios: bidirectional communication
 
 ```agda
--- Канал: отправка и получение
+-- Channel: send and receive
 record Channel (Send : Set) (Recv : Set) : Set where
-  send   : Send → Event ⊤           -- отправить в worker
-  recv   : Event Recv               -- получить из worker
-  close  : Event ⊤                  -- закрыть канал
+  send   : Send → Event ⊤           -- send to worker
+  recv   : Event Recv               -- receive from worker
+  close  : Event ⊤                  -- close channel
 
--- Создать канал к worker'у
+-- Create channel to worker
 channel : WorkerScript → Event (Channel Send Recv)
 ```
 
-**Семантика канала:**
+**Channel semantics:**
 
-- `send` — отправляет сообщение в worker, возвращает Event ⊤ когда доставлено
-- `recv` — поток сообщений от worker'а (может быть много за такт)
-- `close` — закрывает канал
+- `send` — sends message to worker, returns Event ⊤ when delivered
+- `recv` — message stream from worker (may be many per tick)
+- `close` — closes channel
 
-**Закрытие канала:**
-1. Когда Channel исчезает из `events` (декларативно) → автоматически close
-2. Явный вызов `close` → отправить сигнал worker'у
-3. Pending сообщения в очереди — теряются (fire-and-forget)
-4. Worker получает событие "channel closed" и должен завершиться
+**Channel closing:**
+1. When Channel disappears from `events` (declaratively) → automatic close
+2. Explicit `close` call → send signal to worker
+3. Pending messages in queue — lost (fire-and-forget)
+4. Worker receives "channel closed" event and should terminate
 
 ```javascript
 // Worker-side
@@ -450,11 +450,11 @@ onmessage = (e) => {
     self.close()
     return
   }
-  // обработка обычных сообщений
+  // process regular messages
 }
 ```
 
-### Пример: стриминг данных
+### Example: data streaming
 
 ```agda
 data Msg = Start | Chunk Data | End | SendMore
@@ -467,8 +467,8 @@ streamProcessor = record
                 then map GotChannel (channel "processor.js")
                 else never
       (Just ch) → merge
-        (ch.recv)                           -- получаем чанки
-        (if m.needMore then ch.send More else never)  -- запрашиваем ещё
+        (ch.recv)                           -- receive chunks
+        (if m.needMore then ch.send More else never)  -- request more
   }
 ```
 
@@ -476,45 +476,45 @@ streamProcessor = record
 
 ## 7. SharedArrayBuffer
 
-### Для тяжёлых данных
+### For heavy data
 
-Обычная передача: копирование (медленно для больших массивов).
+Regular transfer: copying (slow for large arrays).
 
-SharedArrayBuffer: общая память (быстро, но требует синхронизации).
+SharedArrayBuffer: shared memory (fast, but requires synchronization).
 
 ```agda
--- Shared buffer между main thread и worker
+-- Shared buffer between main thread and worker
 SharedBuffer : ℕ → Set
 
--- Создать shared buffer
+-- Create shared buffer
 allocShared : ℕ → Event SharedBuffer
 
--- Worker с доступом к shared memory
+-- Worker with access to shared memory
 workerShared : SharedBuffer → WorkerFn A B → A → Event B
 ```
 
-### Пример: обработка изображения
+### Example: image processing
 
 ```agda
 processImage : App Msg Model
 processImage = record
   { ...
   ; events = λ m → case m.phase of λ where
-      -- 1. Выделить shared buffer
+      -- 1. Allocate shared buffer
       Init → map GotBuffer (allocShared (m.width * m.height * 4))
 
-      -- 2. Запустить worker с shared buffer
+      -- 2. Run worker with shared buffer
       Ready → map Done (workerShared m.buffer processPixels m.params)
 
       _ → never
   }
 ```
 
-Worker читает/пишет напрямую в buffer, без копирования.
+Worker reads/writes directly to buffer, without copying.
 
 ---
 
-## 8. FFI реализация
+## 8. FFI Implementation
 
 ### Worker primitive
 
@@ -565,7 +565,7 @@ onmessage = async (e) => {
   const fn = eval(e.data.fn)
   const input = e.data.input
 
-  // Для функций с прогрессом
+  // For functions with progress
   const reportProgress = (percent) => {
     if (!cancelled) {
       postMessage({ type: 'progress', percent })
@@ -585,87 +585,87 @@ onmessage = async (e) => {
 }
 ```
 
-### Как Agda-функция становится JS
+### How Agda function becomes JS
 
-**Проблема:** Agda компилируется в JS, но worker требует отдельный скрипт.
+**Problem:** Agda compiles to JS, but worker requires separate script.
 
-**Решение:** compile-time extraction.
+**Solution:** compile-time extraction.
 
 ```agda
--- В Agda: помечаем функцию как worker-совместимую
+-- In Agda: mark function as worker-compatible
 {-# WORKER factorize #-}
 factorize : ℕ → List ℕ
 factorize n = ...
 ```
 
-Компилятор:
-1. Компилирует `factorize` в JS как обычно
-2. Дополнительно создаёт `factorize.worker.js` с той же логикой
-3. `worker factorize` в runtime ссылается на этот файл
+Compiler:
+1. Compiles `factorize` to JS as usual
+2. Additionally creates `factorize.worker.js` with same logic
+3. `worker factorize` in runtime references this file
 
 ```javascript
-// Сгенерированный код
+// Generated code
 const worker = (fnName) => (input) => ({
   _type: 'worker',
   _args: [fnName, input],
 
   subscribe: (emit) => {
-    // Загружаем конкретный worker-файл
+    // Load specific worker file
     const w = new Worker(`${fnName}.worker.js`)
     // ...
   }
 })
 ```
 
-**Ограничения WorkerFn:**
-- Функция должна быть чистой (без побочных эффектов)
-- Не может замыкаться на внешние переменные (только аргументы)
-- Все зависимости должны быть доступны в worker-контексте
+**WorkerFn constraints:**
+- Function must be pure (no side effects)
+- Cannot close over external variables (only arguments)
+- All dependencies must be available in worker context
 
 ---
 
-## 9. Типизация конкурентности
+## 9. Typing Concurrency
 
-### Линейные типы для ресурсов (Phase 3+)
+### Linear types for resources (Phase 3+)
 
-Worker — ресурс, который должен быть освобождён. Линейные типы гарантируют это.
+Worker is a resource that must be freed. Linear types guarantee this.
 
-**Примечание:** Agda не имеет встроенных линейных типов. Варианты реализации:
+**Note:** Agda doesn't have built-in linear types. Implementation options:
 
-**Вариант A: Эмуляция через индексированные типы**
+**Option A: Emulation via indexed types**
 
 ```agda
--- Состояние ресурса
+-- Resource state
 data ResourceState : Set where
   Open Closed : ResourceState
 
--- Индексированный handle
+-- Indexed handle
 data WorkerHandle (A : Set) : ResourceState → Set where
   mkHandle : WorkerId → WorkerHandle A Open
 
--- Операции меняют индекс
+-- Operations change index
 await : WorkerHandle A Open → Event (A × WorkerHandle A Closed)
 cancel : WorkerHandle A Open → Event (WorkerHandle A Closed)
 
--- Нельзя использовать Closed handle
--- await : WorkerHandle A Closed → ... -- не типизируется
+-- Cannot use Closed handle
+-- await : WorkerHandle A Closed → ... -- doesn't typecheck
 ```
 
-**Вариант B: Uniqueness types (как в Clean)**
+**Option B: Uniqueness types (like in Clean)**
 
 ```agda
--- Уникальный тип: компилятор отслеживает единственность
+-- Unique type: compiler tracks uniqueness
 data Unique (A : Set) : Set where
   unique : A → Unique A
 
--- Операции потребляют и возвращают
+-- Operations consume and return
 useWorker : Unique (WorkerHandle A) → Event (A × Unique Consumed)
 ```
 
-**Вариант C: Монада с линейным контекстом**
+**Option C: Monad with linear context**
 
 ```agda
--- Linear monad отслеживает ресурсы
+-- Linear monad tracks resources
 data LIO (resources : List ResourceType) (A : Set) : Set where
   ...
 
@@ -673,51 +673,51 @@ spawn : LIO rs (WorkerHandle A) → LIO (Worker ∷ rs) (WorkerHandle A)
 await : WorkerHandle A → LIO (Worker ∷ rs) A → LIO rs A
 ```
 
-**Для MVP:** декларативная модель (`events`) уже даёт автоматическое управление ресурсами. Линейные типы — оптимизация для явного низкоуровневого контроля.
+**For MVP:** declarative model (`events`) already provides automatic resource management. Linear types are optimization for explicit low-level control.
 
-### Session types для протоколов
+### Session types for protocols
 
-Для сложных worker'ов с протоколом общения:
+For complex workers with communication protocol:
 
 ```agda
--- Протокол: отправить Int, получить String, конец
+-- Protocol: send Int, receive String, end
 Protocol : Session
 Protocol = Send ℕ (Recv String End)
 
--- Worker следует протоколу
+-- Worker follows protocol
 typedWorker : (s : Session) → WorkerImpl s → SessionChannel s
 ```
 
 ---
 
-## 10. Сравнение с Haskell async
+## 10. Comparison with Haskell async
 
-### Выразительность: декларативно vs явные handle'ы
+### Expressiveness: declarative vs explicit handles
 
-Всё, что можно сделать с явными handle'ами в Haskell, выражается декларативно:
+Everything that can be done with explicit handles in Haskell is expressed declaratively:
 
-| Операция | Haskell async | Agdelte |
-|----------|---------------|---------|
-| Запустить | `h <- async task` | `events = worker task x` |
-| Дождаться | `wait h` | Результат приходит как Event |
-| Отменить | `cancel h` | Убрать из `events` |
-| Проверить статус | `poll h` | Хранить в Model |
-| Передать компоненту | `passHandle h` | `mapE ChildMsg (child.events)` |
-| Условная отмена | `when cond (cancel h)` | `if cond then never else worker ...` |
+| Operation | Haskell async | Agdelte |
+|-----------|---------------|---------|
+| Start | `h <- async task` | `events = worker task x` |
+| Wait | `wait h` | Result comes as Event |
+| Cancel | `cancel h` | Remove from `events` |
+| Check status | `poll h` | Store in Model |
+| Pass to component | `passHandle h` | `mapE ChildMsg (child.events)` |
+| Conditional cancel | `when cond (cancel h)` | `if cond then never else worker ...` |
 
-**Вывод:** декларативная модель эквивалентна по выразительности.
+**Conclusion:** declarative model is equivalent in expressiveness.
 
-### Преимущества Agdelte
+### Agdelte advantages
 
-| Аспект | Haskell async | Agdelte |
+| Aspect | Haskell async | Agdelte |
 |--------|---------------|---------|
-| Утечки ресурсов | ⚠️ возможны (забыли cancel) | ✅ невозможны по построению |
-| Structured concurrency | ⚠️ нужен явный `withAsync` | ✅ автоматически |
-| Bracket/cleanup | ⚠️ ручной | ✅ автоматический |
-| Progress reporting | ❌ строить вручную | ✅ встроено |
-| Унификация с IO | ❌ отдельный API | ✅ единый Event |
+| Resource leaks | Possible (forgot cancel) | Impossible by construction |
+| Structured concurrency | Needs explicit `withAsync` | Automatic |
+| Bracket/cleanup | Manual | Automatic |
+| Progress reporting | Build manually | Built-in |
+| Unification with IO | Separate API | Unified Event |
 
-### Соответствие API
+### API correspondence
 
 ```haskell
 -- Haskell async
@@ -730,17 +730,17 @@ mapConcurrently :: (a -> IO b) -> [a] -> IO [b]
 ```
 
 ```agda
--- Agdelte (декларативно через events)
+-- Agdelte (declaratively through events)
 worker   : WorkerFn A B → A → Event B        -- async + wait
--- cancel = убрать Event из events
+-- cancel = remove Event from events
 race     : List (Event A) → Event A          -- race
 parallel : List (Event A) → Event (List A)   -- concurrently / mapConcurrently
 ```
 
-### Пример: concurrently
+### Example: concurrently
 
 ```haskell
--- Haskell: загрузить два ресурса параллельно
+-- Haskell: load two resources in parallel
 main = do
   (users, posts) <- concurrently
     (fetchUsers)
@@ -749,7 +749,7 @@ main = do
 ```
 
 ```agda
--- Agdelte: то же самое
+-- Agdelte: same thing
 data Msg = StartLoad | GotBoth (List User × List Post)
 
 data Phase = Idle | Loading | Done (List User × List Post)
@@ -774,17 +774,17 @@ app = record
       _ → never
   }
   where
-    -- Комбинатор для пары (специализация parallel)
+    -- Combinator for pair (specialization of parallel)
     both : Event A → Event B → Event (A × B)
     both ea eb = map toPair (parallel [map Left ea, map Right eb])
       where
         toPair [Left a, Right b] = (a , b)
 ```
 
-### Пример: race с таймаутом
+### Example: race with timeout
 
 ```haskell
--- Haskell: запрос с таймаутом
+-- Haskell: request with timeout
 fetchWithTimeout :: Int -> IO (Maybe Response)
 fetchWithTimeout ms = do
   result <- race
@@ -794,7 +794,7 @@ fetchWithTimeout ms = do
 ```
 
 ```agda
--- Agdelte: то же самое
+-- Agdelte: same thing
 data Msg = Fetch | GotResult (Maybe Response)
 
 app = record
@@ -812,16 +812,16 @@ app = record
       ]
 ```
 
-### Пример: mapConcurrently
+### Example: mapConcurrently
 
 ```haskell
--- Haskell: обработать список параллельно
+-- Haskell: process list in parallel
 processAll :: [Item] -> IO [Result]
 processAll items = mapConcurrently processItem items
 ```
 
 ```agda
--- Agdelte: то же самое
+-- Agdelte: same thing
 data Msg = Process | GotResults (List Result)
 
 app = record
@@ -831,13 +831,13 @@ app = record
       then mapE GotResults (parallel (map (worker processItem) m.items))
       else never
   }
--- 10 items → 10 worker'ов параллельно → один Event со списком результатов
+-- 10 items → 10 workers in parallel → one Event with list of results
 ```
 
-### Пример: async/await стиль (последовательные зависимые вычисления)
+### Example: async/await style (sequential dependent computations)
 
 ```haskell
--- Haskell: сначала одно, потом другое (зависит от результата первого)
+-- Haskell: first one, then another (depends on first result)
 main = do
   user <- async fetchUser
   userId <- wait user
@@ -847,7 +847,7 @@ main = do
 ```
 
 ```agda
--- Agdelte: state machine для последовательности
+-- Agdelte: state machine for sequence
 data Phase
   = Idle
   | FetchingUser
@@ -874,66 +874,66 @@ app = record
   }
 ```
 
-**Паттерн:** фаза в Model определяет, какой worker активен. Результат одного → следующая фаза → следующий worker.
+**Pattern:** phase in Model determines which worker is active. Result of one → next phase → next worker.
 
-### Пример: withAsync (bracket-style)
+### Example: withAsync (bracket-style)
 
 ```haskell
--- Haskell: гарантированная отмена при выходе из scope
+-- Haskell: guaranteed cancellation on scope exit
 withAsync :: IO a -> (Async a -> IO b) -> IO b
 withAsync action inner = bracket (async action) cancel inner
 ```
 
 ```agda
--- Agdelte: автоматически через декларативность!
+-- Agdelte: automatic through declarativeness!
 events m =
   if m.pageActive
-  then worker longComputation m.data  -- активен пока на странице
-  else never                          -- ушли со страницы → отмена
+  then worker longComputation m.data  -- active while on page
+  else never                          -- left page → cancellation
 
--- Не нужен явный bracket — отмена происходит автоматически
--- когда Event исчезает из events
+-- No explicit bracket needed — cancellation happens automatically
+-- when Event disappears from events
 ```
 
-### Сводка соответствий
+### Correspondence summary
 
-| Haskell async | Agdelte | Примечание |
-|---------------|---------|------------|
-| `async action` | `worker fn x` | Возвращает Event |
-| `wait handle` | Подписка через events | Декларативно |
-| `cancel handle` | Убрать из events | Автоматически |
-| `race a b` | `race [ea, eb]` | Идентично |
-| `concurrently a b` | `both ea eb` | Через parallel |
-| `mapConcurrently f xs` | `parallel (map (worker f) xs)` | Идентично |
-| `withAsync` | Декларативность | Автоматическая отмена |
-| Последовательность | State machine | Фазы в Model |
+| Haskell async | Agdelte | Note |
+|---------------|---------|------|
+| `async action` | `worker fn x` | Returns Event |
+| `wait handle` | Subscription through events | Declarative |
+| `cancel handle` | Remove from events | Automatic |
+| `race a b` | `race [ea, eb]` | Identical |
+| `concurrently a b` | `both ea eb` | Via parallel |
+| `mapConcurrently f xs` | `parallel (map (worker f) xs)` | Identical |
+| `withAsync` | Declarativeness | Automatic cancellation |
+| Sequence | State machine | Phases in Model |
 
-**Ключевое отличие:** в Haskell управление явное (handle'ы), в Agdelte — декларативное (events). Результат тот же, но без ручного управления ресурсами.
+**Key difference:** in Haskell management is explicit (handles), in Agdelte — declarative (events). Result is the same, but without manual resource management.
 
 ### STM (Software Transactional Memory)
 
-Haskell async имеет мощную интеграцию с STM для координации конкурентных процессов.
+Haskell async has powerful STM integration for coordinating concurrent processes.
 
-**Многие паттерны STM уже покрыты в Agdelte:**
+**Many STM patterns are already covered in Agdelte:**
 
-| STM паттерн | Аналог в Agdelte | Примечание |
-|-------------|------------------|------------|
-| `TVar` (следить за изменениями) | `changes` на Signal | Signal — дискретный поток, не TVar |
-| `retry` (ждать условие) | `if cond then worker ... else never` | Декларативно через events |
-| `orElse` (альтернатива) | `race` | Первый завершившийся |
-| Атомарность | `update` атомарен | Один такт = атомарная операция |
+| STM pattern | Agdelte analog | Note |
+|-------------|----------------|------|
+| `TVar` (watch changes) | `changes` on Signal | Signal is discrete stream, not TVar |
+| `retry` (wait for condition) | `if cond then worker ... else never` | Declaratively through events |
+| `orElse` (alternative) | `race` | First to finish |
+| Atomicity | `update` is atomic | One tick = atomic operation |
 
-**Когда нужен настоящий STM:**
-- Сложная координация между множеством worker'ов
-- Разделяемое мутабельное состояние между потоками
-- Паттерны, которые трудно выразить через Event-комбинаторы
+**When real STM is needed:**
+- Complex coordination between many workers
+- Shared mutable state between threads
+- Patterns hard to express through Event combinators
 
-**Решение для серверной части:**
+**Solution for server-side:**
 
-Серверная часть Agdelte компилируется в Haskell и исполняется на GHC. STM доступен напрямую:
+Server part of Agdelte compiles to Haskell and runs on GHC. STM is available directly:
 
 ```agda
--- На сервере: использовать STM из GHC
+-- On server: use STM from GHC
 postulate
   TVar    : Set → Set
   newTVar : A → IO (TVar A)
@@ -945,42 +945,42 @@ postulate
 {-# COMPILE GHC atomically = Control.Concurrent.STM.atomically #-}
 ```
 
-**Архитектура клиент-сервер:**
+**Client-server architecture:**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        Agdelte                              │
 ├─────────────────────────────────────────────────────────────┤
-│  Клиент (JS)          │  Сервер (GHC)                       │
+│  Client (JS)          │  Server (GHC)                       │
 │  ─────────────        │  ────────────                       │
-│  Web Workers          │  Green threads (миллионы)           │
-│  Event-модель         │  Event-модель + STM                 │
+│  Web Workers          │  Green threads (millions)           │
+│  Event model          │  Event model + STM                  │
 │  SharedArrayBuffer    │  MVar, TVar, Chan                   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-Клиент и сервер используют одну Event-модель. Сервер дополнительно имеет доступ к STM для сложной координации.
+Client and server use the same Event model. Server additionally has access to STM for complex coordination.
 
-### Итог сравнения с Haskell async
+### Haskell async comparison summary
 
 | | Haskell async | Agdelte |
 |--|---------------|---------|
-| Выразительность | ✅ | ✅ эквивалентна |
-| Безопасность | ⚠️ требует дисциплины | ✅ по построению |
-| Structured concurrency | ⚠️ явно | ✅ по умолчанию |
-| Унификация | ❌ отдельный API | ✅ единый Event |
-| STM | ✅ | ✅ на сервере (GHC) |
+| Expressiveness | Yes | Equivalent |
+| Safety | Requires discipline | By construction |
+| Structured concurrency | Explicit | By default |
+| Unification | Separate API | Unified Event |
+| STM | Yes | On server (GHC) |
 
-**Вывод:** Agdelte конкурентность не уступает Haskell async в выразительности, превосходит в безопасности и унификации, имеет доступ к STM на сервере через GHC.
+**Conclusion:** Agdelte concurrency matches Haskell async in expressiveness, exceeds in safety and unification, has STM access on server via GHC.
 
 ---
 
-### Другие паттерны
+### Other patterns
 
 #### Background computation
 
 ```agda
--- Простой случай: вычислить в фоне
+-- Simple case: compute in background
 background : (A → B) → A → Event B
 background = worker
 ```
@@ -988,7 +988,7 @@ background = worker
 #### Debounced worker
 
 ```agda
--- Запустить worker только после паузы в вводе
+-- Run worker only after input pause
 debouncedWorker : ℕ → WorkerFn A B → Signal A → Event B
 debouncedWorker ms fn input =
   switchMap (λ a → delay ms >> worker fn a) (changes input)
@@ -997,25 +997,25 @@ debouncedWorker ms fn input =
 #### Cached worker
 
 ```agda
--- Кэшировать результаты
+-- Cache results
 cachedWorker : Eq A → WorkerFn A B → A → Event B
 cachedWorker eq fn a =
   case lookup a cache of
-    Just b  → occur b          -- из кэша (одно дискретное событие)
-    Nothing → map (cache!) (worker fn a)  -- вычислить и сохранить
+    Just b  → occur b          -- from cache (one discrete event)
+    Nothing → map (cache!) (worker fn a)  -- compute and store
 ```
 
 #### Retry with backoff
 
 ```agda
--- Повторить при ошибке с экспоненциальной задержкой
+-- Retry on error with exponential backoff
 retryWorker : ℕ → WorkerFn A B → A → Event (Either String B)
 retryWorker maxRetries fn a = go 0 100
   where
     go : ℕ → ℕ → Event (Either String B)
     go n delayMs =
       if n >= maxRetries
-      then occur (Left "Max retries exceeded")  -- одно дискретное событие
+      then occur (Left "Max retries exceeded")  -- one discrete event
       else race
         [ map Right (worker fn a)
         , delay delayMs >> go (n + 1) (delayMs * 2)
@@ -1024,11 +1024,11 @@ retryWorker maxRetries fn a = go 0 100
 
 ---
 
-## 11. Интеграция с App
+## 11. Integration with App
 
-### App остаётся неизменным
+### App remains unchanged
 
-Worker'ы интегрируются через стандартный `events` — никаких расширений App не требуется:
+Workers integrate through standard `events` — no App extensions required:
 
 ```agda
 record App (Msg : Set) (Model : Set) : Set where
@@ -1037,12 +1037,12 @@ record App (Msg : Set) (Model : Set) : Set where
     update  : Msg → Model → Model
     view    : Model → Html Msg
     events  : Model → Event Msg
-    -- Worker'ы — просто ещё один Event в events
+    -- Workers are just another Event in events
 ```
 
-### Автоматическое управление
+### Automatic management
 
-`events` достаточно для всех случаев:
+`events` is enough for all cases:
 
 ```agda
 events m = merge
@@ -1051,66 +1051,65 @@ events m = merge
   (if m.fetching then request (get "/api") else never)
 ```
 
-Runtime сам определяет:
-- Какие worker'ы запустить
-- Какие переиспользовать из пула
-- Какие отменить
+Runtime determines automatically:
+- Which workers to start
+- Which to reuse from pool
+- Which to cancel
 
 ---
 
-## Итого
+## Summary
 
-### Примитивы конкурентности
+### Concurrency primitives
 
-| Примитив | Тип | Описание |
-|----------|-----|----------|
-| `worker` | `WorkerFn A B → A → Event B` | Вычисление в отдельном потоке |
-| `workerWithProgress` | `WorkerFn A B → A → Event (Progress B)` | С отчётом о прогрессе |
-| `parallel` | `List (Event A) → Event (List A)` | Параллельно, собрать все |
-| `race` | `List (Event A) → Event A` | Параллельно, взять первый |
-| `poolWorker` | `Pool → WorkerFn A B → A → Event B` | Через пул worker'ов |
-| `channel` | `WorkerScript → Event (Channel S R)` | Двунаправленная связь |
+| Primitive | Type | Description |
+|-----------|------|-------------|
+| `worker` | `WorkerFn A B → A → Event B` | Computation in separate thread |
+| `workerWithProgress` | `WorkerFn A B → A → Event (Progress B)` | With progress reporting |
+| `parallel` | `List (Event A) → Event (List A)` | Parallel, collect all |
+| `race` | `List (Event A) → Event A` | Parallel, take first |
+| `poolWorker` | `Pool → WorkerFn A B → A → Event B` | Through worker pool |
+| `channel` | `WorkerScript → Event (Channel S R)` | Bidirectional communication |
 
-### Связь с базовой архитектурой
+### Connection with base architecture
 
 ```
-README.md (базовая)                concurrency.md (расширение)
-───────────────────                ────────────────────────────
-Signal, Event          ◄────────   (используются как есть)
-App, Html, Runtime     ◄────────   (используются как есть)
+README.md (base)                  concurrency.md (extension)
+────────────────                  ──────────────────────────
+Signal, Event          ◄────────  (used as is)
+App, Html, Runtime     ◄────────  (used as is)
 
-interval, request      ◄── тот ──► worker, parallel, race
-websocket                же           channel, pool
-                       паттерн:
-                       дискретные
-                       события
+interval, request      ◄── same ─► worker, parallel, race
+websocket                pattern:   channel, pool
+                       discrete
+                       events
 ```
 
-### Ключевой принцип
+### Key principle
 
-**Worker = ещё один Event-примитив, генерирующий дискретные события.** Конкурентность не меняет архитектуру — она добавляет новые примитивы, следующие той же модели:
+**Worker = another Event primitive generating discrete events.** Concurrency doesn't change architecture — it adds new primitives following the same model:
 
-- **Дискретность:** результат, прогресс, отмена — отдельные дискретные события
-- **Декларативность:** `events m = if m.computing then worker f x else never`
-- **Автоматическое управление:** подписка/отписка через runtime
-- **Композиция:** `merge`, `mapE`, `filterE` работают одинаково
-- **Structured concurrency:** следует из декларативной модели
+- **Discreteness:** result, progress, cancellation — separate discrete events
+- **Declarativeness:** `events m = if m.computing then worker f x else never`
+- **Automatic management:** subscription/unsubscription through runtime
+- **Composition:** `merge`, `mapE`, `filterE` work the same
+- **Structured concurrency:** follows from declarative model
 
-### Когда использовать
+### When to use
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    UI-приложение                         │
+│                    UI application                        │
 ├─────────────────────────────────────────────────────────┤
-│  95% кода: формы, списки, навигация, HTTP               │
+│  95% of code: forms, lists, navigation, HTTP            │
 │  ────────────────────────────────────────               │
 │  → DOM events + request + interval                      │
-│  → НЕ нужен модуль Concurrent/                          │
+│  → Concurrent/ module NOT needed                        │
 ├─────────────────────────────────────────────────────────┤
-│  5% кода: тяжёлые вычисления                            │
+│  5% of code: heavy computations                         │
 │  ────────────────────────────                           │
 │  → worker, parallel                                     │
-│  → импортировать Concurrent/ только здесь               │
+│  → import Concurrent/ only here                         │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -1118,23 +1117,23 @@ websocket                же           channel, pool
 
 ## Roadmap
 
-> Конкурентность — **Phase 3** общего roadmap (после MVP и Extensions).
-> См. [README.md](../README.md) для полного roadmap.
+> Concurrency is an **independent track** (see polynomials.md).
+> Can be developed in parallel with Widget Lenses.
 
-**Phase 3a: Базовая конкурентность**
+**Concurrency Phase A: Basic**
 - `worker : WorkerFn A B → A → Event B`
-- Базовая отмена
+- Basic cancellation
 - `parallel`, `race`
 
-**Phase 3b: Расширенная конкурентность**
+**Concurrency Phase B: Extended**
 - `workerWithProgress`
 - Worker pool
 - Channels
 
-**Phase 4: Продвинутое**
+**Concurrency Phase C: Advanced**
 - SharedArrayBuffer
-- Linear types для ресурсов
+- Linear types for resources
 - Session types
-- STM интеграция (серверная часть через GHC)
+- STM integration (server via GHC)
 - Distributed workers
 - GPU compute (WebGPU)

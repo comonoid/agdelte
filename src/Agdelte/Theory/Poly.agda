@@ -143,3 +143,35 @@ transformCoalg (mkLens f g) C = mkCoalg
   (State C)
   (f ∘ observe C)
   (λ s d → update C s (g (observe C s) d))
+
+------------------------------------------------------------------------
+-- Incremental Lens (for Widget Lenses)
+------------------------------------------------------------------------
+
+-- Delta type: changes to a position
+-- For now, we use a simple approach: delta is just a new value
+-- In a full implementation, this would be a proper diff type
+
+record IncLens (P Q : Poly) : Set₁ where
+  constructor mkIncLens
+  field
+    -- Standard lens operations
+    lens : Lens P Q
+    -- Delta type for positions of P
+    ΔPos : Pos P → Set
+    -- How delta propagates: ΔP p → ΔQ (onPos p)
+    -- This is the key: instead of diffing, we propagate deltas through the lens
+    onDelta : (p : Pos P) → ΔPos p → Dir Q (Lens.onPos lens p)
+
+open IncLens public
+
+-- Identity incremental lens
+idIncLens : {P : Poly} → IncLens P P
+idIncLens {P} = mkIncLens idLens (Dir P) (λ p d → d)
+
+-- Composition of incremental lenses
+_∘IL_ : {P Q R : Poly} → IncLens Q R → IncLens P Q → IncLens P R
+_∘IL_ {P} {Q} {R} iq ip = mkIncLens
+  (lens iq ∘L lens ip)
+  (ΔPos ip)
+  (λ p δp → Lens.onDir (lens iq) (Lens.onPos (lens ip) p) (onDelta ip p δp))

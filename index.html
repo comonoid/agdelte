@@ -175,72 +175,72 @@
   <p class="subtitle">Reactive UI Framework with Dependent Types in Agda</p>
 
   <div class="features">
-    <span class="feature">Elm Architecture</span>
-    <span class="feature">Event + Cmd</span>
-    <span class="feature">Type-Safe HTML</span>
+    <span class="feature">Svelte-style Reactive</span>
+    <span class="feature">No Virtual DOM</span>
+    <span class="feature">Type-Safe Templates</span>
     <span class="feature">Compiles to JS</span>
   </div>
 
   <div class="examples">
     <a href="examples_html/counter.html" class="example-card">
       <h2>Counter</h2>
-      <p>Simple counter with increment, decrement, and reset. Demonstrates basic Elm architecture.</p>
+      <p>Simple counter with reactive bindings. Direct DOM updates, no Virtual DOM.</p>
       <span class="status ready">Ready</span>
       <code>examples/Counter.agda</code>
     </a>
 
     <a href="examples_html/timer.html" class="example-card">
       <h2>Timer</h2>
-      <p>Stopwatch with start/stop/reset. Shows Event subs with interval timer.</p>
+      <p>Stopwatch with reactive text and interval subscriptions.</p>
       <span class="status ready">Ready</span>
       <code>examples/Timer.agda</code>
     </a>
 
     <a href="examples_html/todo.html" class="example-card">
       <h2>TodoMVC</h2>
-      <p>Full TodoMVC implementation. Demonstrates lists, filtering, and complex state.</p>
+      <p>Full TodoMVC with reactive lists (foreach) and conditional rendering (when).</p>
       <span class="status ready">Ready</span>
       <code>examples/Todo.agda</code>
     </a>
 
     <a href="examples_html/keyboard.html" class="example-card">
       <h2>Keyboard</h2>
-      <p>Global keyboard events via onKeys. Arrow keys move box, Escape resets.</p>
+      <p>Global keyboard events with reactive style bindings for box position.</p>
       <span class="status ready">Ready</span>
       <code>examples/KeyboardDemo.agda</code>
     </a>
 
     <a href="examples_html/http.html" class="example-card">
       <h2>HTTP</h2>
-      <p>HTTP via Cmd. Demonstrates commands separate from subscriptions.</p>
+      <p>HTTP requests via Event subscriptions with reactive status display.</p>
       <span class="status ready">Ready</span>
       <code>examples/HttpDemo.agda</code>
     </a>
 
     <a href="examples_html/task.html" class="example-card">
       <h2>Task Chain</h2>
-      <p>Monadic HTTP chains with do-notation. Sequential requests via Task monad.</p>
+      <p>Monadic HTTP chains with do-notation and reactive output.</p>
       <span class="status ready">Ready</span>
       <code>examples/TaskDemo.agda</code>
     </a>
 
     <a href="examples_html/websocket.html" class="example-card">
       <h2>WebSocket</h2>
-      <p>Real-time echo client. Demonstrates wsConnect and wsSend.</p>
+      <p>Real-time echo client with reactive message list.</p>
       <span class="status ready">Ready</span>
       <code>examples/WebSocketDemo.agda</code>
     </a>
 
     <a href="examples_html/router.html" class="example-card">
       <h2>Router</h2>
-      <p>SPA routing with History API. Uses pushUrl and onUrlChange.</p>
+      <p>SPA routing with conditional page rendering (when).</p>
       <span class="status ready">Ready</span>
       <code>examples/RouterDemo.agda</code>
     </a>
 
     <a href="examples_html/composition.html" class="example-card">
       <h2>Composition</h2>
-      <p>Two counters composed with _∥_. Shows parallel app composition.</p>
+      <p>Two counters with shared total. Component composition.</p>
       <span class="status ready">Ready</span>
       <code>examples/CompositionDemo.agda</code>
     </a>
@@ -255,14 +255,14 @@
   </div>
 
   <div class="tech-stack">
-    <h3>Architecture</h3>
+    <h3>Architecture (Svelte-style)</h3>
     <ul>
-      <li>Event — subscriptions (subs)</li>
+      <li>bindF — reactive text bindings</li>
+      <li>when/foreach — conditional & lists</li>
+      <li>Event — subscriptions</li>
       <li>Cmd — commands (HTTP, etc.)</li>
-      <li>Task — monadic chains (do-notation)</li>
-      <li>update: Msg → Model → Model</li>
-      <li>Type-safe HTML elements</li>
-      <li>Automatic subscription cleanup</li>
+      <li>No Virtual DOM — O(bindings) updates</li>
+      <li>Type-safe templates in Agda</li>
     </ul>
   </div>
 </body>

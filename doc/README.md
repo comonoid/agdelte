@@ -23,7 +23,6 @@ The `architecture/` directory contains additional design documents:
 |----------|-------------|
 | [combinators.md](../architecture/combinators.md) | All combinators with types |
 | [time-model.md](../architecture/time-model.md) | Time model: ticks, dt |
-| [ffi.md](../architecture/ffi.md) | JavaScript FFI reference |
 | [concurrency.md](../architecture/concurrency.md) | Phase 3 concurrency (planned) |
 | [vs-svelte.md](../architecture/vs-svelte.md) | Comparison with Svelte 5 |
 | [vs-vue3.md](../architecture/vs-vue3.md) | Comparison with Vue 3 |

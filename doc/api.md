@@ -2,28 +2,106 @@
 
 ## Core Types
 
-### App
+### ReactiveApp
 
 ```agda
-record App (Model Msg : Set) : Set where
+record ReactiveApp (Model Msg : Set) : Set₁ where
   field
-    init    : Model
-    update  : Msg → Model → Model
-    view    : Model → Html Msg
-    subs    : Model → Event Msg
-    command : Msg → Model → Cmd Msg
+    init     : Model
+    update   : Msg → Model → Model
+    template : Node Model Msg
 ```
 
-### Constructors
+### Constructor
 
 ```agda
-mkApp : Model → (Msg → Model → Model) → (Model → Html Msg)
-      → (Model → Event Msg) → App Model Msg
+mkReactiveApp : Model → (Msg → Model → Model) → Node Model Msg → ReactiveApp Model Msg
+```
 
-mkCmdApp : Model → (Msg → Model → Model) → (Model → Html Msg)
-         → (Model → Event Msg) → (Msg → Model → Cmd Msg) → App Model Msg
+### Subscriptions and Commands (separate exports)
 
-simpleApp : Model → (Msg → Model → Model) → (Model → Html Msg) → App Model Msg
+```agda
+-- Exported separately from module:
+subs : Model → Event Msg      -- optional
+cmd  : Msg → Model → Cmd Msg  -- optional
+```
+
+---
+
+## Node — Reactive Template
+
+From `Agdelte.Reactive.Node`:
+
+```agda
+data Node (Model Msg : Set) : Set₁ where
+  text    : String → Node Model Msg
+  bind    : Binding Model String → Node Model Msg
+  elem    : String → List (Attr Model Msg) → List (Node Model Msg) → Node Model Msg
+  empty   : Node Model Msg
+  when    : (Model → Bool) → Node Model Msg → Node Model Msg
+  foreach : ∀ {A : Set} → (Model → List A) → (A → ℕ → Node Model Msg) → Node Model Msg
+```
+
+### Binding
+
+```agda
+record Binding (Model : Set) (A : Set) : Set where
+  field
+    extract : Model → A
+    equals  : A → A → Bool
+```
+
+### Smart Constructors
+
+```agda
+-- Reactive text binding
+bindF : (Model → String) → Node Model Msg
+
+-- Elements
+div, span, button, p, h1, h2, h3, ul, li,
+input, label, nav, a, pre : List (Attr Model Msg) → List (Node Model Msg) → Node Model Msg
+```
+
+### Attr
+
+```agda
+data Attr (Model Msg : Set) : Set₁ where
+  attr      : String → String → Attr Model Msg
+  attrBind  : String → Binding Model String → Attr Model Msg
+  on        : String → Msg → Attr Model Msg
+  onValue   : String → (String → Msg) → Attr Model Msg
+  style     : String → String → Attr Model Msg
+  styleBind : String → Binding Model String → Attr Model Msg
+```
+
+### Attr Smart Constructors
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `onClick` | `Msg → Attr Model Msg` | Click handler |
+| `onInput` | `(String → Msg) → Attr Model Msg` | Input value |
+| `onKeyDown` | `(String → Msg) → Attr Model Msg` | Key press value |
+| `onChange` | `(String → Msg) → Attr Model Msg` | Change value |
+| `class` | `String → Attr Model Msg` | Static class |
+| `classBind` | `(Model → String) → Attr Model Msg` | Reactive class |
+| `id'` | `String → Attr Model Msg` | Element id |
+| `value` | `String → Attr Model Msg` | Static value |
+| `valueBind` | `(Model → String) → Attr Model Msg` | Reactive value |
+| `placeholder` | `String → Attr Model Msg` | Placeholder |
+| `type'` | `String → Attr Model Msg` | Input type |
+| `href` | `String → Attr Model Msg` | Link href |
+| `disabled` | `Attr Model Msg` | Disabled |
+| `disabledBind` | `(Model → Bool) → Attr Model Msg` | Reactive disabled |
+| `checked` | `Attr Model Msg` | Checked |
+| `checkedBind` | `(Model → Bool) → Attr Model Msg` | Reactive checked |
+| `keyAttr` | `String → Attr Model Msg` | data-key |
+| `styles` | `String → String → Attr Model Msg` | Static style |
+
+### Component Composition
+
+```agda
+focusNode : (Outer → Inner) → Node Inner Msg → Node Outer Msg
+focusBinding : (Outer → Inner) → Binding Inner A → Binding Outer A
 ```
 
 ---
@@ -183,122 +261,5 @@ fetchData = do
   pure (parseUser user)
 
 -- In command:
-command Fetch _ = attempt fetchData GotResult
-```
-
----
-
-## Html
-
-### Elements
-
-From `Agdelte.Html.Elements`:
-
-```agda
-div, span, p, h1, h2, h3, h4, h5, h6,
-a, button, input, textarea, select, option,
-ul, ol, li, table, tr, td, th,
-form, label, img, br, hr, pre, code,
-header, footer, main', nav, section, article, aside
-```
-
-### Attributes
-
-From `Agdelte.Html.Attributes`:
-
-```agda
--- Common
-id, class, style', title, hidden
-
--- Links
-href, src, alt
-
--- Forms
-type', name, value, placeholder, disabled, readonly, checked, selected,
-autofocus, required, min, max, step, pattern', maxlength, minlength,
-rows, cols, wrap, multiple, accept, autocomplete, for'
-
--- Data
-dataAttr  -- data-* attributes
-```
-
-### Events
-
-From `Agdelte.Html.Events`:
-
-```agda
--- Mouse
-onClick, onDoubleClick, onMouseDown, onMouseUp,
-onMouseEnter, onMouseLeave, onContextMenu
-
--- Keyboard
-onKeyDown, onKeyUp, onKeyPress
-
--- Form
-onInput', onChange, onSubmit, onFocus, onBlur
-
--- With preventDefault
-onClickPrevent, onSubmitPrevent
-```
-
-### Navigation
-
-From `Agdelte.Html.Navigation`:
-
-```agda
-navLink : String → Msg → List (Attr Msg) → List (Html Msg) → Html Msg
-navLink' : String → Msg → String → Html Msg
-navLinkClass : String → Msg → String → String → Html Msg
-```
-
-### Utilities
-
-```agda
-empty    : Html Msg                      -- empty text node
-fragment : List (Html Msg) → Html Msg    -- wrapper div
-when     : Bool → Html Msg → Html Msg    -- conditional
-unless   : Bool → Html Msg → Html Msg    -- inverse conditional
-mapHtml  : (A → B) → Html A → Html B     -- transform messages
-```
-
----
-
-## App Composition
-
-### Parallel
-
-```agda
-_∥_ : App M₁ A₁ → App M₂ A₂ → App (M₁ × M₂) (A₁ ⊎ A₂)
-tensor : App M₁ A₁ → App M₂ A₂ → App (M₁ × M₂) (A₁ ⊎ A₂)  -- alias
-```
-
-### Alternative
-
-```agda
-_⊕ᵃ_ : App M₁ A₁ → App M₂ A₂ → App (M₁ ⊎ M₂) (A₁ ⊎ A₂)
-coproduct : ...  -- alias
-```
-
-### Modifiers
-
-```agda
-withView    : (Model → Html Msg) → App → App
-withUpdate  : (Msg → Model → Model) → App → App
-withSubs    : (Model → Event Msg) → App → App
-withEvents  : (Model → Event Msg) → App → App  -- merge with existing
-withCommand : (Msg → Model → Cmd Msg) → App → App  -- merge with existing
-```
-
-### Transformations
-
-```agda
-mapMsg   : (A → B) → (B → A) → App M A → App M B
-mapModel : (M₂ → M₁) → (M₁ → M₂ → M₂) → M₂ → App M₁ Msg → App M₂ Msg
-```
-
-### Lifecycle
-
-```agda
-step  : Msg → App → App              -- apply one message
-steps : List Msg → App → App         -- apply multiple messages
+cmd Fetch _ = attempt fetchData GotResult
 ```

@@ -8,7 +8,7 @@
  * Agda List: [] = null или { head, tail } структура
  * В зависимости от компиляции может быть разный формат
  */
-function toArray(agdaList) {
+export function toArray(agdaList) {
   // Если уже массив — возвращаем как есть
   if (Array.isArray(agdaList)) {
     return agdaList;

@@ -8,9 +8,9 @@
 
 | Document | Description |
 |----------|-------------|
+| [polynomials.md](polynomials.md) | **Polynomial functors roadmap and phases** |
 | [combinators.md](combinators.md) | All combinators with types and examples |
 | [time-model.md](time-model.md) | Time model: ticks, animationFrame, dt |
-| [ffi.md](ffi.md) | JavaScript FFI implementations |
 | [concurrency.md](concurrency.md) | Phase 3 concurrency (planned) |
 | [vs-svelte.md](vs-svelte.md) | Detailed comparison with Svelte 5 |
 | [vs-vue3.md](vs-vue3.md) | Feature comparison with Vue 3 |

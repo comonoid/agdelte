@@ -1,21 +1,18 @@
 {-# OPTIONS --without-K #-}
 
 -- Timer: пример с внешними событиями (interval)
+-- Reactive approach: no Virtual DOM, direct bindings
 
 module Timer where
 
 open import Data.Nat using (ℕ; zero; suc; _+_)
 open import Data.Nat.Show using (show)
-open import Data.Bool using (Bool; true; false; not)
-open import Data.String using (String; _++_)
+open import Data.Bool using (Bool; true; false; not; if_then_else_)
+open import Data.String using (String; _++_; length)
 open import Data.List using ([]; _∷_; [_])
 
 open import Agdelte.Core.Event
-open import Agdelte.Html.Types
-open import Agdelte.Html.Elements
-open import Agdelte.Html.Attributes
-open import Agdelte.Html.Events
-import Agdelte.App as App
+open import Agdelte.Reactive.Node
 
 ------------------------------------------------------------------------
 -- Model
@@ -45,14 +42,13 @@ data Msg : Set where
 -- Update
 ------------------------------------------------------------------------
 
-update : Msg → Model → Model
-update Tick m = if running m then record m { tenths = suc (tenths m) } else m
-  where open import Data.Bool using (if_then_else_)
-update Toggle m = record m { running = not (running m) }
-update Reset m = record m { tenths = 0 }  -- Не останавливает таймер!
+updateModel : Msg → Model → Model
+updateModel Tick m = if running m then record m { tenths = suc (tenths m) } else m
+updateModel Toggle m = record m { running = not (running m) }
+updateModel Reset m = record m { tenths = 0 }  -- Не останавливает таймер!
 
 ------------------------------------------------------------------------
--- View
+-- Formatting
 ------------------------------------------------------------------------
 
 formatTime : ℕ → String
@@ -65,44 +61,47 @@ formatTime t =
   where
     open import Data.Nat.DivMod using (_/_; _%_)
     open import Data.Nat using (_<ᵇ_)
-    open import Data.String using (length)
-    open import Data.Bool using (if_then_else_)
 
     pad : String → String
     pad s = if length s <ᵇ 2 then "0" ++ s else s
 
-view : Model → Html Msg
-view m =
-  div (class "timer" ∷ [])
-    ( h1 [] (text "Agdelte Timer" ∷ [])
-    ∷ div (class "display" ∷ fontSize "48px" ∷ [])
-        (text (formatTime (tenths m)) ∷ [])
-    ∷ div (class "controls" ∷ [])
+------------------------------------------------------------------------
+-- Template: reactive bindings (no Virtual DOM)
+------------------------------------------------------------------------
+
+-- Button text depends on running state
+buttonText : Model → String
+buttonText m = if running m then "Pause" else "Start"
+
+timerTemplate : Node Model Msg
+timerTemplate =
+  div [ class "timer" ]
+    ( h1 [] [ text "Agdelte Timer" ]
+    ∷ div (class "display" ∷ styles "font-size" "48px" ∷ [])
+        [ bindF (formatTime ∘ tenths) ]  -- auto-updates!
+    ∷ div [ class "controls" ]
         ( button (onClick Toggle ∷ class "btn" ∷ [])
-            (text (if running m then "Pause" else "Start") ∷ [])
+            [ bindF buttonText ]  -- auto-updates!
         ∷ button (onClick Reset ∷ class "btn" ∷ [])
-            (text "Reset" ∷ [])
+            [ text "Reset" ]
         ∷ [] )
     ∷ [] )
-  where open import Data.Bool using (if_then_else_)
+  where open import Function using (_∘_)
 
 ------------------------------------------------------------------------
--- Events: подписка на interval когда таймер запущен
+-- Subscriptions: interval when timer is running
 ------------------------------------------------------------------------
 
-events : Model → Event Msg
-events m = if running m
-           then interval 100 Tick  -- Каждые 0.1 секунды
-           else never
-  where open import Data.Bool using (if_then_else_)
+subs : Model → Event Msg
+subs m = if running m
+         then interval 100 Tick  -- Каждые 0.1 секунды
+         else never
 
 ------------------------------------------------------------------------
 -- App
 ------------------------------------------------------------------------
 
-timerApp : App.App Model Msg
-timerApp = App.mkApp initialModel update view events
+app : ReactiveApp Model Msg
+app = mkReactiveApp initialModel updateModel timerTemplate
 
--- Export for demo-loader.js
-app : App.App Model Msg
-app = timerApp
+-- subs is exported separately (see above)

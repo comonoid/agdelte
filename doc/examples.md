@@ -1,54 +1,61 @@
 # Agdelte Examples Guide
 
-All examples follow Elm Architecture and demonstrate specific features.
+All examples use **Reactive Bindings** (like Svelte) — no Virtual DOM.
 
 ## Overview
 
 | Example | Features | Complexity |
 |---------|----------|------------|
-| [Counter](#counter) | Basic App, onClick | Simple |
+| [Counter](#counter) | Reactive bindings, onClick | Simple |
 | [Timer](#timer) | Event subs (interval) | Simple |
-| [Todo](#todo) | Lists, input, filtering | Medium |
-| [KeyboardDemo](#keyboarddemo) | Global keyboard events | Medium |
-| [HttpDemo](#httpdemo) | Cmd (httpGet) | Medium |
+| [Todo](#todo) | foreach, when, input | Medium |
+| [KeyboardDemo](#keyboarddemo) | Global keyboard events, styleBind | Medium |
+| [HttpDemo](#httpdemo) | Cmd (httpGet), disabledBind | Medium |
 | [TaskDemo](#taskdemo) | Task chains, do-notation | Medium |
-| [WebSocketDemo](#websocketdemo) | wsConnect, wsSend | Medium |
-| [RouterDemo](#routerdemo) | SPA routing, navLink | Medium |
-| [CompositionDemo](#compositiondemo) | App composition (_∥_) | Advanced |
+| [WebSocketDemo](#websocketdemo) | wsConnect, wsSend, foreach | Medium |
+| [RouterDemo](#routerdemo) | SPA routing, when | Medium |
+| [CompositionDemo](#compositiondemo) | focusNode, shared total | Advanced |
 
 ---
 
 ## Counter
 
-**Demonstrates:** Basic Elm Architecture, button clicks.
+**Demonstrates:** Reactive bindings (Svelte-style), direct DOM updates.
 
 ```agda
-data Msg = Inc | Dec
+data Msg = Increment | Decrement | Reset
 
-update : Msg → ℕ → ℕ
-update Inc n = suc n
-update Dec n = pred n
+updateModel : Msg → ℕ → ℕ
+updateModel Increment n = suc n
+updateModel Decrement zero = zero
+updateModel Decrement (suc n) = n
+updateModel Reset _ = zero
 
-view : ℕ → Html Msg
-view n = div []
-  [ button [ onClick Dec ] [ text "-" ]
-  , span [] [ text (show n) ]
-  , button [ onClick Inc ] [ text "+" ]
-  ]
+counterTemplate : Node ℕ Msg
+counterTemplate = div [ class "counter" ]
+  ( h1 [] [ text "Agdelte Counter" ]
+  ∷ div [ class "display" ] [ bindF show ]   -- auto-updates!
+  ∷ div [ class "buttons" ]
+      ( button (onClick Decrement ∷ class "btn" ∷ []) [ text "-" ]
+      ∷ button (onClick Reset ∷ class "btn" ∷ []) [ text "Reset" ]
+      ∷ button (onClick Increment ∷ class "btn" ∷ []) [ text "+" ]
+      ∷ [] )
+  ∷ [] )
 
-app = simpleApp 0 update view
+app : ReactiveApp ℕ Msg
+app = mkReactiveApp 0 updateModel counterTemplate
 ```
 
-**Key point:** `simpleApp` for apps without subscriptions or commands.
+**Key point:** `bindF show` creates a reactive binding — DOM updates directly when model changes, no VDOM diffing.
 
 ---
 
 ## Timer
 
-**Demonstrates:** Event subscriptions (interval).
+**Demonstrates:** Event subscriptions (interval), reactive text.
 
 ```agda
-data Msg = Tick | Toggle
+data Msg = Tick | Toggle | Reset
 
 record Model : Set where
   field
@@ -57,39 +64,44 @@ record Model : Set where
 
 subs : Model → Event Msg
 subs m = if running m then interval 1000 Tick else never
+
+app : ReactiveApp Model Msg
+app = mkReactiveApp initModel updateModel timerTemplate
 ```
 
-**Key point:** `subs` returns different Event based on model state.
+**Key point:** `subs` returns different Event based on model state. Exported separately from `app`.
 
 ---
 
 ## Todo
 
-**Demonstrates:** Lists, input handling, filtering.
+**Demonstrates:** `foreach` for dynamic lists, `when` for conditional rendering, input handling.
 
 ```agda
-data Filter = All | Active | Completed
-
 record Todo : Set where
   field
-    id        : ℕ
-    text      : String
+    todoId    : ℕ
+    todoText  : String
     completed : Bool
 
-view : Model → Html Msg
-view m = div []
-  [ input [ onInput UpdateInput, value (inputText m) ] []
-  , ul [] (map viewTodo (filterTodos (filter m) (todos m)))
-  ]
+todoTemplate : Node Model Msg
+todoTemplate = div [ class "todo-app" ]
+  ( ...
+  ∷ ul [ class "todo-list" ]
+      [ foreach todos viewTodoItem ]   -- reactive list!
+  ∷ when hasTodos (
+      div [ class "footer" ] [ ... ]   -- conditional footer
+    )
+  ∷ [] )
 ```
 
-**Key point:** Lists with `map`, conditional rendering with `when`.
+**Key point:** `foreach` renders list items reactively. `when` conditionally shows/hides elements.
 
 ---
 
 ## KeyboardDemo
 
-**Demonstrates:** Global keyboard event handling.
+**Demonstrates:** Global keyboard event handling, `styleBind` for dynamic styles.
 
 ```agda
 subs : Model → Event Msg
@@ -102,30 +114,34 @@ subs _ = onKeyDown handleKey
     ... | "ArrowLeft"  = just MoveLeft
     ... | "ArrowRight" = just MoveRight
     ... | _            = nothing
+
+-- Dynamic position via styleBind
+styles (name "left") (λ m → showNat (posX m) ++ "px")
+styles (name "top")  (λ m → showNat (posY m) ++ "px")
 ```
 
-**Key point:** `onKeyDown` with Maybe — filter keys at subscription level.
+**Key point:** `onKeyDown` with Maybe — filter keys at subscription level. `styleBind` for reactive CSS.
 
 ---
 
 ## HttpDemo
 
-**Demonstrates:** HTTP requests via Cmd.
+**Demonstrates:** HTTP requests via Cmd, `disabledBind` for reactive button state.
 
 ```agda
 data Msg = Fetch | GotData String | GotError String
 
-command : Msg → Model → Cmd Msg
-command Fetch _ = httpGet "/api/data" GotData GotError
-command _ _ = ε
+cmd : Msg → Model → Cmd Msg
+cmd Fetch _ = httpGet "/api/data" GotData GotError
+cmd _ _ = ε
 
-update : Msg → Model → Model
-update Fetch m = record m { status = Loading }
-update (GotData d) m = record m { status = Ready d }
-update (GotError e) m = record m { status = Error e }
+updateModel : Msg → Model → Model
+updateModel Fetch m = record m { status = "Loading..." }
+updateModel (GotData d) m = record m { status = d }
+updateModel (GotError e) m = record m { status = "Error: " ++ e }
 ```
 
-**Key point:** `update` stays simple, HTTP logic in `command`.
+**Key point:** `updateModel` stays simple, HTTP logic in `cmd`. Exported separately.
 
 ---
 
@@ -140,9 +156,9 @@ fetchChain = do
   posts ← http ("/api/users/" ++ user ++ "/posts")
   pure (combine user posts)
 
-command : Msg → Model → Cmd Msg
-command Fetch _ = attempt fetchChain GotResult
-command _ _ = ε
+cmd : Msg → Model → Cmd Msg
+cmd Fetch _ = attempt fetchChain GotResult
+cmd _ _ = ε
 ```
 
 **Key point:** `Task` monad for sequential operations, `attempt` to run.
@@ -151,24 +167,20 @@ command _ _ = ε
 
 ## WebSocketDemo
 
-**Demonstrates:** WebSocket connection and messaging.
+**Demonstrates:** WebSocket connection, `foreach` for message list, `when` for conditional UI.
 
 ```agda
-record Model : Set where
-  field
-    wantConnected : Bool   -- intent (for subscriptions)
-    connected     : Bool   -- actual status
-    messages      : List ChatMsg
-    input         : String
-
 subs : Model → Event Msg
 subs m = if wantConnected m then wsConnect wsUrl WsEvent else never
 
-command : Msg → Model → Cmd Msg
-command Send m = if connected m
-  then wsSend wsUrl (input m)
-  else ε
-command _ _ = ε
+cmd : Msg → Model → Cmd Msg
+cmd Send m = if connected m then wsSend wsUrl (input m) else ε
+cmd _ _ = ε
+
+-- Message list with foreach
+foreach messages viewMessage
+-- Conditional connected status
+when isConnected (div [ class "status" ] [ text "Connected" ])
 ```
 
 **Key point:** Separate `wantConnected` (intent) from `connected` (status) to prevent subscription cycling.
@@ -177,53 +189,47 @@ command _ _ = ε
 
 ## RouterDemo
 
-**Demonstrates:** SPA routing with browser history.
+**Demonstrates:** SPA routing with `when` for conditional page rendering.
 
 ```agda
-data Route = Home | About | Counter
+data Route = Home | About | NotFound
 
 subs : Model → Event Msg
-subs _ = onUrlChange (Navigate ∘ parseRoute)
+subs _ = onUrlChange (UrlChanged ∘ parseRoute)
 
-command : Msg → Model → Cmd Msg
-command (Navigate r) _ = ε  -- No command needed, just update route
-command _ _ = ε
+cmd : Msg → Model → Cmd Msg
+cmd (Navigate r) _ = pushUrl (routeToUrl r)
+cmd _ _ = ε
 
-view : Model → Html Msg
-view m = div []
-  [ nav []
-      [ navLink' "/" (Navigate Home) "Home"
-      , navLink' "/about" (Navigate About) "About"
-      , navLink' "/counter" (Navigate Counter) "Counter"
-      ]
-  , viewRoute (route m)
-  ]
+-- Conditional pages with when
+when isHome (div [] [ text "Welcome!" ])
+when isAbout (div [] [ text "About page" ])
 ```
 
-**Key point:** `navLink` handles preventDefault automatically. Use `onUrlChange` for popstate events.
+**Key point:** `when` replaces conditional rendering. `pushUrl` for navigation, `onUrlChange` for popstate events.
 
 ---
 
 ## CompositionDemo
 
-**Demonstrates:** Parallel app composition.
+**Demonstrates:** Two counters composed with shared total via `focusNode`.
 
 ```agda
--- Two counters running independently
-twoCounters : App (ℕ × ℕ) (CounterMsg ⊎ CounterMsg)
-twoCounters = counter ∥ counter
+-- Shared model
+record Model : Set where
+  field
+    counter1 : ℕ
+    counter2 : ℕ
 
--- Custom view wrapping composed app
-app = App.withView customView twoCounters
-  where
-    customView : (ℕ × ℕ) → Html (CounterMsg ⊎ CounterMsg)
-    customView (l , r) = div []
-      [ div [] [ text "Left: ", mapHtml inj₁ (counterView l) ]
-      , div [] [ text "Right: ", mapHtml inj₂ (counterView r) ]
-      ]
+-- Reuse counter template with focusNode
+focusNode counter1 counterTemplate  -- maps Inner→Outer
+focusNode counter2 counterTemplate
+
+-- Shared total binding
+bindF (λ m → show (counter1 m + counter2 m))
 ```
 
-**Key point:** `_∥_` combines apps, `mapHtml` transforms messages, `withView` replaces view.
+**Key point:** `focusNode` allows reusing templates with different model slices. Shared state via parent model.
 
 ---
 
@@ -257,34 +263,31 @@ Every example follows this pattern:
 module Examples.MyExample where
 
 -- 1. Imports
-open import Agdelte.App
-open import Agdelte.Core.Event
-open import Agdelte.Core.Cmd
-open import Agdelte.Html.Types
-open import Agdelte.Html.Elements
-open import Agdelte.Html.Events
+open import Agdelte.Reactive.Node
 
 -- 2. Model
-record Model : Set where
-  field ...
+Model = ℕ  -- or record
 
 -- 3. Messages
 data Msg : Set where ...
 
 -- 4. Update (pure!)
-update : Msg → Model → Model
+updateModel : Msg → Model → Model
 
--- 5. View (pure!)
-view : Model → Html Msg
+-- 5. Template (declarative structure with bindings!)
+template : Node Model Msg
+template = div [ class "example" ]
+  ( ... [ bindF showValue ]  -- reactive binding
+  ∷ button [ onClick SomeMsg ] [ text "Click" ]
+  ∷ [] )
 
--- 6. Subscriptions
+-- 6. App
+app : ReactiveApp Model Msg
+app = mkReactiveApp init updateModel template
+
+-- 7. Optional: subs, cmd (exported separately)
 subs : Model → Event Msg
-
--- 7. Commands (if needed)
-command : Msg → Model → Cmd Msg
-
--- 8. App
-app : App Model Msg
-app = mkApp init update view subs           -- simple
-app = mkCmdApp init update view subs cmd    -- with commands
+cmd : Msg → Model → Cmd Msg
 ```
+
+**Key difference from Virtual DOM**: `template` is data (not a function), bindings track which DOM nodes to update.

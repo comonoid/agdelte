@@ -6,7 +6,7 @@
 
 | Пример | Описание | Особенности |
 |--------|----------|-------------|
-| Counter | Простой счётчик | Базовый Elm Architecture |
+| ReactiveCounter | Счётчик | Reactive bindings (no VDOM) |
 | Timer | Секундомер | Event subs (interval) |
 | Todo | Список задач | Списки, фильтрация, input handling |
 | Keyboard | Управление стрелками | onKeyDown, global keyboard events |
@@ -78,29 +78,31 @@ agda Todo.agda
 
 ## Структура примера
 
-Каждый пример следует Elm Architecture:
+Каждый пример использует Reactive Bindings (как Svelte):
 
 ```agda
 -- Model: состояние приложения
-record Model : Set where ...
+Model = ℕ  -- или record
 
 -- Msg: сообщения (события)
-data Msg : Set where ...
+data Msg : Set where
+  Inc Dec : Msg
 
--- update: обновление состояния (остаётся простым!)
+-- update: обновление состояния
 update : Msg → Model → Model
 
--- view: рендеринг HTML
-view : Model → Html Msg
-
--- subs: подписки на события (interval, keyboard)
-subs : Model → Event Msg
-
--- command: команды (HTTP) — опционально
-command : Msg → Model → Cmd Msg
+-- template: декларативный шаблон с привязками
+template : Node Model Msg
+template =
+  div [ class "counter" ]
+    ( button [ onClick Dec ] [ text "-" ]
+    ∷ span [ class "count" ] [ bindF show ]   -- auto-updates!
+    ∷ button [ onClick Inc ] [ text "+" ]
+    ∷ [] )
 
 -- app: сборка приложения
-app : App Model Msg
-app = mkApp init update view subs          -- простые приложения
-app = mkCmdApp init update view subs cmd   -- с HTTP
+app : ReactiveApp Model Msg
+app = mkReactiveApp init update template
 ```
+
+**Ключевое отличие от Virtual DOM**: `template` — это данные, не функция. Биндинги отслеживают, какие DOM-узлы нужно обновить.
