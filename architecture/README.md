@@ -9,7 +9,8 @@
 
 | Document | Description |
 |----------|-------------|
-| [concurrency.md](concurrency.md) | Concurrency + Protocols (Phase 7, planned) |
+| [concurrency.md](concurrency.md) | Browser-side concurrency: Web Workers, channels (Phase 7) |
+| [dual-backend.md](dual-backend.md) | Dual-backend architecture: JS (browser) + Haskell/MAlonzo (server) |
 
 ## Completed Phase Documentation (in doc/)
 
