@@ -336,34 +336,49 @@ See [examples/README.md](examples/README.md) for details.
 - Runtime with direct DOM updates via reactive bindings
 - focusNode for component composition
 
-**Phase 3: Combinators and API completeness**
+**Phase 3: Incremental updates**
+
+- Keyed foreach — update by key, not by index
+- Nested bindings inside foreach elements
+- `when` with enter/leave animations
+
+**Phase 4: Widget Lenses**
+
+- `Lens Outer Inner` with get/set/modify
+- Lens composition `_∘L_`
+- Integration with Node/Binding (focusNode → full Lens)
+
+**Phase 5: Combinators and testing**
 
 - Event transformations: filterE, snapshot, foldp, switchE
 - Accumulators: accumE, accumB, mapAccum
 - Testing: interpret, collectN — pure event testing without browser
 - See [architecture/combinators.md](architecture/combinators.md)
 
-**Phase 4: Formal properties**
+**Phase 6: Widget Networks + Big Lens**
 
-- Lens laws proofs (identity, composition)
-- ReactiveApp ↔ Coalg formal connection
-- Protocol examples (typed WebSocket, HTTP)
+- Polynomial wiring diagrams (`_⊗_`, `_⊕_`, `wire`)
+- Declarative widget topology
+- Big Lens — navigate/modify entire network
 
-**Phase 5: Incremental updates**
+**Phase 7: Concurrency + Protocols**
 
-- Keyed foreach — update by key, not by index
-- Incremental DOM for foreach — add/remove without recreation
-- Nested bindings inside foreach elements
-
-**Phase 6: Concurrency**
-
-- worker, parallel, race, channel
-- Worker pools, structured concurrency
+- Workers as agents in polynomial network
+- Channels = polynomial directions (Dir)
+- Protocol Lens — typed agent communication
 - See [architecture/concurrency.md](architecture/concurrency.md)
 
-**Phase 7: Developer Experience**
+**Phase 8: Developer Experience**
 
-- Hot reload, time-travel debugging, DevTools
+- DevTools via Big Lens (network inspection)
+- Time-travel debugging
+- Hot reload
+
+**Phase 9: Formal properties + Session types**
+
+- Lens laws proofs
+- Dependent protocols
+- ReactiveApp ↔ Coalg formal connection
 
 ## Philosophy
 

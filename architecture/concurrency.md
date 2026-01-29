@@ -1,6 +1,6 @@
 # Concurrency in Agdelte
 
-> **Status:** Planned (Phase 6). This document describes the architecture extension for concurrent computations.
+> **Status:** Planned (Phase 7). This document describes the architecture extension for concurrent computations.
 >
 > **Extension:** optional extension of the base architecture. See [doc/architecture.md](../doc/architecture.md).
 >

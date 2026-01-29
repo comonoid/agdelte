@@ -287,82 +287,79 @@ the structure is always correct.
 
 See [doc/architecture.md](../doc/architecture.md) for full API details.
 
-### Phase 3: Combinators
+### Phase 3: Incremental Updates
 
-**Focus**: Event combinators and API completeness. See [combinators.md](combinators.md).
+**Focus**: Efficient dynamic lists and conditional rendering.
+
+**Deliverables**:
+- [ ] Keyed `foreach` — update by key, not by index
+- [ ] Nested bindings inside `foreach` elements
+- [ ] `when` with enter/leave animations
+
+### Phase 4: Widget Lenses
+
+**Focus**: Full lens-based model navigation within widgets.
+
+**Deliverables**:
+- [ ] `Lens Outer Inner` with get/set/modify
+- [ ] Lens composition `_∘L_`
+- [ ] Integration with Node/Binding (`focusNode` → full `Lens`)
+- [ ] Bidirectional data flow through lenses
+
+### Phase 5: Combinators and Testing
+
+**Focus**: Event combinators and pure testing. See [combinators.md](combinators.md).
 
 **Deliverables**:
 - [ ] Event transformations: filterE, snapshot, foldp, switchE
 - [ ] Accumulators: accumE, accumB, mapAccum
 - [ ] Testing: interpret, collectN
 
-### Phase 4: Proofs & Protocols
+### Phase 6: Widget Networks + Big Lens
 
-**Focus**: Mathematical rigor and protocol examples.
+**Focus**: Polynomial wiring diagrams, declarative widget topology.
+
+```
+Lens (inner)  →  Network of Lenses  →  Big Lens (navigate all)
+```
 
 **Deliverables**:
-- [ ] Prove lens laws in Agda (identity, composition)
-- [ ] Coproduct `_⊕_` of polynomials
-- [ ] Protocol examples (typed WebSocket, HTTP)
+- [ ] Wiring diagrams (`_⊗_`, `_⊕_`, `wire`)
+- [ ] Declarative widget network DSL
+- [ ] Big Lens — navigate/modify entire network
+- [ ] Demo: Composed app with inspectable network
 
-### Phase 6: Agent Networks
+### Phase 7: Concurrency + Protocols
 
-**Focus**: Wiring diagrams, multi-agent composition.
+**Focus**: Workers as agents in polynomial network, typed communication.
 
 **Deliverables**:
 - [ ] `Agent` as polynomial coalgebra
-- [ ] Wiring diagram DSL
-- [ ] Runtime interpreter for networks
+- [ ] Workers as agents (channels = Dir of polynomial)
+- [ ] Protocol Lens — typed agent communication
+- [ ] Structured concurrency via wiring
+- [ ] parallel, race, cancellation
 - [ ] Demo: Chat system with multiple agents
 
-### Phase 8: Mega-Lens & Navigation
+### Phase 8: Developer Experience
 
-**Focus**: Global state navigation, debugging tools.
+**Focus**: DevTools powered by Big Lens.
 
 **Deliverables**:
-- [ ] Focus/zoom into any agent
-- [ ] State inspector UI
+- [ ] Network inspector via Big Lens
 - [ ] Time-travel debugging
-- [ ] Demo: Visual network editor
+- [ ] Hot reload
 
-### Phase 9: Dependent Protocols
+### Phase 9: Formal Properties + Session Types
 
-**Focus**: Session types, history-dependent protocols.
-
-```
-Agdelte.Poly.Dependent   -- Dependent polynomials
-Agdelte.Poly.Session     -- Session types
-```
+**Focus**: Mathematical rigor, dependent protocols.
 
 **Deliverables**:
+- [ ] Lens laws proofs (identity, composition)
+- [ ] ReactiveApp ↔ Coalg formal connection
 - [ ] Dependent polynomial formalization
 - [ ] Session type DSL
 - [ ] Demo: Multi-step form with typed transitions
-
----
-
-## Independent Track: Concurrency
-
-> **Note**: Concurrency is orthogonal to the polynomial/lens work.
-> Can be developed in parallel with any phase.
-
-**Focus**: Robust handling of async operations and parallel computations.
-
-```
-Agdelte.Concurrent.Task    -- Cancellable tasks
-Agdelte.Concurrent.Race    -- Race conditions handling
-Agdelte.Concurrent.Worker  -- Web Worker integration
-```
-
-**Deliverables**:
-- [ ] Task cancellation (`cancel : TaskId → Cmd`)
-- [ ] Race combinator (`race : Task A → Task A → Task A`)
-- [ ] Debounce/throttle at Task level (not just Event)
-- [ ] Web Worker offloading for heavy computations
-- [ ] Proper error boundaries for concurrent failures
-
-**Current state**: Basic concurrency exists via `Event.merge` and async `Cmd`.
-This track extends it with cancellation, racing, and worker support.
 
 ---
 

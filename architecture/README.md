@@ -11,7 +11,7 @@
 | [polynomials.md](polynomials.md) | **Polynomial functors roadmap and phases** |
 | [combinators.md](combinators.md) | All combinators with types and examples |
 | [time-model.md](time-model.md) | Time model: ticks, animationFrame, dt |
-| [concurrency.md](concurrency.md) | Concurrency design (Phase 6, planned) |
+| [concurrency.md](concurrency.md) | Concurrency + Protocols (Phase 7, planned) |
 | [vs-svelte.md](vs-svelte.md) | Detailed comparison with Svelte 5 |
 | [vs-vue3.md](vs-vue3.md) | Feature comparison with Vue 3 |
 
