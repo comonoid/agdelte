@@ -312,6 +312,34 @@ export function interpretEvent(event, dispatch) {
       };
     },
 
+    // worker: Web Worker (structured concurrency — terminate on unsubscribe)
+    worker: (scriptUrl, input, onResult, onError) => {
+      let w;
+      try {
+        w = new Worker(scriptUrl, { type: 'module' });
+      } catch (e) {
+        dispatch(onError(e.message || 'Failed to create worker'));
+        return { unsubscribe: () => {} };
+      }
+
+      w.onmessage = (e) => {
+        dispatch(onResult(typeof e.data === 'string' ? e.data : JSON.stringify(e.data)));
+      };
+
+      w.onerror = (e) => {
+        dispatch(onError(e.message || 'Worker error'));
+      };
+
+      // Send input to worker
+      w.postMessage(input);
+
+      return {
+        unsubscribe: () => {
+          w.terminate();
+        }
+      };
+    },
+
     // onUrlChange: изменение URL (popstate)
     onUrlChange: (handler) => {
       const listener = () => {

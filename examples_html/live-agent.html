@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Agent - Agdelte</title>
+  <link rel="stylesheet" href="common.css">
+  <style>
+    .agents { display: flex; gap: 2rem; flex-wrap: wrap; margin: 1.5rem 0; }
+    .agent-card {
+      border: 2px solid #ccc; border-radius: 8px; padding: 1.5rem;
+      min-width: 220px; text-align: center; background: #fafafa;
+      transition: border-color 0.2s;
+    }
+    .agent-card.flash { border-color: #4caf50; }
+    .agent-card h2 { margin: 0 0 0.5rem; font-size: 1.2rem; }
+    .agent-state {
+      font-size: 2.5rem; font-weight: bold; margin: 1rem 0;
+      font-family: monospace;
+    }
+    .agent-card button {
+      padding: 0.5rem 1.5rem; font-size: 1rem; cursor: pointer;
+      border: 1px solid #999; border-radius: 4px; background: #fff;
+    }
+    .agent-card button:hover { background: #eee; }
+    .ws-status {
+      display: inline-block; padding: 0.2rem 0.6rem; border-radius: 4px;
+      font-size: 0.85rem; margin-bottom: 1rem;
+    }
+    .ws-status.connected { background: #c8e6c9; color: #2e7d32; }
+    .ws-status.disconnected { background: #ffcdd2; color: #c62828; }
+    .ws-status.connecting { background: #fff9c4; color: #f57f17; }
+    .log { font-family: monospace; font-size: 0.85rem; max-height: 200px;
+           overflow-y: auto; background: #222; color: #0f0; padding: 0.75rem;
+           border-radius: 4px; margin-top: 1rem; }
+    .log div { margin: 2px 0; }
+    .log .ws { color: #0ff; }
+    .log .http { color: #ff0; }
+    .log .err { color: #f44; }
+  </style>
+</head>
+<body>
+  <a href="../index.html" class="back">&larr; Back to examples</a>
+
+  <h1>Live Agent Dashboard</h1>
+  <p class="subtitle">Real-time WebSocket + HTTP &harr; Haskell MultiAgent server</p>
+
+  <span id="ws-status" class="ws-status connecting">connecting...</span>
+
+  <div class="agents">
+    <div class="agent-card" id="card-counter">
+      <h2>Counter</h2>
+      <div class="agent-state" id="state-counter">-</div>
+      <button onclick="step('counter')">Increment</button>
+    </div>
+    <div class="agent-card" id="card-toggle">
+      <h2>Toggle</h2>
+      <div class="agent-state" id="state-toggle">-</div>
+      <button onclick="step('toggle')">Flip</button>
+    </div>
+  </div>
+
+  <div class="log" id="log"></div>
+
+  <div class="info">
+    <p>Server: <code>_build/MultiAgent</code> on port 3000</p>
+    <p>HTTP: <code>GET /counter/state</code>, <code>POST /counter/step</code>, etc.</p>
+    <p>WebSocket: <code>ws://localhost:3000/ws</code> broadcasts <code>agent:value</code> on each step</p>
+    <p>Source: <code>server/MultiAgent.agda</code></p>
+  </div>
+
+  <script>
+    const SERVER = 'http://localhost:3000';
+    const WS_URL = 'ws://localhost:3000/ws';
+    const logEl = document.getElementById('log');
+    const statusEl = document.getElementById('ws-status');
+
+    function log(msg, cls) {
+      const d = document.createElement('div');
+      d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      if (cls) d.className = cls;
+      logEl.appendChild(d);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function flash(name) {
+      const card = document.getElementById('card-' + name);
+      card.classList.add('flash');
+      setTimeout(() => card.classList.remove('flash'), 300);
+    }
+
+    function updateState(name, value) {
+      document.getElementById('state-' + name).textContent = value;
+      flash(name);
+    }
+
+    // --- WebSocket ---
+    let ws;
+    function connect() {
+      statusEl.textContent = 'connecting...';
+      statusEl.className = 'ws-status connecting';
+      ws = new WebSocket(WS_URL);
+
+      ws.onopen = () => {
+        statusEl.textContent = 'connected';
+        statusEl.className = 'ws-status connected';
+        log('WebSocket connected', 'ws');
+        // Fetch initial states
+        fetchState('counter');
+        fetchState('toggle');
+      };
+
+      ws.onmessage = (e) => {
+        log('WS: ' + e.data, 'ws');
+        // Format: "agentName:value"
+        const idx = e.data.indexOf(':');
+        if (idx > 0) {
+          const name = e.data.substring(0, idx);
+          const value = e.data.substring(idx + 1);
+          updateState(name, value);
+        }
+      };
+
+      ws.onclose = () => {
+        statusEl.textContent = 'disconnected';
+        statusEl.className = 'ws-status disconnected';
+        log('WebSocket disconnected, reconnecting in 2s...', 'err');
+        setTimeout(connect, 2000);
+      };
+
+      ws.onerror = () => {
+        log('WebSocket error', 'err');
+      };
+    }
+
+    // --- HTTP ---
+    async function fetchState(name) {
+      try {
+        const res = await fetch(`${SERVER}/${name}/state`);
+        const text = await res.text();
+        updateState(name, text);
+        log(`GET /${name}/state -> ${text}`, 'http');
+      } catch (e) {
+        log(`GET /${name}/state failed: ${e.message}`, 'err');
+      }
+    }
+
+    async function step(name) {
+      try {
+        const res = await fetch(`${SERVER}/${name}/step`, { method: 'POST' });
+        const text = await res.text();
+        log(`POST /${name}/step -> ${text}`, 'http');
+        // State update will come via WebSocket broadcast
+      } catch (e) {
+        log(`POST /${name}/step failed: ${e.message}`, 'err');
+      }
+    }
+
+    connect();
+  </script>
+</body>
+</html>

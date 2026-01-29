@@ -106,3 +106,20 @@ isEmpty ε = ⊤
   where open import Data.Unit using (⊤)
 isEmpty _ = ⊥
   where open import Data.Empty using (⊥)
+
+------------------------------------------------------------------------
+-- Agent interaction combinators
+-- Semantic wrappers for communicating with remote Agent servers
+------------------------------------------------------------------------
+
+-- Query agent state (GET /agent-path/state)
+agentQuery : String → (String → A) → (String → A) → Cmd A
+agentQuery endpoint = httpGet endpoint
+
+-- Step agent with input (POST /agent-path/step)
+agentStep : String → String → (String → A) → (String → A) → Cmd A
+agentStep endpoint input = httpPost endpoint input
+
+-- Step agent without meaningful input (POST /agent-path/step, empty body)
+agentStep! : String → (String → A) → (String → A) → Cmd A
+agentStep! endpoint = httpPost endpoint ""

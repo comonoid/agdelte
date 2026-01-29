@@ -103,6 +103,12 @@ data Event (A : Set) : Set where
   -- Event on URL change (popstate)
   onUrlChange : (String → A) → Event A
 
+  -- === Web Worker ===
+  -- Spawn a worker, send input, receive results
+  -- worker scriptUrl input onResult onError
+  -- Structured concurrency: unsubscribe terminates the worker
+  worker : String → String → (String → A) → (String → A) → Event A
+
   -- === Combinators ===
   merge    : Event A → Event A → Event A
   debounce : ℕ → Event A → Event A    -- delay after pause
@@ -138,6 +144,7 @@ mapE f (httpGet url onOk onErr) = httpGet url (f ∘ onOk) (f ∘ onErr)
 mapE f (httpPost url body onOk onErr) = httpPost url body (f ∘ onOk) (f ∘ onErr)
 mapE f (wsConnect url h) = wsConnect url (f ∘ h)
 mapE f (onUrlChange h) = onUrlChange (f ∘ h)
+mapE f (worker url input onOk onErr) = worker url input (f ∘ onOk) (f ∘ onErr)
 mapE f (merge e₁ e₂) = merge (mapE f e₁) (mapE f e₂)
 mapE f (debounce n e) = debounce n (mapE f e)
 mapE f (throttle n e) = throttle n (mapE f e)
@@ -161,6 +168,7 @@ filterE p (httpGet url onOk onErr) = httpGet url onOk onErr  -- filter applied i
 filterE p (httpPost url body onOk onErr) = httpPost url body onOk onErr
 filterE p (wsConnect url h) = wsConnect url h  -- filter on WsMsg makes no sense
 filterE p (onUrlChange h) = onUrlChange h      -- filter on URL makes no sense
+filterE p (worker url input onOk onErr) = worker url input onOk onErr  -- filter applied in runtime
 filterE p (merge e₁ e₂) = merge (filterE p e₁) (filterE p e₂)
 filterE p (debounce n e) = debounce n (filterE p e)
 filterE p (throttle n e) = throttle n (filterE p e)
