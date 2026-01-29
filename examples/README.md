@@ -46,13 +46,13 @@ npm run build:all
 
 ```bash
 # Counter
-agda --js --js-es6 --js-optimize --compile-dir=../build Counter.agda
+agda --js --js-es6 --js-optimize --compile-dir=../_build Counter.agda
 
 # Timer
-agda --js --js-es6 --js-optimize --compile-dir=../build Timer.agda
+agda --js --js-es6 --js-optimize --compile-dir=../_build Timer.agda
 
 # Todo
-agda --js --js-es6 --js-optimize --compile-dir=../build Todo.agda
+agda --js --js-es6 --js-optimize --compile-dir=../_build Todo.agda
 ```
 
 ### Type checking only (no JS)
