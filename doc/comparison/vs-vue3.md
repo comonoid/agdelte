@@ -299,128 +299,162 @@ All categories A and B features are implemented:
 
 ## Performance Analysis
 
-### Update Cycle: O(bindings) vs O(tree)
+### Architecture Comparison
 
-The fundamental performance difference lies in how DOM updates are computed.
-
-**Vue 3** uses Virtual DOM with optimized diffing:
+**Vue 3** — Virtual DOM with Proxy-based dependency tracking:
 
 ```
 Model change
-  → re-run render function → new VNode tree
-  → diff(oldTree, newTree) → patches
-  → apply patches to real DOM
+  → Proxy detects which reactive properties changed
+  → Re-run render for affected components only
+  → diff(oldVNodes, newVNodes) → patches
+  → Apply patches to real DOM
 ```
 
-**Agdelte** uses direct reactive bindings (Svelte-style):
+**Agdelte** — Direct reactive bindings with 3-level optimization:
 
 ```
 Model change
-  → for each binding: oldVal = extract(oldModel), newVal = extract(newModel)
-  → if oldVal !== newVal: update DOM node directly
+  → Level 1: Scope cutoff — skip unchanged component subtrees (scopeProj)
+  → Level 2: Slot tracking — probe model fields, skip unaffected bindings
+  → Level 3: Cached values — one extract() call, compare with cache
+  → Update DOM directly (no diffing)
 ```
 
 | Metric | Vue 3 | Agdelte |
 |--------|-------|---------|
-| **Update complexity** | O(tree size) worst case, O(changed subtrees) with block tree optimization | O(number of bindings) |
-| **Comparison target** | VNode trees (JS objects) | Extracted values (strings, bools) |
-| **Allocation per update** | New VNode tree every render | Zero allocations (in-place comparison) |
-| **Static content** | Hoisted at compile time (skipped in diff) | Never touched (only bindings are tracked) |
+| **Change detection** | Proxy on reactive objects (per-property) | Probe Scott-encoded slots (per-field) |
+| **Component scoping** | Automatic (Proxy tracks dependencies) | Automatic (zoomNode wraps in scopeProj) |
+| **Update complexity** | O(changed components × VNode tree) | O(changed slots × bindings per slot) |
+| **Allocation per update** | New VNode tree per component re-render | Zero (in-place comparison with cached values) |
+| **Static content** | Hoisted at compile time | Never tracked (only bindings exist) |
+
+### How Agdelte's 3-Level Pipeline Works
+
+#### Level 1: Scope Cutoff (component-level)
+
+`zoomNode` automatically wraps components in `scopeProj`, attaching the projection function. On update, the runtime compares the projected sub-model. If unchanged — entire subtree skipped.
+
+For record models (most common), slot tracking (Level 2) handles this more efficiently. `scopeProj`+`deepEqual` is the fallback for non-record models (e.g., plain `ℕ`).
+
+#### Level 2: Slot-Based Dependency Tracking (field-level)
+
+At first update, the runtime:
+1. Probes the model via a static Proxy to extract constructor args (one per field)
+2. For each binding, runs `extract` with each slot replaced by a sentinel — if output changes, binding depends on that slot
+
+On subsequent updates:
+1. One `probeSlots(newModel)` call — compare args with cached `oldArgs` via `===`
+2. Build `changedSlots` set
+3. Skip all bindings whose slots aren't in the set
+
+This is analogous to Vue 3's Proxy-based `track()`/`trigger()`, but operates on Scott-encoded Agda records instead of plain JS objects.
+
+#### Level 3: Cached Last Value (binding-level)
+
+Each binding stores its last extracted string value. Only one `extract(newModel)` call needed (not two). DOM update only if value differs from cache.
 
 ### Concrete Scenarios
 
-#### Small app (counter: 1 button, 1 text)
+#### Small app (counter: 1 field, 2 bindings)
 
 | | Vue 3 | Agdelte |
 |--|-------|---------|
-| Update work | Re-run render → 3 VNodes → diff → 1 patch | 1 binding check → 1 textContent write |
-| Overhead | ~minimal (tree is tiny) | ~minimal |
+| Update work | Proxy detect → re-render → 3 VNodes → diff → 1 patch | 1 slot probe → 2 cached extract → 1 DOM write |
 | **Verdict** | **Equal** | **Equal** |
 
-#### Medium app (todo list: 100 items, edit 1)
+#### Medium app (todo list: 100 items, edit 1 item text)
 
 | | Vue 3 | Agdelte |
 |--|-------|---------|
-| Update work | Re-run render → ~300 VNodes → diff with keys → 1 patch | ~100 binding checks → 1-3 DOM updates |
-| Key optimization | Block tree: skip static parts | Only registered bindings are checked |
-| **Verdict** | Fast (block tree) | **Faster** (no tree walk) |
+| Update work | Re-render list component → diff 100 keyed VNodes → 1 patch | Slot `todos` changed → list re-reconciles → 1 item DOM update |
+| **Verdict** | Fast (keyed diff) | **Faster** (no VNode tree) |
 
 #### Large app (dashboard: 50 components, 1000 bindings, update 1 widget)
 
 | | Vue 3 | Agdelte |
 |--|-------|---------|
-| Update work | Re-run affected component render → diff subtree → patches | ~1000 binding checks → few DOM updates |
-| Key optimization | Component boundaries limit re-render scope | Flat binding list, no tree structure |
-| Component isolation | Only changed component re-renders | All bindings checked (no component scoping) |
-| **Verdict** | **Faster** (component scoping) | Slower (flat scan of all bindings) |
+| Update work | Proxy detect → 1 component re-render → diff → patches | scopeProj: 49 components skipped. 1 component: slot tracking → ~20 extract calls |
+| Component isolation | Proxy tracks per-component deps | zoomNode auto-wraps in scopeProj |
+| **Verdict** | **Comparable** | **Comparable** |
+
+This was previously "Vue 3 wins" — before scope cutoff and slot tracking, Agdelte scanned all 1000 bindings. Now it skips 49 unchanged components and only checks bindings in the changed component's slot.
 
 ### Where Agdelte Wins
 
-1. **Fine-grained updates.** Each `bindF` tracks exactly one DOM dependency. No intermediate VNode creation, no diff algorithm. A model change that affects 3 DOM nodes touches exactly 3 nodes.
+1. **Zero GC pressure per update.** No VNode tree allocation. Agdelte's update is allocation-free: probe slots, compare cached strings, write DOM.
 
-2. **Zero GC pressure per update.** Vue 3 allocates a new VNode tree on every re-render (even with object pooling, this creates GC work). Agdelte's update loop is allocation-free: compare old/new extracted values, write to DOM if changed.
+2. **Predictable latency.** O(changed_slots × bindings_per_slot). No pathological deep-tree diffs.
 
-3. **Predictable latency.** Update time is strictly proportional to the number of bindings. No pathological cases from deep tree diffs or key mismatch.
+3. **Fine-grained binding.** Each `bindF` tracks one DOM dependency. No intermediate representation.
 
-4. **`when`/`foreach` efficiency.** Conditional blocks (`when`) use a placeholder comment node; toggling is one DOM insert/remove. Keyed lists (`foreachKeyed`) do O(n) reconciliation with data-key attributes — comparable to Vue's keyed v-for.
+4. **Smaller runtime.** ~5 KB vs ~40 KB. No template compiler, no VNode infrastructure.
+
+5. **`when`/`foreach` efficiency.** Conditional blocks use comment placeholders. Keyed lists do O(n) reconciliation — comparable to Vue's keyed v-for.
 
 ### Where Vue 3 Wins
 
-1. **Component-scoped reactivity.** Vue's Proxy-based dependency tracking knows *which component* depends on *which data*. Only affected components re-render. Agdelte checks all bindings on every update — no dependency graph to skip irrelevant checks.
+1. **Deep property tracking.** Vue's Proxy tracks `user.name` separately from `user.age`. Agdelte's slot tracking is top-level only — `user` is one slot. Nested field changes require `zoomNode` composition for equivalent granularity.
 
-2. **Compiler optimizations.** Vue's template compiler marks static hoists, patch flags, and block trees. These reduce diffing work to near-zero for static content. Agdelte's runtime doesn't have this compile-time analysis.
+2. **Compiler optimizations.** Vue's template compiler produces static hoists, patch flags, block trees. Agdelte has no compile-time template analysis.
 
-3. **Large apps with many independent components.** When 50 components exist but only 1 changes, Vue re-runs 1 render function. Agdelte scans all 1000 bindings (though each check is a cheap `!==` comparison).
+3. **Mature micro-optimizations.** VNode pooling, `v-memo`, `v-once`, `KeepAlive` with cached trees. Agdelte's runtime is young.
 
-4. **Mature optimizations.** Vue 3 has years of micro-optimization: VNode pooling, Static hoisting, `v-memo`, `v-once`, `KeepAlive` with cached trees. Agdelte's runtime is young.
+4. **Ecosystem tooling.** DevTools, SSR, HMR all deeply integrated.
+
+### Scott Encoding: Challenge and Solution
+
+Agda compiles records to Scott-encoded functions. Each field access creates new objects, breaking `===` referential equality. Agdelte solves this with:
+
+- **Slot probing:** a static `Proxy` that intercepts Scott elimination to extract constructor args. One Proxy allocated at module load, reused for all probes.
+- **`deepEqual`:** recursive Proxy introspection of Scott-encoded values — used as fallback for non-record models.
+- **String fingerprints:** `scope (λ m → show field)` for explicit manual cutoff when needed.
 
 ### Memory
 
 | | Vue 3 | Agdelte |
 |--|-------|---------|
-| Model storage | Proxy-wrapped reactive objects | Plain JS objects (Scott-encoded) |
-| Per-binding overhead | Watcher + dependency sets | `{node, binding}` pair |
-| Tree overhead | VNode tree (recreated per render) | None (bindings are flat list) |
-| Proxy cost | ~2x memory per reactive object | None |
-
-Agdelte uses less memory per component: no Proxy wrappers, no VNode trees, no Watcher objects. The trade-off is that Scott-encoded Agda data structures can be more verbose than hand-written JS objects.
+| Model storage | Proxy-wrapped reactive objects | Plain JS functions (Scott-encoded) |
+| Per-binding overhead | Watcher + dependency sets | `{node, binding, lastValue, slots}` |
+| Tree overhead | VNode tree (per render) | None (scoped flat lists) |
+| Proxy cost | ~2× memory per reactive object | One static Proxy (shared) |
 
 ### Startup Time
 
 | | Vue 3 | Agdelte |
 |--|-------|---------|
-| Parse + compile | Template compilation (ahead-of-time or runtime) | Agda → JS compilation (ahead-of-time only) |
+| Parse + compile | Template compilation (AOT or runtime) | Agda → JS (AOT only) |
 | First render | Create VNode tree → create DOM | Walk Node tree → create DOM + collect bindings |
-| Bundle size | ~30-50 KB gzipped (core + compiler) | ~5-10 KB (reactive.js runtime) |
+| Slot detection | N/A (Proxy wrapping at creation) | Lazy (first update, not first render) |
+| Bundle size | ~30-50 KB gzipped | ~5-10 KB |
 
-Agdelte has a smaller runtime footprint. However, compiled Agda modules can be large due to Scott encoding verbosity (each data constructor becomes a function with N branches).
+Slot detection is deferred to the first `dispatch`, so initial render is unaffected.
 
-### Theoretical Limits
-
-Both approaches converge to the same theoretical minimum: **O(changed DOM nodes)**. The question is overhead to *identify* which nodes changed:
+### Theoretical Position
 
 | | Vue 3 | Agdelte | Svelte |
 |--|-------|---------|--------|
-| Identify changes via | VNode diff (runtime) | Binding scan (runtime) | Compiled `if (dirty)` checks (compile-time) |
-| Overhead | O(tree) → O(blocks) with optimization | O(bindings) | O(dirty flags) — minimal |
+| Change detection | Proxy (runtime, per-property) | Slot probe (runtime, per-field) | Compiled dirty flags (compile-time) |
+| Scoping | Component-level (Proxy deps) | Component-level (scopeProj) + field-level (slots) | Component-level (compiled) |
+| DOM update | VNode diff → patches | Direct DOM write | Direct DOM write |
 
-Agdelte sits between Vue 3 and Svelte: no tree diffing (like Svelte), but runtime binding scan instead of compile-time dirty flags.
+Agdelte sits between Vue 3 and Svelte: field-level tracking like Vue's Proxy (but via slot probing), direct DOM writes like Svelte (no VDOM).
 
 ### Summary
 
 | Aspect | Winner | Why |
 |--------|--------|-----|
 | **Small updates** | Agdelte | Direct binding, zero allocation |
-| **Large lists** | Agdelte | O(bindings), no VNode recreation |
-| **Many independent components** | Vue 3 | Component-scoped reactivity |
-| **Memory usage** | Agdelte | No Proxy, no VNode trees |
+| **Large lists** | Agdelte | No VNode recreation |
+| **Many independent components** | **Comparable** | Both have component-level scoping |
+| **Deep property tracking** | Vue 3 | Proxy tracks nested properties; Agdelte needs zoomNode |
+| **Memory usage** | Agdelte | No per-object Proxy, no VNode trees |
 | **Bundle size** | Agdelte | ~5 KB vs ~40 KB |
 | **Compiled output size** | Vue 3 | Scott encoding is verbose |
-| **Worst case latency** | Agdelte | Predictable O(bindings) vs tree diff |
-| **Best case latency** | Vue 3 | Skip unchanged components entirely |
+| **Worst case latency** | Agdelte | Predictable O(slots × bindings/slot) |
 | **Maturity** | Vue 3 | Years of micro-optimization |
 
-**Bottom line:** Agdelte matches or beats Vue 3 on small-to-medium apps due to the no-VDOM architecture. Vue 3 has an advantage on large apps with many independent components due to Proxy-based dependency tracking. Both are fast enough for real-world use.
+**Bottom line:** With scope cutoff and slot-based dependency tracking, Agdelte is competitive with Vue 3 across all app sizes. Vue 3 retains an edge in deep property tracking and ecosystem maturity. Agdelte wins on memory, bundle size, and predictable latency. The previous gap on large apps (flat binding scan) is closed by automatic `zoomNode` scoping and field-level slot tracking.
 
 ---
 

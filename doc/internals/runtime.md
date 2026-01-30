@@ -7,23 +7,23 @@ JavaScript runtime implementation for Agdelte applications.
 The runtime interprets Scott-encoded Agda data structures and executes them in the browser. **Key feature: No Virtual DOM** — uses reactive bindings like Svelte.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────────┐
 │  Agda                                                        │
 │  ReactiveApp { init, update, template }                      │
 │  ↓ Compiled to JS (Scott encoding)                           │
-├─────────────────────────────────────────────────────────────┤
+├──────────────────────────────────────────────────────────────┤
 │  Runtime                                                     │
 │  runReactiveApp(app, container)                              │
 │  ├─ renderNode(template) — create DOM, track bindings        │
 │  ├─ dispatch(msg) — event loop                               │
-│  └─ updateBindings(oldModel, newModel) — direct DOM updates  │
-├─────────────────────────────────────────────────────────────┤
-│  Binding Scopes                                              │
-│  Tree of scopes, each with own bindings                      │
-│  On model change: check binding.extract(old) vs extract(new) │
-│  If changed → update domNode directly (NO diffing!)          │
-│  Destroyed scope → all child bindings cleaned up             │
-└─────────────────────────────────────────────────────────────┘
+│  └─ updateScope(scope, old, new) — 3-level optimized update  │
+├──────────────────────────────────────────────────────────────┤
+│  Update Pipeline                                             │
+│  1. Scope cutoff — skip unchanged component subtrees         │
+│  2. Slot tracking — skip bindings on unchanged model fields  │
+│  3. Cached values — one extract() call, compare with cache   │
+│  Result: only touched bindings hit the DOM (NO diffing!)     │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ## Main Loop (Reactive — No VDOM!)
@@ -138,39 +138,89 @@ function renderNode(node) {
 }
 ```
 
-### updateBindings — On Model Change
+### updateScope — On Model Change
 
-No diffing — just check each binding with simple JS `!==`:
+Three-level optimization pipeline:
+
+```
+Model change
+  │
+  ├─ Level 1: Scope cutoff (scopeProj / scope)
+  │  If projected sub-model unchanged → skip entire subtree
+  │
+  ├─ Level 2: Slot-based dependency tracking
+  │  Probe model via Proxy → find changed slots (fields)
+  │  Skip bindings whose slots didn't change
+  │
+  └─ Level 3: Cached lastValue comparison
+     For affected bindings: extract(newModel), compare with cached value
+     Update DOM only if string changed
+```
+
+#### Level 1: Scope Cutoff
+
+`zoomNode` wraps each composed component in `scopeProj get`, where `get` is the model projection. On update:
 
 ```javascript
-function updateBindings(oldModel, newModel) {
-  // Text bindings
-  for (const { node, binding } of textBindings) {
-    const oldVal = binding.extract(oldModel);
-    const newVal = binding.extract(newModel);
-    if (oldVal !== newVal) node.textContent = newVal;
-  }
+// String fingerprint (manual, via `scope`)
+if (scope.fingerprint) {
+  const newFP = scope.fingerprint(newModel);
+  if (newFP === scope.lastFP) return;  // skip entire subtree
+}
 
-  // Attribute bindings
-  for (const { node, binding, attrName } of attrBindings) {
-    const oldVal = binding.extract(oldModel);
-    const newVal = binding.extract(newModel);
-    if (oldVal !== newVal) node.setAttribute(attrName, newVal);
-  }
-
-  // Style bindings
-  for (const { node, binding, styleName } of styleBindings) {
-    const oldVal = binding.extract(oldModel);
-    const newVal = binding.extract(newModel);
-    if (oldVal !== newVal) node.style.setProperty(styleName, newVal);
-  }
-
-  // Conditionals (when) — toggle visibility
-  // Lists (foreach) — re-render on length change
+// Deep structural equality (automatic, via `scopeProj`)
+// Fallback for non-record models when slot tracking unavailable
+if (scope.project) {
+  if (deepEqual(scope.lastProj, scope.project(newModel), 0)) return;
 }
 ```
 
-**Performance**: O(bindings), not O(tree). Same approach as Svelte's compiled output.
+`deepEqual` handles Scott-encoded records via Proxy introspection: probes both values to extract constructor name + args, compares recursively.
+
+#### Level 2: Slot-Based Dependency Tracking
+
+Like Vue 3's dependency tracking, but for Scott-encoded records:
+
+```javascript
+// 1. Probe model to find changed slots (one Proxy call per update)
+const newArgs = probeSlots(newModel);  // model(_slotProbe) → args array
+// Compare with cached args from previous update via ===
+const changed = new Set();  // indices of changed slots
+
+// 2. Each binding knows its slot dependencies (detected lazily on first update)
+//    detectSlots: run extract with each slot replaced by Symbol sentinel
+//    If output changes → binding depends on that slot
+
+// 3. Skip bindings whose slots didn't change
+for (const b of scope.bindings) {
+  if (changed && b.slots && !b.slots.some(s => changed.has(s))) continue;
+  // ... extract and update
+}
+```
+
+Slot detection runs once per binding (lazy, on first update). The static `_slotProbe` Proxy is shared across all calls.
+
+#### Level 3: Cached Last Value
+
+Each binding caches its last extracted string value. Only one `extract(newModel)` call instead of two:
+
+```javascript
+const newVal = extract(newModel);
+if (newVal !== b.lastValue) {
+  b.node.textContent = newVal;
+  b.lastValue = newVal;
+}
+```
+
+#### Performance Summary
+
+For a model with 5 fields and 100 bindings, when 1 field changes:
+
+| Approach | extract calls | DOM checks |
+|----------|--------------|------------|
+| Naive (old) | 200 (old+new × 100) | 100 |
+| With slot tracking | ~20 (affected slot only) | ~20 |
+| With scope cutoff (unrelated component) | 0 | 0 |
 
 **Note**: We use JS `!==` instead of Agda's `Binding.equals` because Agda stdlib's string equality (`_≈?_` from Data.String.Properties) causes stack overflow in JS due to deep proof term evaluation.
 

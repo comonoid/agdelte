@@ -42,7 +42,18 @@ data Node (Model Msg : Set) : Set₁ where
   foreach      : ∀ {A} → (Model → List A) → (A → ℕ → Node Model Msg) → Node Model Msg
   foreachKeyed : ∀ {A} → (Model → List A) → (A → String) → (A → ℕ → Node Model Msg) → Node Model Msg
   whenT        : (Model → Bool) → Transition → Node Model Msg → Node Model Msg
+  scope        : (Model → String) → Node Model Msg → Node Model Msg
+  scopeProj    : ∀ {M'} → (Model → M') → Node Model Msg → Node Model Msg
 ```
+
+### Scope Cutoff
+
+`scope` and `scopeProj` enable subtree-skipping: if the fingerprint/projection hasn't changed, the entire subtree is skipped during update.
+
+- **`scope`** — manual string fingerprint. Fast (`===` on strings), but requires user to write the function.
+- **`scopeProj`** — automatic projection. Runtime uses deep structural equality on Scott-encoded values via Proxy introspection. No user input needed.
+
+`zoomNode` automatically wraps in `scopeProj`, so all composed components get free cutoff.
 
 ### Transition
 
@@ -118,15 +129,24 @@ data Attr (Model Msg : Set) : Set₁ where
 ## Component Composition
 
 ```agda
-zoomNode : (M → M') → (Msg' → Msg) → Node M' Msg' → Node M Msg
-zoomAttr : (M → M') → (Msg' → Msg) → Attr M' Msg' → Attr M Msg
+-- Automatic scopeProj cutoff — subtree skipped if projected sub-model unchanged
+zoomNode  : (M → M') → (Msg' → Msg) → Node M' Msg' → Node M Msg
+zoomNodeL : Lens M M' → Prism Msg Msg' → Node M' Msg' → Node M Msg
+
+-- With explicit string fingerprint (faster than deepEqual, but manual)
+zoomNodeS  : (M → M') → (M' → String) → (Msg' → Msg) → Node M' Msg' → Node M Msg
+zoomNodeLS : Lens M M' → (M' → String) → Prism Msg Msg' → Node M' Msg' → Node M Msg
+
+-- Raw (no scope cutoff)
+zoomNode' : (M → M') → (Msg' → Msg) → Node M' Msg' → Node M Msg
+zoomAttr  : (M → M') → (Msg' → Msg) → Attr M' Msg' → Attr M Msg
 ```
 
-`zoomNode` maps both model AND messages — child components are fully reusable:
+`zoomNode` maps both model AND messages — child components are fully reusable and get automatic scope cutoff:
 
 ```agda
-zoomNode proj₁ LeftMsg counterTemplate
-zoomNode proj₂ RightMsg counterTemplate
+zoomNode proj₁ LeftMsg counterTemplate   -- skipped if proj₁(model) unchanged
+zoomNode proj₂ RightMsg counterTemplate  -- skipped if proj₂(model) unchanged
 ```
 
 ## Lens

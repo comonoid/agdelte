@@ -108,6 +108,15 @@ data Node (Model Msg : Set) : Set₁ where
   -- Conditional rendering with enter/leave CSS transitions
   whenT : (Model → Bool) → Transition → Node Model Msg → Node Model Msg
 
+  -- Scope cutoff (manual): string fingerprint for subtree skipping.
+  -- If fingerprint(oldModel) ≡ fingerprint(newModel), skip updating this subtree.
+  scope : (Model → String) → Node Model Msg → Node Model Msg
+
+  -- Scope cutoff (automatic): projection function for subtree skipping.
+  -- Runtime uses deep structural equality on Scott-encoded values via Proxy.
+  -- Used automatically by zoomNode — no manual fingerprint needed.
+  scopeProj : ∀ {M' : Set} → (Model → M') → Node Model Msg → Node Model Msg
+
 ------------------------------------------------------------------------
 -- Smart constructors for common patterns
 ------------------------------------------------------------------------
@@ -260,22 +269,30 @@ zoomAttr get wrap (onValue event handler) = onValue event (wrap ∘ handler)
 zoomAttr get wrap (style name val) = style name val
 zoomAttr get wrap (styleBind name b) = styleBind name (focusBinding get b)
 
--- Transform node: remap both model extraction and message dispatching
--- This is the key for proper component composition!
+-- Internal: remap node without adding scope wrapper (used by zoomNode)
 {-# TERMINATING #-}
+zoomNode' : ∀ {M M' Msg Msg'} → (M → M') → (Msg' → Msg) → Node M' Msg' → Node M Msg
+zoomNode' get wrap (text s) = text s
+zoomNode' get wrap (bind b) = bind (focusBinding get b)
+zoomNode' get wrap (elem tag attrs children) =
+  elem tag (map (zoomAttr get wrap) attrs) (map (zoomNode' get wrap) children)
+zoomNode' get wrap empty = empty
+zoomNode' get wrap (when cond node) = when (cond ∘ get) (zoomNode' get wrap node)
+zoomNode' get wrap (foreach {A} getList render) =
+  foreach (getList ∘ get) (λ a i → zoomNode' get wrap (render a i))
+zoomNode' get wrap (foreachKeyed {A} getList keyFn render) =
+  foreachKeyed (getList ∘ get) keyFn (λ a i → zoomNode' get wrap (render a i))
+zoomNode' get wrap (whenT cond trans node) =
+  whenT (cond ∘ get) trans (zoomNode' get wrap node)
+zoomNode' get wrap (scope fp node) =
+  scope (fp ∘ get) (zoomNode' get wrap node)
+zoomNode' get wrap (scopeProj proj node) =
+  scopeProj (proj ∘ get) (zoomNode' get wrap node)
+
+-- Transform node: remap model/message AND wrap in automatic scopeProj cutoff.
+-- Every zoomNode call gets free subtree-skipping via deepEqual.
 zoomNode : ∀ {M M' Msg Msg'} → (M → M') → (Msg' → Msg) → Node M' Msg' → Node M Msg
-zoomNode get wrap (text s) = text s
-zoomNode get wrap (bind b) = bind (focusBinding get b)
-zoomNode get wrap (elem tag attrs children) =
-  elem tag (map (zoomAttr get wrap) attrs) (map (zoomNode get wrap) children)
-zoomNode get wrap empty = empty
-zoomNode get wrap (when cond node) = when (cond ∘ get) (zoomNode get wrap node)
-zoomNode get wrap (foreach {A} getList render) =
-  foreach (getList ∘ get) (λ a i → zoomNode get wrap (render a i))
-zoomNode get wrap (foreachKeyed {A} getList keyFn render) =
-  foreachKeyed (getList ∘ get) keyFn (λ a i → zoomNode get wrap (render a i))
-zoomNode get wrap (whenT cond trans node) =
-  whenT (cond ∘ get) trans (zoomNode get wrap node)
+zoomNode get wrap node = scopeProj get (zoomNode' get wrap node)
 
 ------------------------------------------------------------------------
 -- Zoom with Lens + Prism (Phase 6: typed component composition)
@@ -287,6 +304,14 @@ open import Agdelte.Reactive.Optic using (Prism; Lens; get; build)
 -- Same as zoomNode but with structured optic types
 zoomNodeL : ∀ {M M' Msg Msg'} → Lens M M' → Prism Msg Msg' → Node M' Msg' → Node M Msg
 zoomNodeL l p = zoomNode (get l) (build p)
+
+-- zoomNode with explicit string fingerprint (overrides automatic scopeProj)
+zoomNodeS : ∀ {M M' Msg Msg'} → (M → M') → (M' → String) → (Msg' → Msg) → Node M' Msg' → Node M Msg
+zoomNodeS get' fp wrap node = scope (fp ∘ get') (zoomNode' get' wrap node)
+
+-- zoomNodeLS: Lens + Prism + fingerprint
+zoomNodeLS : ∀ {M M' Msg Msg'} → Lens M M' → (M' → String) → Prism Msg Msg' → Node M' Msg' → Node M Msg
+zoomNodeLS l fp p = zoomNodeS (get l) fp (build p)
 
 -- zoomAttr with Lens + Prism
 zoomAttrL : ∀ {M M' Msg Msg'} → Lens M M' → Prism Msg Msg' → Attr M' Msg' → Attr M Msg

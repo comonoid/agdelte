@@ -108,18 +108,130 @@ async function loadNodeModule() {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// Deep structural equality for Scott-encoded Agda values
+// ─────────────────────────────────────────────────────────────────────
+
+function deepEqual(a, b, depth) {
+  if (a === b) return true;
+  if (depth > 20) return false;  // guard against infinite recursion
+  const ta = typeof a, tb = typeof b;
+  if (ta !== tb) return false;
+  if (ta !== 'function') return a === b;
+  // Both are functions — probe as Scott-encoded values via Proxy
+  let aCtor, aArgs, bCtor, bArgs;
+  const probeA = new Proxy({}, {
+    get(_, name) { return (...args) => { aCtor = name; aArgs = args; }; }
+  });
+  const probeB = new Proxy({}, {
+    get(_, name) { return (...args) => { bCtor = name; bArgs = args; }; }
+  });
+  try {
+    a(probeA);
+    b(probeB);
+  } catch {
+    return false;  // not a Scott-encoded value
+  }
+  if (aCtor !== bCtor) return false;
+  if (!aArgs || !bArgs || aArgs.length !== bArgs.length) return false;
+  for (let i = 0; i < aArgs.length; i++) {
+    if (!deepEqual(aArgs[i], bArgs[i], depth + 1)) return false;
+  }
+  return true;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Slot-based dependency tracking for Scott-encoded models
+// ─────────────────────────────────────────────────────────────────────
+
+/** Count slots (fields) of a Scott-encoded record */
+function countSlots(model) {
+  if (typeof model !== 'function') return 0;
+  let count = 0;
+  try {
+    model(new Proxy({}, {
+      get(_, name) { return (...args) => { count = args.length; }; }
+    }));
+  } catch { return 0; }
+  return count;
+}
+
+/** Create a model with slot `idx` replaced by a unique sentinel */
+function replaceSlot(model, idx) {
+  const sentinel = Symbol();
+  const replaced = (cases) => model(new Proxy({}, {
+    get(_, ctorName) {
+      return (...args) => {
+        const modified = [...args];
+        modified[idx] = sentinel;
+        return cases[ctorName](...modified);
+      };
+    }
+  }));
+  return replaced;
+}
+
+/**
+ * Detect which top-level model slots a binding's extract depends on.
+ * Runs extract with each slot replaced; if output changes, binding depends on it.
+ */
+function detectSlots(extract, model, numSlots) {
+  if (numSlots === 0) return null;
+  const deps = [];
+  let baseValue;
+  try { baseValue = extract(model); } catch { return null; }
+  for (let i = 0; i < numSlots; i++) {
+    try {
+      const modifiedValue = extract(replaceSlot(model, i));
+      if (modifiedValue !== baseValue) deps.push(i);
+    } catch {
+      deps.push(i); // if it throws, assume dependency
+    }
+  }
+  return deps.length > 0 ? deps : null;
+}
+
+/** Probe a Scott-encoded model, return its constructor args */
+const _slotProbe = new Proxy({}, {
+  get(_, name) { return (...args) => args; }
+});
+
+function probeSlots(model) {
+  if (typeof model !== 'function') return null;
+  try { return model(_slotProbe); } catch { return null; }
+}
+
+/**
+ * Detect which top-level slots changed between cached args and new model.
+ * scope.cachedArgs stores previous probe result; updated in-place.
+ * Returns a Set of changed slot indices, or null if not trackable.
+ */
+function changedSlotsFromCache(scope, newModel) {
+  const newArgs = probeSlots(newModel);
+  if (!newArgs) return null;
+  const oldArgs = scope.cachedArgs;
+  scope.cachedArgs = newArgs;
+  if (!oldArgs || oldArgs.length !== newArgs.length) return null;
+  const changed = new Set();
+  for (let i = 0; i < oldArgs.length; i++) {
+    if (oldArgs[i] !== newArgs[i]) changed.add(i);
+  }
+  return changed;
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // Binding Scopes
 // ─────────────────────────────────────────────────────────────────────
 
 function createScope(parent) {
   const scope = {
-    bindings: [],       // { node, binding }
-    attrBindings: [],   // { node, binding, attrName }
-    styleBindings: [],  // { node, binding, styleName }
+    bindings: [],       // { node, binding, lastValue, slots }
+    attrBindings: [],   // { node, binding, attrName, lastValue, slots }
+    styleBindings: [],  // { node, binding, styleName, lastValue, slots }
     conditionals: [],   // { cond, innerNode, node, rendered, scope }
     lists: [],          // { marker, getList, render, renderedItems, keyed, keyFn }
     children: [],       // child scopes
-    parent: parent || null
+    parent: parent || null,
+    numSlots: -1        // cached slot count (-1 = not yet detected)
   };
   if (parent) parent.children.push(scope);
   return scope;
@@ -237,7 +349,8 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         const extract = NodeModule.Binding.extract(binding);
         const value = extract(model);
         const textNode = document.createTextNode(value);
-        currentScope.bindings.push({ node: textNode, binding });
+        // slots detected lazily on first update
+        currentScope.bindings.push({ node: textNode, binding, lastValue: value, slots: null });
         return textNode;
       },
 
@@ -341,6 +454,20 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         return container;
       },
 
+      scope: (fingerprint, innerNode) => {
+        const childScope = createScope(currentScope);
+        childScope.fingerprint = fingerprint;
+        childScope.lastFP = fingerprint(model);
+        return withScope(childScope, () => renderNode(innerNode));
+      },
+
+      scopeProj: (_typeM, proj, innerNode) => {
+        const childScope = createScope(currentScope);
+        childScope.project = proj;
+        childScope.lastProj = proj(model);
+        return withScope(childScope, () => renderNode(innerNode));
+      },
+
       foreachKeyed: (_typeA, getList, keyFn, render) => {
         const container = document.createDocumentFragment();
         const marker = document.createComment('foreachKeyed');
@@ -393,7 +520,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         } else {
           el.setAttribute(name, value);
         }
-        currentScope.attrBindings.push({ node: el, binding, attrName: name });
+        currentScope.attrBindings.push({ node: el, binding, attrName: name, lastValue: value, slots: null });
       },
       on: (event, msg) => {
         el.addEventListener(event, (e) => {
@@ -416,8 +543,9 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       },
       styleBind: (name, binding) => {
         const extract = NodeModule.Binding.extract(binding);
-        el.style.setProperty(name, extract(model));
-        currentScope.styleBindings.push({ node: el, binding, styleName: name });
+        const value = extract(model);
+        el.style.setProperty(name, value);
+        currentScope.styleBindings.push({ node: el, binding, styleName: name, lastValue: value, slots: null });
       }
     });
   }
@@ -461,38 +589,75 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
    * Recursively update all bindings in a scope tree
    */
   function updateScope(scope, oldModel, newModel) {
+    // Scope cutoff: string fingerprint only (scopeProj skipped if slot tracking active)
+    if (scope.fingerprint) {
+      const newFP = scope.fingerprint(newModel);
+      if (newFP === scope.lastFP) return;
+      scope.lastFP = newFP;
+    }
+
+    // Slot-based change detection (one Proxy probe, cached args)
+    if (scope.numSlots === -1) scope.numSlots = countSlots(oldModel);
+    const numSlots = scope.numSlots;
+    let changed = null;
+    if (numSlots > 0) {
+      if (!scope.cachedArgs) scope.cachedArgs = probeSlots(oldModel);
+      changed = changedSlotsFromCache(scope, newModel);
+      // If slot tracking works and nothing changed, skip entire scope
+      if (changed && changed.size === 0) return;
+    } else if (scope.project) {
+      // Fallback to deepEqual only when slot tracking unavailable (non-record model)
+      const newProj = scope.project(newModel);
+      if (deepEqual(scope.lastProj, newProj, 0)) return;
+      scope.lastProj = newProj;
+    }
+
+    // Lazy slot detection helper
+    function ensureSlots(b) {
+      if (b.slots === null && numSlots > 0) {
+        const extract = NodeModule.Binding.extract(b.binding);
+        b.slots = detectSlots(extract, oldModel, numSlots);
+      }
+    }
+
     // Text bindings
-    for (const { node, binding } of scope.bindings) {
-      const extract = NodeModule.Binding.extract(binding);
-      const oldVal = extract(oldModel);
+    for (const b of scope.bindings) {
+      ensureSlots(b);
+      if (changed && b.slots && !b.slots.some(s => changed.has(s))) continue;
+      const extract = NodeModule.Binding.extract(b.binding);
       const newVal = extract(newModel);
-      if (oldVal !== newVal) {
-        node.textContent = newVal;
+      if (newVal !== b.lastValue) {
+        b.node.textContent = newVal;
+        b.lastValue = newVal;
       }
     }
 
     // Attribute bindings
-    for (const { node, binding, attrName } of scope.attrBindings) {
-      const extract = NodeModule.Binding.extract(binding);
-      const oldVal = extract(oldModel);
+    for (const b of scope.attrBindings) {
+      ensureSlots(b);
+      if (changed && b.slots && !b.slots.some(s => changed.has(s))) continue;
+      const extract = NodeModule.Binding.extract(b.binding);
       const newVal = extract(newModel);
-      if (oldVal !== newVal) {
-        if (attrName === 'disabled' || attrName === 'checked') {
-          if (newVal === 'true') node.setAttribute(attrName, '');
-          else node.removeAttribute(attrName);
+      if (newVal !== b.lastValue) {
+        if (b.attrName === 'disabled' || b.attrName === 'checked') {
+          if (newVal === 'true') b.node.setAttribute(b.attrName, '');
+          else b.node.removeAttribute(b.attrName);
         } else {
-          node.setAttribute(attrName, newVal);
+          b.node.setAttribute(b.attrName, newVal);
         }
+        b.lastValue = newVal;
       }
     }
 
     // Style bindings
-    for (const { node, binding, styleName } of scope.styleBindings) {
-      const extract = NodeModule.Binding.extract(binding);
-      const oldVal = extract(oldModel);
+    for (const b of scope.styleBindings) {
+      ensureSlots(b);
+      if (changed && b.slots && !b.slots.some(s => changed.has(s))) continue;
+      const extract = NodeModule.Binding.extract(b.binding);
       const newVal = extract(newModel);
-      if (oldVal !== newVal) {
-        node.style.setProperty(styleName, newVal);
+      if (newVal !== b.lastValue) {
+        b.node.style.setProperty(b.styleName, newVal);
+        b.lastValue = newVal;
       }
     }
 
