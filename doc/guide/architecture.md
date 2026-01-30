@@ -258,7 +258,7 @@ Correspondences:
 - `_∥_` corresponds to `⊗` on Poly level
 - `Agent S I O ≅ Coalg (O × y^I)` — polynomial coalgebra
 - `DepAgent S O I ≅ Coalg (mkPoly O I)` — full dependent polynomial coalgebra
-- `AgentLens I₁ O₁ I₂ O₂ ≅ Lens (Mono O₁ I₁) (Mono O₂ I₂)` — morphism in Poly category
+- `AgentLens I₁ O₁ I₂ O₂ = Lens (Mono O₁ I₁) (Mono O₂ I₂)` — type alias for Poly.Lens (identity, not isomorphism)
 - `DepAgentLens I₁ I₂ ≅ Lens (mkPoly O₁ I₁) (mkPoly O₂ I₂)` — dependent polynomial morphism
 - `dep⊕` corresponds to `choice` (Coalg (P ⊕ Q))
 - `dep&` corresponds to `parallel` (Coalg (P ⊗ Q))
@@ -271,7 +271,7 @@ This provides formal guarantees and enables future optimizations.
 ```
 Layer 3:  Session API (send, recv, offer, choose)     ← Session.agda
 Layer 2:  Named combinators (_>>>_, _***_, _&_, _⊕_)  ← Wiring.agda
-Layer 1:  AgentLens + through + ∘AL                    ← Wiring.agda
+Layer 1:  AgentLens (= Poly.Lens) + through + ∘AL       ← Wiring.agda
 ```
 
 ## Multi-Level Architecture

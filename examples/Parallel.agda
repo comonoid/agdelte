@@ -161,14 +161,14 @@ subs m =
         else never
       parSub = if fetching m
         then parallel
-               ( httpGet "/api/users" id (const "")
-               ∷ httpGet "/api/posts" id (const "")
+               ( httpGet "https://jsonplaceholder.typicode.com/posts/1" id (const "")
+               ∷ httpGet "https://jsonplaceholder.typicode.com/posts/2" id (const "")
                ∷ [] )
                GotAll
         else never
       raceSub = if racing m
         then race
-               ( mapE RaceWon (httpGet "/api/data" id (const "error"))
+               ( mapE RaceWon (httpGet "https://jsonplaceholder.typicode.com/posts/3" id (const "error"))
                ∷ timeout 3000 RaceTimeout
                ∷ [] )
         else never

@@ -733,3 +733,393 @@ h1 {
   font-family: monospace;
   margin-bottom: 0.3rem;
 }
+
+/* ================================================================
+   Worker Demo
+   ================================================================ */
+
+.worker-demo {
+  text-align: center;
+  min-width: 360px;
+}
+
+.worker-demo h1 {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+  background: none;
+  -webkit-text-fill-color: var(--text);
+}
+
+.worker-demo p {
+  color: #aaa;
+  margin-bottom: 0.75rem;
+}
+
+.worker-demo .controls {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.worker-demo .controls button {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: var(--primary);
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: transform 0.1s, background 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.worker-demo .controls button:hover {
+  background: #3a8eef;
+  transform: scale(1.1);
+}
+
+.worker-demo .input-value {
+  font-size: 2rem;
+  font-weight: bold;
+  color: var(--primary);
+  min-width: 100px;
+  display: inline-block;
+}
+
+.worker-demo .compute-btn {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 0.85rem 2rem;
+  font-size: 1.1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.1s, background 0.2s;
+  margin-bottom: 1.5rem;
+}
+
+.worker-demo .compute-btn:hover:not(:disabled) {
+  background: #d13550;
+  transform: translateY(-2px);
+}
+
+.worker-demo .compute-btn:disabled {
+  background: #555;
+  cursor: not-allowed;
+}
+
+.worker-demo .status {
+  background: rgba(0,0,0,0.2);
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  margin-bottom: 0.75rem;
+}
+
+.worker-demo .count {
+  color: #666;
+  font-size: 0.9rem;
+}
+
+/* ================================================================
+   Parallel Combinators Demo
+   ================================================================ */
+
+.parallel-demo {
+  text-align: center;
+  min-width: 420px;
+}
+
+.parallel-demo h1 {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+  background: none;
+  -webkit-text-fill-color: var(--text);
+}
+
+.parallel-demo p {
+  color: #aaa;
+  margin-bottom: 0.75rem;
+}
+
+.parallel-demo .nav {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 1.5rem;
+  background: rgba(0,0,0,0.3);
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.parallel-demo .nav button {
+  flex: 1;
+  padding: 0.6rem 1rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #888;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.parallel-demo .nav button:hover {
+  background: rgba(74,158,255,0.15);
+  color: var(--primary);
+}
+
+.parallel-demo .nav button:disabled {
+  background: var(--primary);
+  color: white;
+}
+
+.parallel-demo .demo-section {
+  background: rgba(0,0,0,0.15);
+  border-radius: 10px;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.parallel-demo .demo-section h2 {
+  color: var(--primary);
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
+}
+
+.parallel-demo .demo-section p {
+  margin-bottom: 0.5rem;
+}
+
+.parallel-demo .demo-section button {
+  background: var(--primary);
+  color: white;
+  border: none;
+  padding: 0.65rem 1.5rem;
+  font-size: 0.95rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.1s, background 0.2s;
+  margin: 0.25rem;
+}
+
+.parallel-demo .demo-section button:hover:not(:disabled) {
+  background: #3a8eef;
+  transform: translateY(-2px);
+}
+
+.parallel-demo .demo-section button:disabled {
+  background: #555;
+  cursor: not-allowed;
+}
+
+.parallel-demo .status {
+  background: rgba(0,0,0,0.2);
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-family: monospace;
+  font-size: 0.9rem;
+  margin-top: 0.75rem;
+  text-align: left;
+  word-break: break-all;
+}
+
+/* ================================================================
+   Remote Agent Demo
+   ================================================================ */
+
+.remote-agent-demo {
+  text-align: center;
+  min-width: 380px;
+}
+
+.remote-agent-demo h1 {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+  background: none;
+  -webkit-text-fill-color: var(--text);
+}
+
+.remote-agent-demo p {
+  color: #aaa;
+  margin-bottom: 0.75rem;
+}
+
+.remote-agent-demo .count {
+  font-size: 2.5rem;
+  font-weight: bold;
+  color: var(--primary);
+  margin: 1rem 0;
+}
+
+.remote-agent-demo .status {
+  background: rgba(0,0,0,0.2);
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  margin-bottom: 1.5rem;
+}
+
+.remote-agent-demo .controls {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.remote-agent-demo .controls button {
+  background: var(--primary);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.1s, background 0.2s;
+}
+
+.remote-agent-demo .controls button:hover:not(:disabled) {
+  background: #3a8eef;
+  transform: translateY(-2px);
+}
+
+.remote-agent-demo .controls button:disabled {
+  background: #555;
+  cursor: not-allowed;
+}
+
+.remote-agent-demo .step-btn {
+  background: var(--accent) !important;
+}
+
+.remote-agent-demo .step-btn:hover:not(:disabled) {
+  background: #d13550 !important;
+}
+
+/* ================================================================
+   Session Form Demo
+   ================================================================ */
+
+.session-form {
+  text-align: center;
+  min-width: 400px;
+}
+
+.session-form h1 {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+  background: none;
+  -webkit-text-fill-color: var(--text);
+}
+
+.session-form p {
+  color: #aaa;
+  margin-bottom: 0.75rem;
+}
+
+.session-form .progress {
+  background: rgba(0,0,0,0.2);
+  border-radius: 8px;
+  padding: 0.6rem 1.2rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+  color: #888;
+  letter-spacing: 0.5px;
+}
+
+.session-form .form-step {
+  background: rgba(0,0,0,0.15);
+  border-radius: 10px;
+  padding: 2rem;
+  margin-bottom: 1rem;
+}
+
+.session-form .prompt {
+  font-size: 1.15rem;
+  color: var(--primary);
+  margin-bottom: 1rem;
+  font-weight: 500;
+}
+
+.session-form input {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  font-size: 1.1rem;
+  border: 2px solid #333;
+  border-radius: 8px;
+  background: #0f0f23;
+  color: var(--text);
+  margin-bottom: 1.25rem;
+  transition: border-color 0.2s;
+}
+
+.session-form input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.session-form input::placeholder {
+  color: #555;
+}
+
+.session-form .actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.session-form .btn {
+  padding: 0.7rem 1.5rem;
+  font-size: 1rem;
+  border-radius: 8px;
+  border: 1px solid #444;
+  background: rgba(255,255,255,0.05);
+  color: var(--text);
+  cursor: pointer;
+  transition: transform 0.1s, background 0.2s;
+}
+
+.session-form .btn:hover {
+  background: rgba(255,255,255,0.1);
+  transform: translateY(-2px);
+}
+
+.session-form .btn.primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+
+.session-form .btn.primary:hover {
+  background: #3a8eef;
+}
+
+.session-form .confirm {
+  border: 1px solid rgba(74,158,255,0.3);
+  background: rgba(74,158,255,0.05);
+}
+
+.session-form .done {
+  border: 1px solid rgba(74,222,128,0.3);
+  background: rgba(74,222,128,0.05);
+}
+
+.session-form .summary {
+  text-align: left;
+  background: rgba(0,0,0,0.2);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin: 1rem 0;
+  font-size: 0.95rem;
+  line-height: 1.8;
+  color: #bbb;
+}
+
+.session-form .done h2 {
+  color: var(--success);
+  font-size: 1.3rem;
+  margin-bottom: 0.5rem;
+}

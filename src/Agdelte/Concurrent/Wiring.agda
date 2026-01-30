@@ -2,7 +2,8 @@
 
 -- Wiring: polynomial lens composition of agents
 --
--- Layer 1: AgentLens — morphism between agent interfaces (polynomial lens)
+-- Layer 1: AgentLens — type alias for Poly.Lens (Mono O I)
+--          Identity and composition come from Poly directly.
 -- Layer 2: Simple combinators — >>>, ***, fanout, loop
 --          defined via AgentLens but usable without knowing about lenses
 --
@@ -17,6 +18,7 @@ open import Data.Unit using (⊤; tt)
 open import Function using (_∘_; id; const)
 
 open import Agdelte.Concurrent.Agent
+open import Agdelte.Theory.Poly using (Poly; Mono; Lens; mkLens; onPos; onDir; idLens; _∘L_)
 
 private
   variable
@@ -26,21 +28,26 @@ private
 -- Layer 1: AgentLens — polynomial lens between agent interfaces
 ------------------------------------------------------------------------
 
--- A lens between two agent interfaces.
--- fwd maps observations (covariant, positions)
--- bwd maps inputs (contravariant, directions) — may depend on current observation
+-- AgentLens is a Poly.Lens between monomial polynomials.
+--   onPos maps observations (covariant, positions)
+--   onDir maps inputs (contravariant, directions)
 --
 -- This is a morphism in the category of polynomial functors:
 --   p(y) = O₁ × y^{I₁}  →  q(y) = O₂ × y^{I₂}
--- where fwd : O₁ → O₂, bwd : O₁ → I₂ → I₁
+-- where onPos : O₁ → O₂, onDir : O₁ → I₂ → I₁
 
-record AgentLens (I₁ O₁ I₂ O₂ : Set) : Set where
-  constructor mkAgentLens
-  field
-    fwd : O₁ → O₂
-    bwd : O₁ → I₂ → I₁
+AgentLens : (I₁ O₁ I₂ O₂ : Set) → Set
+AgentLens I₁ O₁ I₂ O₂ = Lens (Mono O₁ I₁) (Mono O₂ I₂)
 
-open AgentLens public
+-- Convenience aliases for backward compatibility
+mkAgentLens : (O₁ → O₂) → (O₁ → I₂ → I₁) → AgentLens I₁ O₁ I₂ O₂
+mkAgentLens = mkLens
+
+fwd : AgentLens I₁ O₁ I₂ O₂ → O₁ → O₂
+fwd = onPos
+
+bwd : AgentLens I₁ O₁ I₂ O₂ → O₁ → I₂ → I₁
+bwd = onDir
 
 -- Apply lens to agent: change its external interface
 through : AgentLens I O I' O' → Agent S I O → Agent S I' O'
@@ -51,18 +58,16 @@ through φ a = record
   }
 
 ------------------------------------------------------------------------
--- AgentLens identity and composition
+-- AgentLens identity and composition: re-exported from Poly
 ------------------------------------------------------------------------
 
 -- Identity lens: no change to interface
 idAL : AgentLens I O I O
-idAL = mkAgentLens id (const id)
+idAL = idLens
 
--- Compose lenses: φ then ψ
+-- Compose lenses: φ then ψ (same as Poly._∘L_)
 _∘AL_ : AgentLens I₂ O₂ I' O' → AgentLens I₁ O₁ I₂ O₂ → AgentLens I₁ O₁ I' O'
-ψ ∘AL φ = mkAgentLens
-  (fwd ψ ∘ fwd φ)
-  (λ o₁ i' → bwd φ o₁ (bwd ψ (fwd φ o₁) i'))
+_∘AL_ = _∘L_
 
 ------------------------------------------------------------------------
 -- Layer 2: Simple combinators

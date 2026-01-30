@@ -56,7 +56,7 @@ data Msg : Set where
 ------------------------------------------------------------------------
 
 serverUrl : String
-serverUrl = "http://localhost:3000"
+serverUrl = "http://127.0.0.1:3000"
 
 ------------------------------------------------------------------------
 -- Update (pure state transition)

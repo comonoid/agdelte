@@ -19,6 +19,14 @@ All examples use **Reactive Bindings** (like Svelte) — no Virtual DOM.
 | [Combinators](#combinators) | foldE, mapFilterE pipeline | Advanced |
 | [Dynamic Optics](#dynamic-optics) | ixList, Traversal, runtime _∘O_, routeMsg | Advanced |
 | [Session Form](#session-form) | Session protocol, phased state, typed transitions | Advanced |
+| [Worker](#worker) | Web Worker, background computation | Medium |
+| [Parallel](#parallel) | workerWithProgress, parallel, race | Advanced |
+| [Remote Agent](#remote-agent) | Browser ↔ Haskell agent server | Advanced |
+| [Agent Wiring](#agent-wiring) | >>>, &, ⊕, ***, fanout, loop, through, AgentLens | Theory |
+| [Dep Agent](#dep-agent) | DepAgent, state-dependent input, embed, dep⊕, dep& | Theory |
+| [Session Dual](#session-dual) | Session, dual, mkReqResp, mkOffer, dual-involution | Theory |
+| [SharedAgent Demo](#sharedagent-demo) | share, asLinear, peekShared, stepShared, registry | Server |
+| [Inspector Demo](#inspector-demo) | Diagram, inspectDiagram, wireSlot, refOptic, sendAndPrint | Server |
 
 ---
 
@@ -356,6 +364,208 @@ when isSubmitted  (div [] [ success message ])
 
 ---
 
+## Worker
+
+**Demonstrates:** Offloading heavy computation to a Web Worker background thread.
+
+```agda
+-- Worker computes fibonacci, main thread stays responsive
+subs : Model → Event Msg
+subs m = if computing m
+  then worker "/workers/fib.js" (show n) GotResult GotError
+  else never
+```
+
+**Key point:** `worker` spawns a separate thread. Main thread UI stays responsive during heavy computation.
+
+---
+
+## Parallel
+
+**Demonstrates:** `workerWithProgress`, `parallel`, `race`, `raceTimeout` combinators.
+
+```agda
+-- Worker with progress updates
+workerWithProgress "/workers/heavy.js" input GotResult GotError GotProgress
+
+-- Parallel HTTP requests, collect all
+parallel [ httpGet url1 id id, httpGet url2 id id ] combine
+
+-- Race: first to finish wins
+race [ httpGet fast id id, httpGet slow id id ]
+```
+
+**Key point:** Concurrency combinators compose declaratively. `parallel` collects all results, `race` takes the first.
+
+---
+
+## Remote Agent
+
+**Demonstrates:** Browser client talking to a Haskell agent server via fetch API.
+
+```agda
+-- Query remote agent state
+cmd Query _ = agentQuery "/api/agent/state" GotState GotError
+
+-- Step remote agent
+cmd (Step input) _ = agentStep "/api/agent/step" input GotState GotError
+```
+
+**Key point:** `agentQuery`/`agentStep` use the Big Lens protocol (peek/over) to interact with server-side agents.
+
+---
+
+## Agent Wiring
+
+**Demonstrates:** All `Wiring.agda` combinators with step-by-step verification proofs. Pure Agda (no HTML).
+
+```agda
+-- Pipeline: counter >>> classifier
+pipeline : Agent (ℕ × ℕ) ⊤ String
+pipeline = counter >>> classifier
+
+-- External choice: counter & classifier
+both : Agent (ℕ × ℕ) (⊤ ⊎ ℕ) (ℕ × String)
+both = counter & classifier
+
+-- AgentLens: interface transformation
+myLens : AgentLens ⊤ ℕ ⊤ String
+myLens = mkAgentLens show (λ _ _ → tt)
+
+adapted : Agent ℕ ⊤ String
+adapted = through myLens counter
+```
+
+**Key point:** Covers `>>>`, `&`, `⊕`, `***`, `fanout`, `loop`, `through`, `selectLeft`/`selectRight`, `mkAgentLens`, `mapI`/`mapO`/`remap`, `SomeAgent`/`pack`/`>>>ₛ`. All operations verified with `≡ refl` proofs.
+
+Source: `examples/AgentWiring.agda`
+
+---
+
+## Dep Agent
+
+**Demonstrates:** `DepAgent` — dependent polynomial coalgebra where input type depends on observation. Pure Agda (no HTML).
+
+```agda
+-- Vending machine: commands depend on phase
+data Phase : Set where
+  idle  : Phase    -- accepts Insert (⊤)
+  ready : Phase    -- accepts Select (String)
+
+Cmd : Phase → Set
+Cmd idle  = ⊤
+Cmd ready = String
+
+vendingMachine : DepAgent VendState Phase Cmd
+```
+
+**Key point:** In `idle` phase, only `⊤` (insert coin) is accepted. In `ready` phase, only `String` (select product) is accepted. Wrong-phase commands are rejected by the type checker. Also shows `embed` (Agent → DepAgent), `dep⊕` (exact internal choice), `dep&` (exact external choice), `throughDep` + `DepAgentLens` (interface transformation).
+
+Source: `examples/DepAgentDemo.agda`
+
+---
+
+## Session Dual
+
+**Demonstrates:** Dual session types with formal duality proofs. Pure Agda (no HTML).
+
+```agda
+-- Key-value store protocol
+KVProto : Session
+KVProto = offer GetProto PutProto
+
+-- Client sees the dual automatically
+ClientKVProto : Session
+ClientKVProto = dual KVProto
+
+-- Type-level guarantee: what server sends, client receives
+_ : SessionO GetProto ≡ SessionI (dual GetProto)
+_ = refl
+
+-- Duality is an involution (imported from Theory)
+_ : dual (dual KVProto) ≡ KVProto
+_ = dual-involution KVProto
+```
+
+**Key point:** `dual` automatically flips send↔recv, offer↔choose. The type system guarantees server output matches client input. `dual-involution` proves `dual (dual s) ≡ s` for any session. Also shows `mkReqResp`, `mkOffer`, `selectLeft`/`selectRight`, `SessionAgent`.
+
+Source: `examples/SessionDual.agda`
+
+---
+
+## SharedAgent Demo
+
+**Demonstrates:** Multiplicity markers (`share`, `asLinear`), `peekShared`/`stepShared`, `useLinear`, shared agent composition (`>>>shared`, `***shared`, `fanoutShared`), `Registry`/`lookupAgent`. Haskell-compiled (no browser).
+
+```agda
+-- Wrap agents with multiplicity witness
+sharedCounter : SharedAgent String String
+sharedCounter = share counterAgent
+
+linearEcho : LinearAgent String String
+linearEcho = asLinear echoAgent
+
+-- Compose: pipeline, parallel, fanout
+pipelined = sharedEcho >>>shared sharedBang    -- echo → add "!"
+parallel  = sharedCounter ***shared sharedAcc  -- independent pair
+fanned    = fanoutShared sharedCounter sharedAcc  -- same input to both
+
+-- Registry: named collection of shared agents
+registry : Registry
+registry = mkNamed "counter" "/counter" sharedCounter
+         ∷ mkNamed "accumulator" "/acc" sharedAcc ∷ []
+
+lookupAgent "counter" registry  -- → just (...)
+```
+
+**Key point:** `SharedAgent` is the type-level witness that an agent can serve multiple clients. `LinearAgent` is consumed after one use. Composition combinators (`>>>shared`, `***shared`, `fanoutShared`) preserve multiplicity. `Registry` enables named lookup.
+
+```bash
+npm run build:shared-demo && npm run run:shared-demo
+```
+
+Source: `server/SharedAgentDemo.agda`
+
+---
+
+## Inspector Demo
+
+**Demonstrates:** `Diagram` construction (`singleAgent`, `dualAgent`, `pipeline`, `_⊕D_`), `inspectDiagram` to peek all agent states, `wireSlot` to bridge pure Agent to mutable IO, `refOptic` for IORef-backed IOOptic, `sendAndPrint` for command dispatch. Haskell-compiled (no browser).
+
+```agda
+-- Build diagrams declaratively
+counterDiagram  = singleAgent "counter" "/counter" counterAgent 3001
+dualDiagram     = dualAgent "counter" "/counter" counterAgent
+                            "echo"    "/echo"    echoAgent 3002
+pipelineDiagram = pipeline "echo" "/echo" echoAgent
+                           "bang" "/bang" bangAgent 3003
+mergedDiagram   = (counterDiagram ⊕D pipelineDiagram) 3004
+
+-- Inspect all agents in a diagram
+inspectDiagram counterDiagram
+-- Output:
+--   === Network Inspector ===
+--   Agents: 1
+--     counter: 0
+--   =========================
+
+-- Bridge to mutable IO and inspect via IOOptic
+wireSlot (mkSlot "counter" "/counter" counterAgent) >>= λ def → ...
+newIORef "initial-value" >>= λ ref →
+ioPeek (refOptic ref)    -- → just "initial-value"
+ioOver (refOptic ref) "new"  -- updates IORef, returns "new"
+```
+
+**Key point:** `Diagram` is the declarative topology — slots + connections. `inspectDiagram` uses `IOOptic` (Big Lens) to peek each agent. `wireSlot` bridges pure `Agent` coalgebra to mutable `AgentDef` for the server runtime. `_⊕D_` merges two diagrams.
+
+```bash
+npm run build:inspector-demo && npm run run:inspector-demo
+```
+
+Source: `server/InspectorDemo.agda`
+
+---
+
 ## Running Examples
 
 ```bash
@@ -379,6 +589,14 @@ http://localhost:8080/examples_html/transitions.html
 http://localhost:8080/examples_html/composition.html
 http://localhost:8080/examples_html/combinators.html
 http://localhost:8080/examples_html/optic-dynamic.html
+http://localhost:8080/examples_html/worker.html
+http://localhost:8080/examples_html/parallel.html
+http://localhost:8080/examples_html/remote-agent.html
+http://localhost:8080/examples_html/session-form.html
+
+# Server examples (Haskell-compiled, run in terminal)
+npm run build:shared-demo && npm run run:shared-demo
+npm run build:inspector-demo && npm run run:inspector-demo
 ```
 
 ## Structure Pattern

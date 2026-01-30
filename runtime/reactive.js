@@ -25,7 +25,7 @@ function executeTask(task, onSuccess, onError) {
         .catch((error) => executeTask(onErr(error.message), onSuccess, onError));
     },
     'httpPost': (url, body, onOk, onErr) => {
-      fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
+      fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body })
         .then(async (response) => {
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           return response.text();
@@ -55,7 +55,7 @@ function executeCmd(cmd, dispatch) {
         .catch((error) => dispatch(onError(error.message)));
     },
     'httpPost': (url, body, onSuccess, onError) => {
-      fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
+      fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body })
         .then(async (r) => r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`)))
         .then((text) => dispatch(onSuccess(text)))
         .catch((error) => dispatch(onError(error.message)));
@@ -709,6 +709,15 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       throttle: (ms, inner) => `throttle(${ms})`,
       wsConnect: (url, handler) => `wsConnect(${url})`,
       onUrlChange: (handler) => 'onUrlChange',
+      worker: (url, input) => `worker(${url},${input})`,
+      workerWithProgress: (url, input) => `workerWithProgress(${url},${input})`,
+      parallel: (_typeB, eventList, mapFn) => 'parallel',
+      race: (eventList) => 'race',
+      poolWorker: (poolSize, url, input) => `poolWorker(${poolSize},${url},${input})`,
+      poolWorkerWithProgress: (poolSize, url, input) => `poolWorkerWithProgress(${poolSize},${url},${input})`,
+      workerChannel: (url) => `workerChannel(${url})`,
+      allocShared: (n) => `allocShared(${n})`,
+      workerShared: (buf, url, input) => `workerShared(${url},${input})`,
       foldE: (_typeB, init, step, inner) => `foldE(${serializeEvent(inner)})`,
       mapFilterE: (_typeB, f, inner) => `mapFilterE(${serializeEvent(inner)})`,
       switchE: (initial, meta) => `switchE(${serializeEvent(initial)},${serializeEvent(meta)})`

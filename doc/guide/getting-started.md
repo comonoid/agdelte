@@ -1,0 +1,116 @@
+# Getting Started
+
+## Prerequisites
+
+- **Agda** >= 2.6.4 with standard library >= 2.0
+- **Node.js** >= 18.0
+- **GHC** >= 9.4 (for server examples)
+
+## Project Structure
+
+```
+src/Agdelte/           -- Agda library modules
+  Reactive/            -- Node, Lens, Optic, BigLens, Diagram, Inspector
+  Core/                -- Event, Cmd, Task, Signal
+  Concurrent/          -- Agent, Wiring, SharedAgent, Session
+  Theory/              -- Poly, formal proofs
+  FFI/                 -- Browser, Server, Shared postulates
+
+examples/              -- Browser examples (JS backend)
+server/                -- Server examples (GHC backend)
+runtime/               -- JavaScript runtime (reactive.js, events.js, dom.js)
+hs/                    -- Haskell support modules (Http, WebSocket, AgentServer)
+examples_html/         -- HTML pages for browser examples
+doc/                   -- Documentation
+```
+
+## Build & Run (Browser Examples)
+
+```bash
+# Build all browser examples (Agda → JS)
+npm run build:all
+
+# Start development server
+npm run dev
+
+# Open in browser
+open http://localhost:8080
+```
+
+Individual examples:
+
+```bash
+npm run build:counter        # Counter
+npm run build:timer          # Timer
+npm run build:todo           # Todo list
+npm run build:keyboard       # Keyboard events
+npm run build:http           # HTTP requests
+npm run build:task           # Task chains
+npm run build:websocket      # WebSocket
+npm run build:router         # SPA routing
+npm run build:composition    # Component composition
+npm run build:transitions    # CSS transitions
+npm run build:combinators    # Event combinators
+npm run build:optic-dynamic  # Dynamic optics
+npm run build:worker         # Web Worker
+npm run build:parallel       # Parallel/Race
+npm run build:session-form   # Session form
+npm run build:remote-agent   # Remote agent client
+```
+
+## Build & Run (Server Examples)
+
+Server examples compile to native Haskell binaries via MAlonzo:
+
+```bash
+# HTTP agent server (used by Remote Agent browser example)
+npm run build:server && npm run run:server
+
+# Multi-agent server (counter + toggle, with WebSocket)
+npm run build:multi-agent && npm run run:multi-agent
+
+# SharedAgent demo (pure console output)
+npm run build:shared-demo && npm run run:shared-demo
+
+# Inspector/Diagram demo (pure console output)
+npm run build:inspector-demo && npm run run:inspector-demo
+```
+
+## Writing a New Example
+
+### Browser example
+
+1. Create `examples/MyExample.agda`:
+
+```agda
+module MyExample where
+
+open import Agdelte.Reactive.Node
+open import Agdelte.Core.Event    -- if needed
+open import Agdelte.Core.Cmd      -- if needed
+
+-- Model, Msg, update, template, app
+-- Optional: subs, cmd (exported separately)
+```
+
+2. Add build script to `package.json`:
+
+```json
+"build:my-example": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/MyExample.agda"
+```
+
+3. Create `examples_html/my-example.html` (copy from `counter.html`, change `data-agdelte="MyExample"`).
+
+### Server example
+
+1. Create `server/MyServer.agda` with `main : IO ⊤`.
+2. Add GHC build script (copy from `build:server` pattern).
+3. Run: `_build/MyServer`.
+
+## Tests
+
+```bash
+npm test                    # Runtime tests (JS)
+npm run typecheck           # Type-check core modules
+npm run typecheck:theory    # Type-check theory modules
+```

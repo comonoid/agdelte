@@ -265,6 +265,23 @@ The polynomial foundation doesn't add complexity for the user — `Agent`, `Lens
 
 ---
 
+## Formal Proofs (Theory/)
+
+All correspondences are formally verified in `src/Agdelte/Theory/`:
+
+| Module | What is proved |
+|--------|---------------|
+| `AgentCoalg` | `Agent S I O ≅ Coalg (Mono O I)`, `AgentLens = Poly.Lens` (identity) |
+| `OpticPolyLens` | `Optic ≅ Poly.Lens` (round-trip proofs) |
+| `BigLensPolyLens` | `StatefulBigLens ≅ Coalg (Mono O I)`, `BigLensMap ≅ Poly.Lens`, composition preserved |
+| `LensLaws` | `id ∘ f = f`, `f ∘ id = f`, `(f ∘ g) ∘ h = f ∘ (g ∘ h)` for Poly.Lens |
+| `SessionDualProof` | `dual (dual s) ≡ s`, `dual` is injective |
+| `PolyApp` | `ReactiveApp ↔ Coalg`, signal/app polynomial correspondences |
+
+Since the AgentLens unification, `AgentLens I₁ O₁ I₂ O₂` is definitionally equal to `Lens (Mono O₁ I₁) (Mono O₂ I₂)` — no isomorphism proof needed, it's `refl`.
+
+---
+
 ## References
 
 - Spivak, D. "Poly: An abundant categorical setting for mode-dependent dynamics"

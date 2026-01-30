@@ -714,6 +714,9 @@ export function interpretEvent(event, dispatch) {
  * x ∷ xs = cb => cb['_∷_'](x, xs)
  */
 function agdaListToArray(list) {
+  // Agda JS backend compiles List to native JS Array
+  if (Array.isArray(list)) return list;
+  // Fallback: Scott-encoded list
   const arr = [];
   let current = list;
   while (current) {
@@ -732,13 +735,8 @@ function agdaListToArray(list) {
  * Convert JS Array to Agda List (Scott-encoded)
  */
 function mkAgdaList(arr) {
-  let list = (cb) => cb['[]']();
-  for (let i = arr.length - 1; i >= 0; i--) {
-    const elem = arr[i];
-    const tail = list;
-    list = (cb) => cb['_∷_'](elem, tail);
-  }
-  return list;
+  // Agda JS backend uses native JS Arrays for List
+  return Array.from(arr);
 }
 
 /**

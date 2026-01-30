@@ -4,6 +4,9 @@
 --
 -- Agent IS a coalgebra of the polynomial p(y) = O × y^I
 -- This module makes the correspondence explicit and proves it.
+--
+-- Since Phase 9, AgentLens IS Poly.Lens (Mono O₁ I₁) (Mono O₂ I₂),
+-- so the lens correspondence is definitional (id).
 
 module Agdelte.Theory.AgentCoalg where
 
@@ -59,7 +62,6 @@ record AgentStructure (S I O : Set) : Set where
 structureToCoalg : ∀ {S I O} → AgentStructure S I O → Coalg (Mono O I)
 structureToCoalg {S} as = mkCoalg S (AgentStructure.observe as) (AgentStructure.step as)
 
--- Coalg → AgentStructure (direct version with explicit carrier):
 fromCoalgStr : ∀ {I O : Set} (c : Coalg (Mono O I)) → AgentStructure (Coalg.State c) I O
 fromCoalgStr c = record
   { observe = Coalg.observe c
@@ -88,34 +90,15 @@ agent-coalg-step : ∀ {S I O} (a : Agent S I O) (s : S) (i : I)
 agent-coalg-step _ _ _ = refl
 
 ------------------------------------------------------------------------
--- AgentLens ↔ Poly.Lens for monomial case
+-- AgentLens = Poly.Lens (definitional since Phase 9)
 ------------------------------------------------------------------------
+
+-- AgentLens I₁ O₁ I₂ O₂ is now defined as Lens (Mono O₁ I₁) (Mono O₂ I₂)
+-- in Wiring.agda, so no conversion is needed. For reference:
 
 open import Agdelte.Concurrent.Wiring using (AgentLens)
 
--- AgentLens I₁ O₁ I₂ O₂ corresponds to Poly.Lens (Mono O₁ I₁) (Mono O₂ I₂)
--- Both have: fwd : O₁ → O₂ and bwd : O₁ → I₂ → I₁
-
-agentLensToPolyLens : ∀ {I₁ O₁ I₂ O₂ : Set}
-                    → AgentLens I₁ O₁ I₂ O₂
-                    → Lens (Mono O₁ I₁) (Mono O₂ I₂)
-agentLensToPolyLens al = mkLens
-  (AgentLens.fwd al)
-  (AgentLens.bwd al)
-
-polyLensToAgentLens : ∀ {I₁ O₁ I₂ O₂ : Set}
-                    → Lens (Mono O₁ I₁) (Mono O₂ I₂)
-                    → AgentLens I₁ O₁ I₂ O₂
-polyLensToAgentLens pl = record
-  { fwd = Lens.onPos pl
-  ; bwd = Lens.onDir pl
-  }
-
--- Round-trips are identity (definitional)
-al-round-trip : ∀ {I₁ O₁ I₂ O₂ : Set} (al : AgentLens I₁ O₁ I₂ O₂)
-              → polyLensToAgentLens (agentLensToPolyLens al) ≡ al
-al-round-trip _ = refl
-
-pl-round-trip : ∀ {I₁ O₁ I₂ O₂ : Set} (pl : Lens (Mono O₁ I₁) (Mono O₂ I₂))
-              → agentLensToPolyLens (polyLensToAgentLens pl) ≡ pl
-pl-round-trip _ = refl
+-- The "isomorphism" is identity — AgentLens IS Poly.Lens.
+agentLensIsPolyLens : ∀ {I₁ O₁ I₂ O₂ : Set}
+                    → AgentLens I₁ O₁ I₂ O₂ ≡ Lens (Mono O₁ I₁) (Mono O₂ I₂)
+agentLensIsPolyLens = refl

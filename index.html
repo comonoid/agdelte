@@ -60,7 +60,7 @@
 
     .examples {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      grid-template-columns: repeat(4, 1fr);
       gap: 1.5rem;
       max-width: 900px;
       width: 100%;
@@ -264,6 +264,34 @@
       <p>ixList + Traversal: runtime optic composition, batch operations, dynamic focus.</p>
       <span class="status ready">Ready</span>
       <code>examples/OpticDynamic.agda</code>
+    </a>
+
+    <a href="examples_html/worker.html" class="example-card">
+      <h2>Web Worker</h2>
+      <p>Heavy computation offloaded to a background thread (fibonacci).</p>
+      <span class="status ready">Ready</span>
+      <code>examples/Worker.agda</code>
+    </a>
+
+    <a href="examples_html/parallel.html" class="example-card">
+      <h2>Parallel</h2>
+      <p>Worker with progress, parallel HTTP requests, and race combinators.</p>
+      <span class="status ready">Ready</span>
+      <code>examples/Parallel.agda</code>
+    </a>
+
+    <a href="examples_html/remote-agent.html" class="example-card">
+      <h2>Remote Agent</h2>
+      <p>Browser client talking to a Haskell agent server via fetch API.</p>
+      <span class="status ready">Ready</span>
+      <code>examples/RemoteAgent.agda</code>
+    </a>
+
+    <a href="examples_html/session-form.html" class="example-card">
+      <h2>Session Form</h2>
+      <p>Multi-step registration form with typed state transitions (SessionExec).</p>
+      <span class="status ready">Ready</span>
+      <code>examples/SessionFormDemo.agda</code>
     </a>
   </div>
 
