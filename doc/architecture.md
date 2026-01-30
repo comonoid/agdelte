@@ -244,12 +244,31 @@ In `Theory/` module (isolated, optional):
 - **Coalg** — Coalgebras (systems with state)
 - **Lens** — Morphisms between Poly
 
+In `Concurrent/` module (practical):
+
+- **Agent S I O** — Polynomial coalgebra (`state`, `observe`, `step`)
+- **AgentLens** — Polynomial lens between agent interfaces (`fwd`/`bwd`)
+- **Wiring** — Linear logic combinators: `_>>>_` (◁), `_***_` (⊗), `_&_` (&), `_⊕_` (⊕)
+- **Session** — Typed communication protocols as sugar over polynomial lenses
+- **ProcessOpticLinear** — Indexed IPC handles with connection state tracking
+
 Correspondences:
 - `Signal A ≅ Coalg (Mono A ⊤)`
 - `App ≅ Coalg (AppPoly) + init + events`
 - `_∥_` corresponds to `⊗` on Poly level
+- `Agent S I O ≅ Coalg (O × y^I)` — polynomial coalgebra
+- `AgentLens I₁ O₁ I₂ O₂` — morphism in Poly category
+- `Session → (SessionI, SessionO)` — protocol compiles to Agent interface types
 
 This provides formal guarantees and enables future optimizations.
+
+### Agent Wiring Architecture (3 layers)
+
+```
+Layer 3:  Session API (send, recv, offer, choose)     ← Session.agda
+Layer 2:  Named combinators (_>>>_, _***_, _&_, _⊕_)  ← Wiring.agda
+Layer 1:  AgentLens + through + ∘AL                    ← Wiring.agda
+```
 
 ## Multi-Level Architecture
 

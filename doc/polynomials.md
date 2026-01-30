@@ -325,17 +325,19 @@ See [architecture.md](architecture.md) for full API details.
 - [x] `routeMsg` — automatic message routing via Prism
 - [x] 16 propositional equality proofs in OpticTest
 
-### Phase 7: Concurrency + Protocols
+### Phase 7: Concurrency + Protocols ✅ DONE
 
 **Focus**: Workers as agents in polynomial network, typed communication.
 
 **Deliverables**:
-- [ ] `Agent` as polynomial coalgebra
-- [ ] Workers as agents (channels = Dir of polynomial)
-- [ ] Protocol Lens — typed agent communication
-- [ ] Structured concurrency via wiring
-- [ ] parallel, race, cancellation
-- [ ] Demo: Chat system with multiple agents
+- [x] `Agent` as polynomial coalgebra — `Agent S I O` with `state`/`observe`/`step`
+- [x] Workers as agents (channels = Dir of polynomial)
+- [x] AgentLens — polynomial lens between agent interfaces (`fwd`/`bwd`)
+- [x] Wiring combinators — `_>>>_` (◁), `_***_` (⊗), `_&_` (&), `_⊕_` (⊕), `loop` (trace)
+- [x] Session types — `Session` data type, `dual`, `SessionI`/`SessionO`, smart constructors
+- [x] Linear IPC handles — indexed `IpcHandleL` with `Connected`/`Disconnected` states
+- [x] parallel, race, cancellation
+- [x] Multi-agent HTTP + WebSocket server
 
 ### Phase 8: Developer Experience
 
@@ -354,7 +356,7 @@ See [architecture.md](architecture.md) for full API details.
 - [ ] Lens laws proofs (identity, composition)
 - [ ] ReactiveApp ↔ Coalg formal connection
 - [ ] Dependent polynomial formalization
-- [ ] Session type DSL
+- [x] Session type DSL — basic `Session` data type done; recursive sessions and multi-step execution remain
 - [ ] Demo: Multi-step form with typed transitions
 
 ---

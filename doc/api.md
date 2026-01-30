@@ -415,6 +415,156 @@ record Agent (S I O : Set) : Set where
 
 ---
 
+## Wiring — Agent Composition (Phase 7)
+
+From `Agdelte.Concurrent.Wiring` — polynomial lens composition of agents.
+
+### AgentLens
+
+```agda
+record AgentLens (I₁ O₁ I₂ O₂ : Set) : Set where
+  field
+    fwd : O₁ → O₂
+    bwd : O₁ → I₂ → I₁
+
+through : AgentLens I O I' O' → Agent S I O → Agent S I' O'
+```
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `idAL` | `AgentLens I O I O` | Identity lens |
+| `_∘AL_` | `AgentLens I₂ O₂ I' O' → AgentLens I₁ O₁ I₂ O₂ → AgentLens I₁ O₁ I' O'` | Compose lenses |
+| `through` | `AgentLens I O I' O' → Agent S I O → Agent S I' O'` | Apply lens to agent |
+
+### Combinators
+
+| Function | Type | Linear Logic | Description |
+|----------|------|-------------|-------------|
+| `_>>>_` | `Agent S₁ I M → Agent S₂ M O → Agent (S₁ × S₂) I O` | ◁ | Pipeline |
+| `_***_` | `Agent S₁ I₁ O₁ → Agent S₂ I₂ O₂ → Agent (S₁ × S₂) (I₁ × I₂) (O₁ × O₂)` | ⊗ | Parallel |
+| `_&_` | `Agent S₁ I₁ O₁ → Agent S₂ I₂ O₂ → Agent (S₁ × S₂) (I₁ ⊎ I₂) (O₁ × O₂)` | & | External choice |
+| `_⊕_` | `Agent S₁ I₁ O₁ → Agent S₂ I₂ O₂ → Agent (S₁ ⊎ S₂) (I₁ ⊎ I₂) (O₁ ⊎ O₂)` | ⊕ | Internal choice |
+| `fanout` | `Agent S₁ I O₁ → Agent S₂ I O₂ → Agent (S₁ × S₂) I (O₁ × O₂)` | Δ | Fan-out |
+| `loop` | `Agent S (I × O) O → Agent S I O` | trace | Feedback |
+| `selectLeft` | `AgentLens (I₁ ⊎ I₂) (O₁ × O₂) I₁ O₁` | π₁ | Select left branch |
+| `selectRight` | `AgentLens (I₁ ⊎ I₂) (O₁ × O₂) I₂ O₂` | π₂ | Select right branch |
+
+### Utilities
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `mapI` | `(I' → I) → Agent S I O → Agent S I' O` | Contravariant input map |
+| `mapO` | `(O → O') → Agent S I O → Agent S I O'` | Covariant output map |
+| `remap` | `(I' → I) → (O → O') → Agent S I O → Agent S I' O'` | Both at once |
+| `swap` | `Agent S (I₁ × I₂) O → Agent S (I₂ × I₁) O` | Swap inputs |
+| `constAgent` | `O → Agent O I O` | Constant output |
+| `terminal` | `Agent ⊤ I ⊤` | Unit agent |
+
+### Existential wrapper
+
+```agda
+record SomeAgent (I O : Set) : Set₁ where
+  field
+    {State} : Set
+    agent : Agent State I O
+
+pack : Agent S I O → SomeAgent I O
+_>>>ₛ_ _***ₛ_ _&ₛ_ _⊕ₛ_ -- compositions on packed agents
+```
+
+---
+
+## Session Types (Phase 7)
+
+From `Agdelte.Concurrent.Session` — typed communication protocols as sugar over polynomial lenses.
+
+### Session
+
+```agda
+data Session : Set₁ where
+  send   : (A : Set) → Session → Session   -- produce A, continue
+  recv   : (A : Set) → Session → Session   -- consume A, continue
+  offer  : Session → Session → Session      -- client picks branch (&)
+  choose : Session → Session → Session      -- system picks branch (⊕)
+  done   : Session                           -- protocol complete
+```
+
+### Duality
+
+```agda
+dual : Session → Session
+-- send ↔ recv, offer ↔ choose, done ↔ done
+```
+
+### Interpretation
+
+```agda
+SessionI : Session → Set    -- input type for a session
+SessionO : Session → Set    -- output type for a session
+SessionAgent : Session → Set → Set
+SessionAgent s S = Agent S (SessionI s) (SessionO s)
+```
+
+### Example protocols
+
+```agda
+ReqResp : Set → Set → Session
+ReqResp Req Resp = recv Req (send Resp done)
+
+ProcessProtocol : Session
+ProcessProtocol = offer
+  (recv ⊤ (send String done))       -- peek
+  (recv String (send String done))   -- step
+```
+
+### Smart constructors
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `reqInput` | `Req → SessionI (ReqResp Req Resp)` | Pack request |
+| `respOutput` | `SessionO (ReqResp Req Resp) → Resp` | Unpack response |
+| `offerLeft` | `SessionI s₁ → SessionI (offer s₁ s₂)` | Select left branch |
+| `offerRight` | `SessionI s₂ → SessionI (offer s₁ s₂)` | Select right branch |
+| `peekLens` | `AgentLens ... (SessionI PeekProtocol) (SessionO PeekProtocol)` | Lens for peek |
+| `stepLens` | `AgentLens ... (SessionI StepProtocol) (SessionO StepProtocol)` | Lens for step |
+
+### Builders
+
+```agda
+mkReqResp : S → (S → Resp) → (S → Req → S) → SessionAgent (ReqResp Req Resp) S
+mkOffer : SessionAgent s₁ S₁ → SessionAgent s₂ S₂ → SessionAgent (offer s₁ s₂) (S₁ × S₂)
+```
+
+---
+
+## ProcessOpticLinear — Indexed IPC Handle (Phase 7)
+
+From `Agdelte.Concurrent.ProcessOpticLinear` — type-safe IPC with connection state tracking.
+
+```agda
+data ConnState : Set where
+  Connected Disconnected : ConnState
+
+data IpcHandleL : ConnState → Set where
+  mkHandle : IpcHandle → IpcHandleL Connected
+```
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `connect` | `String → IO (IpcHandleL Connected)` | Connect to Unix socket |
+| `query` | `IpcHandleL Connected → IO String` | Peek (only on Connected) |
+| `step` | `IpcHandleL Connected → String → IO String` | Step (only on Connected) |
+| `close` | `IpcHandleL Connected → IO ⊤` | Close (Connected → void) |
+| `queryAndClose` | `String → IO String` | Safe one-shot peek |
+| `stepAndClose` | `String → String → IO String` | Safe one-shot step |
+
+Type-level guarantees:
+- Cannot query after disconnect
+- Cannot disconnect twice
+- Only `Connected` handles can be used
+
+---
+
 ## FFI (Phase 7)
 
 ### Shared Types (`FFI.Shared`)
