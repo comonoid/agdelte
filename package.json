@@ -33,7 +33,7 @@
     "dev": "node serve.cjs",
     "build:main": "agda --compile --compile-dir=_build --ghc-flag=-ihs --ghc-flag=\"-odir _build\" --ghc-flag=\"-hidir _build\" -i src -i server server/Main.agda",
     "build:remote-agent": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/RemoteAgent.agda",
-    "build:server": "agda --compile --compile-dir=_build --ghc-flag=-ihs --ghc-flag=\"-odir _build\" --ghc-flag=\"-hidir _build\" --ghc-flag=\"-package network\" --ghc-flag=\"-package text\" --ghc-flag=\"-package bytestring\" server/HttpAgent.agda",
+    "build:server": "agda --compile --compile-dir=_build --ghc-flag=-ihs --ghc-flag=\"-odir _build\" --ghc-flag=\"-hidir _build\" --ghc-flag=\"-package network\" --ghc-flag=\"-package text\" --ghc-flag=\"-package bytestring\" --ghc-flag=\"-package crypton\" --ghc-flag=\"-package base64-bytestring\" --ghc-flag=\"-package memory\" --ghc-flag=\"-package stm\" --ghc-flag=\"-package containers\" server/HttpAgent.agda",
     "build:multi-agent": "agda --compile --compile-dir=_build --ghc-flag=-ihs --ghc-flag=\"-odir _build\" --ghc-flag=\"-hidir _build\" --ghc-flag=\"-package network\" --ghc-flag=\"-package text\" --ghc-flag=\"-package bytestring\" --ghc-flag=\"-package crypton\" --ghc-flag=\"-package base64-bytestring\" --ghc-flag=\"-package stm\" --ghc-flag=\"-package memory\" --ghc-flag=\"-package containers\" server/MultiAgent.agda",
     "run:server": "./_build/HttpAgent",
     "run:multi-agent": "./_build/MultiAgent",
