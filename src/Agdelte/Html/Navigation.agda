@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K #-}
 
--- Html Navigation: высокоуровневые примитивы для SPA навигации
+-- Html Navigation: high-level primitives for SPA navigation
 
 module Agdelte.Html.Navigation where
 
@@ -20,18 +20,18 @@ private
 -- Navigation Link
 ------------------------------------------------------------------------
 
--- | Навигационная ссылка для SPA
--- Автоматически: preventDefault + dispatch Msg
--- URL отображается в href для SEO и Ctrl+Click
+-- | Navigation link for SPA
+-- Automatically: preventDefault + dispatch Msg
+-- URL is rendered in href for SEO and Ctrl+Click
 navLink : String → Msg → List (Attr Msg) → List (Html Msg) → Html Msg
 navLink url msg attrs children =
   a (onClickPrevent msg ∷ href url ∷ attrs) children
 
--- | Простая навигационная ссылка (только текст)
+-- | Simple navigation link (text only)
 navLink' : String → Msg → String → Html Msg
 navLink' url msg label = navLink url msg [] (text label ∷ [])
 
--- | Навигационная ссылка с классом
+-- | Navigation link with class
 navLinkClass : String → Msg → String → String → Html Msg
 navLinkClass url msg className label =
   navLink url msg (class className ∷ []) (text label ∷ [])

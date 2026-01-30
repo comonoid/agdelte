@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K #-}
 
--- Html Types: базовые типы для виртуального DOM
+-- Html Types: base types for virtual DOM
 
 module Agdelte.Html.Types where
 
@@ -11,30 +11,30 @@ open import Data.Bool using (Bool; true; false; not)
 open import Function using (_∘_)
 
 ------------------------------------------------------------------------
--- Атрибуты
+-- Attributes
 ------------------------------------------------------------------------
 
--- Атрибут HTML элемента
+-- HTML element attribute
 data Attr (Msg : Set) : Set where
-  -- Обычный атрибут (name="value")
+  -- Regular attribute (name="value")
   attr : String → String → Attr Msg
-  -- Булев атрибут (disabled, checked, etc.)
+  -- Boolean attribute (disabled, checked, etc.)
   boolAttr : String → Attr Msg
-  -- CSS стиль
+  -- CSS style
   style : String → String → Attr Msg
-  -- Обработчик событий
+  -- Event handler
   on : String → Msg → Attr Msg
-  -- Обработчик с preventDefault (для навигации)
+  -- Event handler with preventDefault (for navigation)
   onPrevent : String → Msg → Attr Msg
-  -- Обработчик с данными (для input)
+  -- Event handler with data (for input)
   onInput : (String → Msg) → Attr Msg
-  -- Обработчик клавиш
+  -- Key event handler
   onKey : String → (String → Msg) → Attr Msg
-  -- Ключ для эффективного diffing
+  -- Key for efficient diffing
   key : String → Attr Msg
 
--- FFI для Attr конструкторов
--- Параметр Msg стирается при компиляции
+-- FFI for Attr constructors
+-- Msg parameter is erased at compile time
 {-# COMPILE JS attr = name => value => ({ type: 'attr', name, value }) #-}
 {-# COMPILE JS boolAttr = name => ({ type: 'boolAttr', name }) #-}
 {-# COMPILE JS style = name => value => ({ type: 'style', name, value }) #-}
@@ -45,31 +45,31 @@ data Attr (Msg : Set) : Set where
 {-# COMPILE JS key = value => ({ type: 'key', value }) #-}
 
 ------------------------------------------------------------------------
--- HTML элементы
+-- HTML elements
 ------------------------------------------------------------------------
 
--- Виртуальный DOM узел
+-- Virtual DOM node
 data Html (Msg : Set) : Set where
-  -- Элемент: тег, атрибуты, дети
+  -- Element: tag, attributes, children
   node : String → List (Attr Msg) → List (Html Msg) → Html Msg
-  -- Текстовый узел
+  -- Text node
   text : String → Html Msg
-  -- Keyed элемент (для списков)
+  -- Keyed element (for lists)
   keyed : String → List (Attr Msg) → List (String × Html Msg) → Html Msg
-  -- ПРИМЕЧАНИЕ: lazy требует Set₁, убран из MVP
+  -- NOTE: lazy requires Set₁, removed from MVP
   -- lazy : ∀ {A : Set} → A → (A → Html Msg) → Html Msg
 
--- FFI для Html конструкторов
--- Параметр Msg стирается при компиляции
+-- FFI for Html constructors
+-- Msg parameter is erased at compile time
 {-# COMPILE JS node = tag => attrs => children => ({ tag, attrs, children }) #-}
 {-# COMPILE JS text = s => ({ tag: 'TEXT', text: s }) #-}
 {-# COMPILE JS keyed = tag => attrs => children => ({ tag, attrs, children, keyed: true }) #-}
 
 ------------------------------------------------------------------------
--- Functor для Attr и Html
+-- Functor for Attr and Html
 ------------------------------------------------------------------------
 
--- Преобразование сообщений в Attr
+-- Transform messages in Attr
 mapAttr : ∀ {A B : Set} → (A → B) → Attr A → Attr B
 mapAttr f (attr name value) = attr name value
 mapAttr f (boolAttr name) = boolAttr name
@@ -80,7 +80,7 @@ mapAttr f (onInput handler) = onInput (f ∘ handler)
 mapAttr f (onKey event handler) = onKey event (f ∘ handler)
 mapAttr f (key k) = key k
 
--- FFI для mapAttr (работает с plain objects)
+-- FFI for mapAttr (works with plain objects)
 {-# COMPILE JS mapAttr = _ => _ => f => attr => {
   if (!attr) return attr;
   switch (attr.type) {
@@ -92,7 +92,7 @@ mapAttr f (key k) = key k
   }
 } #-}
 
--- Преобразование сообщений в Html
+-- Transform messages in Html
 {-# TERMINATING #-}
 mapHtml : ∀ {A B : Set} → (A → B) → Html A → Html B
 mapHtml f (node tag attrs children) =
@@ -101,7 +101,7 @@ mapHtml f (text s) = text s
 mapHtml f (keyed tag attrs children) =
   keyed tag (map (mapAttr f) attrs) (map (λ p → proj₁ p , mapHtml f (proj₂ p)) children)
 
--- FFI для mapHtml (работает с plain objects)
+-- FFI for mapHtml (works with plain objects)
 {-# COMPILE JS mapHtml = _ => _ => f => html => {
   if (!html) return html;
   if (html.tag === 'TEXT') return html;
@@ -129,18 +129,18 @@ mapHtml f (keyed tag attrs children) =
 } #-}
 
 ------------------------------------------------------------------------
--- Утилиты
+-- Utilities
 ------------------------------------------------------------------------
 
--- Пустой элемент
+-- Empty element
 empty : ∀ {Msg : Set} → Html Msg
 empty = text ""
 
--- Группировка без обёртки (fragment)
+-- Grouping without wrapper (fragment)
 fragment : ∀ {Msg : Set} → List (Html Msg) → Html Msg
-fragment children = node "div" [] children  -- В реальности используем Fragment
+fragment children = node "div" [] children  -- In practice we use Fragment
 
--- Условный рендеринг
+-- Conditional rendering
 when : ∀ {Msg : Set} → Bool → Html Msg → Html Msg
 when true  h = h
 when false _ = empty

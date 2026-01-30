@@ -1,30 +1,30 @@
 /**
  * Agdelte Runtime - Virtual DOM
- * Создание и патчинг DOM элементов
+ * DOM element creation and patching
  */
 
 /**
- * Конвертация Agda List в JavaScript Array
- * Agda List: [] = null или { head, tail } структура
- * В зависимости от компиляции может быть разный формат
+ * Convert Agda List to JavaScript Array
+ * Agda List: [] = null or { head, tail } structure
+ * Format may vary depending on compilation
  */
 export function toArray(agdaList) {
-  // Если уже массив — возвращаем как есть
+  // If already an array — return as is
   if (Array.isArray(agdaList)) {
     return agdaList;
   }
 
-  // Если null/undefined — пустой массив
+  // If null/undefined — empty array
   if (agdaList == null) {
     return [];
   }
 
-  // Если это Agda linked list: { head, tail } или { _1, _2 }
+  // If Agda linked list: { head, tail } or { _1, _2 }
   const result = [];
   let current = agdaList;
 
   while (current != null) {
-    // Формат MAlonzo: ["[]"] для пустого, ["::", head, tail] для cons
+    // MAlonzo format: ["[]"] for empty, ["::", head, tail] for cons
     if (Array.isArray(current)) {
       if (current[0] === '[]' || current.length === 0) {
         break;
@@ -36,21 +36,21 @@ export function toArray(agdaList) {
       }
     }
 
-    // Формат с полями head/tail
+    // Format with head/tail fields
     if (current.head !== undefined) {
       result.push(current.head);
       current = current.tail;
       continue;
     }
 
-    // Формат с полями _1/_2 (старый MAlonzo)
+    // Format with _1/_2 fields (old MAlonzo)
     if (current._1 !== undefined) {
       result.push(current._1);
       current = current._2;
       continue;
     }
 
-    // Не распознали формат — возможно уже примитив
+    // Unrecognized format — possibly already a primitive
     break;
   }
 
@@ -58,40 +58,40 @@ export function toArray(agdaList) {
 }
 
 /**
- * Создание реального DOM из виртуального
- * @param {Object} vnode - Виртуальный узел
- * @param {Function} dispatch - Диспетчер сообщений
- * @returns {Node} - Реальный DOM узел
+ * Create real DOM from virtual DOM
+ * @param {Object} vnode - Virtual node
+ * @param {Function} dispatch - Message dispatcher
+ * @returns {Node} - Real DOM node
  */
 export function createElement(vnode, dispatch) {
   if (vnode === null || vnode === undefined) {
     return document.createTextNode('');
   }
 
-  // Текстовый узел
+  // Text node
   if (vnode.tag === 'TEXT' || typeof vnode === 'string') {
     const text = typeof vnode === 'string' ? vnode : vnode.text;
     return document.createTextNode(text);
   }
 
-  // Обычный элемент: { tag, attrs, children }
+  // Regular element: { tag, attrs, children }
   const { tag } = vnode;
   const attrs = toArray(vnode.attrs || []);
   const children = toArray(vnode.children || []);
 
-  // Создаём элемент
+  // Create element
   const el = document.createElement(tag);
 
-  // Применяем атрибуты
+  // Apply attributes
   for (const attr of attrs) {
     if (attr) applyAttribute(el, attr, dispatch);
   }
 
-  // Создаём детей
+  // Create children
   if (vnode.keyed) {
-    // Keyed children: [[key, vnode], ...] или Agda List of pairs
+    // Keyed children: [[key, vnode], ...] or Agda List of pairs
     for (const pair of children) {
-      // pair может быть [key, child] или { _1: key, _2: child }
+      // pair can be [key, child] or { _1: key, _2: child }
       const key = Array.isArray(pair) ? pair[0] : (pair.fst || pair._1);
       const child = Array.isArray(pair) ? pair[1] : (pair.snd || pair._2);
       const childEl = createElement(child, dispatch);
@@ -108,7 +108,7 @@ export function createElement(vnode, dispatch) {
 }
 
 /**
- * Применение атрибута к элементу
+ * Apply attribute to element
  */
 function applyAttribute(el, attr, dispatch) {
   const { type, name, value, handler } = attr;
@@ -215,7 +215,7 @@ function applyAttribute(el, attr, dispatch) {
       break;
 
     default:
-      // Fallback: обычный атрибут
+      // Fallback: regular attribute
       if (name && value !== undefined) {
         el.setAttribute(name, value);
       }
@@ -223,7 +223,7 @@ function applyAttribute(el, attr, dispatch) {
 }
 
 /**
- * Удаление атрибута
+ * Remove attribute
  */
 function removeAttribute(el, attr) {
   const { type, name } = attr;
@@ -244,7 +244,7 @@ function removeAttribute(el, attr) {
     case 'on':
     case 'onInput':
     case 'onKey':
-      // Обработчики событий удаляются при замене элемента
+      // Event handlers are removed when element is replaced
       break;
 
     case 'key':
@@ -254,38 +254,38 @@ function removeAttribute(el, attr) {
 }
 
 /**
- * Патчинг DOM: применение разницы между старым и новым VDOM
- * @param {Node} dom - Текущий DOM узел
- * @param {Object} oldVnode - Старый виртуальный узел
- * @param {Object} newVnode - Новый виртуальный узел
- * @param {Function} dispatch - Диспетчер
- * @returns {Node} - Обновлённый DOM узел
+ * DOM patching: apply diff between old and new VDOM
+ * @param {Node} dom - Current DOM node
+ * @param {Object} oldVnode - Old virtual node
+ * @param {Object} newVnode - New virtual node
+ * @param {Function} dispatch - Dispatcher
+ * @returns {Node} - Updated DOM node
  */
 export function patch(dom, oldVnode, newVnode, dispatch) {
-  // Если узлы идентичны — ничего не делаем
+  // If nodes are identical — do nothing
   if (oldVnode === newVnode) {
     return dom;
   }
 
-  // Если новый узел null — удаляем
+  // If new node is null — remove
   if (newVnode === null || newVnode === undefined) {
     dom.parentNode?.removeChild(dom);
     return null;
   }
 
-  // Если старый узел null — создаём новый
+  // If old node is null — create new
   if (oldVnode === null || oldVnode === undefined) {
     return createElement(newVnode, dispatch);
   }
 
-  // Если типы разные — полная замена
+  // If types differ — full replacement
   if (getNodeType(oldVnode) !== getNodeType(newVnode)) {
     const newDom = createElement(newVnode, dispatch);
     dom.parentNode?.replaceChild(newDom, dom);
     return newDom;
   }
 
-  // Текстовые узлы
+  // Text nodes
   if (isTextNode(newVnode)) {
     const newText = typeof newVnode === 'string' ? newVnode : newVnode.text;
     const oldText = typeof oldVnode === 'string' ? oldVnode : oldVnode.text;
@@ -296,14 +296,14 @@ export function patch(dom, oldVnode, newVnode, dispatch) {
     return dom;
   }
 
-  // Разные теги — замена
+  // Different tags — replace
   if (oldVnode.tag !== newVnode.tag) {
     const newDom = createElement(newVnode, dispatch);
     dom.parentNode?.replaceChild(newDom, dom);
     return newDom;
   }
 
-  // Тот же тег — патчим атрибуты и детей
+  // Same tag — patch attributes and children
   patchAttributes(dom, toArray(oldVnode.attrs || []), toArray(newVnode.attrs || []), dispatch);
   patchChildren(dom, oldVnode, newVnode, dispatch);
 
@@ -311,21 +311,21 @@ export function patch(dom, oldVnode, newVnode, dispatch) {
 }
 
 /**
- * Патчинг атрибутов
+ * Patch attributes
  * Now handles events efficiently - updates handler reference without recreating element
  */
 function patchAttributes(el, oldAttrs, newAttrs, dispatch) {
   const oldMap = new Map(oldAttrs.filter(Boolean).map(a => [attrKey(a), a]));
   const newMap = new Map(newAttrs.filter(Boolean).map(a => [attrKey(a), a]));
 
-  // Удаляем старые
+  // Remove old
   for (const [key, attr] of oldMap) {
     if (!newMap.has(key)) {
       removeAttribute(el, attr);
     }
   }
 
-  // Добавляем/обновляем новые (включая events - теперь они обновляются эффективно)
+  // Add/update new (including events - now updated efficiently)
   for (const [key, attr] of newMap) {
     const oldAttr = oldMap.get(key);
     if (!oldAttr || !attrsEqual(oldAttr, attr)) {
@@ -335,7 +335,7 @@ function patchAttributes(el, oldAttrs, newAttrs, dispatch) {
 }
 
 /**
- * Патчинг детей
+ * Patch children
  */
 function patchChildren(el, oldVnode, newVnode, dispatch) {
   const oldChildren = toArray(oldVnode.children || []);
@@ -355,26 +355,26 @@ function patchChildren(el, oldVnode, newVnode, dispatch) {
     const newChild = newChildren[i];
 
     if (i >= oldChildren.length) {
-      // Добавляем новый
+      // Add new
       el.appendChild(createElement(newChild, dispatch));
     } else if (i >= newChildren.length) {
-      // Удаляем лишний
+      // Remove extra
       el.removeChild(el.childNodes[newChildren.length]);
     } else {
-      // Патчим существующий
+      // Patch existing
       patch(el.childNodes[i], oldChild, newChild, dispatch);
     }
   }
 }
 
 /**
- * Патчинг keyed детей (эффективный diffing)
+ * Patch keyed children (efficient diffing)
  */
 function patchKeyedChildren(el, oldChildren, newChildren, dispatch) {
   const oldMap = new Map(oldChildren);
   const newMap = new Map(newChildren);
 
-  // Удаляем элементы которых больше нет
+  // Remove elements that no longer exist
   for (const [key] of oldChildren) {
     if (!newMap.has(key)) {
       const toRemove = el.querySelector(`[data-key="${key}"]`);
@@ -384,7 +384,7 @@ function patchKeyedChildren(el, oldChildren, newChildren, dispatch) {
     }
   }
 
-  // Добавляем/обновляем/перемещаем
+  // Add/update/move
   let prevDom = null;
 
   for (const [key, newChild] of newChildren) {
@@ -392,7 +392,7 @@ function patchKeyedChildren(el, oldChildren, newChildren, dispatch) {
     let dom = el.querySelector(`[data-key="${key}"]`);
 
     if (!oldChild) {
-      // Новый элемент
+      // New element
       dom = createElement(newChild, dispatch);
       dom.dataset.key = key;
 
@@ -402,10 +402,10 @@ function patchKeyedChildren(el, oldChildren, newChildren, dispatch) {
         el.prepend(dom);
       }
     } else {
-      // Обновляем существующий
+      // Update existing
       dom = patch(dom, oldChild, newChild, dispatch);
 
-      // Перемещаем если нужно
+      // Move if needed
       if (prevDom && prevDom.nextSibling !== dom) {
         prevDom.after(dom);
       } else if (!prevDom && el.firstChild !== dom) {
@@ -418,7 +418,7 @@ function patchKeyedChildren(el, oldChildren, newChildren, dispatch) {
 }
 
 /**
- * Утилиты
+ * Utilities
  */
 function getNodeType(vnode) {
   if (typeof vnode === 'string') return 'text';
@@ -441,7 +441,7 @@ function attrsEqual(a, b) {
 }
 
 /**
- * Рендеринг VDOM в HTML строку (для SSR)
+ * Render VDOM to HTML string (for SSR)
  */
 export function renderToString(vnode) {
   if (vnode === null || vnode === undefined) {
@@ -465,7 +465,7 @@ export function renderToString(vnode) {
 
   let html = `<${tag}`;
 
-  // Атрибуты
+  // Attributes
   for (const attr of attrs) {
     if (!attr) continue;
     if (attr.type === 'attr') {
@@ -484,7 +484,7 @@ export function renderToString(vnode) {
         html += ` style="${attr.name}: ${escapeHtml(attr.value)}"`;
       }
     }
-    // События не рендерим в HTML
+    // Events are not rendered to HTML
   }
 
   if (selfClosing.includes(tag)) {
@@ -493,7 +493,7 @@ export function renderToString(vnode) {
 
   html += '>';
 
-  // Дети
+  // Children
   if (vnode.keyed) {
     for (const [, child] of children) {
       html += renderToString(child);

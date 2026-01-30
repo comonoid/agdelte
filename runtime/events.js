@@ -1,8 +1,8 @@
 /**
  * Agdelte Runtime - Event Interpreter
  *
- * Event теперь data type (AST), а не Signal.
- * Runtime интерпретирует этот AST и создаёт подписки.
+ * Event is now a data type (AST), not Signal.
+ * Runtime interprets this AST and creates subscriptions.
  *
  * Scott encoding:
  *   Event.never     = cb => cb.never()
@@ -139,7 +139,7 @@ function getPool(poolSize, scriptUrl) {
 }
 
 /**
- * Создаёт WsMsg (Scott-encoded)
+ * Creates WsMsg (Scott-encoded)
  */
 function mkWsMsg(tag, value) {
   return (cb) => {
@@ -153,9 +153,9 @@ function mkWsMsg(tag, value) {
 }
 
 /**
- * Интерпретирует Event AST и создаёт подписки
+ * Interprets Event AST and creates subscriptions
  * @param {Object} event - Event (Scott-encoded)
- * @param {Function} dispatch - Диспетчер сообщений
+ * @param {Function} dispatch - Message dispatcher
  * @returns {Object} - { unsubscribe: () => void }
  */
 export function interpretEvent(event, dispatch) {
@@ -163,26 +163,26 @@ export function interpretEvent(event, dispatch) {
     return { unsubscribe: () => {} };
   }
 
-  // Scott encoding: вызываем event с объектом обработчиков
+  // Scott encoding: call event with handler object
   return event({
-    // never: ничего не делаем
+    // never: do nothing
     never: () => ({ unsubscribe: () => {} }),
 
-    // interval: периодическое событие
+    // interval: periodic event
     interval: (ms, msg) => {
       const msNum = typeof ms === 'bigint' ? Number(ms) : ms;
       const id = setInterval(() => dispatch(msg), msNum);
       return { unsubscribe: () => clearInterval(id) };
     },
 
-    // timeout: однократное событие
+    // timeout: one-shot event
     timeout: (ms, msg) => {
       const msNum = typeof ms === 'bigint' ? Number(ms) : ms;
       const id = setTimeout(() => dispatch(msg), msNum);
       return { unsubscribe: () => clearTimeout(id) };
     },
 
-    // onKeyDown: клавиатура (keydown)
+    // onKeyDown: keyboard (keydown)
     onKeyDown: (handler) => {
       const listener = (e) => {
         const keyEvent = mkKeyboardEvent(e);
@@ -196,7 +196,7 @@ export function interpretEvent(event, dispatch) {
       return { unsubscribe: () => document.removeEventListener('keydown', listener) };
     },
 
-    // onKeyUp: клавиатура (keyup)
+    // onKeyUp: keyboard (keyup)
     onKeyUp: (handler) => {
       const listener = (e) => {
         const keyEvent = mkKeyboardEvent(e);
@@ -210,7 +210,7 @@ export function interpretEvent(event, dispatch) {
       return { unsubscribe: () => document.removeEventListener('keyup', listener) };
     },
 
-    // httpGet: HTTP GET запрос
+    // httpGet: HTTP GET request
     httpGet: (url, onSuccess, onError) => {
       const controller = new AbortController();
       let completed = false;
@@ -238,7 +238,7 @@ export function interpretEvent(event, dispatch) {
       };
     },
 
-    // httpPost: HTTP POST запрос
+    // httpPost: HTTP POST request
     httpPost: (url, body, onSuccess, onError) => {
       const controller = new AbortController();
       let completed = false;
@@ -271,7 +271,7 @@ export function interpretEvent(event, dispatch) {
       };
     },
 
-    // merge: объединение двух событий
+    // merge: combine two events
     merge: (e1, e2) => {
       const sub1 = interpretEvent(e1, dispatch);
       const sub2 = interpretEvent(e2, dispatch);
@@ -283,7 +283,7 @@ export function interpretEvent(event, dispatch) {
       };
     },
 
-    // debounce: задержка после паузы
+    // debounce: delay after pause
     debounce: (ms, innerEvent) => {
       const msNum = typeof ms === 'bigint' ? Number(ms) : ms;
       let timeoutId = null;
@@ -307,7 +307,7 @@ export function interpretEvent(event, dispatch) {
       };
     },
 
-    // throttle: ограничение частоты
+    // throttle: rate limiting
     throttle: (ms, innerEvent) => {
       const msNum = typeof ms === 'bigint' ? Number(ms) : ms;
       let lastCall = 0;
@@ -349,7 +349,7 @@ export function interpretEvent(event, dispatch) {
       };
     },
 
-    // wsConnect: WebSocket соединение
+    // wsConnect: WebSocket connection
     wsConnect: (url, handler) => {
       const ws = new WebSocket(url);
 
@@ -369,7 +369,7 @@ export function interpretEvent(event, dispatch) {
         dispatch(handler(mkWsMsg('WsClosed')));
       };
 
-      // Регистрируем для wsSend
+      // Register for wsSend
       wsConnections.set(url, ws);
 
       return {
@@ -693,7 +693,7 @@ export function interpretEvent(event, dispatch) {
       };
     },
 
-    // onUrlChange: изменение URL (popstate)
+    // onUrlChange: URL change (popstate)
     onUrlChange: (handler) => {
       const listener = () => {
         dispatch(handler(window.location.pathname + window.location.search));
@@ -740,7 +740,7 @@ function mkAgdaList(arr) {
 }
 
 /**
- * Создаёт KeyboardEvent record для Agda (Scott-encoded)
+ * Creates KeyboardEvent record for Agda (Scott-encoded)
  * Agda record = { constructorName: cb => cb.constructorName(fields...) }
  */
 function mkKeyboardEvent(e) {
@@ -757,7 +757,7 @@ function mkKeyboardEvent(e) {
 }
 
 /**
- * Извлекает значение из Maybe (Scott-encoded)
+ * Extracts value from Maybe (Scott-encoded)
  * Maybe.just(x)  = cb => cb.just(x)
  * Maybe.nothing  = cb => cb.nothing()
  */
@@ -770,19 +770,19 @@ function extractMaybe(maybe) {
 }
 
 /**
- * Legacy: подписка на событие (для совместимости)
+ * Legacy: event subscription (for compatibility)
  */
 export function subscribe(eventSpec, dispatch) {
-  // Если это старый формат (plain object), используем старую логику
+  // If old format (plain object), use old logic
   if (eventSpec && eventSpec.type) {
     return subscribeLegacy(eventSpec, dispatch);
   }
-  // Иначе интерпретируем как Event AST
+  // Otherwise interpret as Event AST
   return interpretEvent(eventSpec, dispatch);
 }
 
 /**
- * Legacy подписка для старого формата {type, config}
+ * Legacy subscription for old format {type, config}
  */
 function subscribeLegacy(eventSpec, dispatch) {
   const { type, config } = eventSpec;
@@ -830,7 +830,7 @@ function subscribeLegacy(eventSpec, dispatch) {
 }
 
 /**
- * Отписка
+ * Unsubscribe
  */
 export function unsubscribe(subscription) {
   if (subscription && typeof subscription.unsubscribe === 'function') {
@@ -839,7 +839,7 @@ export function unsubscribe(subscription) {
 }
 
 /**
- * Утилиты debounce/throttle
+ * Debounce/throttle utilities
  */
 export function debounce(fn, ms) {
   let timeoutId;

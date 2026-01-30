@@ -1,6 +1,6 @@
 # Agdelte Examples
 
-> See [doc/examples.md](../doc/examples.md) for detailed guide.
+> See [doc/guide/examples.md](../doc/guide/examples.md) for detailed guide.
 
 Examples demonstrate Agdelte features:
 
@@ -19,6 +19,13 @@ Examples demonstrate Agdelte features:
 | Combinators | Event pipeline | foldE, mapFilterE |
 | OpticDynamic | Dynamic optics | ixList, Traversal, runtime _∘O_ |
 | StressTest | Performance benchmark | ops/sec, 13 bindings, interval |
+| AgentWiring | Agent wiring | Agent coalgebra, Wiring |
+| DepAgentDemo | Dependent agents | DepAgent |
+| Parallel | Parallel execution | Parallel event combinators |
+| RemoteAgent | Remote agents | RemoteOptic, cross-host |
+| SessionDual | Session duality | Session types, dual proof |
+| SessionFormDemo | Session forms | SessionForm |
+| Worker | Web workers | worker, offload computation |
 
 ## Building
 

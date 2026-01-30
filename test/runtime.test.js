@@ -1,18 +1,18 @@
 /**
  * Agdelte Runtime Tests
- * Тесты для JavaScript runtime
+ * Tests for JavaScript runtime
  */
 
 import { createElement, patch, renderToString } from '../runtime/dom.js';
 import { subscribe, unsubscribe, debounce, throttle } from '../runtime/events.js';
 import { interval, animationFrame, onKey } from '../runtime/primitives.js';
 
-// Простой test runner
+// Simple test runner
 let passed = 0;
 let failed = 0;
 let skipped = 0;
 
-// Проверка наличия DOM (для Node.js окружения)
+// Check for DOM availability (Node.js environment)
 const hasDOM = typeof document !== 'undefined';
 
 function test(name, fn) {
@@ -121,7 +121,7 @@ test('debounce delays calls', (done) => {
 
   assertEqual(callCount, 0, 'Should not call immediately');
 
-  // В реальных тестах используем setTimeout для проверки
+  // In real tests we use setTimeout for verification
   // setTimeout(() => {
   //   assertEqual(callCount, 1, 'Should call once after delay');
   //   done();
@@ -269,7 +269,7 @@ console.log(`Failed: ${failed}`);
 console.log(`Skipped: ${skipped}`);
 console.log(`Total: ${passed + failed + skipped}`);
 
-// В Node.js: успех если только пропущены DOM тесты
+// In Node.js: success if only DOM tests were skipped
 if (failed > 0) {
   process.exit(1);
 } else {

@@ -6,7 +6,7 @@
 > The difference is that Svelte achieves this through compilation, while Agdelte uses explicit bindings.
 >
 > **Note:** Examples below use **ReactiveApp** (template with bindings).
-> For the full API see [api.md](api.md).
+> For the full API see the [API reference](../api/node.md).
 
 11 examples with analysis of advantages and disadvantages of both approaches.
 

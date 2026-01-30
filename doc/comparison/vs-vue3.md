@@ -3,7 +3,7 @@
 > Feature and approach comparison. Agdelte architecture: [README.md](../README.md)
 >
 > **Note:** Agdelte uses **ReactiveApp** with templates and bindings (Svelte-style, without Virtual DOM).
-> Some examples below use the old `App` with `view` to illustrate patterns — see [api.md](api.md) for the current API.
+> Some examples below use the old `App` with `view` to illustrate patterns — see the [API reference](../api/node.md) for the current API.
 
 ## Complete List of Required Features
 

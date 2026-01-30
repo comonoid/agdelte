@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K #-}
 
--- Html Elements: все HTML элементы
+-- Html Elements: all HTML elements
 
 module Agdelte.Html.Elements where
 
@@ -267,25 +267,25 @@ figcaption : List (Attr Msg) → List (Html Msg) → Html Msg
 figcaption = node "figcaption"
 
 ------------------------------------------------------------------------
--- Удобные сокращения
+-- Convenience shortcuts
 ------------------------------------------------------------------------
 
--- Текстовый узел
+-- Text node
 txt : String → Html Msg
 txt = text
 
--- div с текстом
+-- div with text
 divText : String → Html Msg
 divText s = div [] (text s ∷ [])
 
--- span с текстом
+-- span with text
 spanText : String → Html Msg
 spanText s = span [] (text s ∷ [])
 
--- Кнопка с текстом
+-- Button with text
 buttonText : List (Attr Msg) → String → Html Msg
 buttonText attrs s = button attrs (text s ∷ [])
 
--- Ссылка с текстом
+-- Link with text
 aText : List (Attr Msg) → String → Html Msg
 aText attrs s = a attrs (text s ∷ [])

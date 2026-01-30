@@ -1,30 +1,30 @@
 /**
  * Agdelte Runtime - Main Entry Point
- * Запускает Elm-подобное приложение в браузере
+ * Runs an Elm-like application in the browser
  */
 
 import { createElement, patch } from './dom.js';
 import { interpretEvent, unsubscribe, wsConnections, channelConnections } from './events.js';
 
 /**
- * Интерпретирует и выполняет Task (монадическую цепочку)
+ * Interprets and executes a Task (monadic chain)
  * @param {Object} task - Scott-encoded Task
- * @param {Function} onSuccess - callback при успехе (value)
- * @param {Function} onError - callback при ошибке (string)
+ * @param {Function} onSuccess - callback on success (value)
+ * @param {Function} onError - callback on error (string)
  */
 function executeTask(task, onSuccess, onError) {
   task({
-    // pure(a) - успешное завершение
+    // pure(a) - successful completion
     'pure': (value) => {
       onSuccess(value);
     },
 
-    // fail(e) - ошибка
+    // fail(e) - error
     'fail': (error) => {
       onError(error);
     },
 
-    // httpGet(url, onOk, onErr) - HTTP GET с continuation
+    // httpGet(url, onOk, onErr) - HTTP GET with continuation
     'httpGet': (url, onOk, onErr) => {
       fetch(url)
         .then(async (response) => {
@@ -34,18 +34,18 @@ function executeTask(task, onSuccess, onError) {
           return response.text();
         })
         .then((text) => {
-          // Продолжаем с результатом
+          // Continue with result
           const nextTask = onOk(text);
           executeTask(nextTask, onSuccess, onError);
         })
         .catch((error) => {
-          // Продолжаем с ошибкой (onErr continuation)
+          // Continue with error (onErr continuation)
           const nextTask = onErr(error.message);
           executeTask(nextTask, onSuccess, onError);
         });
     },
 
-    // httpPost(url, body, onOk, onErr) - HTTP POST с continuation
+    // httpPost(url, body, onOk, onErr) - HTTP POST with continuation
     'httpPost': (url, body, onOk, onErr) => {
       fetch(url, {
         method: 'POST',
@@ -71,22 +71,22 @@ function executeTask(task, onSuccess, onError) {
 }
 
 /**
- * Интерпретирует и выполняет команду (Cmd)
+ * Interprets and executes a command (Cmd)
  * @param {Object} cmd - Scott-encoded Cmd
- * @param {Function} dispatch - функция отправки сообщений
+ * @param {Function} dispatch - message dispatch function
  */
 function executeCmd(cmd, dispatch) {
   cmd({
-    // ε - пустая команда
+    // ε - empty command
     'ε': () => {},
 
-    // _<>_ - композиция команд (параллельное выполнение)
+    // _<>_ - command composition (parallel execution)
     '_<>_': (cmd1, cmd2) => {
       executeCmd(cmd1, dispatch);
       executeCmd(cmd2, dispatch);
     },
 
-    // httpGet - HTTP GET запрос (простой API)
+    // httpGet - HTTP GET request (simple API)
     'httpGet': (url, onSuccess, onError) => {
       fetch(url)
         .then(async (response) => {
@@ -99,7 +99,7 @@ function executeCmd(cmd, dispatch) {
         .catch((error) => dispatch(onError(error.message)));
     },
 
-    // httpPost - HTTP POST запрос (простой API)
+    // httpPost - HTTP POST request (simple API)
     'httpPost': (url, body, onSuccess, onError) => {
       fetch(url, {
         method: 'POST',
@@ -116,8 +116,8 @@ function executeCmd(cmd, dispatch) {
         .catch((error) => dispatch(onError(error.message)));
     },
 
-    // attempt - запуск Task (монадический API)
-    // Result: ok(value) или err(error)
+    // attempt - run Task (monadic API)
+    // Result: ok(value) or err(error)
     'attempt': (task, handler) => {
       executeTask(
         task,
@@ -134,7 +134,7 @@ function executeCmd(cmd, dispatch) {
       );
     },
 
-    // === DOM эффекты ===
+    // === DOM effects ===
     'focus': (selector) => {
       const el = document.querySelector(selector);
       if (el) el.focus();
@@ -221,13 +221,13 @@ function executeCmd(cmd, dispatch) {
 }
 
 /**
- * Запуск приложения
- * @param {Object} app - Скомпилированное Agda приложение
- * @param {HTMLElement} container - DOM контейнер
- * @returns {Object} - API для управления приложением
+ * Run application
+ * @param {Object} app - Compiled Agda application
+ * @param {HTMLElement} container - DOM container
+ * @returns {Object} - API for controlling the application
  */
 export function runApp(app, container) {
-  // Состояние приложения
+  // Application state
   let model = app.init;
   let currentVdom = null;
   let currentDom = null;
@@ -235,10 +235,10 @@ export function runApp(app, container) {
   let isUpdating = false;
   let pendingMessages = [];
 
-  // Диспетчер сообщений
+  // Message dispatcher
   function dispatch(msg) {
     if (isUpdating) {
-      // Накапливаем сообщения во время обновления
+      // Accumulate messages during update
       pendingMessages.push(msg);
       return;
     }
@@ -246,22 +246,22 @@ export function runApp(app, container) {
     isUpdating = true;
 
     try {
-      // Получаем команду ДО обновления модели (чтобы command имел доступ к старой модели)
+      // Get command BEFORE updating model (so command has access to old model)
       const cmd = app.command(msg)(model);
 
-      // Обновляем модель
+      // Update model
       model = app.update(msg)(model);
 
-      // Выполняем команду
+      // Execute command
       executeCmd(cmd, dispatch);
 
-      // Перерисовываем
+      // Re-render
       render();
 
-      // Обновляем подписки
+      // Update subscriptions
       updateSubscriptions();
 
-      // Обрабатываем накопленные сообщения
+      // Process accumulated messages
       while (pendingMessages.length > 0) {
         const nextMsg = pendingMessages.shift();
         const nextCmd = app.command(nextMsg)(model);
@@ -275,24 +275,24 @@ export function runApp(app, container) {
     }
   }
 
-  // Рендеринг
+  // Rendering
   function render() {
     const newVdom = app.view(model);
 
     if (currentDom === null) {
-      // Первый рендер - очищаем контейнер
+      // First render - clear container
       container.innerHTML = '';
       currentDom = createElement(newVdom, dispatch);
       container.appendChild(currentDom);
     } else {
-      // Патчинг
+      // Patching
       currentDom = patch(currentDom, currentVdom, newVdom, dispatch);
     }
 
     currentVdom = newVdom;
   }
 
-  // Сериализация Event AST для сравнения
+  // Serialize Event AST for comparison
   function serializeEvent(event) {
     if (!event) return 'null';
 
@@ -324,50 +324,50 @@ export function runApp(app, container) {
     });
   }
 
-  // Текущий "fingerprint" подписки
+  // Current subscription fingerprint
   let currentEventFingerprint = null;
 
-  // Обновление подписок на события
-  // Стратегия: сравниваем fingerprints, переподписываемся только при изменении
+  // Update event subscriptions
+  // Strategy: compare fingerprints, resubscribe only on change
   function updateSubscriptions() {
-    // Получаем новый Event AST
+    // Get new Event AST
     const eventSpec = app.subs(model);
     const newFingerprint = serializeEvent(eventSpec);
 
-    // Если подписка не изменилась, ничего не делаем
+    // If subscription unchanged, do nothing
     if (newFingerprint === currentEventFingerprint) {
       return;
     }
 
-    // Отписываемся от старых
+    // Unsubscribe from old
     if (currentSubscription) {
       unsubscribe(currentSubscription);
     }
 
-    // Интерпретируем и подписываемся
+    // Interpret and subscribe
     currentSubscription = interpretEvent(eventSpec, dispatch);
     currentEventFingerprint = newFingerprint;
   }
 
-  // Инициализация
+  // Initialization
   render();
   updateSubscriptions();
 
-  // Публичный API
+  // Public API
   return {
-    // Отправить сообщение
+    // Dispatch message
     dispatch,
 
-    // Получить текущую модель
+    // Get current model
     getModel: () => model,
 
-    // Получить текущий DOM
+    // Get current DOM
     getContainer: () => container,
 
-    // Принудительный ререндер
+    // Force re-render
     forceRender: render,
 
-    // Уничтожение приложения
+    // Destroy application
     destroy: () => {
       if (currentSubscription) {
         unsubscribe(currentSubscription);
@@ -480,6 +480,6 @@ export async function mountModule(moduleName, container, options = {}) {
   }
 }
 
-// Re-export для удобства
+// Re-export for convenience
 export { createElement, patch } from './dom.js';
 export { interpretEvent, subscribe, unsubscribe, debounce, throttle } from './events.js';

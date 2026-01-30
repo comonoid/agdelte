@@ -1,7 +1,7 @@
 {-# OPTIONS --without-K --guardedness #-}
 
--- PolyApp: связь между App и Polynomial Functors
--- Демонстрирует, что App Model Msg ≅ Coalg (AppPoly Msg)
+-- PolyApp: connection between App and Polynomial Functors
+-- Demonstrates that App Model Msg ≅ Coalg (AppPoly Msg)
 
 module Agdelte.Theory.PolyApp where
 
@@ -17,25 +17,25 @@ open import Agdelte.Html.Types
 open import Agdelte.App
 
 ------------------------------------------------------------------------
--- App как коалгебра полинома
+-- App as polynomial coalgebra
 ------------------------------------------------------------------------
 
--- Полином для UI-компонента:
--- Pos = Html Msg (что отображаем)
--- Dir = λ _ → Msg (все позиции принимают одинаковые сообщения)
+-- Polynomial for UI component:
+-- Pos = Html Msg (what we display)
+-- Dir = λ _ → Msg (all positions accept the same messages)
 --
--- Интерпретация: ⟦AppPoly Msg⟧ X = Σ (Html Msg) (λ _ → Msg → X) ≅ Html Msg × (Msg → X)
--- Это в точности интерфейс "показать UI и принять сообщение"
+-- Interpretation: ⟦AppPoly Msg⟧ X = Σ (Html Msg) (λ _ → Msg → X) ≅ Html Msg × (Msg → X)
+-- This is exactly the interface "display UI and accept a message"
 AppPoly : Set → Poly
 AppPoly Msg = Mono (Html Msg) Msg
 
 ------------------------------------------------------------------------
--- Преобразование App в Coalg
+-- Convert App to Coalg
 ------------------------------------------------------------------------
 
--- App Model Msg соответствует коалгебре AppPoly Msg с State = Model
--- view   соответствует observe
--- update соответствует update (с flip)
+-- App Model Msg corresponds to coalgebra AppPoly Msg with State = Model
+-- view   corresponds to observe
+-- update corresponds to update (with flip)
 appToCoalg : ∀ {Model Msg : Set} → App Model Msg → Coalg (AppPoly Msg)
 appToCoalg {Model} app = mkCoalg
   Model                            -- State
@@ -43,56 +43,56 @@ appToCoalg {Model} app = mkCoalg
   (λ m msg → update app msg m)     -- update  : Model → Msg → Model
 
 ------------------------------------------------------------------------
--- Параллельная композиция через Poly
+-- Parallel composition via Poly
 ------------------------------------------------------------------------
 
--- App._∥_ соответствует Poly.parallel
--- AppPoly A₁ ⊗ AppPoly A₂ ≅ AppPoly (A₁ ⊎ A₂) с Pos = Html A₁ × Html A₂
+-- App._∥_ corresponds to Poly.parallel
+-- AppPoly A₁ ⊗ AppPoly A₂ ≅ AppPoly (A₁ ⊎ A₂) with Pos = Html A₁ × Html A₂
 --
--- Однако есть тонкость: в App._∥_ мы используем mapHtml для перевода
--- типов сообщений, что не напрямую соответствует ⊗.
--- Это связь "по духу", а не точный изоморфизм.
+-- However there is a subtlety: in App._∥_ we use mapHtml to translate
+-- message types, which does not directly correspond to ⊗.
+-- This is a connection "in spirit", not an exact isomorphism.
 
--- Полином для параллельной композиции:
+-- Polynomial for parallel composition:
 ParallelPoly : Set → Set → Poly
 ParallelPoly Msg₁ Msg₂ = AppPoly Msg₁ ⊗ AppPoly Msg₂
 
--- Коалгебра параллельной композиции
+-- Coalgebra of parallel composition
 parallelCoalg : ∀ {Model₁ Model₂ Msg₁ Msg₂ : Set}
               → App Model₁ Msg₁ → App Model₂ Msg₂ → Coalg (ParallelPoly Msg₁ Msg₂)
 parallelCoalg app₁ app₂ = P.parallel (appToCoalg app₁) (appToCoalg app₂)
 
 ------------------------------------------------------------------------
--- Альтернативная композиция через Poly
+-- Alternative composition via Poly
 ------------------------------------------------------------------------
 
--- App._⊕ᵃ_ соответствует Poly.choice
+-- App._⊕ᵃ_ corresponds to Poly.choice
 -- AppPoly A₁ ⊕ AppPoly A₂ = mkPoly (Html A₁ ⊎ Html A₂) ...
 
--- Полином для альтернативной композиции:
+-- Polynomial for alternative composition:
 ChoicePoly : Set → Set → Poly
 ChoicePoly Msg₁ Msg₂ = AppPoly Msg₁ ⊕ AppPoly Msg₂
 
--- Коалгебра альтернативной композиции
+-- Coalgebra of alternative composition
 choiceCoalg : ∀ {Model₁ Model₂ Msg₁ Msg₂ : Set}
             → App Model₁ Msg₁ → App Model₂ Msg₂ → Coalg (ChoicePoly Msg₁ Msg₂)
 choiceCoalg app₁ app₂ = P.choice (appToCoalg app₁) (appToCoalg app₂)
 
 ------------------------------------------------------------------------
--- mapMsg через Lens
+-- mapMsg via Lens
 ------------------------------------------------------------------------
 
 -- mapMsg : (Msg₂ → Msg₁) → (Msg₁ → Msg₂) → App Model Msg₁ → App Model Msg₂
--- соответствует применению линзы к полиному
+-- corresponds to applying a lens to the polynomial
 
--- Линза между AppPoly Msg₁ и AppPoly Msg₂
--- Изоморфизм сообщений индуцирует изоморфизм полиномов
+-- Lens between AppPoly Msg₁ and AppPoly Msg₂
+-- Message isomorphism induces polynomial isomorphism
 msgLens : ∀ {Msg₁ Msg₂ : Set} → (Msg₁ → Msg₂) → (Msg₂ → Msg₁) → Lens (AppPoly Msg₁) (AppPoly Msg₂)
 msgLens to from = mkLens
   (mapHtml to)      -- onPos : Html Msg₁ → Html Msg₂
   (λ _ → from)      -- onDir : Msg₂ → Msg₁
 
--- Применение линзы к коалгебре App
+-- Applying lens to App coalgebra
 transformApp : ∀ {Msg₁ Msg₂ : Set} → (Msg₁ → Msg₂) → (Msg₂ → Msg₁) → Coalg (AppPoly Msg₁) → Coalg (AppPoly Msg₂)
 transformApp to from = transformCoalg (msgLens to from)
 
@@ -153,35 +153,35 @@ choice-observe-right : ∀ {M₁ M₂ Msg₁ Msg₂ : Set}
 choice-observe-right _ _ _ = refl
 
 ------------------------------------------------------------------------
--- Семантика App через Signal
+-- Semantics of App via Signal
 ------------------------------------------------------------------------
 
--- Запуск приложения производит Signal (Html Msg)
--- Это соответствует разворачиванию коалгебры в бесконечный поток
+-- Running the application produces Signal (Html Msg)
+-- This corresponds to unfolding the coalgebra into an infinite stream
 
--- Простой случай: без внешних событий, фиксированная последовательность Msg
+-- Simple case: no external events, fixed sequence of Msg
 runWithMsgs : ∀ {Model Msg : Set} → App Model Msg → Signal Msg → Signal (Html Msg)
 now  (runWithMsgs app msgs) = view app (init app)
 next (runWithMsgs app msgs) = runWithMsgs (step (now msgs) app) (next msgs)
 
 ------------------------------------------------------------------------
--- Wiring: соединение App с внешним миром
+-- Wiring: connecting App to the external world
 ------------------------------------------------------------------------
 
--- App можно рассматривать как "провод" (wire) в терминах Poly:
--- Он принимает Msg на входе и выдаёт Html Msg на выходе
--- Wiring diagram показывает, как App соединяется с:
--- 1. DOM (источник событий → Msg)
--- 2. Renderer (Html Msg → побочные эффекты)
--- 3. Subscriptions (внешние события → Event Msg)
+-- App can be viewed as a "wire" in Poly terms:
+-- It accepts Msg as input and produces Html Msg as output
+-- Wiring diagram shows how App connects to:
+-- 1. DOM (event source → Msg)
+-- 2. Renderer (Html Msg → side effects)
+-- 3. Subscriptions (external events → Event Msg)
 
--- Полный полином для App с подписками:
--- Pos = Html Msg × Event Msg (что выдаём: UI + подписки)
--- Dir = λ _ → Msg (принимаем сообщения)
+-- Full polynomial for App with subscriptions:
+-- Pos = Html Msg × Event Msg (what we produce: UI + subscriptions)
+-- Dir = λ _ → Msg (accept messages)
 AppWithEventsPoly : Set → Poly
 AppWithEventsPoly Msg = Mono (Html Msg × Event Msg) Msg
 
--- Коалгебра для полного App
+-- Coalgebra for the full App
 appWithEventsToCoalg : ∀ {Model Msg : Set} → App Model Msg → Coalg (AppWithEventsPoly Msg)
 appWithEventsToCoalg {Model} app = mkCoalg
   Model
@@ -194,19 +194,19 @@ appE-coalg-observe : ∀ {Model Msg : Set} (app : App Model Msg) (m : Model)
 appE-coalg-observe _ _ = refl
 
 ------------------------------------------------------------------------
--- Связь с теорией: App как динамическая система
+-- Connection to theory: App as a dynamical system
 ------------------------------------------------------------------------
 
--- В терминологии polynomial functors:
--- - App — это Moore machine (конечный автомат с выходом)
--- - Состояние: Model
--- - Вход: Msg
--- - Выход: Html Msg (+ Event Msg для подписок)
--- - Переход: update : Msg → Model → Model
--- - Наблюдение: view : Model → Html Msg
+-- In polynomial functors terminology:
+-- - App is a Moore machine (finite automaton with output)
+-- - State: Model
+-- - Input: Msg
+-- - Output: Html Msg (+ Event Msg for subscriptions)
+-- - Transition: update : Msg → Model → Model
+-- - Observation: view : Model → Html Msg
 --
 -- Moore machine = Coalg (Mono Output Input)
--- где Output = Html Msg, Input = Msg
+-- where Output = Html Msg, Input = Msg
 --
--- Это ключевое соответствие, делающее Elm/TEA архитектуру
--- экземпляром теории polynomial functors.
+-- This is the key correspondence making Elm/TEA architecture
+-- an instance of polynomial functors theory.

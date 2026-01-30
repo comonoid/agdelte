@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K #-}
 
--- Html Attributes: атрибуты HTML элементов
+-- Html Attributes: HTML element attributes
 
 module Agdelte.Html.Attributes where
 
@@ -226,11 +226,11 @@ data' name' val = attr ("data-" ++ name') val
 -- Styles
 ------------------------------------------------------------------------
 
--- Инлайн стили
+-- Inline styles
 styles : String → String → Attr Msg
 styles = style
 
--- Удобные хелперы для частых стилей
+-- Convenience helpers for common styles
 backgroundColor : String → Attr Msg
 backgroundColor = style "background-color"
 

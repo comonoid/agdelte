@@ -1,6 +1,6 @@
 /**
  * Agdelte Runtime - FFI Primitives
- * JavaScript реализации для Agda FFI
+ * JavaScript implementations for Agda FFI
  */
 
 // ========================================
@@ -8,9 +8,9 @@
 // ========================================
 
 /**
- * Создать событие интервала
- * @param {number} ms - Интервал в миллисекундах
- * @param {*} msg - Сообщение для отправки
+ * Create an interval event
+ * @param {number} ms - Interval in milliseconds
+ * @param {*} msg - Message to dispatch
  * @returns {Object} - Event spec
  */
 export function interval(ms) {
@@ -21,7 +21,7 @@ export function interval(ms) {
 }
 
 /**
- * Создать событие однократного таймера
+ * Create a one-shot timer event
  */
 export function timeout(ms) {
   return (msg) => ({
@@ -35,7 +35,7 @@ export function timeout(ms) {
 // ========================================
 
 /**
- * Событие на каждый кадр анимации
+ * Animation frame event
  */
 export function animationFrame(msg) {
   return {
@@ -45,7 +45,7 @@ export function animationFrame(msg) {
 }
 
 /**
- * Событие с timestamp
+ * Animation frame event with timestamp
  */
 export function animationFrameWithTime(handler) {
   return {
@@ -59,7 +59,7 @@ export function animationFrameWithTime(handler) {
 // ========================================
 
 /**
- * Подписка на нажатия клавиш
+ * Subscribe to key presses
  */
 export function onKeyDown(handler) {
   return {
@@ -76,7 +76,7 @@ export function onKeyUp(handler) {
 }
 
 /**
- * Подписка на конкретную клавишу
+ * Subscribe to a specific key
  */
 export function onKey(key) {
   return (msg) => ({
@@ -89,7 +89,7 @@ export function onKey(key) {
 }
 
 /**
- * Подписка на клавиши со стрелками
+ * Subscribe to arrow keys
  */
 export function onArrowKeys(handler) {
   return {
@@ -114,7 +114,7 @@ export function onArrowKeys(handler) {
 // ========================================
 
 /**
- * Позиция мыши
+ * Mouse position
  */
 export function onMouseMove(handler) {
   return {
@@ -181,7 +181,7 @@ export function onOnlineStatus(onOnline, onOffline) {
 // ========================================
 
 /**
- * Создать HTTP запрос
+ * Create an HTTP request
  */
 export function httpRequest(config) {
   return (onSuccess) => (onError) => ({
@@ -191,14 +191,14 @@ export function httpRequest(config) {
 }
 
 /**
- * GET запрос
+ * GET request
  */
 export function httpGet(url) {
   return httpRequest({ method: 'GET', url });
 }
 
 /**
- * POST запрос
+ * POST request
  */
 export function httpPost(url, body) {
   return httpRequest({
@@ -210,7 +210,7 @@ export function httpPost(url, body) {
 }
 
 /**
- * Выполнить HTTP запрос и вызвать callback
+ * Perform an HTTP request and invoke callback
  */
 export async function performRequest(config, dispatch) {
   const { method = 'GET', url, headers = {}, body, onSuccess, onError } = config;
@@ -238,21 +238,21 @@ export async function performRequest(config, dispatch) {
 // ========================================
 
 /**
- * Текущее время в миллисекундах
+ * Current time in milliseconds
  */
 export function now() {
   return Date.now();
 }
 
 /**
- * Текущее время как Date
+ * Current time as Date
  */
 export function currentTime() {
   return new Date();
 }
 
 /**
- * Периодическое время
+ * Periodic time
  */
 export function every(ms) {
   return (handler) => ({
@@ -269,21 +269,21 @@ export function every(ms) {
 // ========================================
 
 /**
- * Случайное число
+ * Random number
  */
 export function random() {
   return Math.random();
 }
 
 /**
- * Случайное целое в диапазоне [min, max]
+ * Random integer in range [min, max]
  */
 export function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 /**
- * Случайный элемент массива
+ * Random element from array
  */
 export function randomElement(arr) {
   return arr[randomInt(0, arr.length - 1)];
@@ -323,7 +323,7 @@ export function onStorageChange(key, handler) {
 }
 
 // ========================================
-// Console (для отладки)
+// Console (debugging)
 // ========================================
 
 export function log(msg) {
@@ -339,7 +339,7 @@ export function trace(label) {
 }
 
 // ========================================
-// Debounce / Throttle для Events
+// Debounce / Throttle for Events
 // ========================================
 
 export function debounced(ms) {
@@ -360,7 +360,7 @@ export function throttled(ms) {
 // Agda FFI exports
 // ========================================
 
-// Эти функции соответствуют COMPILE JS прагмам в Agda
+// These functions correspond to COMPILE JS pragmas in Agda
 
 export const AgdeltePrimitives = {
   // Interval
@@ -420,7 +420,7 @@ export const AgdeltePrimitives = {
   throttled
 };
 
-// Для использования в браузере
+// For browser usage
 if (typeof window !== 'undefined') {
   window.AgdeltePrimitives = AgdeltePrimitives;
 }

@@ -181,42 +181,106 @@ The key difference from Virtual DOM: `template` is **data**, not a function. Bin
 
 | Document | Description |
 |----------|-------------|
-| [doc/](doc/) | Main documentation |
-| [doc/architecture.md](doc/architecture.md) | Core architecture and design |
-| [doc/api.md](doc/api.md) | API reference (Node, Event, Cmd, Task, Optic) |
-| [doc/runtime.md](doc/runtime.md) | JavaScript runtime implementation |
-| [doc/examples.md](doc/examples.md) | Guide to all examples |
+| [doc/](doc/) | Main documentation index |
+| [doc/guide/architecture.md](doc/guide/architecture.md) | Core architecture and design |
+| [doc/guide/examples.md](doc/guide/examples.md) | Guide to all examples |
+| [doc/guide/getting-started.md](doc/guide/getting-started.md) | Prerequisites, build, run |
+
+### API Reference
+
+| Document | Description |
+|----------|-------------|
+| [doc/api/node.md](doc/api/node.md) | ReactiveApp, Node, Attr, Binding, zoomNode, Lens |
+| [doc/api/event.md](doc/api/event.md) | Subscriptions: interval, keyboard, WebSocket, workers |
+| [doc/api/cmd.md](doc/api/cmd.md) | Commands: HTTP, DOM, clipboard, storage, routing |
+| [doc/api/task.md](doc/api/task.md) | Monadic chains: sequential HTTP, do-notation |
+| [doc/api/optic.md](doc/api/optic.md) | Lens, Prism, Affine, Traversal, Optic, ProcessOptic, RemoteOptic |
+| [doc/api/agent.md](doc/api/agent.md) | Agent coalgebra, Wiring, SharedAgent, Diagram |
+| [doc/api/signal.md](doc/api/signal.md) | Synchronous streams: const, map, delay, fold |
+| [doc/api/session.md](doc/api/session.md) | Session types: send/recv, dual, offer/choose |
+| [doc/api/ffi.md](doc/api/ffi.md) | Browser/Server postulates, Serialize |
 
 ### Additional Documents
 
 | Document | Description |
 |----------|-------------|
-| [doc/combinators.md](doc/combinators.md) | All combinators with types |
-| [doc/time-model.md](doc/time-model.md) | Time model: ticks, dt |
-| [doc/polynomials.md](doc/polynomials.md) | Polynomial functors: theory and phases |
-| [doc/vs-svelte.md](doc/vs-svelte.md) | Comparison with Svelte 5 |
-| [doc/vs-vue3.md](doc/vs-vue3.md) | Comparison with Vue 3 |
-| [doc/research.md](doc/research.md) | Research: wiring diagrams, linear types, session types |
+| [doc/internals/runtime.md](doc/internals/runtime.md) | JavaScript runtime implementation |
+| [doc/theory/combinators.md](doc/theory/combinators.md) | All combinators with types |
+| [doc/theory/time-model.md](doc/theory/time-model.md) | Time model: ticks, dt |
+| [doc/theory/polynomials.md](doc/theory/polynomials.md) | Polynomial functors: theory and phases |
+| [doc/comparison/vs-svelte.md](doc/comparison/vs-svelte.md) | Comparison with Svelte 5 |
+| [doc/comparison/vs-vue3.md](doc/comparison/vs-vue3.md) | Comparison with Vue 3 |
 
 ## Project Structure
 
 ```
 src/
   Agdelte/
+    ├── App.agda                 -- Top-level app module
+    │
     ├── Reactive/                -- Reactive templates (Svelte-style)
     │   ├── Node.agda            -- Node, Binding, ReactiveApp
     │   ├── Lens.agda            -- Lens, fstLens, sndLens
-    │   └── Optic.agda           -- Prism, Traversal, Affine, Optic, routeMsg
+    │   ├── Optic.agda           -- Prism, Traversal, Affine, Optic, routeMsg
+    │   ├── BigLens.agda         -- Big Lens across processes/hosts
+    │   ├── Diagram.agda         -- Wiring diagrams
+    │   ├── Inspector.agda       -- Runtime inspector
+    │   ├── ProcessOptic.agda    -- Cross-process optics
+    │   ├── RemoteOptic.agda     -- Cross-host optics
+    │   └── TimeTravel.agda      -- Time-travel debugging
     │
     ├── Core/                    -- Effects
     │   ├── Signal.agda          -- Coinductive stream
     │   ├── Event.agda           -- Event — subscriptions (interval, keyboard)
     │   ├── Cmd.agda             -- Cmd — commands (httpGet, httpPost)
-    │   └── Task.agda            -- Task — monadic chains (do-notation)
+    │   ├── Task.agda            -- Task — monadic chains (do-notation)
+    │   └── Result.agda          -- Result type for error handling
+    │
+    ├── Concurrent/              -- Concurrency & session types
+    │   ├── Agent.agda           -- Agent coalgebra
+    │   ├── CoSession.agda       -- Co-session types
+    │   ├── DepAgent.agda        -- Dependent agents
+    │   ├── Obligation.agda      -- Linear obligations
+    │   ├── ProcessOpticLinear.agda -- Linear process optics
+    │   ├── Session.agda         -- Session types
+    │   ├── SessionExec.agda     -- Session execution
+    │   ├── SessionForm.agda     -- Session formulas
+    │   ├── SharedAgent.agda     -- Shared agent state
+    │   └── Wiring.agda          -- Agent wiring
+    │
+    ├── Html/                    -- HTML DSL
+    │   ├── Attributes.agda      -- HTML attributes
+    │   ├── Elements.agda        -- HTML elements
+    │   ├── Events.agda          -- DOM events
+    │   ├── Navigation.agda      -- Navigation helpers
+    │   └── Types.agda           -- HTML types
+    │
+    ├── FFI/                     -- Foreign function interface
+    │   ├── Browser.agda         -- Browser postulates
+    │   ├── Server.agda          -- Server postulates
+    │   └── Shared.agda          -- Shared FFI types
+    │
+    ├── Lens/                    -- Lens utilities
+    │   └── Widget.agda          -- Widget lenses
+    │
+    ├── Primitive/               -- Primitive event sources
+    │   ├── AnimationFrame.agda  -- requestAnimationFrame
+    │   ├── Interval.agda        -- setInterval
+    │   ├── Keyboard.agda        -- Keyboard events
+    │   ├── Mouse.agda           -- Mouse events
+    │   ├── Request.agda         -- HTTP requests
+    │   └── Time.agda            -- Time primitives
     │
     ├── Theory/                  -- Mathematical foundation (optional)
     │   ├── Poly.agda            -- Polynomial functors, Coalg, Lens
-    │   └── PolySignal.agda      -- Signal ≅ Coalg (Mono A ⊤)
+    │   ├── PolySignal.agda      -- Signal ≅ Coalg (Mono A ⊤)
+    │   ├── PolyApp.agda         -- Polynomial app structure
+    │   ├── AgentCoalg.agda      -- Agent as coalgebra
+    │   ├── BigLensPolyLens.agda -- BigLens ≅ Poly.Lens
+    │   ├── DepPoly.agda         -- Dependent polynomials
+    │   ├── LensLaws.agda        -- Lens law proofs
+    │   ├── OpticPolyLens.agda   -- Optic ≅ Poly.Lens
+    │   └── SessionDualProof.agda -- Session duality proof
     │
     └── Test/                    -- Tests
         ├── Interpret.agda       -- Pure event testing (SimEvent)
@@ -226,20 +290,37 @@ examples/
     Counter.agda                 -- Counter with reactive bindings
     Timer.agda                   -- Stopwatch with interval
     Todo.agda                    -- TodoMVC-style app
-    Keyboard.agda            -- Global keyboard events
-    Http.agda                -- HTTP requests
-    Task.agda                -- Task chains (do-notation)
-    WebSocket.agda           -- WebSocket communication
-    Router.agda              -- SPA routing
-    Composition.agda         -- App composition (zoomNode)
-    Transitions.agda         -- CSS enter/leave animations (whenT)
-    Combinators.agda         -- Event pipeline (foldE, mapFilterE)
-    OpticDynamic.agda        -- Dynamic optics (ixList, Traversal, _∘O_)
+    Keyboard.agda                -- Global keyboard events
+    KeyboardDemo.agda            -- Keyboard demo (server)
+    Http.agda                    -- HTTP requests
+    Task.agda                    -- Task chains (do-notation)
+    WebSocket.agda               -- WebSocket communication
+    Router.agda                  -- SPA routing
+    Composition.agda             -- App composition (zoomNode)
+    Transitions.agda             -- CSS enter/leave animations (whenT)
+    Combinators.agda             -- Event pipeline (foldE, mapFilterE)
+    OpticDynamic.agda            -- Dynamic optics (ixList, Traversal, _∘O_)
+    StressTest.agda              -- Performance benchmark
+    AgentWiring.agda             -- Agent wiring example
+    DepAgentDemo.agda            -- Dependent agent demo
+    Parallel.agda                -- Parallel execution
+    RemoteAgent.agda             -- Remote agent example
+    SessionDual.agda             -- Session duality example
+    SessionFormDemo.agda         -- Session form demo
+    Worker.agda                  -- Web worker example
 
 runtime/
+    index.js                     -- Entry point, exports
     reactive.js                  -- Main: runReactiveApp, renderNode, updateBindings
     reactive-auto.js             -- Auto-loader (data-agdelte attribute)
     events.js                    -- Event interpretation, subscribe/unsubscribe
+    dom.js                       -- DOM manipulation helpers
+    primitives.js                -- Primitive event sources
+    auto.js                      -- Auto-discovery
+    widget.js                    -- Widget runtime
+    workers/
+        fibonacci.js             -- Fibonacci worker example
+        fibonacci-progress.js    -- Fibonacci with progress reporting
 ```
 
 ## Key Properties
@@ -307,7 +388,7 @@ events m = if m.computing
 -- Event disappears → worker cancelled (automatic cleanup)
 ```
 
-Structured concurrency, automatic resource management, no leaks. See [doc/api.md](doc/api.md).
+Structured concurrency, automatic resource management, no leaks. See [doc/api/event.md](doc/api/event.md).
 
 ## Quick Start
 
@@ -336,7 +417,7 @@ See [examples/README.md](examples/README.md) for details.
 **Phase 2: Reactive Architecture** ✅
 
 - ReactiveApp, Node, Binding — Svelte-style, no Virtual DOM
-- All 9 examples migrated (Counter, Timer, Todo, Keyboard, HTTP, Task, WebSocket, Router, Composition)
+- All examples migrated (Counter, Timer, Todo, Keyboard, HTTP, Task, WebSocket, Router, Composition)
 - Runtime with direct DOM updates via reactive bindings
 - zoomNode for component composition
 
@@ -371,7 +452,7 @@ See [examples/README.md](examples/README.md) for details.
 - Agents as polynomial coalgebras, channels, structured concurrency
 - `ProcessOptic` / `RemoteOptic` — same `Optic` interface across processes and hosts
 - Big Optic spans local widgets, processes, and remote hosts uniformly
-- See [doc/research.md](doc/research.md)
+- See [doc/api/agent.md](doc/api/agent.md)
 
 **Phase 8: Developer Experience**
 

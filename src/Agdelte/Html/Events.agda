@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K #-}
 
--- Html Events: обработчики событий DOM
+-- Html Events: DOM event handlers
 
 module Agdelte.Html.Events where
 
@@ -19,7 +19,7 @@ private
 onClick : Msg → Attr Msg
 onClick = on "click"
 
--- onClick с preventDefault (для навигационных ссылок)
+-- onClick with preventDefault (for navigation links)
 onClickPrevent : Msg → Attr Msg
 onClickPrevent = onPrevent "click"
 
@@ -63,9 +63,9 @@ onKeyUp = onKey "keyup"
 onKeyPress : (String → Msg) → Attr Msg
 onKeyPress = onKey "keypress"
 
--- Специальные клавиши
+-- Special keys
 onEnter : Msg → Attr Msg
-onEnter msg = onKey "keydown" (λ key → msg)  -- Фильтрация в runtime
+onEnter msg = onKey "keydown" (λ key → msg)  -- Filtered at runtime
 
 onEscape : Msg → Attr Msg
 onEscape msg = onKey "keydown" (λ key → msg)

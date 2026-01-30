@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K #-}
 
--- App: Elm-подобная архитектура с Event-driven подписками и командами
+-- App: Elm-like architecture with Event-driven subscriptions and commands
 -- App = { init, update, view, subs, command }
 
 module Agdelte.App where
@@ -16,33 +16,33 @@ open import Agdelte.Core.Cmd
 open import Agdelte.Html.Types
 
 ------------------------------------------------------------------------
--- App Record: основная структура приложения
+-- App Record: main application structure
 ------------------------------------------------------------------------
 
 record App (Model Msg : Set) : Set where
   field
-    -- Начальное состояние
+    -- Initial state
     init : Model
 
-    -- Обновление состояния по сообщению
+    -- Update state by message
     update : Msg → Model → Model
 
-    -- Отображение состояния в HTML
+    -- Render state to HTML
     view : Model → Html Msg
 
-    -- Динамические подписки на события (зависят от модели)
+    -- Dynamic event subscriptions (depend on model)
     subs : Model → Event Msg
 
-    -- Команды (побочные эффекты) — вызываются после update
+    -- Commands (side effects) — called after update
     command : Msg → Model → Cmd Msg
 
 open App public
 
 ------------------------------------------------------------------------
--- Конструкторы App
+-- App constructors
 ------------------------------------------------------------------------
 
--- Простое приложение (без команд) — для Counter, Timer, etc.
+-- Simple application (no commands) — for Counter, Timer, etc.
 mkApp : ∀ {Model Msg : Set}
       → Model
       → (Msg → Model → Model)
@@ -54,10 +54,10 @@ mkApp i u v s = record
   ; update = u
   ; view = v
   ; subs = s
-  ; command = λ _ _ → ε  -- нет команд
+  ; command = λ _ _ → ε  -- no commands
   }
 
--- Приложение с командами — для HTTP и других эффектов
+-- Application with commands — for HTTP and other effects
 mkCmdApp : ∀ {Model Msg : Set}
          → Model
          → (Msg → Model → Model)
@@ -73,15 +73,15 @@ mkCmdApp i u v s c = record
   ; command = c
   }
 
--- Для обратной совместимости: events = subs
+-- For backward compatibility: events = subs
 events : ∀ {Model Msg : Set} → App Model Msg → Model → Event Msg
 events = subs
 
 ------------------------------------------------------------------------
--- Простое приложение без внешних событий
+-- Simple application without external events
 ------------------------------------------------------------------------
 
--- Создать приложение только с view-событиями (клики и т.п.)
+-- Create application with view events only (clicks etc.)
 simpleApp : ∀ {Model Msg : Set}
           → Model
           → (Msg → Model → Model)
@@ -90,11 +90,11 @@ simpleApp : ∀ {Model Msg : Set}
 simpleApp i u v = mkApp i u v (const never)
 
 ------------------------------------------------------------------------
--- Композиция приложений
+-- Application composition
 ------------------------------------------------------------------------
 
--- Параллельная композиция: оба приложения работают одновременно
--- Модель — пара, сообщение — сумма
+-- Parallel composition: both applications run simultaneously
+-- Model is a pair, message is a sum
 _∥_ : ∀ {M₁ M₂ A₁ A₂ : Set}
     → App M₁ A₁ → App M₂ A₂
     → App (M₁ × M₂) (A₁ ⊎ A₂)
@@ -104,12 +104,12 @@ app₁ ∥ app₂ = mkCmdApp
   -- update
   (λ { (inj₁ msg) (m₁ , m₂) → update app₁ msg m₁ , m₂
      ; (inj₂ msg) (m₁ , m₂) → m₁ , update app₂ msg m₂ })
-  -- view (показываем оба)
+  -- view (show both)
   (λ { (m₁ , m₂) → node "div" []
        ( mapHtml inj₁ (view app₁ m₁)
        ∷ mapHtml inj₂ (view app₂ m₂)
        ∷ [] ) })
-  -- subs (объединяем)
+  -- subs (merge)
   (λ { (m₁ , m₂) → merge
        (mapE inj₁ (subs app₁ m₁))
        (mapE inj₂ (subs app₂ m₂)) })
@@ -119,17 +119,17 @@ app₁ ∥ app₂ = mkCmdApp
 
 infixr 5 _∥_
 
--- Альтернативная композиция: только одно приложение активно
+-- Alternative composition: only one application is active
 _⊕ᵃ_ : ∀ {M₁ M₂ A₁ A₂ : Set}
      → App M₁ A₁ → App M₂ A₂
      → App (M₁ ⊎ M₂) (A₁ ⊎ A₂)
 app₁ ⊕ᵃ app₂ = mkCmdApp
-  -- init (начинаем с первого)
+  -- init (start with the first)
   (inj₁ (init app₁))
   -- update
   (λ { (inj₁ msg) (inj₁ m₁) → inj₁ (update app₁ msg m₁)
      ; (inj₂ msg) (inj₂ m₂) → inj₂ (update app₂ msg m₂)
-     ; _ m → m })  -- Игнорируем несовпадающие сообщения
+     ; _ m → m })  -- Ignore mismatched messages
   -- view
   (λ { (inj₁ m₁) → mapHtml inj₁ (view app₁ m₁)
      ; (inj₂ m₂) → mapHtml inj₂ (view app₂ m₂) })
@@ -144,13 +144,13 @@ app₁ ⊕ᵃ app₂ = mkCmdApp
 infixr 4 _⊕ᵃ_
 
 ------------------------------------------------------------------------
--- Трансформации приложения
+-- Application transformations
 ------------------------------------------------------------------------
 
--- Изменить тип сообщения
+-- Change message type
 mapMsg : ∀ {Model Msg₁ Msg₂ : Set}
-       → (Msg₂ → Msg₁)  -- Преобразование входящих
-       → (Msg₁ → Msg₂)  -- Преобразование исходящих (для events)
+       → (Msg₂ → Msg₁)  -- Incoming transformation
+       → (Msg₁ → Msg₂)  -- Outgoing transformation (for events)
        → App Model Msg₁
        → App Model Msg₂
 mapMsg from to app = mkCmdApp
@@ -160,7 +160,7 @@ mapMsg from to app = mkCmdApp
   (λ m → mapE to (subs app m))
   (λ msg m → mapCmd to (command app (from msg) m))
 
--- Изменить модель (линза)
+-- Change model (lens)
 mapModel : ∀ {Model₁ Model₂ Msg : Set}
          → (Model₂ → Model₁)        -- get
          → (Model₁ → Model₂ → Model₂)  -- set
@@ -175,10 +175,10 @@ mapModel get set initial app = mkCmdApp
   (λ msg m₂ → command app msg (get m₂))
 
 ------------------------------------------------------------------------
--- Добавление функциональности
+-- Adding functionality
 ------------------------------------------------------------------------
 
--- Заменить view (для кастомизации отображения)
+-- Replace view (for display customization)
 withView : ∀ {Model Msg : Set}
          → (Model → Html Msg)
          → App Model Msg
@@ -190,7 +190,7 @@ withView v app = mkCmdApp
   (subs app)
   (command app)
 
--- Заменить update
+-- Replace update
 withUpdate : ∀ {Model Msg : Set}
            → (Msg → Model → Model)
            → App Model Msg
@@ -202,7 +202,7 @@ withUpdate u app = mkCmdApp
   (subs app)
   (command app)
 
--- Заменить subs
+-- Replace subs
 withSubs : ∀ {Model Msg : Set}
          → (Model → Event Msg)
          → App Model Msg
@@ -214,7 +214,7 @@ withSubs s app = mkCmdApp
   s
   (command app)
 
--- Добавить внешние события к приложению (merge)
+-- Add external events to application (merge)
 withEvents : ∀ {Model Msg : Set}
            → (Model → Event Msg)
            → App Model Msg
@@ -226,7 +226,7 @@ withEvents extraEvents app = mkCmdApp
   (λ m → merge (subs app m) (extraEvents m))
   (command app)
 
--- Добавить команды к приложению (merge)
+-- Add commands to application (merge)
 withCommand : ∀ {Model Msg : Set}
             → (Msg → Model → Cmd Msg)
             → App Model Msg
@@ -238,7 +238,7 @@ withCommand cmd app = mkCmdApp
   (subs app)
   (λ msg m → command app msg m <> cmd msg m)
 
--- Добавить middleware (перехват сообщений)
+-- Add middleware (message interception)
 withMiddleware : ∀ {Model Msg : Set}
                → (Msg → Model → Maybe Msg)
                → App Model Msg
@@ -251,7 +251,7 @@ withMiddleware middleware app = mkCmdApp
   (λ msg m → maybe (λ msg' → command app msg' m) ε (middleware msg m))
   where open import Data.Maybe using (maybe)
 
--- Добавить логирование (для отладки)
+-- Add logging (for debugging)
 withLogging : ∀ {Model Msg : Set}
             → (Msg → Model → Model → Model)  -- before → after → logged
             → App Model Msg
@@ -269,7 +269,7 @@ withLogging logger app = mkCmdApp
 -- Batch updates
 ------------------------------------------------------------------------
 
--- Применить список сообщений
+-- Apply a list of messages
 batchUpdate : ∀ {Model Msg : Set}
             → App Model Msg
             → List Msg
@@ -279,33 +279,33 @@ batchUpdate app [] m = m
 batchUpdate app (msg ∷ msgs) m = batchUpdate app msgs (update app msg m)
 
 ------------------------------------------------------------------------
--- Связь с полиномами (см. Agdelte.Theory.PolyApp для деталей)
+-- Connection to polynomials (see Agdelte.Theory.PolyApp for details)
 ------------------------------------------------------------------------
 
--- App Model Msg — это коалгебра полинома AppPoly Msg = Mono (Html Msg) Msg
+-- App Model Msg is a coalgebra of polynomial AppPoly Msg = Mono (Html Msg) Msg
 --
--- Ключевое соответствие:
---   App.init   → начальное состояние коалгебры
+-- Key correspondence:
+--   App.init   → initial state of coalgebra
 --   App.view   → Coalg.observe : State → Pos
 --   App.update → Coalg.update  : State → Dir → State
 --
--- Операции на App соответствуют wiring diagrams на коалгебрах:
+-- Operations on App correspond to wiring diagrams on coalgebras:
 --   _∥_  ↔ Poly.parallel : Coalg P → Coalg Q → Coalg (P ⊗ Q)
 --   _⊕ᵃ_ ↔ Poly.choice   : Coalg P → Coalg Q → Coalg (P ⊕ Q)
 --   mapMsg ↔ Poly.transformCoalg : Lens P Q → Coalg P → Coalg Q
 --
--- Это делает App экземпляром Moore machine в терминах polynomial functors:
+-- This makes App an instance of Moore machine in polynomial functors terms:
 --   Moore machine = ν X. Output × (Input → X) = Coalg (Mono Output Input)
 
 ------------------------------------------------------------------------
--- Утилиты
+-- Utilities
 ------------------------------------------------------------------------
 
--- Получить текущий view
+-- Get current view
 currentView : ∀ {Model Msg : Set} → App Model Msg → Html Msg
 currentView app = view app (init app)
 
--- Симуляция одного шага
+-- Simulate one step
 step : ∀ {Model Msg : Set} → Msg → App Model Msg → App Model Msg
 step msg app = mkCmdApp
   (update app msg (init app))
@@ -314,19 +314,19 @@ step msg app = mkCmdApp
   (subs app)
   (command app)
 
--- Симуляция нескольких шагов
+-- Simulate multiple steps
 steps : ∀ {Model Msg : Set} → List Msg → App Model Msg → App Model Msg
 steps [] app = app
 steps (msg ∷ msgs) app = steps msgs (step msg app)
 
 ------------------------------------------------------------------------
--- Wiring diagram aliases (для совместимости с Poly терминологией)
+-- Wiring diagram aliases (for compatibility with Poly terminology)
 ------------------------------------------------------------------------
 
--- Параллельное соединение (tensor product)
+-- Parallel connection (tensor product)
 tensor : ∀ {M₁ M₂ A₁ A₂ : Set} → App M₁ A₁ → App M₂ A₂ → App (M₁ × M₂) (A₁ ⊎ A₂)
 tensor = _∥_
 
--- Выбор (coproduct)
+-- Choice (coproduct)
 coproduct : ∀ {M₁ M₂ A₁ A₂ : Set} → App M₁ A₁ → App M₂ A₂ → App (M₁ ⊎ M₂) (A₁ ⊎ A₂)
 coproduct = _⊕ᵃ_
