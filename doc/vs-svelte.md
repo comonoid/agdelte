@@ -276,7 +276,7 @@ template = ul []
 | | Svelte | Agdelte |
 |--|--------|---------|
 | **Syntax** | ✅ `{#each}` with destructuring | ✅ `map` — standard function |
-| **Keyed lists** | ✅ `(todo.id)` built-in | ✅ `foreachKeyed` (Phase 3) |
+| **Keyed lists** | ✅ `(todo.id)` built-in | ✅ `foreachKeyed` |
 | **Performance** | ✅ Optimized diff | ✅ Keyed reconciliation — O(1) per change |
 | **Readability** | ✅ Template similar to HTML | ✅ Functional style |
 

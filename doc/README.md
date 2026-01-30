@@ -8,23 +8,17 @@
 | [api.md](api.md) | API reference (Node, Event, Cmd, Task, Optic, Agent, FFI) |
 | [runtime.md](runtime.md) | JavaScript runtime implementation |
 | [examples.md](examples.md) | Guide to all examples |
-| [roadmap.md](roadmap.md) | **Roadmap: all phases with detailed descriptions** |
+| [todo.md](todo.md) | Planned work |
 
 ## Additional Documents
 
 | Document | Description |
 |----------|-------------|
-| [polynomials.md](polynomials.md) | Polynomial functors: theory and phase planning |
+| [polynomials.md](polynomials.md) | Polynomial functors: theory and role in the project |
 | [combinators.md](combinators.md) | All combinators with types and examples |
 | [time-model.md](time-model.md) | Time model: ticks, dt |
 | [vs-svelte.md](vs-svelte.md) | Detailed comparison with Svelte 5 |
 | [vs-vue3.md](vs-vue3.md) | Feature comparison with Vue 3 |
-
-## Research (unimplemented)
-
-| Document | Description |
-|----------|-------------|
-| [research.md](research.md) | Wiring diagrams, linear types, session types (research-level) |
 
 ## Quick Links
 

@@ -44,7 +44,7 @@ data Node (Model Msg : Set) : Set₁ where
   whenT        : (Model → Bool) → Transition → Node Model Msg → Node Model Msg
 ```
 
-### Transition (Phase 3)
+### Transition
 
 ```agda
 record Transition : Set where
@@ -111,7 +111,7 @@ data Attr (Model Msg : Set) : Set₁ where
 | `styles` | `String → String → Attr Model Msg` | Static style |
 | `vmodel` | `(Model → String) → (String → Msg) → List (Attr Model Msg)` | Two-way binding (valueBind + onInput) |
 
-### Component Composition (Phase 4)
+### Component Composition
 
 ```agda
 zoomNode : (M → M') → (Msg' → Msg) → Node M' Msg' → Node M Msg
@@ -127,7 +127,7 @@ zoomNode proj₂ RightMsg counterTemplate
 
 ---
 
-## Lens (Phase 4)
+## Lens
 
 From `Agdelte.Reactive.Lens`:
 
@@ -219,7 +219,7 @@ data WsMsg : Set where
 | `_<\|>_` | `Event A → Event A → Event A` | Infix merge |
 | `_<$>_` | `(A → B) → Event A → Event B` | Infix mapE |
 
-### Stateful Combinators (Phase 5)
+### Stateful Combinators
 
 | Function | Type | Description |
 |----------|------|-------------|
@@ -227,7 +227,7 @@ data WsMsg : Set where
 | `mapFilterE` | `(B → Maybe A) → Event B → Event A` | Map + filter in one step |
 | `switchE` | `Event A → Event (Event A) → Event A` | Dynamic event source switching |
 
-### Derived Combinators (Phase 5)
+### Derived Combinators
 
 | Function | Type | Description |
 |----------|------|-------------|
@@ -246,7 +246,7 @@ data WsMsg : Set where
 | `_>>=E_` | `Event A → (A → Event B) → Event B` | Event bind via switchE |
 | `sequenceE` | `List (Event A) → Event (List A)` | Sequential execution, collect results |
 
-### Web Workers (Phase 7)
+### Web Workers
 
 | Function | Type | Description |
 |----------|------|-------------|
@@ -284,7 +284,7 @@ data WsMsg : Set where
 
 ---
 
-## Optics (Phase 6)
+## Optics
 
 From `Agdelte.Reactive.Optic`:
 
@@ -352,7 +352,7 @@ zoomNodeL : Lens M M' → Prism Msg Msg' → Node M' Msg' → Node M Msg
 zoomAttrL : Lens M M' → Prism Msg Msg' → Attr M' Msg' → Attr M Msg
 ```
 
-### ProcessOptic (Phase 7)
+### ProcessOptic
 
 From `Agdelte.Reactive.ProcessOptic` — server-to-server optic over Unix sockets:
 
@@ -374,7 +374,7 @@ record ProcessOptic (A : Set) : Set where
 
 Protocol: `"peek"` → state, `"step:INPUT"` → new state (over Unix domain socket).
 
-### RemoteOptic (Phase 7)
+### RemoteOptic
 
 From `Agdelte.Reactive.RemoteOptic` — browser-to-server optic over HTTP:
 
@@ -394,7 +394,7 @@ record RemoteOptic (A : Set) : Set where
 
 ---
 
-## Agent (Phase 7)
+## Agent
 
 From `Agdelte.Concurrent.Agent` — polynomial coalgebra for concurrent processes:
 
@@ -415,7 +415,7 @@ record Agent (S I O : Set) : Set where
 
 ---
 
-## Wiring — Agent Composition (Phase 7)
+## Wiring — Agent Composition
 
 From `Agdelte.Concurrent.Wiring` — polynomial lens composition of agents.
 
@@ -474,7 +474,7 @@ _>>>ₛ_ _***ₛ_ _&ₛ_ _⊕ₛ_ -- compositions on packed agents
 
 ---
 
-## Session Types (Phase 7)
+## Session Types
 
 From `Agdelte.Concurrent.Session` — typed communication protocols as sugar over polynomial lenses.
 
@@ -537,7 +537,7 @@ mkOffer : SessionAgent s₁ S₁ → SessionAgent s₂ S₂ → SessionAgent (of
 
 ---
 
-## ProcessOpticLinear — Indexed IPC Handle (Phase 7)
+## ProcessOpticLinear — Indexed IPC Handle
 
 From `Agdelte.Concurrent.ProcessOpticLinear` — type-safe IPC with connection state tracking.
 
@@ -565,7 +565,7 @@ Type-level guarantees:
 
 ---
 
-## FFI (Phase 7)
+## FFI
 
 ### Shared Types (`FFI.Shared`)
 
@@ -604,7 +604,7 @@ Haskell-only postulates via MAlonzo:
 
 ---
 
-## Testing (Phase 5)
+## Testing
 
 From `Agdelte.Test.Interpret`:
 
@@ -740,4 +740,125 @@ fetchData = do
 
 -- In command:
 cmd Fetch _ = attempt fetchData GotResult
+```
+
+---
+
+## Big Lens
+
+Network-wide optic — same peek/over interface across local widgets, server agents, and browser clients.
+
+**File:** `src/Agdelte/Reactive/BigLens.agda`
+
+### IOOptic
+
+Effectful optic over a transport. State lives remotely; we send/receive serialized strings.
+
+```agda
+record IOOptic : Set where
+  constructor mkIOOptic
+  field
+    ioPeek : IO (Maybe String)    -- read remote state
+    ioOver : String → IO String   -- send input, get result
+```
+
+### Constructors
+
+```agda
+-- Unix socket (ProcessOptic protocol)
+processAgentOptic : String → IOOptic
+
+-- WebSocket to browser client
+clientOptic : String → IOOptic       -- clientId → IOOptic
+
+-- Local IORef (testing)
+refOptic : IORef String → IOOptic
+
+-- Constant (testing)
+constIOOptic : String → IOOptic
+```
+
+### Composition
+
+```agda
+_∘IO_ : IOOptic → IOOptic → IOOptic   -- sequential composition
+```
+
+### Server: Client Registry (AgentServer.hs)
+
+Each WS client gets a unique ID on connect. Server can peek/over any client:
+
+```
+Protocol:
+  Server → Client:  "peek:clientId"   → client responds "peek-response:{json}"
+  Server → Client:  "over:msgPayload" → client dispatches message
+  Client → Server:  "peek-response:value" → peek result
+
+HTTP endpoints:
+  GET  /client/{clientId}/peek   → peek client model
+  POST /client/{clientId}/over   → dispatch msg to client
+```
+
+### Browser: Big Lens Runtime (reactive.js)
+
+```js
+// Auto-connect via options:
+const app = await runReactiveApp(module, container, {
+  bigLensWs: 'ws://localhost:3000/ws'
+});
+
+// Or manually:
+app.connectBigLens('ws://localhost:3000/ws');
+app.getClientId();  // → "client-0" (assigned by server)
+```
+
+Handles incoming WS messages:
+- `peek:*` → responds with `JSON.stringify(model)`
+- `over:*` → dispatches parsed message into update loop
+
+### Wiring Diagrams
+
+**File:** `src/Agdelte/Reactive/Diagram.agda`
+
+Declarative network topology — replaces ad-hoc `wireAgent` + `runAgentServer2`.
+
+```agda
+-- Connection rules
+data Connection : Set where
+  broadcast   : String → Connection            -- output → all WS clients
+  agentPipe   : String → String → Connection   -- source → target agent
+  clientRoute : String → Connection            -- WS input → agent
+
+-- Named agent slot
+record Slot : Set₁ where
+  field
+    name  : String
+    path  : String
+    {S}   : Set
+    agent : Agent S String String
+
+-- Complete topology
+record Diagram : Set₁ where
+  field
+    slots       : List Slot
+    connections : List Connection
+    port        : Nat
+```
+
+Smart constructors:
+
+```agda
+singleAgent : ... → Diagram   -- 1 agent, broadcast + clientRoute
+dualAgent   : ... → Diagram   -- 2 agents, both broadcast
+pipeline    : ... → Diagram   -- agent1 output → agent2 input
+_⊕D_        : Diagram → Diagram → Nat → Diagram  -- merge
+wire        : Connection → Diagram → Diagram       -- add connection
+```
+
+IO bridge:
+
+```agda
+wireSlot    : Slot → IO AgentDef       -- pure Agent → mutable server
+runDiagram1 : Diagram → IO ⊤           -- run 1-agent diagram
+runDiagram2 : Diagram → IO ⊤           -- run 2-agent diagram
 ```

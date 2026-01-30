@@ -269,33 +269,16 @@ But this is **usage ergonomics**, not **framework implementation complexity**.
 
 ---
 
-## Correct Implementation Sequence
+## What Is Already Implemented
 
-If implemented in the correct order, each next feature builds on previous ones:
+All categories A and B features are implemented:
 
-### Phase 1-2: Completed ✅
-
-Core, IO primitives, ReactiveApp, 9 examples, runtime without VDOM.
-
-### Phase 3: Incremental Updates ✅
-
-Binding scopes, foreachKeyed, whenT with CSS animations.
-
-### Phase 4: Widget Lenses ✅
-
-Lens get/set, zoomNode (model + msg), fstLens/sndLens.
-
-### Phase 5: Combinators & Testing ✅
-
-foldE, mapFilterE, switchE, accumE, mapAccum, pure testing (SimEvent, 6 proofs).
-
-### Phase 6: Optics + Widget Networks ✅
-
-Prism, Traversal, Affine, unified Optic, zoomNodeL, routeMsg, 16 proofs.
-
-### Phase 7+: Planned
-
-Concurrency, DevTools, formal properties. See [roadmap.md](roadmap.md).
+- **Core:** ReactiveApp, reactive bindings, events, commands, tasks
+- **Incremental updates:** Binding scopes, foreachKeyed, whenT with CSS animations
+- **Component composition:** Lens, zoomNode, fstLens/sndLens
+- **Combinators & testing:** foldE, mapFilterE, switchE, accumE, mapAccum, pure testing (SimEvent, proofs)
+- **Optics:** Prism, Traversal, Affine, unified Optic, zoomNodeL, routeMsg
+- **Concurrency:** Agent, Wiring, Session types, ProcessOptic, BigLens, Diagrams
 
 ---
 
@@ -311,6 +294,133 @@ Concurrency, DevTools, formal properties. See [roadmap.md](roadmap.md).
 
 - **Vue:** Need to invent reactivity (Proxy), Virtual DOM, template compiler
 - **Agdelte:** Signal/Event — known model from FRP, simpler Runtime, theory (Poly) guarantees correctness
+
+---
+
+## Performance Analysis
+
+### Update Cycle: O(bindings) vs O(tree)
+
+The fundamental performance difference lies in how DOM updates are computed.
+
+**Vue 3** uses Virtual DOM with optimized diffing:
+
+```
+Model change
+  → re-run render function → new VNode tree
+  → diff(oldTree, newTree) → patches
+  → apply patches to real DOM
+```
+
+**Agdelte** uses direct reactive bindings (Svelte-style):
+
+```
+Model change
+  → for each binding: oldVal = extract(oldModel), newVal = extract(newModel)
+  → if oldVal !== newVal: update DOM node directly
+```
+
+| Metric | Vue 3 | Agdelte |
+|--------|-------|---------|
+| **Update complexity** | O(tree size) worst case, O(changed subtrees) with block tree optimization | O(number of bindings) |
+| **Comparison target** | VNode trees (JS objects) | Extracted values (strings, bools) |
+| **Allocation per update** | New VNode tree every render | Zero allocations (in-place comparison) |
+| **Static content** | Hoisted at compile time (skipped in diff) | Never touched (only bindings are tracked) |
+
+### Concrete Scenarios
+
+#### Small app (counter: 1 button, 1 text)
+
+| | Vue 3 | Agdelte |
+|--|-------|---------|
+| Update work | Re-run render → 3 VNodes → diff → 1 patch | 1 binding check → 1 textContent write |
+| Overhead | ~minimal (tree is tiny) | ~minimal |
+| **Verdict** | **Equal** | **Equal** |
+
+#### Medium app (todo list: 100 items, edit 1)
+
+| | Vue 3 | Agdelte |
+|--|-------|---------|
+| Update work | Re-run render → ~300 VNodes → diff with keys → 1 patch | ~100 binding checks → 1-3 DOM updates |
+| Key optimization | Block tree: skip static parts | Only registered bindings are checked |
+| **Verdict** | Fast (block tree) | **Faster** (no tree walk) |
+
+#### Large app (dashboard: 50 components, 1000 bindings, update 1 widget)
+
+| | Vue 3 | Agdelte |
+|--|-------|---------|
+| Update work | Re-run affected component render → diff subtree → patches | ~1000 binding checks → few DOM updates |
+| Key optimization | Component boundaries limit re-render scope | Flat binding list, no tree structure |
+| Component isolation | Only changed component re-renders | All bindings checked (no component scoping) |
+| **Verdict** | **Faster** (component scoping) | Slower (flat scan of all bindings) |
+
+### Where Agdelte Wins
+
+1. **Fine-grained updates.** Each `bindF` tracks exactly one DOM dependency. No intermediate VNode creation, no diff algorithm. A model change that affects 3 DOM nodes touches exactly 3 nodes.
+
+2. **Zero GC pressure per update.** Vue 3 allocates a new VNode tree on every re-render (even with object pooling, this creates GC work). Agdelte's update loop is allocation-free: compare old/new extracted values, write to DOM if changed.
+
+3. **Predictable latency.** Update time is strictly proportional to the number of bindings. No pathological cases from deep tree diffs or key mismatch.
+
+4. **`when`/`foreach` efficiency.** Conditional blocks (`when`) use a placeholder comment node; toggling is one DOM insert/remove. Keyed lists (`foreachKeyed`) do O(n) reconciliation with data-key attributes — comparable to Vue's keyed v-for.
+
+### Where Vue 3 Wins
+
+1. **Component-scoped reactivity.** Vue's Proxy-based dependency tracking knows *which component* depends on *which data*. Only affected components re-render. Agdelte checks all bindings on every update — no dependency graph to skip irrelevant checks.
+
+2. **Compiler optimizations.** Vue's template compiler marks static hoists, patch flags, and block trees. These reduce diffing work to near-zero for static content. Agdelte's runtime doesn't have this compile-time analysis.
+
+3. **Large apps with many independent components.** When 50 components exist but only 1 changes, Vue re-runs 1 render function. Agdelte scans all 1000 bindings (though each check is a cheap `!==` comparison).
+
+4. **Mature optimizations.** Vue 3 has years of micro-optimization: VNode pooling, Static hoisting, `v-memo`, `v-once`, `KeepAlive` with cached trees. Agdelte's runtime is young.
+
+### Memory
+
+| | Vue 3 | Agdelte |
+|--|-------|---------|
+| Model storage | Proxy-wrapped reactive objects | Plain JS objects (Scott-encoded) |
+| Per-binding overhead | Watcher + dependency sets | `{node, binding}` pair |
+| Tree overhead | VNode tree (recreated per render) | None (bindings are flat list) |
+| Proxy cost | ~2x memory per reactive object | None |
+
+Agdelte uses less memory per component: no Proxy wrappers, no VNode trees, no Watcher objects. The trade-off is that Scott-encoded Agda data structures can be more verbose than hand-written JS objects.
+
+### Startup Time
+
+| | Vue 3 | Agdelte |
+|--|-------|---------|
+| Parse + compile | Template compilation (ahead-of-time or runtime) | Agda → JS compilation (ahead-of-time only) |
+| First render | Create VNode tree → create DOM | Walk Node tree → create DOM + collect bindings |
+| Bundle size | ~30-50 KB gzipped (core + compiler) | ~5-10 KB (reactive.js runtime) |
+
+Agdelte has a smaller runtime footprint. However, compiled Agda modules can be large due to Scott encoding verbosity (each data constructor becomes a function with N branches).
+
+### Theoretical Limits
+
+Both approaches converge to the same theoretical minimum: **O(changed DOM nodes)**. The question is overhead to *identify* which nodes changed:
+
+| | Vue 3 | Agdelte | Svelte |
+|--|-------|---------|--------|
+| Identify changes via | VNode diff (runtime) | Binding scan (runtime) | Compiled `if (dirty)` checks (compile-time) |
+| Overhead | O(tree) → O(blocks) with optimization | O(bindings) | O(dirty flags) — minimal |
+
+Agdelte sits between Vue 3 and Svelte: no tree diffing (like Svelte), but runtime binding scan instead of compile-time dirty flags.
+
+### Summary
+
+| Aspect | Winner | Why |
+|--------|--------|-----|
+| **Small updates** | Agdelte | Direct binding, zero allocation |
+| **Large lists** | Agdelte | O(bindings), no VNode recreation |
+| **Many independent components** | Vue 3 | Component-scoped reactivity |
+| **Memory usage** | Agdelte | No Proxy, no VNode trees |
+| **Bundle size** | Agdelte | ~5 KB vs ~40 KB |
+| **Compiled output size** | Vue 3 | Scott encoding is verbose |
+| **Worst case latency** | Agdelte | Predictable O(bindings) vs tree diff |
+| **Best case latency** | Vue 3 | Skip unchanged components entirely |
+| **Maturity** | Vue 3 | Years of micro-optimization |
+
+**Bottom line:** Agdelte matches or beats Vue 3 on small-to-medium apps due to the no-VDOM architecture. Vue 3 has an advantage on large apps with many independent components due to Proxy-based dependency tracking. Both are fast enough for real-world use.
 
 ---
 
@@ -366,11 +476,4 @@ All Vue 3 features are implementable in Agdelte with comparable or less complexi
 - Some require **different patterns** (local state → nested models)
 - All are implementable with **comparable complexity**
 
-**Agdelte advantage:** theoretical foundation (Polynomial Functors) in isolated `Theory/` module guarantees that architecture won't lead to a dead end:
-
-- **Phase 1-2 (done):** simple definitions for the user, ReactiveApp
-- **Phase 3-4 (done):** foreachKeyed, whenT, Lens, zoomNode
-- **Phase 5-6 (done):** foldE/mapFilterE/switchE, Prism/Traversal/Optic, zoomNodeL/routeMsg
-- **Phase 7+:** Wiring diagrams, concurrency for complex systems
-
-Combinators compose correctly by construction.
+**Agdelte advantage:** theoretical foundation (Polynomial Functors) in isolated `Theory/` module guarantees that architecture won't lead to a dead end. Combinators compose correctly by construction.

@@ -18,7 +18,7 @@ The runtime interprets Scott-encoded Agda data structures and executes them in t
 │  ├─ dispatch(msg) — event loop                               │
 │  └─ updateBindings(oldModel, newModel) — direct DOM updates  │
 ├─────────────────────────────────────────────────────────────┤
-│  Binding Scopes (Phase 3)                                    │
+│  Binding Scopes                                              │
 │  Tree of scopes, each with own bindings                      │
 │  On model change: check binding.extract(old) vs extract(new) │
 │  If changed → update domNode directly (NO diffing!)          │
@@ -31,7 +31,7 @@ The runtime interprets Scott-encoded Agda data structures and executes them in t
 ```javascript
 function runReactiveApp(app, container) {
   let model = app.init;
-  const rootScope = createScope();  // Binding scopes (Phase 3)
+  const rootScope = createScope();  // Binding scopes
 
   // 1. Initial render: create DOM, collect bindings in scopes
   const dom = renderNode(app.template, rootScope);
@@ -123,13 +123,13 @@ function renderNode(node) {
       });
     },
 
-    // Phase 3: keyed list reconciliation
+    // Keyed list reconciliation
     foreachKeyed: (_typeA, getList, keyFn, render) => {
       // Same key → reuse DOM node; new key → create; removed → destroy
       // Uses data-key attribute for O(n) reconciliation
     },
 
-    // Phase 3: conditional with CSS transitions
+    // Conditional with CSS transitions
     whenT: (cond, transition, innerNode) => {
       // On enter: add enterClass, render node
       // On leave: add leaveClass, remove after duration ms

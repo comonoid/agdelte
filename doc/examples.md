@@ -18,6 +18,7 @@ All examples use **Reactive Bindings** (like Svelte) — no Virtual DOM.
 | [Composition](#composition) | zoomNode, shared total | Advanced |
 | [Combinators](#combinators) | foldE, mapFilterE pipeline | Advanced |
 | [Dynamic Optics](#dynamic-optics) | ixList, Traversal, runtime _∘O_, routeMsg | Advanced |
+| [Session Form](#session-form) | Session protocol, phased state, typed transitions | Advanced |
 
 ---
 
@@ -78,7 +79,7 @@ app = mkReactiveApp initModel updateModel timerTemplate
 
 ## Todo
 
-**Demonstrates:** `foreachKeyed` for keyed list reconciliation (Phase 3), `when` for conditional rendering, input handling.
+**Demonstrates:** `foreachKeyed` for keyed list reconciliation, `when` for conditional rendering, input handling.
 
 ```agda
 record Todo : Set where
@@ -215,7 +216,7 @@ when isAbout (div [] [ text "About page" ])
 
 ## Transitions
 
-**Demonstrates:** `whenT` with CSS enter/leave transitions (Phase 3). Auto-dismiss via `timeout`.
+**Demonstrates:** `whenT` with CSS enter/leave transitions. Auto-dismiss via `timeout`.
 
 ```agda
 panelTrans : Transition
@@ -242,7 +243,7 @@ subs m = if notifVisible m then timeout 3000 AutoDismiss else never
 
 ## Composition
 
-**Demonstrates:** Two counters composed with shared total via `zoomNode` (Phase 4).
+**Demonstrates:** Two counters composed with shared total via `zoomNode`.
 
 ```agda
 -- Shared model
@@ -267,7 +268,7 @@ bindF (λ m → show (counter1 m + counter2 m))
 
 ## Combinators
 
-**Demonstrates:** `foldE` + `mapFilterE` stateful event pipeline (Phase 5).
+**Demonstrates:** `foldE` + `mapFilterE` stateful event pipeline.
 
 ```agda
 -- Pipeline: interval 300ms → foldE (count internally) → mapFilterE (classify)
@@ -289,7 +290,7 @@ isBatch n = (n % 5) ≡ᵇ 0
 
 ## Dynamic Optics
 
-**Demonstrates:** Runtime optic composition with `ixList`, `Traversal`, `_∘O_`, `peek` (Phase 6 advanced).
+**Demonstrates:** Runtime optic composition with `ixList`, `Traversal`, `_∘O_`, `peek`.
 
 ```agda
 -- Dynamic optic: target depends on runtime state (selected index)
@@ -309,6 +310,49 @@ selectedText m with peek (nthItemOptic (selected m)) m
 ```
 
 **Key point:** Unlike static `Lens` (always succeeds), `ixList` returns `Affine` (may fail). Optics compose at runtime via `_∘O_` — the navigation target changes based on user interaction. `Traversal.overAll` enables batch operations over the entire collection.
+
+---
+
+## Session Form
+
+**Demonstrates:** Multi-step form with typed state transitions using Session protocol concepts from `SessionExec`.
+
+```agda
+-- Session protocol (conceptual):
+--   recv Name → recv Email → recv Age → send Summary → done
+
+data FormPhase : Set where
+  enterName  : FormPhase
+  enterEmail : FormPhase
+  enterAge   : FormPhase
+  confirm    : FormPhase
+  submitted  : FormPhase
+
+record Model : Set where
+  field
+    phase    : FormPhase
+    name     : String
+    email    : String
+    age      : String
+    curInput : String
+    stepNum  : ℕ
+
+-- Submit: typed transition per phase
+submitStep : Model → Model
+submitStep m with phase m
+... | enterName  = mkModel enterEmail (curInput m) (email m) (age m) "" 2
+... | enterEmail = mkModel enterAge (name m) (curInput m) (age m) "" 3
+... | enterAge   = mkModel confirm (name m) (email m) (curInput m) "" 4
+... | confirm    = mkModel submitted (name m) (email m) (age m) "" 5
+... | submitted  = m
+
+-- Conditional rendering per phase
+when isInputPhase (div [] [ input [...], button [...] ])
+when isConfirm    (div [] [ summary, button "Submit" ])
+when isSubmitted  (div [] [ success message ])
+```
+
+**Key point:** The `FormPhase` type encodes session protocol progress. Each phase has typed transitions — `enterName` only saves to `name`, `enterEmail` only saves to `email`. The `when` combinator renders different UI per phase. This is the Agent/SessionExec pattern (phased state machine) applied to a ReactiveApp.
 
 ---
 

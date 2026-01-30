@@ -150,15 +150,15 @@ function destroyScope(scope) {
 export async function runReactiveApp(moduleExports, container, options = {}) {
   await loadNodeModule();
 
-  // Extract app, subs, cmd from module
+  // Extract app, subs, cmd from module (mutable for hot reload)
   const appRecord = moduleExports.app;
-  const subsFunc = moduleExports.subs || null;
-  const cmdFunc = moduleExports.cmd || null;
+  let subsFunc = moduleExports.subs || null;
+  let cmdFunc = moduleExports.cmd || null;
 
-  // Extract ReactiveApp fields
+  // Extract ReactiveApp fields (mutable for hot reload)
   const init = NodeModule.ReactiveApp.init(appRecord);
-  const update = NodeModule.ReactiveApp.update(appRecord);
-  const template = NodeModule.ReactiveApp.template(appRecord);
+  let update = NodeModule.ReactiveApp.update(appRecord);
+  let template = NodeModule.ReactiveApp.template(appRecord);
 
   // State
   let model = init;
@@ -761,13 +761,170 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   const counts = countBindings(rootScope);
   console.log(`Reactive app mounted: ${counts.text} text bindings, ${counts.attr} attr bindings, ${counts.style} style bindings`);
 
+  // ─────────────────────────────────────────────────────────────────
+  // Phase 8B: Big Lens — handle incoming peek/over WS messages
+  // ─────────────────────────────────────────────────────────────────
+
+  let bigLensWs = null;
+  let bigLensClientId = null;
+
+  /**
+   * Connect to Big Lens server for peek/over protocol.
+   * Server assigns a client ID on connect.
+   * Incoming messages:
+   *   "peek:clientId"  → respond with JSON.stringify(model)
+   *   "over:msgPayload" → dispatch msgPayload as a message
+   *   "connected:clientId" → store our client ID
+   *   "agentName:value" → agent broadcast (existing behavior)
+   */
+  function connectBigLens(wsUrl) {
+    const ws = new WebSocket(wsUrl);
+    bigLensWs = ws;
+
+    ws.onmessage = (event) => {
+      const data = event.data;
+
+      if (data.startsWith('connected:')) {
+        bigLensClientId = data.slice('connected:'.length);
+        console.log(`Big Lens: connected as ${bigLensClientId}`);
+        return;
+      }
+
+      if (data.startsWith('peek:')) {
+        // Server wants to read our model — respond with serialized model
+        const serialized = JSON.stringify(model);
+        ws.send('peek-response:' + serialized);
+        return;
+      }
+
+      if (data.startsWith('over:')) {
+        // Server wants to dispatch a message to our app
+        const msgPayload = data.slice('over:'.length);
+        // Try to parse as JSON, fall back to raw string
+        try {
+          const msg = JSON.parse(msgPayload);
+          dispatch(msg);
+        } catch {
+          // If not JSON, dispatch as raw string (for simple string messages)
+          dispatch(msgPayload);
+        }
+        return;
+      }
+
+      // Otherwise: agent broadcast (existing behavior), ignore
+    };
+
+    ws.onclose = () => {
+      bigLensClientId = null;
+      bigLensWs = null;
+    };
+
+    return ws;
+  }
+
+  // Auto-connect if options specify a Big Lens WS URL
+  if (options.bigLensWs) {
+    connectBigLens(options.bigLensWs);
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // Phase 8 (polynomials.md): Time-Travel Debugging
+  // ─────────────────────────────────────────────────────────────────
+
+  let historyPast = [];      // previous models (newest first)
+  let historyFuture = [];    // undone models (oldest first)
+  const maxHistory = options.maxHistory || 100;
+
+  function timeTravelDispatch(msg) {
+    // Record current state before update
+    historyPast.unshift(structuredClone ? structuredClone(model) : JSON.parse(JSON.stringify(model)));
+    if (historyPast.length > maxHistory) historyPast.length = maxHistory;
+    historyFuture = []; // new action clears redo
+    dispatch(msg);
+  }
+
+  function timeTravel_undo() {
+    if (historyPast.length === 0) return;
+    const oldModel = model;
+    historyFuture.unshift(structuredClone ? structuredClone(model) : JSON.parse(JSON.stringify(model)));
+    model = historyPast.shift();
+    updateScope(rootScope, oldModel, model);
+    updateSubscriptions();
+  }
+
+  function timeTravel_redo() {
+    if (historyFuture.length === 0) return;
+    const oldModel = model;
+    historyPast.unshift(structuredClone ? structuredClone(model) : JSON.parse(JSON.stringify(model)));
+    model = historyFuture.shift();
+    updateScope(rootScope, oldModel, model);
+    updateSubscriptions();
+  }
+
+  function timeTravel_getHistory() {
+    return {
+      past: historyPast.length,
+      future: historyFuture.length,
+      canUndo: historyPast.length > 0,
+      canRedo: historyFuture.length > 0
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // Phase 8 (polynomials.md): Hot Reload
+  // ─────────────────────────────────────────────────────────────────
+
+  function hotReload(newModuleExports) {
+    const newAppRecord = newModuleExports.app;
+
+    // Replace mutable function references
+    update = NodeModule.ReactiveApp.update(newAppRecord);
+    const newTemplate = NodeModule.ReactiveApp.template(newAppRecord);
+    subsFunc = newModuleExports.subs || null;
+    cmdFunc = newModuleExports.cmd || null;
+
+    // Tear down old DOM
+    if (currentSubscription) {
+      unsubscribe(currentSubscription);
+      currentSubscription = null;
+      currentEventFingerprint = null;
+    }
+    destroyScope(rootScope);
+    container.innerHTML = '';
+
+    // Reset root scope
+    Object.assign(rootScope, createScope(null));
+
+    // Re-render with new template, preserving model
+    template = newTemplate;
+    const dom = renderNode(template);
+    if (dom) container.appendChild(dom);
+
+    // Re-subscribe
+    updateSubscriptions();
+
+    console.log('Hot reload complete — model preserved');
+  }
+
   return {
     dispatch,
     getModel: () => model,
     getContainer: () => container,
+    getClientId: () => bigLensClientId,
+    connectBigLens,
+    // Time-travel
+    undo: timeTravel_undo,
+    redo: timeTravel_redo,
+    getHistory: timeTravel_getHistory,
+    dispatchWithHistory: timeTravelDispatch,
+    // Hot reload
+    hotReload,
     destroy: () => {
       if (currentSubscription) {
         unsubscribe(currentSubscription);
+      }
+      if (bigLensWs) {
+        bigLensWs.close();
       }
       destroyScope(rootScope);
       container.innerHTML = '';

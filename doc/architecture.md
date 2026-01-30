@@ -77,7 +77,7 @@ data Event (A : Set) : Set where
   merge      : Event A → Event A → Event A
   debounce   : ℕ → Event A → Event A
   throttle   : ℕ → Event A → Event A
-  -- Stateful (Phase 5) — runtime maintains internal state
+  -- Stateful — runtime maintains internal state
   foldE      : ∀ {B} → A → (B → A → A) → Event B → Event A
   mapFilterE : ∀ {B} → (B → Maybe A) → Event B → Event A
   switchE    : Event A → Event (Event A) → Event A
@@ -142,7 +142,7 @@ command Fetch _ = attempt fetchChain GotResult
 
 ## Component Composition
 
-### zoomNode (model + messages) — Phase 4
+### zoomNode (model + messages)
 
 ```agda
 zoomNode : (M → M') → (Msg' → Msg) → Node M' Msg' → Node M Msg
@@ -156,7 +156,7 @@ zoomNode proj₁ LeftMsg counterTemplate
 zoomNode proj₂ RightMsg counterTemplate
 ```
 
-### zoomNodeL (typed optics) — Phase 6
+### zoomNodeL (typed optics)
 
 ```agda
 zoomNodeL : Lens M M' → Prism Msg Msg' → Node M' Msg' → Node M Msg
@@ -165,7 +165,7 @@ zoomAttrL : Lens M M' → Prism Msg Msg' → Attr M' Msg' → Attr M Msg
 
 Same as `zoomNode` but with typed `Lens` + `Prism` instead of raw functions.
 
-### Lens (Phase 4)
+### Lens
 
 ```agda
 record Lens (Outer Inner : Set) : Set where
@@ -189,8 +189,8 @@ data Node (Model Msg : Set) : Set₁ where
   empty        : Node Model Msg                                                         -- nothing
   when         : (Model → Bool) → Node Model Msg → Node Model Msg                      -- conditional
   foreach      : ∀ {A} → (Model → List A) → (A → ℕ → Node Model Msg) → Node Model Msg -- dynamic list
-  foreachKeyed : ∀ {A} → (Model → List A) → (A → String) → (A → ℕ → Node Model Msg) → Node Model Msg -- keyed reconciliation (Phase 3)
-  whenT        : (Model → Bool) → Transition → Node Model Msg → Node Model Msg         -- with CSS transitions (Phase 3)
+  foreachKeyed : ∀ {A} → (Model → List A) → (A → String) → (A → ℕ → Node Model Msg) → Node Model Msg -- keyed reconciliation
+  whenT        : (Model → Bool) → Transition → Node Model Msg → Node Model Msg         -- with CSS transitions
 
 data Attr (Model Msg : Set) : Set₁ where
   attr      : String → String → Attr Model Msg             -- static attribute
@@ -257,7 +257,11 @@ Correspondences:
 - `App ≅ Coalg (AppPoly) + init + events`
 - `_∥_` corresponds to `⊗` on Poly level
 - `Agent S I O ≅ Coalg (O × y^I)` — polynomial coalgebra
-- `AgentLens I₁ O₁ I₂ O₂` — morphism in Poly category
+- `DepAgent S O I ≅ Coalg (mkPoly O I)` — full dependent polynomial coalgebra
+- `AgentLens I₁ O₁ I₂ O₂ ≅ Lens (Mono O₁ I₁) (Mono O₂ I₂)` — morphism in Poly category
+- `DepAgentLens I₁ I₂ ≅ Lens (mkPoly O₁ I₁) (mkPoly O₂ I₂)` — dependent polynomial morphism
+- `dep⊕` corresponds to `choice` (Coalg (P ⊕ Q))
+- `dep&` corresponds to `parallel` (Coalg (P ⊗ Q))
 - `Session → (SessionI, SessionO)` — protocol compiles to Agent interface types
 
 This provides formal guarantees and enables future optimizations.

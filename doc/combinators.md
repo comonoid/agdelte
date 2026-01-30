@@ -154,7 +154,7 @@ events m = case m.status of λ where
 
 ---
 
-## Testing (Phase 5) ✅
+## Testing
 
 Implemented in `Agdelte.Test.Interpret`. Uses `SimEvent A = List (List A)` — pure list-based event streams.
 

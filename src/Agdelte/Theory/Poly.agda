@@ -170,8 +170,15 @@ idIncLens : {P : Poly} → IncLens P P
 idIncLens {P} = mkIncLens idLens (Dir P) (λ p d → d)
 
 -- Composition of incremental lenses
-_∘IL_ : {P Q R : Poly} → IncLens Q R → IncLens P Q → IncLens P R
-_∘IL_ {P} {Q} {R} iq ip = mkIncLens
+-- Requires a bridge: Dir Q q → ΔPos iq q, so output deltas of ip
+-- can feed into input deltas of iq. This holds trivially when
+-- ΔPos = Dir (the canonical case, as in idIncLens).
+_∘IL_ : {P Q R : Poly}
+       → (iq : IncLens Q R) → (ip : IncLens P Q)
+       → (∀ q → Dir Q q → ΔPos iq q)
+       → IncLens P R
+_∘IL_ {P} {Q} {R} iq ip bridge = mkIncLens
   (lens iq ∘L lens ip)
   (ΔPos ip)
-  (λ p δp → Lens.onDir (lens iq) (Lens.onPos (lens ip) p) (onDelta ip p δp))
+  (λ p δp → onDelta iq (Lens.onPos (lens ip) p)
+             (bridge (Lens.onPos (lens ip) p) (onDelta ip p δp)))
