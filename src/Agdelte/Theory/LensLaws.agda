@@ -22,11 +22,13 @@ open import Agdelte.Reactive.Lens
 ------------------------------------------------------------------------
 
 record LensLawful {Outer Inner : Set} (l : Lens Outer Inner) : Set where
-  open Lens l
+  private
+    g = Lens.get l
+    s = Lens.set l
   field
-    get-set : ∀ (v : Inner) (s : Outer) → get (set v s) ≡ v
-    set-get : ∀ (s : Outer) → set (get s) s ≡ s
-    set-set : ∀ (v₁ v₂ : Inner) (s : Outer) → set v₂ (set v₁ s) ≡ set v₂ s
+    get-set : ∀ (v : Inner) (o : Outer) → g (s v o) ≡ v
+    set-get : ∀ (o : Outer) → s (g o) o ≡ o
+    set-set : ∀ (v₁ v₂ : Inner) (o : Outer) → s v₂ (s v₁ o) ≡ s v₂ o
 
 ------------------------------------------------------------------------
 -- idLens is lawful

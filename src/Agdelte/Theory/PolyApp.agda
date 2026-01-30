@@ -10,7 +10,7 @@ open import Data.Product using (Σ; _,_; proj₁; proj₂; _×_)
 open import Data.Sum using (_⊎_; inj₁; inj₂)
 open import Function using (_∘_; id)
 
-open import Agdelte.Theory.Poly
+open import Agdelte.Theory.Poly as P
 open import Agdelte.Core.Signal hiding (merge; delay)
 open import Agdelte.Core.Event
 open import Agdelte.Html.Types
@@ -60,7 +60,7 @@ ParallelPoly Msg₁ Msg₂ = AppPoly Msg₁ ⊗ AppPoly Msg₂
 -- Коалгебра параллельной композиции
 parallelCoalg : ∀ {Model₁ Model₂ Msg₁ Msg₂ : Set}
               → App Model₁ Msg₁ → App Model₂ Msg₂ → Coalg (ParallelPoly Msg₁ Msg₂)
-parallelCoalg app₁ app₂ = parallel (appToCoalg app₁) (appToCoalg app₂)
+parallelCoalg app₁ app₂ = P.parallel (appToCoalg app₁) (appToCoalg app₂)
 
 ------------------------------------------------------------------------
 -- Альтернативная композиция через Poly
@@ -76,7 +76,7 @@ ChoicePoly Msg₁ Msg₂ = AppPoly Msg₁ ⊕ AppPoly Msg₂
 -- Коалгебра альтернативной композиции
 choiceCoalg : ∀ {Model₁ Model₂ Msg₁ Msg₂ : Set}
             → App Model₁ Msg₁ → App Model₂ Msg₂ → Coalg (ChoicePoly Msg₁ Msg₂)
-choiceCoalg app₁ app₂ = choice (appToCoalg app₁) (appToCoalg app₂)
+choiceCoalg app₁ app₂ = P.choice (appToCoalg app₁) (appToCoalg app₂)
 
 ------------------------------------------------------------------------
 -- mapMsg через Lens
@@ -95,6 +95,62 @@ msgLens to from = mkLens
 -- Применение линзы к коалгебре App
 transformApp : ∀ {Msg₁ Msg₂ : Set} → (Msg₁ → Msg₂) → (Msg₂ → Msg₁) → Coalg (AppPoly Msg₁) → Coalg (AppPoly Msg₂)
 transformApp to from = transformCoalg (msgLens to from)
+
+------------------------------------------------------------------------
+-- Round-trip proofs: App ↔ Coalg correspondence
+------------------------------------------------------------------------
+
+open import Relation.Binary.PropositionalEquality using (_≡_; refl)
+
+-- App has more fields than Coalg (subs, command, init).
+-- The correspondence is structural: view ↔ observe, update ↔ update.
+
+-- observe is preserved
+app-coalg-observe : ∀ {Model Msg : Set} (app : App Model Msg) (m : Model)
+                  → Coalg.observe (appToCoalg app) m ≡ view app m
+app-coalg-observe _ _ = refl
+
+-- update is preserved
+app-coalg-update : ∀ {Model Msg : Set} (app : App Model Msg) (m : Model) (msg : Msg)
+                 → Coalg.update (appToCoalg app) m msg ≡ update app msg m
+app-coalg-update _ _ _ = refl
+
+-- parallel composition corresponds
+parallel-observe : ∀ {M₁ M₂ Msg₁ Msg₂ : Set}
+                 → (a₁ : App M₁ Msg₁) (a₂ : App M₂ Msg₂)
+                 → (m₁ : M₁) (m₂ : M₂)
+                 → Coalg.observe (parallelCoalg a₁ a₂) (m₁ , m₂)
+                   ≡ (view a₁ m₁ , view a₂ m₂)
+parallel-observe _ _ _ _ = refl
+
+parallel-update-left : ∀ {M₁ M₂ Msg₁ Msg₂ : Set}
+                     → (a₁ : App M₁ Msg₁) (a₂ : App M₂ Msg₂)
+                     → (m₁ : M₁) (m₂ : M₂) (msg : Msg₁)
+                     → Coalg.update (parallelCoalg a₁ a₂) (m₁ , m₂) (inj₁ msg)
+                       ≡ (update a₁ msg m₁ , m₂)
+parallel-update-left _ _ _ _ _ = refl
+
+parallel-update-right : ∀ {M₁ M₂ Msg₁ Msg₂ : Set}
+                      → (a₁ : App M₁ Msg₁) (a₂ : App M₂ Msg₂)
+                      → (m₁ : M₁) (m₂ : M₂) (msg : Msg₂)
+                      → Coalg.update (parallelCoalg a₁ a₂) (m₁ , m₂) (inj₂ msg)
+                        ≡ (m₁ , update a₂ msg m₂)
+parallel-update-right _ _ _ _ _ = refl
+
+-- choice composition corresponds
+choice-observe-left : ∀ {M₁ M₂ Msg₁ Msg₂ : Set}
+                    → (a₁ : App M₁ Msg₁) (a₂ : App M₂ Msg₂)
+                    → (m₁ : M₁)
+                    → Coalg.observe (choiceCoalg a₁ a₂) (inj₁ m₁)
+                      ≡ inj₁ (view a₁ m₁)
+choice-observe-left _ _ _ = refl
+
+choice-observe-right : ∀ {M₁ M₂ Msg₁ Msg₂ : Set}
+                     → (a₁ : App M₁ Msg₁) (a₂ : App M₂ Msg₂)
+                     → (m₂ : M₂)
+                     → Coalg.observe (choiceCoalg a₁ a₂) (inj₂ m₂)
+                       ≡ inj₂ (view a₂ m₂)
+choice-observe-right _ _ _ = refl
 
 ------------------------------------------------------------------------
 -- Семантика App через Signal
@@ -131,6 +187,11 @@ appWithEventsToCoalg {Model} app = mkCoalg
   Model
   (λ m → view app m , events app m)
   (λ m msg → update app msg m)
+
+-- Full app with events: observe is preserved
+appE-coalg-observe : ∀ {Model Msg : Set} (app : App Model Msg) (m : Model)
+                   → Coalg.observe (appWithEventsToCoalg app) m ≡ (view app m , events app m)
+appE-coalg-observe _ _ = refl
 
 ------------------------------------------------------------------------
 -- Связь с теорией: App как динамическая система
