@@ -21,6 +21,7 @@ All examples use **Reactive Bindings** (like Svelte) — no Virtual DOM.
 | [Session Form](#session-form) | Session protocol, phased state, typed transitions | Advanced |
 | [Worker](#worker) | Web Worker, background computation | Medium |
 | [Parallel](#parallel) | workerWithProgress, parallel, race | Advanced |
+| [Stress Test](#stress-test) | 10K items, ops/sec, foreach, interval | Medium |
 | [Remote Agent](#remote-agent) | Browser ↔ Haskell agent server | Advanced |
 | [Agent Wiring](#agent-wiring) | >>>, &, ⊕, ***, fanout, loop, through, AgentLens | Theory |
 | [Dep Agent](#dep-agent) | DepAgent, state-dependent input, embed, dep⊕, dep& | Theory |
@@ -399,6 +400,34 @@ race [ httpGet fast id id, httpGet slow id id ]
 
 ---
 
+## Stress Test
+
+**Demonstrates:** Pure dispatch throughput. Measures ops/sec with 13 simultaneous reactive bindings.
+
+```agda
+-- Each tick: increment counter, compute 4 modular bindings
+updateModel Tick m =
+  let c = suc (counter m)
+  in record m
+    { counter = c ; ticks = suc (ticks m) ; totalOps = suc (totalOps m)
+    ; b1 = c % 7 ; b2 = c % 13 ; b3 = c % 37 ; b4 = c % 97 }
+
+-- interval 1ms for max throughput, 1000ms to measure ops/sec
+subs m = if running m
+  then merge (interval 1 Tick) (interval 1000 Measure)
+  else never
+
+-- 13 bindF bindings update simultaneously, bar visualization
+div [ class "binding-row" ]
+  ( span [] [ bindF b1text ]
+  ∷ span [] [ bindF b1bar ]    -- █ blocks visualize mod value
+  ∷ [] )
+```
+
+**Key point:** Each dispatch cycle updates 13 bindings in O(13), not O(n). No Virtual DOM, no diffing, no tree rebuild. Shows ops/sec and peak throughput with live bar visualization.
+
+---
+
 ## Remote Agent
 
 **Demonstrates:** Browser client talking to a Haskell agent server via fetch API.
@@ -593,6 +622,7 @@ http://localhost:8080/examples_html/worker.html
 http://localhost:8080/examples_html/parallel.html
 http://localhost:8080/examples_html/remote-agent.html
 http://localhost:8080/examples_html/session-form.html
+http://localhost:8080/examples_html/stress-test.html
 
 # Server examples (Haskell-compiled, run in terminal)
 npm run build:shared-demo && npm run run:shared-demo

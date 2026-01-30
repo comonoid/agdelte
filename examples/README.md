@@ -18,6 +18,7 @@ Examples demonstrate Agdelte features:
 | Composition | Two counters | zoomNode, shared total |
 | Combinators | Event pipeline | foldE, mapFilterE |
 | OpticDynamic | Dynamic optics | ixList, Traversal, runtime _∘O_ |
+| StressTest | Performance benchmark | ops/sec, 13 bindings, interval |
 
 ## Building
 
@@ -37,6 +38,7 @@ npm run build:composition
 npm run build:transitions
 npm run build:combinators
 npm run build:optic-dynamic
+npm run build:stress-test
 
 # All at once
 npm run build:all
@@ -84,6 +86,7 @@ agda Todo.agda
    - http://localhost:8080/examples_html/composition.html — Composition
    - http://localhost:8080/examples_html/combinators.html — Combinators
    - http://localhost:8080/examples_html/optic-dynamic.html — Dynamic Optics
+   - http://localhost:8080/examples_html/stress-test.html — Stress Test
 
 ## Example structure
 

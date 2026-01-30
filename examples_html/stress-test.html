@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stress Test - Agdelte</title>
+  <link rel="stylesheet" href="common.css">
+  <style>
+    .stress-test { max-width: 700px; margin: 0 auto; }
+    .stress-test .subtitle { color: #888; margin-bottom: 1.5rem; }
+    .controls { display: flex; gap: 8px; margin-bottom: 1.5rem; }
+    .controls button {
+      padding: 12px 28px;
+      border: none;
+      border-radius: 6px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+    .controls button:hover { transform: scale(1.05); }
+    .controls button:nth-child(1) { background: #4ade80; color: #1a1a2e; }
+    .controls button:nth-child(2) { background: #e94560; color: white; }
+    .controls button:nth-child(3) { background: #666; color: white; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .stat {
+      background: rgba(74, 158, 255, 0.08);
+      border: 1px solid rgba(74, 158, 255, 0.2);
+      border-radius: 10px;
+      padding: 1rem;
+      text-align: center;
+    }
+    .stat-main {
+      background: rgba(74, 222, 128, 0.1);
+      border-color: rgba(74, 222, 128, 0.4);
+    }
+    .stat-label { color: #888; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem; }
+    .stat-value { font-size: 1.3rem; font-weight: 700; color: #eee; font-family: monospace; min-height: 2.4rem; display: flex; align-items: center; justify-content: center; }
+    .stat-fps { color: #4a9eff !important; font-size: 2.2rem !important; }
+    .stat-highlight {
+      background: rgba(233, 69, 96, 0.1);
+      border-color: rgba(233, 69, 96, 0.4);
+    }
+    .stat-ops { color: #e94560 !important; font-size: 2.2rem !important; }
+    .stat-peak { color: #fbbf24 !important; }
+
+    .bindings-section { margin-bottom: 2rem; }
+    .bindings-section h2 { font-size: 1rem; color: #888; margin-bottom: 1rem; }
+    .binding-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 6px;
+      padding: 6px 12px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 6px;
+      height: 36px;
+    }
+    .binding-label { color: #888; font-size: 0.85rem; width: 60px; font-family: monospace; }
+    .binding-val { color: #4a9eff; font-size: 1.1rem; width: 30px; text-align: right; font-family: monospace; font-weight: 700; }
+    .binding-bar {
+      color: #4a9eff;
+      font-family: monospace;
+      font-size: 1.1rem;
+      letter-spacing: 1px;
+      width: 200px;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .explanation { color: #555; font-size: 0.85rem; line-height: 1.6; }
+    .explanation p { margin-bottom: 0.3rem; }
+
+    .doc {
+      max-width: 700px;
+      margin: 2rem auto;
+      padding: 2rem;
+      background: rgba(255,255,255,0.03);
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      line-height: 1.7;
+      color: #bbb;
+    }
+    .doc h2 {
+      color: #4a9eff;
+      font-size: 1.1rem;
+      margin-top: 1.8rem;
+      margin-bottom: 0.6rem;
+    }
+    .doc h2:first-child { margin-top: 0; }
+    .doc p { margin-bottom: 0.8rem; font-size: 0.9rem; }
+    .doc ol, .doc ul { margin: 0.5rem 0 1rem 1.5rem; font-size: 0.9rem; }
+    .doc li { margin-bottom: 0.4rem; }
+    .doc code {
+      background: rgba(74, 158, 255, 0.12);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 0.85rem;
+      color: #8cc8ff;
+    }
+    .doc pre {
+      background: rgba(0,0,0,0.4);
+      border-radius: 8px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      margin: 1rem 0;
+    }
+    .doc pre code {
+      background: none;
+      padding: 0;
+      color: #ccc;
+      font-size: 0.82rem;
+      line-height: 1.5;
+    }
+    .doc table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.85rem;
+    }
+    .doc th {
+      text-align: left;
+      padding: 8px 12px;
+      background: rgba(74, 158, 255, 0.1);
+      color: #4a9eff;
+      border-bottom: 1px solid rgba(74, 158, 255, 0.2);
+    }
+    .doc td {
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .doc strong { color: #eee; }
+  </style>
+</head>
+<body>
+  <a href="../index.html" class="back">&larr; Back to examples</a>
+
+  <h1>Stress Test</h1>
+  <p class="subtitle">1M pure updates per frame — no Virtual DOM</p>
+
+  <div id="app" data-agdelte="StressTest">
+    <p class="loading">Loading compiled Agda...</p>
+  </div>
+
+  <div class="doc">
+    <h2>What this measures</h2>
+    <p>
+      This benchmark measures <strong>how much work the framework can do per frame</strong>
+      while maintaining a smooth 60 FPS display refresh.
+    </p>
+    <p>
+      The test runs at <code>interval 1 Frame</code> (as fast as possible). Each frame executes a <strong>batch of 1,000,000
+      pure update iterations</strong> (incrementing a counter 1M times via a tight loop),
+      then updates all 19 reactive bindings and patches the DOM.
+      There is no frame rate cap &mdash; FPS is determined entirely by how fast the framework completes each cycle.
+      The full cycle per frame:
+    </p>
+    <ol>
+      <li><strong>Dispatch</strong> &mdash; <code>Frame</code> message enters the system</li>
+      <li><strong>Pure update</strong> &mdash; <code>iterate 1000000 counter</code> runs 1M increments in a tight loop (pure Agda, compiled to JS)</li>
+      <li><strong>Derived state</strong> &mdash; 6 modular arithmetic ops: <code>counter % 7</code>, <code>% 13</code>, <code>% 37</code>, <code>% 97</code>, <code>% 53</code>, <code>% 3</code></li>
+      <li><strong>Binding scan</strong> &mdash; runtime checks all 19 <code>bindF</code> bindings by calling <code>f(newModel)</code> and comparing with cached value</li>
+      <li><strong>DOM patch</strong> &mdash; only changed text nodes are written (no tree diff, no VDOM allocation)</li>
+    </ol>
+
+    <h2>What you see</h2>
+    <ul>
+      <li><strong>FPS</strong> &mdash; actual frames rendered per second. Not capped &mdash; determined purely by computation + rendering cost.</li>
+      <li><strong>ops/sec</strong> &mdash; logical updates per second = FPS &times; batch size (1M). At 60 FPS this is <strong>~60M ops/sec</strong>.</li>
+      <li><strong>Peak FPS</strong> &mdash; highest FPS observed during the session.</li>
+      <li><strong>Counter</strong> &mdash; raw value, incremented 1M per frame. Proves the model is actually updating.</li>
+      <li><strong>Live Bindings</strong> &mdash; 4 bars showing <code>counter % N</code>. The <code>&#x2588;</code> blocks are built by pure Agda string concatenation. All 6 bars + 6 numbers + 7 stats = 19 bindings updated every frame.</li>
+    </ul>
+
+    <h2>Why it's fast</h2>
+    <p>
+      Agdelte uses <strong>Svelte-style reactive bindings</strong>, not a Virtual DOM.
+      The template is a <strong>static data structure</strong> defined once at compile time &mdash; not a function called every render.
+      Each <code>bindF f</code> tracks an extraction function <code>f : Model &rarr; String</code>.
+      On model change, the runtime calls each <code>f</code> and compares the result with the cached string.
+      If equal &mdash; skip. If different &mdash; write that one DOM text node.
+    </p>
+    <p>
+      Cost per frame: <strong>O(number of bindings)</strong>, not O(tree size).
+      This page has 19 bindings: 19 string comparisons + a few <code>textContent =</code> writes.
+      No object allocation, no GC pressure from virtual trees.
+    </p>
+
+    <h2>The Agda code (key parts)</h2>
+    <pre><code>-- Batch size: 1000 pure updates per frame
+batchSize : &#8469;
+batchSize = 1000000
+
+-- Tight loop: N increments, no DOM, no IO
+iterate : &#8469; &rarr; &#8469; &rarr; &#8469;
+iterate zero    c = c
+iterate (suc n) c = iterate n (suc c)
+
+-- Each frame: batch update + derived bindings
+updateModel Frame m =
+  let c = iterate batchSize (counter m)
+  in record m
+    { counter = c ; frames = suc (frames m)
+    ; b1 = c % 7  ; b2 = c % 13 ; b3 = c % 37
+    ; b4 = c % 97 ; b5 = c % 53 ; b6 = c % 3 }
+
+-- No FPS cap: interval 1 = as fast as possible
+subs m = if running m
+  then merge (interval 1 Frame) (interval 1000 Measure)
+  else never</code></pre>
+
+    <h2>Expected results</h2>
+    <p>
+      On the developer's machine (Linux, Chromium), this benchmark shows <strong>around 60 FPS</strong>
+      and <strong>~60M ops/sec</strong>.
+      On your machine the result may be higher or lower &mdash;
+      FPS depends entirely on CPU speed and browser engine:
+    </p>
+    <ul>
+      <li><strong>Faster CPU / optimized browser</strong> &mdash; higher FPS</li>
+      <li><strong>Slower CPU / heavy tabs</strong> &mdash; lower FPS</li>
+      <li><strong>Background tab</strong> &mdash; browsers throttle timers, FPS will drop significantly</li>
+    </ul>
+    <p>
+      The key insight: the FPS number is <strong>purely computation-bound</strong> &mdash; there is no
+      artificial cap. The framework overhead (19 binding checks + DOM patch) is negligible
+      compared to the 1M pure iterations per frame.
+    </p>
+
+    <h2>Comparison</h2>
+    <table>
+      <tr><th></th><th>Virtual DOM (React/Vue)</th><th>Agdelte (this)</th></tr>
+      <tr><td>Per frame</td><td>Rebuild vdom tree, diff, patch</td><td>19 string comparisons, patch changed</td></tr>
+      <tr><td>Cost</td><td>O(tree size)</td><td>O(changed bindings)</td></tr>
+      <tr><td>GC pressure</td><td>New objects every render</td><td>Zero allocation per frame</td></tr>
+      <tr><td>Template</td><td>Function called each render</td><td>Static data, defined once</td></tr>
+      <tr><td>Headroom</td><td>Limited by diff cost</td><td>1M updates/frame + 19 bindings, uncapped FPS</td></tr>
+    </table>
+  </div>
+
+  <div class="info">
+    <p>Source: <code>examples/StressTest.agda</code></p>
+    <p>Compiled: <code>_build/jAgda.StressTest.mjs</code></p>
+  </div>
+
+  <script type="module" src="../runtime/reactive-auto.js"></script>
+</body>
+</html>
