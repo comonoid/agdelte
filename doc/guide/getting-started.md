@@ -55,6 +55,7 @@ npm run build:optic-dynamic  # Dynamic optics
 npm run build:worker         # Web Worker
 npm run build:parallel       # Parallel/Race
 npm run build:session-form   # Session form
+npm run build:stress-test    # Stress test (binding perf)
 npm run build:remote-agent   # Remote agent client
 ```
 
@@ -63,6 +64,9 @@ npm run build:remote-agent   # Remote agent client
 Server examples compile to native Haskell binaries via MAlonzo:
 
 ```bash
+# Echo agent server (console)
+npm run build:main && npm run run:server
+
 # HTTP agent server (used by Remote Agent browser example)
 npm run build:server && npm run run:server
 
