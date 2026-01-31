@@ -1,8 +1,16 @@
 # Agdelte
 
-**Dependently-typed reactive UI on polynomial functors. No Virtual DOM.**
+**Dependently-typed reactive UI on polynomial functors.  
+No Virtual DOM.**
 
-The foundation is maximally general: polynomial functors and dependent lenses (Spivak, Niu). The surface is maximally simple: `button [ onClick Inc ] [ text "+" ]`. The connection is proven: every practical abstraction is an isomorphism away from the general theory.
+The foundation is maximally general:  
+polynomial functors and dependent lenses (Spivak, Niu).
+
+The surface is maximally simple:  
+`button [ onClick Inc ] [ text "+" ]`
+
+The connection is proven:  
+every practical abstraction is an isomorphism away from the general theory.
 
 ## The Design Principle
 
@@ -62,6 +70,12 @@ MODEL CHANGE:  for each binding: old value vs new value → update if different
 ```
 
 O(bindings), not O(tree). Same as Svelte's compiled output, but explicit and verifiable.
+
+## Performance
+
+Despite Agda's unoptimized JavaScript backend, Agdelte holds 60 FPS with **1,000,000 pure state updates per frame** and 19 reactive bindings (`StressTest.agda`). The reason: O(bindings) DOM updates, not O(tree). The framework does almost no work at render time — it checks a handful of binding values and patches only what changed.
+
+The bottleneck is never the framework. It's how fast your `update` function runs.
 
 ## Architecture: Three Levels
 
