@@ -207,11 +207,21 @@ runtime/          JavaScript: reactive.js, events.js, dom.js
 | [Internals](doc/internals/) | [Runtime](doc/internals/runtime.md) |
 | [Comparison](doc/comparison/) | [vs Svelte](doc/comparison/vs-svelte.md), [vs Vue 3](doc/comparison/vs-vue3.md) |
 
-## Roadmap
+## What's Built
 
-**Done:** Core (Signal, Event, Cmd, Task), Reactive architecture (Node, Binding, no VDOM), Incremental updates (keyed lists, transitions), Optics hierarchy, Combinators & pure testing, Agent wiring & session types, Isomorphism proofs.
+- **Reactive core** — Signal, Event (30+ combinators), Cmd, Task with do-notation
+- **No-VDOM rendering** — Node, Binding, keyed lists (`foreachKeyed`), CSS transitions (`whenT`)
+- **Optics hierarchy** — Lens, Prism, Affine, Traversal, unified `Optic` with `_∘O_`, 16 propositional equality proofs
+- **Component composition** — `zoomNode`, `zoomNodeL`, `routeMsg`, automatic message routing
+- **Concurrency** — Agent coalgebras, wiring diagrams, session types, shared/linear agents, Web Workers
+- **Big Lens** — same `peek`/`over` across local state, Unix sockets, WebSocket, with composition proofs
+- **DevTools** — Network inspector via Big Optic (`Inspector.agda`), time-travel debugging (`TimeTravel.agda`), hot reload (API-level: `app.hotReload(newModule)` preserves model; no automatic file-watch — intentionally left to the caller)
+- **Formal proofs** — 9 Theory modules: `Lens ≅ Poly.Lens`, `Agent ≅ Coalg`, `dual(dual s) ≡ s`, lens category laws, ...
+- **21 examples** — Counter, Todo, Router, WebSocket, Agents, Sessions, StressTest, ...
 
-**Next:** DevTools via Big Optic, time-travel debugging, hot reload, more formal properties.
+## What's Next
+
+Richer DevTools UI. More formal properties (full coherence conditions, functoriality).
 
 ## License
 
