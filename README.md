@@ -217,7 +217,7 @@ runtime/          JavaScript: reactive.js, events.js, dom.js
 - **Big Lens** — same `peek`/`over` across local state, Unix sockets, WebSocket, with composition proofs
 - **DevTools** — Network inspector via Big Optic (`Inspector.agda`), time-travel debugging (`TimeTravel.agda`), hot reload (API-level: `app.hotReload(newModule)` preserves model; no automatic file-watch — intentionally left to the caller)
 - **Formal proofs** — 9 Theory modules: `Lens ≅ Poly.Lens`, `Agent ≅ Coalg`, `dual(dual s) ≡ s`, lens category laws, ...
-- **21 examples** — Counter, Todo, Router, WebSocket, Agents, Sessions, StressTest, ...
+- **20 examples** — 12 browser (Counter, Todo, Router, Http, WebSocket, ...), 8 server/agent (AgentWiring, Sessions, RemoteAgent, ...)
 
 ## What's Next
 
