@@ -1,371 +1,204 @@
 # Agdelte Architecture
 
-## Core Principle
+## The Principle
 
-**Svelte-style reactivity + Dependent types + No Virtual DOM**
+The foundation is the most general thing: **polynomial functors** and **dependent lenses**. Every practical abstraction — `Lens`, `ReactiveApp`, `Agent`, `Session` — is a convenient special case with a proven isomorphism back to the general theory.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  Level 3: Declarative DSL                                   │
-│  button [ onClick Dec ] [ bindF show ]                     │
-│  Aesthetic, readable, statically verified                   │
-├─────────────────────────────────────────────────────────────┤
-│  Level 2: Lenses                                            │
-│  Navigation, modification, composition                      │
-│  Dynamic flexibility at runtime                             │
-├─────────────────────────────────────────────────────────────┤
-│  Level 1: Polynomials                                       │
-│  Mathematical foundation (Spivak, Niu)                      │
-└─────────────────────────────────────────────────────────────┘
+                    You write this
+                         │
+                         ▼
+Level 3    DSL           button [ onClick Dec ] [ bindF show ]
+Level 2    Lenses        Lens { get; set }, Optic, zoomNode
+Level 1    Polynomials   Poly { Pos; Dir }, Coalg, Poly.Lens
+                         ▲
+                         │
+                    This proves it composes
 ```
 
-## Reactive Templates (Svelte-style)
+Level 1 is invisible unless you want it. Level 3 is all you need for apps. The isomorphisms connecting them live in `Theory/` and type-check to `refl`.
+
+## Reactive Templates (No Virtual DOM)
 
 ```agda
 record ReactiveApp (Model Msg : Set) : Set₁ where
   field
-    init     : Model                    -- initial state
-    update   : Msg → Model → Model      -- pure state transition
-    template : Node Model Msg           -- reactive template (NOT a function!)
+    init     : Model
+    update   : Msg → Model → Model
+    template : Node Model Msg    -- data, NOT a function
 ```
 
-### Key Insight: No Virtual DOM
+`template` is a static tree with `bind` points. This is the key difference from Virtual DOM frameworks:
 
 | Virtual DOM (React/Elm) | Reactive Bindings (Svelte/Agdelte) |
-|-------------------------|-------------------------------------|
-| `view : Model → Html`   | `template : Node Model Msg`         |
-| Rebuilds tree each time | Static structure with bindings      |
-| Diff old vs new tree    | Check only bound values             |
-| O(tree size) updates    | O(bindings) updates                 |
+|---|---|
+| `view : Model → Html` | `template : Node Model Msg` |
+| Rebuilds tree each time | Static structure with bindings |
+| Diff old vs new tree | Check only bound values |
+| O(tree size) | O(bindings) |
 
-### How It Works
+### Runtime Algorithm
 
 ```
-1. FIRST RENDER:
-   - Walk Node tree, create real DOM
-   - For each `bind`, remember (DOMNode, Binding)
-
-2. ON MODEL CHANGE:
-   - For each binding: oldValue vs newValue
-   - If changed → update that DOM node directly
-   - NO tree diffing!
+1. Walk template → create real DOM → remember (DOMNode, Binding) pairs
+2. On event: model' = update msg model
+3. For each binding: if extract(model) ≠ extract(model') → update DOM node
+4. No tree diffing. Ever.
 ```
 
-This is exactly what Svelte does at compile time, but with explicit bindings.
+### Polynomial Interpretation
 
-## Event — Subscriptions
+`ReactiveApp M Msg ≅ Coalg(y^Msg)` — an app is a coalgebra of the polynomial `y^Msg`. The `update` function is the coalgebra structure map. Composition `_∥_` corresponds to the product of polynomials. Proof: `PolyApp.agda`.
+
+## Node — The Template Language
 
 ```agda
-{-# NO_POSITIVITY_CHECK #-}
-{-# NO_UNIVERSE_CHECK #-}
-data Event (A : Set) : Set where
-  -- Primitives
-  never      : Event A
-  interval   : ℕ → A → Event A
-  timeout    : ℕ → A → Event A
-  -- Keyboard
-  onKeyDown  : (KeyboardEvent → Maybe A) → Event A
-  onKeyUp    : (KeyboardEvent → Maybe A) → Event A
-  -- HTTP
-  httpGet    : String → (String → A) → (String → A) → Event A
-  httpPost   : String → String → (String → A) → (String → A) → Event A
-  -- WebSocket
-  wsConnect  : String → (WsMsg → A) → Event A
-  -- Routing
-  onUrlChange : (String → A) → Event A
-  -- Combinators
-  merge      : Event A → Event A → Event A
-  debounce   : ℕ → Event A → Event A
-  throttle   : ℕ → Event A → Event A
-  -- Stateful — runtime maintains internal state
-  foldE      : ∀ {B} → A → (B → A → A) → Event B → Event A
-  mapFilterE : ∀ {B} → (B → Maybe A) → Event B → Event A
-  switchE    : Event A → Event (Event A) → Event A
+data Node (Model Msg : Set) : Set₁ where
+  text         : String → Node Model Msg
+  bind         : Binding Model String → Node Model Msg             -- reactive!
+  elem         : String → List (Attr) → List (Node) → Node
+  when         : (Model → Bool) → Node → Node                     -- conditional
+  foreach      : (Model → List A) → (A → ℕ → Node) → Node        -- lists
+  foreachKeyed : (Model → List A) → (A → String) → (A → ℕ → Node) → Node
+  whenT        : (Model → Bool) → Transition → Node → Node        -- animated
+
+record Binding (Model A : Set) : Set where
+  field
+    extract : Model → A
+    equals  : A → A → Bool
 ```
 
-Events are **data** (AST), interpreted by runtime. This enables:
-- Diffing subscriptions via fingerprints
-- Automatic cleanup on unsubscribe
-- Stateful combinators with runtime-managed state (foldE, switchE)
+Smart constructors: `bindF show`, `onClick msg`, `onInput f`, `class "x"`.
 
-## Cmd — Commands
-
-```agda
-data Cmd (A : Set) : Set where
-  ε            : Cmd A                    -- empty
-  _<>_         : Cmd A → Cmd A → Cmd A    -- composition
-  httpGet      : String → (String → A) → (String → A) → Cmd A
-  httpPost     : String → String → (String → A) → (String → A) → Cmd A
-  attempt      : Task A → (Result String A → A) → Cmd A
-  -- DOM
-  focus        : String → Cmd A
-  blur         : String → Cmd A
-  scrollTo     : ℕ → ℕ → Cmd A
-  scrollIntoView : String → Cmd A
-  -- Clipboard
-  writeClipboard : String → Cmd A
-  readClipboard  : (String → A) → Cmd A
-  -- Storage
-  getItem    : String → (Maybe String → A) → Cmd A
-  setItem    : String → String → Cmd A
-  removeItem : String → Cmd A
-  -- WebSocket
-  wsSend     : String → String → Cmd A
-  -- Routing
-  pushUrl    : String → Cmd A
-  replaceUrl : String → Cmd A
-  back       : Cmd A
-  forward    : Cmd A
-```
-
-Commands are **executed once** when dispatched.
-
-## Task — Monadic Chains
-
-```agda
-data Task (A : Set) : Set where
-  pure    : A → Task A
-  fail    : String → Task A
-  httpGet : String → (String → Task A) → (String → Task A) → Task A
-  httpPost : String → String → (String → Task A) → (String → Task A) → Task A
-
--- Monad instance enables do-notation
-fetchChain : Task String
-fetchChain = do
-  user ← http "/api/user"
-  posts ← http ("/api/users/" ++ userId user ++ "/posts")
-  pure (format posts)
-
--- Run via attempt
-command Fetch _ = attempt fetchChain GotResult
-```
-
-## Component Composition
-
-### zoomNode (model + messages)
-
-```agda
-zoomNode : (M → M') → (Msg' → Msg) → Node M' Msg' → Node M Msg
-zoomAttr : (M → M') → (Msg' → Msg) → Attr M' Msg' → Attr M Msg
-```
-
-Full component composition — child templates are reusable without manual wrapping:
-
-```agda
-zoomNode proj₁ LeftMsg counterTemplate
-zoomNode proj₂ RightMsg counterTemplate
-```
-
-### zoomNodeL (typed optics)
-
-```agda
-zoomNodeL : Lens M M' → Prism Msg Msg' → Node M' Msg' → Node M Msg
-zoomAttrL : Lens M M' → Prism Msg Msg' → Attr M' Msg' → Attr M Msg
-```
-
-Same as `zoomNode` but with typed `Lens` + `Prism` instead of raw functions.
-
-### Lens
+## Lenses & Optics
 
 ```agda
 record Lens (Outer Inner : Set) : Set where
   field
     get : Outer → Inner
     set : Inner → Outer → Outer
-  modify : (Inner → Inner) → Outer → Outer
 
-_∘L_ : Lens B C → Lens A B → Lens A C   -- compose
-fstLens : Lens (A × B) A
-sndLens : Lens (A × B) B
+_∘L_ : Lens B C → Lens A B → Lens A C
 ```
 
-## Node — Reactive Template
+This is `Poly.Lens (Mono S S) (Mono A A)` in disguise. The isomorphism is proved with round-trip `refl` in `OpticPolyLens.agda`.
+
+The optics hierarchy: `Lens`, `Prism`, `Affine`, `Traversal`, unified as `Optic` with `_∘O_`.
+
+### Component Composition
 
 ```agda
-data Node (Model Msg : Set) : Set₁ where
-  text         : String → Node Model Msg                                                -- static text
-  bind         : Binding Model String → Node Model Msg                                  -- reactive binding!
-  elem         : String → List (Attr Model Msg) → List (Node Model Msg) → Node Model Msg
-  empty        : Node Model Msg                                                         -- nothing
-  when         : (Model → Bool) → Node Model Msg → Node Model Msg                      -- conditional
-  foreach      : ∀ {A} → (Model → List A) → (A → ℕ → Node Model Msg) → Node Model Msg -- dynamic list
-  foreachKeyed : ∀ {A} → (Model → List A) → (A → String) → (A → ℕ → Node Model Msg) → Node Model Msg -- keyed reconciliation
-  whenT        : (Model → Bool) → Transition → Node Model Msg → Node Model Msg         -- with CSS transitions
+-- Raw functions
+zoomNode : (M → M') → (Msg' → Msg) → Node M' Msg' → Node M Msg
 
-data Attr (Model Msg : Set) : Set₁ where
-  attr      : String → String → Attr Model Msg             -- static attribute
-  attrBind  : String → Binding Model String → Attr Model Msg -- reactive attribute
-  on        : String → Msg → Attr Model Msg                -- event handler
-  onValue   : String → (String → Msg) → Attr Model Msg     -- event with value
-  style     : String → String → Attr Model Msg
-  styleBind : String → Binding Model String → Attr Model Msg
+-- Typed optics
+zoomNodeL : Lens M M' → Prism Msg Msg' → Node M' Msg' → Node M Msg
 
-record Binding (Model : Set) (A : Set) : Set where
+-- Automatic message routing
+routeMsg : Prism Msg Msg' → Lens M M' → ... → ...
+```
+
+## Effects
+
+### Event — Subscriptions (declarative, diffable)
+
+```agda
+data Event (A : Set) : Set where
+  never interval timeout onKeyDown onKeyUp
+  httpGet httpPost wsConnect onUrlChange
+  merge debounce throttle
+  foldE mapFilterE switchE
+  worker parallel race
+```
+
+Events are AST data. The runtime interprets them, fingerprints them for diffing, auto-cleans on unsubscribe. Stateful combinators (`foldE`, `switchE`) have runtime-managed internal state.
+
+### Cmd — One-shot effects
+
+HTTP, DOM manipulation, clipboard, storage, routing, WebSocket sends.
+
+### Task — Monadic chains
+
+```agda
+fetchChain = do
+  user  ← http "/api/user"
+  posts ← http ("/api/users/" ++ userId user ++ "/posts")
+  pure (format posts)
+```
+
+## Concurrency
+
+### Agents as Polynomial Coalgebras
+
+```agda
+record Agent (S I O : Set) : Set where
   field
-    extract : Model → A           -- get value from model
-    equals  : A → A → Bool        -- detect changes
+    state   : S
+    observe : S → O       -- position
+    step    : S → I → S   -- direction
 ```
 
-### Smart Constructors
+This is `Coalg (Mono O I)`. The isomorphism is `refl` (proved in `AgentCoalg.agda`).
+
+`AgentLens I₁ O₁ I₂ O₂` is literally a type alias for `Poly.Lens (Mono O₁ I₁) (Mono O₂ I₂)`. Not an isomorphism — identity.
+
+### Wiring Combinators
+
+| Combinator | Linear Logic | Polynomial operation |
+|---|---|---|
+| `_>>>_` | ◁ | Sequential pipeline |
+| `_***_` | ⊗ | Parallel |
+| `_&_` | & | External choice |
+| `_⊕_` | ⊕ | Internal choice |
+| `fanout` | Δ | Diagonal |
+| `loop` | trace | Feedback |
+
+### Session Types
 
 ```agda
-bindF : (Model → String) → Node Model Msg    -- most common: bindF show
-onClick : Msg → Attr Model Msg               -- on "click"
-onInput : (String → Msg) → Attr Model Msg    -- onValue "input"
-class : String → Attr Model Msg              -- attr "class"
+data Session : Set₁ where
+  send recv : (A : Set) → Session → Session
+  offer choose : Session → Session → Session
+  done : Session
 ```
 
-## Runtime Algorithm (No VDOM!)
+Sessions compile to agent interfaces via `SessionI`/`SessionO`. Duality (`send ↔ recv`, `offer ↔ choose`) is proved involutive: `dual (dual s) ≡ s`.
 
-```
-1. model := app.init
-2. Walk app.template, create real DOM
-3. For each `bind`: remember (DOMNode, Binding)
-4. Attach event handlers from `on` attributes
-5. Subscribe to app.subs(model)
-6. Wait for event (DOM click, interval, websocket, ...)
-7. oldModel := model
-8. model := app.update(msg, oldModel)
-9. For each binding:
-     oldVal := extract(oldModel)
-     newVal := extract(model)
-     if not equals(oldVal, newVal):
-       update DOM node directly
-10. goto 6
-```
+### The Big Lens
 
-**Key difference from Virtual DOM**: No tree reconstruction, no diffing algorithm. O(bindings) instead of O(tree).
+Same `peek`/`over` interface at every scale:
 
-## Theoretical Foundation
+| Scale | Module | Transport |
+|---|---|---|
+| Record field | `Reactive.Lens` | Direct |
+| Component | `Reactive.Optic` | Direct |
+| Process | `Reactive.ProcessOptic` | Unix socket / pipe |
+| Network | `Reactive.RemoteOptic` | WebSocket |
+| Anything | `Reactive.BigLens` | Polymorphic |
 
-In `Theory/` module (isolated, optional):
+All are polynomial lenses. `BigLensPolyLens.agda` proves composition is preserved across the transport boundary.
 
-- **Poly** — Polynomial functors
-- **Coalg** — Coalgebras (systems with state)
-- **Lens** — Morphisms between Poly
+## Isomorphism Table
 
-In `Concurrent/` module (practical):
-
-- **Agent S I O** — Polynomial coalgebra (`state`, `observe`, `step`)
-- **AgentLens** — Polynomial lens between agent interfaces (`fwd`/`bwd`)
-- **Wiring** — Linear logic combinators: `_>>>_` (◁), `_***_` (⊗), `_&_` (&), `_⊕_` (⊕)
-- **Session** — Typed communication protocols as sugar over polynomial lenses
-- **ProcessOpticLinear** — Indexed IPC handles with connection state tracking
-
-Correspondences:
-- `Signal A ≅ Coalg (Mono A ⊤)`
-- `App ≅ Coalg (AppPoly) + init + events`
-- `_∥_` corresponds to `⊗` on Poly level
-- `Agent S I O ≅ Coalg (O × y^I)` — polynomial coalgebra
-- `DepAgent S O I ≅ Coalg (mkPoly O I)` — full dependent polynomial coalgebra
-- `AgentLens I₁ O₁ I₂ O₂ = Lens (Mono O₁ I₁) (Mono O₂ I₂)` — type alias for Poly.Lens (identity, not isomorphism)
-- `DepAgentLens I₁ I₂ ≅ Lens (mkPoly O₁ I₁) (mkPoly O₂ I₂)` — dependent polynomial morphism
-- `dep⊕` corresponds to `choice` (Coalg (P ⊕ Q))
-- `dep&` corresponds to `parallel` (Coalg (P ⊗ Q))
-- `Session → (SessionI, SessionO)` — protocol compiles to Agent interface types
-
-This provides formal guarantees and enables future optimizations.
-
-### Agent Wiring Architecture (3 layers)
-
-```
-Layer 3:  Session API (send, recv, offer, choose)     ← Session.agda
-Layer 2:  Named combinators (_>>>_, _***_, _&_, _⊕_)  ← Wiring.agda
-Layer 1:  AgentLens (= Poly.Lens) + through + ∘AL       ← Wiring.agda
-```
-
-## Multi-Level Architecture
-
-The architecture consists of three complementary levels:
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  Level 3: Declarative DSL                               │
-│  button [ onClick Dec ] [ text "-" ]                   │
-│  Aesthetic, readable, statically verified              │
-└────────────────────────┬────────────────────────────────┘
-                         │ compiles to / represented by
-┌────────────────────────▼────────────────────────────────┐
-│  Level 2: Lenses                                        │
-│  focus : Lens Whole Part                               │
-│  Navigation, modification, composition                  │
-│  Dynamic flexibility at runtime                         │
-└────────────────────────┬────────────────────────────────┘
-                         │ based on
-┌────────────────────────▼────────────────────────────────┐
-│  Level 1: Polynomials                                   │
-│  p(y) = Σ(i : I) y^(B i)                              │
-│  Mathematical foundation                                │
-└─────────────────────────────────────────────────────────┘
-```
-
-### Key Insight: Static Verification + Dynamic Flexibility
-
-These levels are **not mutually exclusive** — they complement each other:
-
-1. **Inductive types (DSL)** provide beautiful declarative syntax. Users write clean, readable code that the type checker verifies.
-
-2. **Lenses** provide navigation and modification capabilities. They work *on* the structures defined by inductive types.
-
-3. **Polynomials** provide the mathematical semantics that make everything composable and predictable.
-
-### The "Big Lens" Principle
-
-A lens can operate at any scale:
-- **Small**: Navigate to a field in a record
-- **Medium**: Transform a subtree of widgets
-- **Large**: Restructure an entire network of widgets
-
-```agda
--- Same abstraction at every scale:
-fieldLens   : Lens Record Field
-widgetLens  : Lens WidgetTree SubWidget
-networkLens : Lens (Network Widget) (Network Widget')
-```
-
-This principle extends naturally to **concurrency**:
-- Process = position in polynomial
-- Channel = direction
-- Lens = rerouting, transformation
-
-### Static + Dynamic
-
-The type system verifies the *initial* structure statically:
-
-```agda
--- Type-checked at compile time:
-myWidget : Widget Model Msg
-myNetwork : Network Widget
-```
-
-But lenses allow *controlled* runtime modification:
-
-```agda
--- At runtime, modify through lens (type-safe!):
-modify networkLens restructure initialNetwork
-```
-
-This is the key: **well-typed programs don't go wrong, but can evolve**.
+| What | Is really | Where proved |
+|---|---|---|
+| `Lens S A` | `Poly.Lens (Mono S S) (Mono A A)` | `Theory/OpticPolyLens` |
+| `ReactiveApp` | `Coalg (AppPoly) + init + events` | `Theory/PolyApp` |
+| `Signal A` | `Coalg (Mono A ⊤)` | `Theory/PolySignal` |
+| `Agent S I O` | `Coalg (Mono O I)` | `Theory/AgentCoalg` |
+| `AgentLens` | `Poly.Lens` | Identity (type alias) |
+| `BigLens` | `Coalg (Mono O I)` | `Theory/BigLensPolyLens` |
+| `Lens ∘L` laws | Category laws | `Theory/LensLaws` |
+| `dual ∘ dual = id` | Involution | `Theory/SessionDualProof` |
 
 ## Benefits
 
-| Capability | Why It's Easy |
-|------------|---------------|
-| Time-travel debugging | Model is just data |
-| Undo/Redo | List of previous Models |
+| Capability | Why |
+|---|---|
+| Time-travel debugging | Model is data |
+| Undo/Redo | List of models |
 | Serialization | `JSON.stringify(model)` |
 | Testing | `update msg model ≡ expected` |
-| Request cancellation | Automatic on unsubscribe |
-| Race conditions | Impossible by construction |
-
-## Comparison
-
-| | Svelte 5 | Virtual DOM (React/Elm) | Agdelte |
-|--|----------|-------------------------|---------|
-| DOM updates | Direct (compiled) | Diff tree, patch | Direct (bindings) |
-| Performance | Fast | Overhead from diffing | Fast |
-| Reactivity | Compiler magic | Runtime diffing | Explicit bindings |
-| Types | TypeScript | Varies | Dependent types |
-| Template | `.svelte` file | `view : Model → Html` | `template : Node Model Msg` |
-| Composition | Components | Components | Lenses + `_∥_` |
-| Proofs | No | No | Yes (via Theory/) |
+| Automatic cleanup | Event diffing |
+| No race conditions | By construction |
+| Correct composition | By polynomial theory |
