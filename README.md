@@ -1,241 +1,435 @@
 # Agdelte
 
-**Dependently-typed reactive UI on polynomial functors.  
-No Virtual DOM.**
+**Reactive UI framework with dependent types. No Virtual DOM.**
 
-The foundation is maximally general:  
-polynomial functors and dependent lenses (Spivak, Niu).
+Svelte showed the way: compile-time reactivity beats runtime diffing. But Svelte's compiler magic is opaque — TypeScript doesn't truly understand it.
 
-The surface is maximally simple:  
-`button [ onClick Inc ] [ text "+" ]`
+Agdelte brings Svelte's key insight to a language with a real type system:
+- **Direct DOM updates** via reactive bindings (no Virtual DOM diffing)
+- **Declarative templates** with `bind` points that auto-update
+- **Static verification** of initial structure + dynamic flexibility via lenses
 
-The connection is proven:  
-every practical abstraction is an isomorphism away from the general theory.
+## Core Idea
 
-## The Design Principle
-
-```
-General foundation          Simple surface           Proven bridge
-─────────────────          ──────────────           ─────────────
-Poly { Pos; Dir }    ───>  Lens { get; set }   <──  Lens ≅ Poly.Lens
-Coalg p S            ───>  ReactiveApp M Msg   <──  App ≅ Coalg
-Poly.Lens P Q        ───>  AgentLens I O I' O' <──  AgentLens = Poly.Lens (refl)
-Σ(o:O) y^{I(o)}     ───>  Agent S I O         <──  Agent ≅ Coalg(Mono O I)
-SessionI/SessionO    ───>  send A · recv B     <──  dual(dual s) ≡ s
-```
-
-You work with the right column. The left column exists in `Theory/`. The middle column is proved in Agda.
-
-## What It Looks Like
+Agdelte uses **reactive bindings** — like Svelte, but with dependent types:
 
 ```agda
--- Counter: 8 lines, fully typed, no Virtual DOM
-data Msg : Set where Inc Dec : Msg
+-- Reactive template with bindings (like Svelte)
+counterTemplate : Node Model Msg
+counterTemplate =
+  div [ class "counter" ]
+    ( button [ onClick Dec ] [ text "-" ]
+    ∷ span [ class "count" ] [ bindF show ]   -- auto-updates on model change!
+    ∷ button [ onClick Inc ] [ text "+" ]
+    ∷ [] )
 
-update : Msg → ℕ → ℕ
+-- App with reactive template
+record ReactiveApp (Model Msg : Set) : Set₁ where
+  field
+    init     : Model
+    update   : Msg → Model → Model
+    template : Node Model Msg    -- NOT a function! Structure with bindings
+```
+
+Key insight: **reactive bindings instead of Virtual DOM**:
+- `bind` points track which DOM nodes depend on model
+- When model changes, only affected bindings update
+- No tree diffing, no re-rendering — direct DOM mutations
+
+```agda
+-- Binding: reactive connection from Model to DOM
+record Binding (Model : Set) (A : Set) : Set where
+  field
+    extract : Model → A           -- get value from model
+    equals  : A → A → Bool        -- detect changes
+```
+
+### How It Works (Svelte-style)
+
+```
+1. FIRST RENDER:
+   - Walk the Node tree, create real DOM
+   - For each `bind`, remember (DOMNode, Binding)
+
+2. ON MODEL CHANGE:
+   - For each binding: extract(oldModel) vs extract(newModel)
+   - If changed: update that DOM node directly
+   - NO tree diffing! Direct updates to tracked nodes.
+```
+
+This is exactly what Svelte does at compile time, but we do it with explicit bindings that the type system can verify.
+
+### Theoretical Foundation
+
+The `Theory/` module (isolated, optional) establishes correspondence with **Polynomial Functors** (Spivak, Niu):
+
+- Reactive bindings as lens-like structures
+- Widget networks as polynomial machines
+- Composition via polynomial operations (⊗, ⊕)
+
+**Multi-level architecture:**
+```
+Level 3: Declarative DSL    — button [ onClick Dec ] [ bindF show ]
+Level 2: Lenses             — navigation, modification, composition
+Level 1: Polynomials        — mathematical foundation
+```
+
+## Quick Example
+
+```agda
+-- Reactive Counter (like Svelte)
+module ReactiveCounter where
+
+open import Agdelte.Reactive.Node
+
+-- Model & Messages
+Model = ℕ
+
+data Msg : Set where
+  Inc Dec : Msg
+
+-- Pure update
+update : Msg → Model → Model
 update Inc n = suc n
 update Dec zero = zero
 update Dec (suc n) = n
 
-template : Node ℕ Msg
+-- Declarative template with reactive binding
+template : Node Model Msg
 template =
   div [ class "counter" ]
     ( button [ onClick Dec ] [ text "-" ]
-    ∷ span [] [ bindF show ]          -- auto-updates when model changes
+    ∷ span [ class "count" ] [ bindF show ]   -- bindF show = auto-update!
     ∷ button [ onClick Inc ] [ text "+" ]
     ∷ [] )
 
-app : ReactiveApp ℕ Msg
+-- App
+app : ReactiveApp Model Msg
 app = mkReactiveApp 0 update template
 ```
 
-Compare to Svelte — same directness, but the type system sees through everything:
-
+**Compare to Svelte:**
 ```svelte
-<script> let count = 0; </script>
+<script>
+  let count = 0;
+</script>
+
 <div class="counter">
   <button on:click={() => count--}>-</button>
-  <span>{count}</span>
+  <span class="count">{count}</span>
   <button on:click={() => count++}>+</button>
 </div>
 ```
 
-## Why No Virtual DOM
+Same declarative style, but with dependent types and no compiler magic.
 
-`template` is **data**, not a function. It's a static tree with `bind` points that track which DOM nodes depend on which parts of the model.
+## Why Agdelte?
 
-```
-FIRST RENDER:  walk tree → create real DOM → remember (DOMNode, Binding) pairs
-MODEL CHANGE:  for each binding: old value vs new value → update if different
-```
+| | Svelte 5 | Virtual DOM (React/Elm) | Agdelte |
+|--|----------|-------------------------|---------|
+| DOM updates | Direct (compiled) | Diff tree, patch | Direct (bindings) |
+| Performance | Fast | Overhead from diffing | Fast |
+| Reactivity | Compiler magic | Runtime diffing | Explicit bindings |
+| Type safety | TypeScript | Varies | Dependent types |
+| Impossible states | Runtime | Runtime | Compile-time |
 
-O(bindings), not O(tree). Same as Svelte's compiled output, but explicit and verifiable.
+**Key advantage over Virtual DOM**: No tree reconstruction, no diffing algorithm. When model changes, only the bound DOM nodes update — exactly like Svelte.
 
-## Performance
-
-Despite Agda's unoptimized JavaScript backend, Agdelte holds 60 FPS with **1,000,000 pure state updates per frame** and 19 reactive bindings (`StressTest.agda`). The reason: O(bindings) DOM updates, not O(tree). The framework does almost no work at render time — it checks a handful of binding values and patches only what changed.
-
-The bottleneck is never the framework. It's how fast your `update` function runs.
-
-## Architecture: Three Levels
+## Architecture
 
 ```
-Level 3    DSL           button [ onClick Dec ] [ bindF show ]
-                         You write this. Types verify it.
-           ─────────────────────────────────────────────────
-Level 2    Lenses        Lens { get; set }, Optic, zoomNode
-                         Composition, navigation, refactoring.
-           ─────────────────────────────────────────────────
-Level 1    Polynomials   Poly { Pos; Dir }, Coalg, Poly.Lens
-                         Mathematical foundation. Proves everything composes.
+┌─────────────────────────────────────────────────────────────┐
+│  Level 3: Declarative DSL                                   │
+│  button [ onClick Dec ] [ bindF show ]                     │
+│  Aesthetic, readable, statically verified                   │
+├─────────────────────────────────────────────────────────────┤
+│  Level 2: Lenses                                            │
+│  Navigation, modification, composition                      │
+│  Dynamic flexibility at runtime                             │
+├─────────────────────────────────────────────────────────────┤
+│  Level 1: Polynomials                                       │
+│  Mathematical foundation (Spivak, Niu)                      │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-Each level is usable independently. Level 1 is optional — you never need to touch `Theory/` to build apps. But it's there, and it guarantees that every combinator composes correctly by construction.
-
-## The Isomorphism Layer
-
-Every practical type in Agdelte is a proven special case of the polynomial foundation:
-
-| Practical type | General form | Proof |
-|---|---|---|
-| `Lens S A` | `Poly.Lens (Mono S S) (Mono A A)` | `OpticPolyLens`: round-trip `refl` |
-| `ReactiveApp M Msg` | `Coalg (AppPoly)` | `PolyApp`: structure-preserving |
-| `Signal A` | `Coalg (Mono A ⊤)` | `PolySignal`: definitional |
-| `Agent S I O` | `Coalg (Mono O I)` | `AgentCoalg`: round-trip `refl` |
-| `AgentLens I₁ O₁ I₂ O₂` | `Poly.Lens (Mono O₁ I₁) (Mono O₂ I₂)` | Identity (type alias) |
-| `BigLens` | `Coalg (Mono O I)` | `BigLensPolyLens`: composition preserved |
-| `dual (dual s)` | `s` | `SessionDualProof`: propositional equality |
-
-The proofs live in `src/Agdelte/Theory/`. They don't affect the runtime — they're compile-time guarantees that the convenient surface types are mathematically equivalent to the general framework.
-
-## Composition
-
-Everything composes because everything is a polynomial lens:
+### ReactiveApp Structure
 
 ```agda
--- Field access
-fstLens : Lens (A × B) A
-
--- Component embedding
-zoomNode : (M → M') → (Msg' → Msg) → Node M' Msg' → Node M Msg
-zoomNodeL : Lens M M' → Prism Msg Msg' → Node M' Msg' → Node M Msg
-
--- Agent wiring (= Poly.Lens composition)
-_>>>_ : Agent pipeline        -- sequential (◁)
-_***_ : Agent parallel        -- tensor (⊗)
-_&_   : Agent external choice -- with (&)
-_⊕_   : Agent internal choice -- plus (⊕)
-
--- Same lens interface across processes and hosts
-ProcessOptic : Optic across Unix sockets
-RemoteOptic  : Optic across WebSocket
-BigLens      : Optic across anything
-```
-
-The **Big Lens** principle: `peek`/`over` works the same whether you're reading a record field, querying a local agent, or inspecting a remote server.
-
-## Effects
-
-```agda
--- Events = subscriptions (declarative, diffable)
-interval   : ℕ → A → Event A
-onKeyDown  : (KeyboardEvent → Maybe A) → Event A
-wsConnect  : String → (WsMsg → A) → Event A
-worker     : WorkerFn A B → A → Event B     -- Web Workers
-merge      : Event A → Event A → Event A
-foldE      : A → (B → A → A) → Event B → Event A
-
--- Commands = one-shot effects
-httpGet    : String → (String → A) → (String → A) → Cmd A
-focus      : String → Cmd A
-pushUrl    : String → Cmd A
-
--- Tasks = monadic chains
-fetchChain : Task String
-fetchChain = do
-  user  ← http "/api/user"
-  posts ← http ("/api/users/" ++ userId user ++ "/posts")
-  pure (format posts)
-```
-
-Events are AST data — the runtime interprets them, diffs subscriptions, manages cleanup automatically.
-
-## Concurrency
-
-Agents are polynomial coalgebras with a convenient record interface:
-
-```agda
-record Agent (S I O : Set) : Set where
+record ReactiveApp (Model Msg : Set) : Set₁ where
   field
-    state   : S
-    observe : S → O       -- output (position in polynomial)
-    step    : S → I → S   -- transition (direction in polynomial)
+    init     : Model                    -- initial state
+    update   : Msg → Model → Model      -- pure state transition
+    template : Node Model Msg           -- reactive template (NOT a function!)
 ```
 
-Session types compile to agent interfaces:
+- **init** — initial state
+- **update** — pure function: `Msg → Model → Model`
+- **template** — declarative structure with bindings (like Svelte template)
+
+### Node — Reactive Template
 
 ```agda
-data Session : Set₁ where
-  send recv : (A : Set) → Session → Session
-  offer choose : Session → Session → Session
-  done : Session
-
--- dual swaps send↔recv, offer↔choose
--- dual (dual s) ≡ s — proved in SessionDualProof
+data Node (Model Msg : Set) : Set₁ where
+  text : String → Node Model Msg                           -- static text
+  bind : Binding Model String → Node Model Msg             -- reactive binding!
+  elem : String → List (Attr Model Msg) → List (Node Model Msg) → Node Model Msg
 ```
 
-Structured concurrency, automatic resource management, linear obligation tracking.
+The key difference from Virtual DOM: `template` is **data**, not a function. Bindings track exactly which DOM nodes need updating.
 
-## Quick Start
+## Documentation
 
-```bash
-# Agda 2.6.4+, agda-stdlib 2.0+
-npm run build:all
-npm run dev
-# http://localhost:8080/
-```
+| Document | Description |
+|----------|-------------|
+| [doc/](doc/) | Main documentation index |
+| [doc/guide/architecture.md](doc/guide/architecture.md) | Core architecture and design |
+| [doc/guide/examples.md](doc/guide/examples.md) | Guide to all examples |
+| [doc/guide/getting-started.md](doc/guide/getting-started.md) | Prerequisites, build, run |
+
+### API Reference
+
+| Document | Description |
+|----------|-------------|
+| [doc/api/node.md](doc/api/node.md) | ReactiveApp, Node, Attr, Binding, zoomNode, Lens |
+| [doc/api/event.md](doc/api/event.md) | Subscriptions: interval, keyboard, WebSocket, workers |
+| [doc/api/cmd.md](doc/api/cmd.md) | Commands: HTTP, DOM, clipboard, storage, routing |
+| [doc/api/task.md](doc/api/task.md) | Monadic chains: sequential HTTP, do-notation |
+| [doc/api/optic.md](doc/api/optic.md) | Lens, Prism, Affine, Traversal, Optic, ProcessOptic, RemoteOptic |
+| [doc/api/agent.md](doc/api/agent.md) | Agent coalgebra, Wiring, SharedAgent, Diagram |
+| [doc/api/signal.md](doc/api/signal.md) | Synchronous streams: const, map, delay, fold |
+| [doc/api/session.md](doc/api/session.md) | Session types: send/recv, dual, offer/choose |
+| [doc/api/ffi.md](doc/api/ffi.md) | Browser/Server postulates, Serialize |
+
+### Additional Documents
+
+| Document | Description |
+|----------|-------------|
+| [doc/internals/runtime.md](doc/internals/runtime.md) | JavaScript runtime implementation |
+| [doc/theory/combinators.md](doc/theory/combinators.md) | All combinators with types |
+| [doc/theory/time-model.md](doc/theory/time-model.md) | Time model: ticks, dt |
+| [doc/theory/polynomials.md](doc/theory/polynomials.md) | Polynomial functors: theory and phases |
+| [doc/comparison/vs-svelte.md](doc/comparison/vs-svelte.md) | Comparison with Svelte 5 |
+| [doc/comparison/vs-vue3.md](doc/comparison/vs-vue3.md) | Comparison with Vue 3 |
 
 ## Project Structure
 
 ```
-src/Agdelte/
-  Reactive/       Node, Binding, Lens, Optic, BigLens — the DSL layer
-  Core/           Signal, Event, Cmd, Task, Result — effects
-  Concurrent/     Agent, Session, Wiring, SharedAgent — concurrency
-  Html/           HTML elements, attributes, events — DSL helpers
-  Theory/         Poly, Coalg, Lens, isomorphism proofs — foundation
-  FFI/            Browser/Server postulates
-  Test/           Pure interpretation, optic proofs
+src/
+  Agdelte/
+    ├── App.agda                 -- Top-level app module
+    │
+    ├── Reactive/                -- Reactive templates (Svelte-style)
+    │   ├── Node.agda            -- Node, Binding, ReactiveApp
+    │   ├── Lens.agda            -- Lens, fstLens, sndLens
+    │   ├── Optic.agda           -- Prism, Traversal, Affine, Optic, routeMsg
+    │   ├── BigLens.agda         -- Big Lens across processes/hosts
+    │   ├── Diagram.agda         -- Wiring diagrams
+    │   ├── Inspector.agda       -- Runtime inspector
+    │   ├── ProcessOptic.agda    -- Cross-process optics
+    │   ├── RemoteOptic.agda     -- Cross-host optics
+    │   └── TimeTravel.agda      -- Time-travel debugging
+    │
+    ├── Core/                    -- Effects
+    │   ├── Signal.agda          -- Coinductive stream
+    │   ├── Event.agda           -- Event — subscriptions (interval, keyboard)
+    │   ├── Cmd.agda             -- Cmd — commands (httpGet, httpPost)
+    │   ├── Task.agda            -- Task — monadic chains (do-notation)
+    │   └── Result.agda          -- Result type for error handling
+    │
+    ├── Concurrent/              -- Concurrency & session types
+    │   ├── Agent.agda           -- Agent coalgebra
+    │   ├── CoSession.agda       -- Co-session types
+    │   ├── DepAgent.agda        -- Dependent agents
+    │   ├── Obligation.agda      -- Linear obligations
+    │   ├── ProcessOpticLinear.agda -- Linear process optics
+    │   ├── Session.agda         -- Session types
+    │   ├── SessionExec.agda     -- Session execution
+    │   ├── SessionForm.agda     -- Session formulas
+    │   ├── SharedAgent.agda     -- Shared agent state
+    │   └── Wiring.agda          -- Agent wiring
+    │
+    ├── Html/                    -- HTML DSL
+    │   ├── Attributes.agda      -- HTML attributes
+    │   ├── Elements.agda        -- HTML elements
+    │   ├── Events.agda          -- DOM events
+    │   ├── Navigation.agda      -- Navigation helpers
+    │   └── Types.agda           -- HTML types
+    │
+    ├── FFI/                     -- Foreign function interface
+    │   ├── Browser.agda         -- Browser postulates
+    │   ├── Server.agda          -- Server postulates
+    │   └── Shared.agda          -- Shared FFI types
+    │
+    ├── Lens/                    -- Lens utilities
+    │   └── Widget.agda          -- Widget lenses
+    │
+    ├── Primitive/               -- Primitive event sources
+    │   ├── AnimationFrame.agda  -- requestAnimationFrame
+    │   ├── Interval.agda        -- setInterval
+    │   ├── Keyboard.agda        -- Keyboard events
+    │   ├── Mouse.agda           -- Mouse events
+    │   ├── Request.agda         -- HTTP requests
+    │   └── Time.agda            -- Time primitives
+    │
+    ├── Theory/                  -- Mathematical foundation (optional)
+    │   ├── Poly.agda            -- Polynomial functors, Coalg, Lens
+    │   ├── PolySignal.agda      -- Signal ≅ Coalg (Mono A ⊤)
+    │   ├── PolyApp.agda         -- Polynomial app structure
+    │   ├── AgentCoalg.agda      -- Agent as coalgebra
+    │   ├── BigLensPolyLens.agda -- BigLens ≅ Poly.Lens
+    │   ├── DepPoly.agda         -- Dependent polynomials
+    │   ├── LensLaws.agda        -- Lens law proofs
+    │   ├── OpticPolyLens.agda   -- Optic ≅ Poly.Lens
+    │   └── SessionDualProof.agda -- Session duality proof
+    │
+    └── Test/                    -- Tests
+        ├── Interpret.agda       -- Pure event testing (SimEvent)
+        └── OpticTest.agda       -- 16 optic proofs
 
-examples/         Counter, Timer, Todo, Router, WebSocket, Agents, ...
-runtime/          JavaScript: reactive.js, events.js, dom.js
+examples/
+    Counter.agda                 -- Counter with reactive bindings
+    Timer.agda                   -- Stopwatch with interval
+    Todo.agda                    -- TodoMVC-style app
+    Keyboard.agda                -- Global keyboard events
+    KeyboardDemo.agda            -- Keyboard demo (server)
+    Http.agda                    -- HTTP requests
+    Task.agda                    -- Task chains (do-notation)
+    WebSocket.agda               -- WebSocket communication
+    Router.agda                  -- SPA routing
+    Composition.agda             -- App composition (zoomNode)
+    Transitions.agda             -- CSS enter/leave animations (whenT)
+    Combinators.agda             -- Event pipeline (foldE, mapFilterE)
+    OpticDynamic.agda            -- Dynamic optics (ixList, Traversal, _∘O_)
+    StressTest.agda              -- Performance benchmark
+    AgentWiring.agda             -- Agent wiring example
+    DepAgentDemo.agda            -- Dependent agent demo
+    Parallel.agda                -- Parallel execution
+    RemoteAgent.agda             -- Remote agent example
+    SessionDual.agda             -- Session duality example
+    SessionFormDemo.agda         -- Session form demo
+    Worker.agda                  -- Web worker example
+
+runtime/
+    index.js                     -- Entry point, exports
+    reactive.js                  -- Main: runReactiveApp, renderNode, updateBindings
+    reactive-auto.js             -- Auto-loader (data-agdelte attribute)
+    events.js                    -- Event interpretation, subscribe/unsubscribe
+    dom.js                       -- DOM manipulation helpers
+    primitives.js                -- Primitive event sources
+    auto.js                      -- Auto-discovery
+    widget.js                    -- Widget runtime
+    workers/
+        fibonacci.js             -- Fibonacci worker example
+        fibonacci-progress.js    -- Fibonacci with progress reporting
 ```
 
-## Documentation
+## Key Properties
 
-| | |
-|---|---|
-| [Guide](doc/guide/) | [Architecture](doc/guide/architecture.md), [Getting Started](doc/guide/getting-started.md), [Examples](doc/guide/examples.md) |
-| [API](doc/api/) | [Node](doc/api/node.md), [Event](doc/api/event.md), [Cmd](doc/api/cmd.md), [Task](doc/api/task.md), [Optic](doc/api/optic.md), [Agent](doc/api/agent.md), [Signal](doc/api/signal.md), [Session](doc/api/session.md), [FFI](doc/api/ffi.md) |
-| [Theory](doc/theory/) | [Polynomials](doc/theory/polynomials.md), [Combinators](doc/theory/combinators.md), [Time Model](doc/theory/time-model.md) |
-| [Internals](doc/internals/) | [Runtime](doc/internals/runtime.md) |
-| [Comparison](doc/comparison/) | [vs Svelte](doc/comparison/vs-svelte.md), [vs Vue 3](doc/comparison/vs-vue3.md) |
+**No Virtual DOM.** Direct DOM updates via reactive bindings — like Svelte, but explicit.
 
-## What's Built
+**Purity.** `update` is a pure function. Template is data, not computation.
 
-- **Reactive core** — Signal, Event (30+ combinators), Cmd, Task with do-notation
-- **No-VDOM rendering** — Node, Binding, keyed lists (`foreachKeyed`), CSS transitions (`whenT`)
-- **Optics hierarchy** — Lens, Prism, Affine, Traversal, unified `Optic` with `_∘O_`, 16 propositional equality proofs
-- **Component composition** — `zoomNode`, `zoomNodeL`, `routeMsg`, automatic message routing
-- **Concurrency** — Agent coalgebras, wiring diagrams, session types, shared/linear agents, Web Workers
-- **Big Lens** — same `peek`/`over` across local state, Unix sockets, WebSocket, with composition proofs
-- **DevTools** — Network inspector via Big Optic (`Inspector.agda`), time-travel debugging (`TimeTravel.agda`), hot reload (API-level: `app.hotReload(newModule)` preserves model; no automatic file-watch — intentionally left to the caller)
-- **Formal proofs** — 9 Theory modules: `Lens ≅ Poly.Lens`, `Agent ≅ Coalg`, `dual(dual s) ≡ s`, lens category laws, ...
-- **20 examples** — 12 browser (Counter, Todo, Router, Http, WebSocket, ...), 8 server/agent (AgentWiring, Sessions, RemoteAgent, ...)
+**Declarativity.** Template describes *structure*, bindings describe *what changes*.
 
-## What's Next
+**Performance.** No tree diffing. O(bindings) updates, not O(tree size).
 
-Richer DevTools UI. More formal properties (full coherence conditions, functoriality).
+**Composability.** Events and bindings combine with standard operations:
+
+```agda
+-- Basic
+never     : Event A                           -- nothing
+merge     : Event A → Event A → Event A       -- combine streams
+mapE      : (A → B) → Event A → Event B       -- transform
+filterE   : (A → Bool) → Event A → Event A    -- filter
+
+-- Sampling (Event + Signal interaction)
+snapshot  : (A → B → C) → Event A → Signal B → Event C  -- sample Signal
+gate      : Event A → Signal Bool → Event A   -- filter by Signal
+changes   : Signal A → Event A                -- events when Signal changes
+
+-- Time-based
+debounce  : ℕ → Event A → Event A             -- after N ms pause
+throttle  : ℕ → Event A → Event A             -- max once per N ms
+
+-- Switching
+switchE   : Event A → Event (Event A) → Event A  -- dynamic Event switching
+
+-- Merging
+mergeWith : (A → A → A) → Event A → Event A → Event A  -- merge with function
+alignWith : (These A B → C) → Event A → Event B → Event C  -- align different types
+
+-- Accumulators
+accumE    : A → Event (A → A) → Event A        -- fold to Event
+accumB    : A → Event (A → A) → Signal A       -- fold functions to Signal
+
+-- Deferred
+pre       : A → Signal A → Signal A            -- delay by one tick
+
+-- Error handling
+catchE    : Event (Result E A) → (E → A) → Event A  -- handle errors
+
+-- Testing
+interpret : (Event A → Event B) → List (List A) → List (List B)  -- test Event transformations
+```
+
+## Concurrency
+
+Heavy computations that block UI? Use workers — same Event pattern:
+
+```agda
+-- Worker is just another Event primitive
+worker : WorkerFn A B → A → Event B
+
+-- Same declarative model
+events m = if m.computing
+  then mapE Done (worker heavyComputation m.data)
+  else never
+-- Event appears → worker starts
+-- Event disappears → worker cancelled (automatic cleanup)
+```
+
+Structured concurrency, automatic resource management, no leaks. See [doc/api/event.md](doc/api/event.md).
+
+## Quick Start
+
+```bash
+# Install dependencies (Agda 2.6.4+, agda-stdlib 2.0+)
+
+# Build all examples
+npm run build:all
+
+# Start dev server
+npm run dev
+
+# Open http://localhost:8080/
+```
+
+See [examples/README.md](examples/README.md) for details.
+
+## Features
+
+- **Reactive templates** — ReactiveApp, Node, Binding (Svelte-style, no Virtual DOM)
+- **Incremental updates** — binding scopes, `foreachKeyed` (key-based list reconciliation), `whenT` (CSS enter/leave transitions)
+- **Widget lenses** — `Lens Outer Inner`, composition `_∘L_`, `zoomNode` for full component composition
+- **Combinators & testing** — `foldE`, `mapFilterE`, `switchE`, `accumE`, `gate`; pure testing via `SimEvent` with propositional equality proofs
+- **Optics** — `Prism`, `Traversal`, `Affine`, unified `Optic` with `_∘O_`; `routeMsg`, `ixList`, 16 equality proofs
+- **Concurrency & distribution** — agents as polynomial coalgebras, channels, structured concurrency; `ProcessOptic` / `RemoteOptic` — same `Optic` interface across processes and hosts; Big Optic spans local widgets, processes, and remote hosts uniformly
+- **Session types** — send/recv, dual, offer/choose; duality proofs; linear obligations; session formulas
+- **Developer tools** — DevTools via Big Optic (network inspection across processes/hosts), time-travel debugging, runtime inspector, hot reload
+- **Formal verification** — `Optic ≅ Poly.Lens` for monomial case, lens law proofs, `ReactiveApp ↔ Coalg` formal connection, session duality proof
+- **Effects** — Signal (coinductive streams), Event (subscriptions), Cmd (commands), Task (monadic chains)
+- **Primitives** — interval, animationFrame, keyboard, mouse, HTTP, WebSocket, workers
+
+## Philosophy
+
+> Svelte's performance + dependent types = Agdelte
+
+Agdelte takes Svelte's key insight — direct DOM updates without Virtual DOM — and makes it explicit and type-safe.
+
+- **Svelte**: Compiler generates direct DOM updates (magic)
+- **Agdelte**: Explicit bindings that the type system verifies (transparent)
+
+Same performance characteristics, but you can see and reason about the reactive connections.
 
 ## License
 
