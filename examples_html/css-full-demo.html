@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CSS Full Demo - Agdelte</title>
+  <link rel="stylesheet" href="common.css">
+  <link rel="stylesheet" href="generated/css-full-demo.css">
+</head>
+<body>
+  <a href="../index.html" class="back">&larr; Back to examples</a>
+
+  <h1>CSS Full Demo</h1>
+  <p class="subtitle">Phases 1-7 + 9: All CSS generated from Agda at compile time</p>
+
+  <div class="preview-box">
+    <h3>Live Preview (generated CSS applied via &lt;link&gt;)</h3>
+    <div class="preview-area">
+
+      <p style="font-size: 0.8rem; color: #999; margin-bottom: 0.25rem;">.toolbar (flex row, centered, gap: 12px)</p>
+      <div class="toolbar" style="margin-bottom: 1.5rem;">
+        <button>Home</button>
+        <button>Settings</button>
+        <button>Profile</button>
+      </div>
+
+      <p style="font-size: 0.8rem; color: #999; margin-bottom: 0.25rem;">.card + .card:hover (transition: opacity, transform)</p>
+      <div class="card" style="margin-bottom: 1rem;">
+        Hover me &mdash; shadow + lift
+      </div>
+
+      <p style="font-size: 0.8rem; color: #999; margin-bottom: 0.25rem;">.card--themed (white on var(--primary), padding: var(--gap))</p>
+      <div class="card card--themed" style="margin-bottom: 1.5rem;">
+        Themed card using CSS variable references
+      </div>
+
+      <p style="font-size: 0.8rem; color: #999; margin-bottom: 0.25rem;">.panel-enter (@keyframes fadeIn) &amp; .spinner (@keyframes spin)</p>
+      <div style="display: flex; align-items: center; gap: 1rem;">
+        <div id="fade-panel" class="card" style="opacity: 0; flex: 1;">
+          Panel (fadeIn)
+          <span id="replay-btn" style="margin-left: 1rem; color: #4a9eff; cursor: pointer; font-size: 0.85rem;">[replay]</span>
+        </div>
+        <div class="spinner" style="width: 32px; height: 32px; border: 3px solid #ccc; border-top-color: var(--primary); border-radius: 50%; flex-shrink: 0;"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="full-css">
+    <h3 style="color: var(--primary); margin-bottom: 0.5rem;">Generated CSS (from css-full-demo.css)</h3>
+    <pre id="css-output">Loading...</pre>
+  </div>
+
+  <div class="info">
+    <p>Source: <code>examples/CssFullDemo.agda</code></p>
+    <p>Generated: <code>examples_html/generated/css-full-demo.css</code></p>
+    <p>Pipeline: <code>agda --js &rarr; generate-css.js &rarr; .css file &rarr; &lt;link&gt;</code></p>
+  </div>
+
+  <script>
+    // Load CSS source for display (from the same file the browser already uses)
+    fetch('generated/css-full-demo.css')
+      .then(r => r.text())
+      .then(css => { document.getElementById('css-output').textContent = css; });
+
+    // fadeIn replay — the only JS needed (browsers can't re-trigger CSS animations without DOM)
+    const fadePanel = document.getElementById('fade-panel');
+    fadePanel.classList.add('panel-enter');
+    fadePanel.style.opacity = '';
+
+    document.getElementById('replay-btn').addEventListener('click', () => {
+      fadePanel.style.opacity = '0';
+      fadePanel.classList.remove('panel-enter');
+      requestAnimationFrame(() => {
+        fadePanel.classList.add('panel-enter');
+        fadePanel.style.opacity = '';
+      });
+    });
+  </script>
+</body>
+</html>

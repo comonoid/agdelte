@@ -21,10 +21,8 @@
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
       padding: 2rem;
+      text-align: center;
     }
 
     h1 {
@@ -45,7 +43,8 @@
     .features {
       display: flex;
       gap: 1rem;
-      margin-bottom: 2rem;
+      margin: 0 auto 2rem;
+      max-width: 900px;
       flex-wrap: wrap;
       justify-content: center;
     }
@@ -60,11 +59,10 @@
 
     .examples {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 1.5rem;
       max-width: 900px;
-      width: 100%;
-      margin-bottom: 2rem;
+      margin: 0 auto 2rem;
     }
 
     .example-card {
@@ -73,6 +71,7 @@
       padding: 1.5rem;
       text-decoration: none;
       color: var(--text);
+      text-align: left;
       transition: transform 0.2s, box-shadow 0.2s;
       box-shadow: 0 4px 20px rgba(0,0,0,0.2);
     }
@@ -120,13 +119,15 @@
       border-radius: 6px;
       font-size: 0.8rem;
       color: #888;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .info {
-      text-align: center;
       color: #666;
       font-size: 0.9rem;
       max-width: 600px;
+      margin: 0 auto;
     }
 
     .info a {
@@ -139,11 +140,12 @@
     }
 
     .tech-stack {
-      margin-top: 2rem;
+      margin: 2rem auto 0;
       padding: 1.5rem;
       background: var(--card);
       border-radius: 12px;
       max-width: 600px;
+      text-align: left;
     }
 
     .tech-stack h3 {
@@ -299,6 +301,27 @@
       <p>1M pure updates per frame at ~60 FPS with 19 live bindings. No Virtual DOM.</p>
       <span class="status ready">Ready</span>
       <code>examples/StressTest.agda</code>
+    </a>
+
+    <a href="examples_html/css-demo.html" class="example-card">
+      <h2>CSS Demo</h2>
+      <p>Phase 5+9: Stylesheet rendering. Agda generates CSS at compile time.</p>
+      <span class="status ready">Ready</span>
+      <code>examples/CssDemo.agda</code>
+    </a>
+
+    <a href="examples_html/css-full-demo.html" class="example-card">
+      <h2>CSS Full Demo</h2>
+      <p>Phases 1-7+9: Variables, Layout, Conditional, Transitions, Animations.</p>
+      <span class="status ready">Ready</span>
+      <code>examples/CssFullDemo.agda</code>
+    </a>
+
+    <a href="examples_html/anim-demo.html" class="example-card">
+      <h2>Anim Demo</h2>
+      <p>Phase 8: Model-driven Tween + Spring animations computed at compile time.</p>
+      <span class="status ready">Ready</span>
+      <code>examples/AnimDemo.agda</code>
     </a>
   </div>
 

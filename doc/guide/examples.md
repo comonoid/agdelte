@@ -28,6 +28,9 @@ All examples use **Reactive Bindings** (like Svelte) — no Virtual DOM.
 | [Session Dual](#session-dual) | Session, dual, mkReqResp, mkOffer, dual-involution | Theory |
 | [SharedAgent Demo](#sharedagent-demo) | share, asLinear, peekShared, stepShared, registry | Server |
 | [Inspector Demo](#inspector-demo) | Diagram, inspectDiagram, wireSlot, refOptic, sendAndPrint | Server |
+| [CSS Demo](#css-demo) | Stylesheet, rule, media, keyframeRule, renderStylesheet | CSS |
+| [CSS Full Demo](#css-full-demo) | All CSS phases: variables, layout, transitions, animations | CSS |
+| [Anim Demo](#anim-demo) | Tween, Spring, compile-time verification | CSS |
 
 ---
 
@@ -595,6 +598,140 @@ Source: `server/InspectorDemo.agda`
 
 ---
 
+## CSS Demo
+
+**Demonstrates:** Static CSS generation from Agda. `Stylesheet`, `rule`, `media`, `keyframeRule`, `renderStylesheet`.
+
+```agda
+open import Agdelte.Css
+open import Agdelte.Css.Stylesheet
+open import Agdelte.Css.Animate (fadeIn)
+
+appCSS : Stylesheet
+appCSS =
+    rawRule "@charset \"UTF-8\";"
+  ∷ rule ".card" (
+        padding' (px 16) ∷ backgroundColor' (hex "#fff")
+      ∷ borderRadius' (px 8)
+      ∷ transition' (trans "box-shadow" (ms 200) ease
+                   ∷ trans "transform" (ms 200) ease ∷ [])
+      ∷ "cursor" ∶ "pointer" ∷ [])
+  ∷ rule ".card:hover" (
+        "box-shadow" ∶ "0 8px 24px rgba(0,0,0,0.3)"
+      ∷ "transform" ∶ "translateY(-2px)" ∷ [])
+  ∷ media "(max-width: 768px)" (
+      rule ".card" (padding' (px 8) ∷ []) ∷ [])
+  ∷ keyframeRule fadeIn
+  ∷ []
+```
+
+**Build pipeline:**
+
+```bash
+npm run build:css-demo     # Agda -> JS
+npm run css:demo           # JS -> css-demo.css
+```
+
+**Key point:** `renderStylesheet` is a pure function. The Agda compiler evaluates the `Stylesheet` value, the JS backend emits it as data, and `generate-css.js` calls `renderStylesheet` to produce a plain `.css` file. No runtime CSS injection.
+
+Source: `examples/CssDemo.agda`
+
+---
+
+## CSS Full Demo
+
+**Demonstrates:** All CSS phases end-to-end: typed properties, composition, variables, layout helpers, conditional styles, transitions, animations, media queries, and stylesheet generation.
+
+```agda
+-- Phase 4: CSS variables
+themeVars : Style
+themeVars = cssVar "primary" "#4a9eff" ∷ cssVar "radius" "8px" ∷ []
+
+-- Phase 2+4: Typed properties with variable references
+themedCard : Style
+themedCard = color' (named "white") ∷ backgroundColor' (var "primary")
+           ∷ "border-radius" ∶ varRef "radius" ∷ []
+
+-- Phase 3: Conditional styles
+cardStyle : Bool → Style
+cardStyle active = styleWhen active
+  ("border" ∶ "2px solid var(--primary)" ∷ [])
+  ("border" ∶ "2px solid transparent" ∷ [])
+
+-- Phase 6: Layout
+toolbar : Style
+toolbar = row <> center <> "padding" ∶ "0.5rem" ∷ []
+
+-- Phase 7: Transitions + animations
+hoverTransition : Decl
+hoverTransition = transition' (trans "all" (ms 200) ease ∷ [])
+
+-- Phase 9: Full stylesheet
+appCSS : Stylesheet
+appCSS = rule ":root" themeVars
+       ∷ rule ".card" (padding' (px 16) ∷ hoverTransition ∷ [])
+       ∷ media "(max-width: 768px)" (rule ".card" (padding' (px 8) ∷ []) ∷ [])
+       ∷ keyframeRule fadeIn ∷ keyframeRule pulse ∷ keyframeRule spin
+       ∷ []
+```
+
+**Build pipeline:**
+
+```bash
+npm run build:css-full-demo   # Agda -> JS
+npm run css:full-demo         # JS -> css-full-demo.css
+```
+
+**Key point:** Covers the entire CSS DSL surface. The generated `.css` file is used by the HTML page via `<link>`. No JavaScript imports of Agda modules at runtime.
+
+Source: `examples/CssFullDemo.agda`
+
+---
+
+## Anim Demo
+
+**Demonstrates:** Compile-time verification of `Tween` and `Spring` physics. Pure Agda computation, no browser runtime.
+
+```agda
+open import Agdelte.Anim.Tween
+open import Agdelte.Anim.Spring
+
+-- Tween: opacity 0->1 over 300ms with easeOut
+opacityTween : Tween Float
+opacityTween = record
+  { elapsed = 0 ; duration = 300 ; from = 0.0 ; to = 1.0
+  ; easing = easeOutFn ; lerp = floatLerp }
+
+opacityMid : Tween Float × Float
+opacityMid = tickTween opacityTween 150      -- advance 150ms
+opacityMidValue = proj₂ opacityMid           -- ≈ 0.875
+
+-- Spring: gentle 0->1
+dialogSpring : Spring
+dialogSpring = gentle 0.0 1.0
+
+dialogFrame1 = tickSpringStable dialogSpring 16  -- position ≈ 0.031
+dialogSettled = isSettled (iterate 80 ...)         -- true after ~1.3s
+
+-- Retarget mid-flight
+retargetedSpring = retarget 2.0 (tickSpringStable (bouncy 0.0 1.0) 50)
+```
+
+**Build pipeline:**
+
+```bash
+npm run build:anim-demo   # Agda -> JS (values computed at compile time)
+npm run css:anim-data     # Extract computed values to JSON
+```
+
+The HTML page loads `anim-demo.json` and displays a verification table (each value checked against expected ranges) plus a bar chart visualization. This is not a runtime animation demo -- it verifies that the Tween/Spring math is correct by inspecting compile-time computed values.
+
+**Key point:** Since Tween and Spring are pure functions, the Agda compiler evaluates them during compilation. The JSON file contains baked-in numbers, not code. In a real app these values would drive `styleBind` each frame.
+
+Source: `examples/AnimDemo.agda`
+
+---
+
 ## Running Examples
 
 ```bash
@@ -623,6 +760,9 @@ http://localhost:8080/examples_html/parallel.html
 http://localhost:8080/examples_html/remote-agent.html
 http://localhost:8080/examples_html/session-form.html
 http://localhost:8080/examples_html/stress-test.html
+http://localhost:8080/examples_html/css-demo.html
+http://localhost:8080/examples_html/css-full-demo.html
+http://localhost:8080/examples_html/anim-demo.html
 
 # Server examples (Haskell-compiled, run in terminal)
 npm run build:shared-demo && npm run run:shared-demo

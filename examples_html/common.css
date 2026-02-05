@@ -1123,3 +1123,148 @@ h1 {
   font-size: 1.3rem;
   margin-bottom: 0.5rem;
 }
+
+/* ================================================================
+   CSS / Anim Demo — shared presentation styles
+   ================================================================ */
+
+.demo-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  max-width: 900px;
+  width: 100%;
+  margin-top: 1rem;
+}
+
+.demo-section {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+.demo-section h3 {
+  color: var(--primary);
+  margin-bottom: 0.75rem;
+  font-size: 1rem;
+}
+.demo-section pre {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 1rem;
+  overflow-x: auto;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: #c9d1d9;
+}
+.demo-section .label {
+  display: inline-block;
+  background: rgba(74, 158, 255, 0.15);
+  color: var(--primary);
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Code / CSS output blocks */
+.css-output {
+  max-width: 700px;
+  width: 100%;
+  margin-top: 1rem;
+}
+.css-output pre,
+.full-css pre {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 1.5rem;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: #c9d1d9;
+}
+.full-css {
+  max-width: 900px;
+  width: 100%;
+  margin-top: 1.5rem;
+}
+.full-css pre {
+  max-height: 500px;
+}
+
+/* Live preview area */
+.preview-box {
+  max-width: 900px;
+  width: 100%;
+  margin-top: 1.5rem;
+}
+.preview-box h3 {
+  color: var(--primary);
+  margin-bottom: 0.75rem;
+}
+.preview-area {
+  border-radius: 8px;
+  padding: 2rem;
+  background: #f8f9fa;
+  color: #333;
+}
+.preview-area button {
+  padding: 0.4rem 1rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
+
+/* Data tables (AnimDemo) */
+.demo-section table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.demo-section th {
+  text-align: left;
+  color: #888;
+  font-weight: 500;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid #30363d;
+}
+.demo-section td {
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid rgba(48,54,61,0.5);
+}
+.demo-section td.val {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: var(--success);
+}
+.demo-section td.pass { color: var(--success); }
+.demo-section td.fail { color: var(--accent); }
+
+/* Bar chart visualization (AnimDemo) */
+.bar-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.bar-label {
+  width: 120px;
+  font-size: 0.8rem;
+  color: #aaa;
+  text-align: right;
+}
+.bar {
+  height: 24px;
+  border-radius: 4px;
+  min-width: 2px;
+}
+.bar-value {
+  font-size: 0.8rem;
+  color: #888;
+  font-family: monospace;
+}

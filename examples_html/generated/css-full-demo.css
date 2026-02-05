@@ -1,0 +1,142 @@
+:root {
+  --primary: #3b82f6;
+  --secondary: #10b981;
+  --radius: 8px;
+  --gap: 1rem;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes slideInUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  from {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes shake {
+  0% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-4px);
+  }
+  50% {
+    transform: translateX(4px);
+  }
+  75% {
+    transform: translateX(-4px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.toolbar {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.card-grid {
+  display: grid;
+  grid-template: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  max-width: 960px;
+  margin: 0 50%;
+}
+
+.card {
+  padding: 1rem;
+  background: #fff;
+  border-radius: 8px;
+  transition: opacity 300ms ease, transform 200ms ease-out;
+}
+
+.card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  transform: translateY(-2px);
+}
+
+.card--themed {
+  color: white;
+  background-color: var(--primary);
+  border-radius: var(--radius);
+  padding: var(--gap);
+}
+
+@media (max-width: 768px) {
+  .card {
+    padding: 8px;
+  }
+
+  .card-grid {
+    display: grid;
+    grid-template: 1fr;
+  }
+}
+
+.panel-enter {
+  animation: fadeIn 300ms ease;
+}
+
+.panel-leave {
+  animation: fadeOut 300ms ease;
+}
+
+.spinner {
+  animation: spin 1s ease infinite;
+}

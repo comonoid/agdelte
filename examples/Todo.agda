@@ -133,69 +133,69 @@ modelHasCompleted m = hasCompleted (todos m)
 -- Template: reactive bindings (no Virtual DOM)
 ------------------------------------------------------------------------
 
--- Reusable style fragments
+-- Reusable style fragments (typed + raw mixed freely)
 accentBtn : Style
 accentBtn =
-    "background" ∶ "#b83f45"
-  ∷ "color"      ∶ "white"
-  ∷ "border"     ∶ "none"
-  ∷ "cursor"     ∶ "pointer"
+    background' (hex "#b83f45")
+  ∷ color' (named "white")
+  ∷ "border"  ∶ "none"           -- raw escape hatch for shorthand props
+  ∷ "cursor"  ∶ "pointer"
   ∷ []
 
 -- Composed styles
 appStyle : Style
 appStyle =
-    "max-width"   ∶ "500px"
-  ∷ "margin"      ∶ "40px auto"
+    maxWidth' (px 500)
+  ∷ "margin"      ∶ "40px auto"  -- raw: complex value with "auto"
   ∷ "font-family" ∶ "sans-serif"
   ∷ []
 
 headerStyle : Style
 headerStyle =
     "text-align"  ∶ "center"
-  ∷ "color"       ∶ "#b83f45"
-  ∷ "font-size"   ∶ "80px"
+  ∷ color' (hex "#b83f45")
+  ∷ fontSize' (px 80)
   ∷ "font-weight" ∶ "200"
   ∷ []
 
 inputSectionStyle : Style
 inputSectionStyle =
     "display"       ∶ "flex"
-  ∷ "gap"           ∶ "8px"
+  ∷ gap' (px 8)
   ∷ "margin-bottom" ∶ "16px"
   ∷ []
 
 inputStyle' : Style
 inputStyle' =
-    "flex"      ∶ "1"
-  ∷ "padding"   ∶ "12px"
-  ∷ "font-size" ∶ "16px"
-  ∷ "border"    ∶ "none"
-  ∷ "outline"   ∶ "none"
+    "flex"   ∶ "1"
+  ∷ padding' (px 12)
+  ∷ fontSize' (px 16)
+  ∷ "border"  ∶ "none"
+  ∷ "outline" ∶ "none"
   ∷ []
 
 addBtnStyle : Style
-addBtnStyle = "padding" ∶ "12px 24px" ∷ [] <> accentBtn
+addBtnStyle = padding2 (px 12) (px 24) ∷ [] <> accentBtn
 
 listStyle : Style
 listStyle =
     "list-style" ∶ "none"
-  ∷ "padding"    ∶ "0"
-  ∷ "margin"     ∶ "0"
+  ∷ padding' (px 0)
+  ∷ margin' (px 0)
   ∷ []
 
 footerStyle : Style
 footerStyle =
     "display"         ∶ "flex"
   ∷ "justify-content" ∶ "space-between"
-  ∷ "padding"         ∶ "12px"
-  ∷ "color"           ∶ "#777"
+  ∷ padding' (px 12)
+  ∷ color' (hex "#777")
   ∷ []
 
 clearStyle : Style
 clearStyle =
-    "padding"       ∶ "6px 12px"
-  ∷ "border-radius" ∶ "4px"
+    padding2 (px 6) (px 12)
+  ∷ borderRadius' (px 4)
   ∷ [] <> accentBtn
 
 -- Key handler for input
@@ -208,7 +208,7 @@ itemStyle : Style
 itemStyle =
     "display"     ∶ "flex"
   ∷ "align-items" ∶ "center"
-  ∷ "padding"     ∶ "8px"
+  ∷ padding' (px 8)
   ∷ []
 
 baseText : Style
@@ -217,15 +217,15 @@ baseText = "flex" ∶ "1" ∷ []
 completedText : Style
 completedText = baseText
   <> ( "text-decoration" ∶ "line-through"
-     ∷ "color"           ∶ "#999"
+     ∷ color' (hex "#999")
      ∷ [] )
 
 deleteStyle : Style
 deleteStyle =
     "background" ∶ "none"
   ∷ "border"     ∶ "none"
-  ∷ "color"      ∶ "#cc9a9a"
-  ∷ "font-size"  ∶ "20px"
+  ∷ color' (hex "#cc9a9a")
+  ∷ fontSize' (px 20)
   ∷ "cursor"     ∶ "pointer"
   ∷ []
 

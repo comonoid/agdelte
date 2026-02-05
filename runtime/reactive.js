@@ -658,6 +658,12 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       if (newVal !== b.lastValue) {
         b.node.style.setProperty(b.styleName, newVal);
         b.lastValue = newVal;
+      } else if (b.styleName === 'animation' && newVal !== 'none' && newVal !== '') {
+        // Re-trigger same animation: browser ignores setting the same value,
+        // so briefly clear and re-apply on next frame
+        const el = b.node, val = newVal;
+        el.style.animation = 'none';
+        requestAnimationFrame(() => { el.style.animation = val; });
       }
     }
 

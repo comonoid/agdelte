@@ -13,6 +13,8 @@ src/Agdelte/           -- Agda library modules
   Reactive/            -- Node, Lens, Optic, BigLens, Diagram, Inspector
   Core/                -- Event, Cmd, Task, Signal
   Concurrent/          -- Agent, Wiring, SharedAgent, Session
+  Css/                 -- Typed CSS DSL (Decl, Length, Color, Layout, Animation...)
+  Anim/                -- Model-driven animations (Tween, Spring)
   Theory/              -- Poly, formal proofs
   FFI/                 -- Browser, Server, Shared postulates
 
@@ -20,7 +22,9 @@ examples/              -- Browser examples (JS backend)
 server/                -- Server examples (GHC backend)
 runtime/               -- JavaScript runtime (reactive.js, events.js, dom.js)
 hs/                    -- Haskell support modules (Http, WebSocket, AgentServer)
+scripts/               -- Build tools (generate-css.js, generate-anim-data.js)
 examples_html/         -- HTML pages for browser examples
+  generated/           -- Build artifacts (CSS files, JSON data)
 doc/                   -- Documentation
 ```
 
@@ -57,7 +61,24 @@ npm run build:parallel       # Parallel/Race
 npm run build:session-form   # Session form
 npm run build:stress-test    # Stress test (binding perf)
 npm run build:remote-agent   # Remote agent client
+npm run build:css-demo       # CSS stylesheet demo
+npm run build:css-full-demo  # CSS full feature demo
+npm run build:anim-demo      # Animation verification demo
 ```
+
+### CSS & Animation Data Generation
+
+After compiling CSS/Anim examples, generate static assets:
+
+```bash
+npm run css:demo        # CssDemo.agda -> css-demo.css
+npm run css:full-demo   # CssFullDemo.agda -> css-full-demo.css
+npm run css:anim-data   # AnimDemo.agda -> anim-demo.json
+npm run css:all         # All of the above
+```
+
+Pipeline: `agda --js` compiles Agda to JS modules, then Node.js scripts
+extract CSS text / computed values from the compiled modules into static files.
 
 ## Build & Run (Server Examples)
 

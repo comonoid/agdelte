@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Animation Demo - Agdelte</title>
+  <link rel="stylesheet" href="common.css">
+</head>
+<body>
+  <a href="../index.html" class="back">&larr; Back to examples</a>
+
+  <h1>Animation Demo</h1>
+  <p class="subtitle">Phase 8: Model-driven animations &mdash; Tween + Spring computed at compile time</p>
+  <div class="instructions">
+    This page shows <strong>compile-time computed values</strong>, not runtime animations.
+    The Agda compiler evaluates tween curves and spring physics during build &mdash;
+    the numbers below are baked into a static JSON file. In a real app these values
+    drive <code>styleBind</code> each frame; here we verify the math is correct.
+  </div>
+
+  <div class="demo-grid">
+    <div class="demo-section">
+      <span class="label">Tween</span>
+      <h3>Opacity Tween (easeOut, 300ms)</h3>
+      <table id="tween-table"><tr><td>Loading...</td></tr></table>
+    </div>
+    <div class="demo-section">
+      <span class="label">Tween</span>
+      <h3>Retarget &amp; Linear</h3>
+      <table id="tween2-table"><tr><td>Loading...</td></tr></table>
+    </div>
+    <div class="demo-section">
+      <span class="label">Spring</span>
+      <h3>Dialog Spring (gentle, 0 &rarr; 1)</h3>
+      <table id="spring-table"><tr><td>Loading...</td></tr></table>
+    </div>
+    <div class="demo-section">
+      <span class="label">Spring</span>
+      <h3>Bouncy + Custom + Snappy</h3>
+      <table id="spring2-table"><tr><td>Loading...</td></tr></table>
+    </div>
+  </div>
+
+  <div class="preview-box">
+    <h3>Visual: Tween &amp; Spring Values</h3>
+    <div class="bar-chart" id="bars">Loading...</div>
+  </div>
+
+  <div class="info">
+    <p>Source: <code>examples/AnimDemo.agda</code></p>
+    <p>Data: <code>examples_html/generated/anim-demo.json</code></p>
+    <p>Pipeline: <code>agda --js &rarr; generate-anim-data.js &rarr; .json &rarr; fetch()</code></p>
+  </div>
+
+  <script>
+    function fmt(v) {
+      return typeof v === 'number' ? v.toFixed(4) : String(v);
+    }
+
+    function makeTable(el, rows) {
+      el.innerHTML = '<tr><th>Property</th><th>Value</th><th>Check</th></tr>' +
+        rows.map(([name, val, check]) => {
+          const cls = check ? 'pass' : 'fail';
+          return '<tr><td>' + name + '</td><td class="val">' + fmt(val) + '</td>' +
+            '<td class="' + cls + '">' + (check ? 'OK' : 'FAIL') + '</td></tr>';
+        }).join('');
+    }
+
+    fetch('generated/anim-demo.json')
+      .then(r => r.json())
+      .then(d => {
+        // Tween section 1
+        makeTable(document.getElementById('tween-table'), [
+          ['@150ms (mid)', d.opacityMidValue, d.opacityMidValue > 0.5 && d.opacityMidValue < 1.0],
+          ['@300ms (end)', d.opacityEndValue, Math.abs(d.opacityEndValue - 1.0) < 0.01],
+          ['isComplete @300ms', d.opacityDone, d.opacityDone === true],
+        ]);
+
+        // Tween section 2
+        makeTable(document.getElementById('tween2-table'), [
+          ['retargetedFrom', d.retargetedFrom, Math.abs(d.retargetedFrom - d.opacityMidValue) < 0.01],
+          ['linearStart', d.linearStart, Math.abs(d.linearStart) < 0.01],
+        ]);
+
+        // Spring section 1
+        makeTable(document.getElementById('spring-table'), [
+          ['frame1 pos', d.dialogPos1, d.dialogPos1 > 0 && d.dialogPos1 < 0.1],
+          ['settled @80 frames', d.dialogSettled, d.dialogSettled === true],
+          ['final position', d.dialogFinalPos, Math.abs(d.dialogFinalPos - 1.0) < 0.01],
+        ]);
+
+        // Spring section 2
+        makeTable(document.getElementById('spring2-table'), [
+          ['bouncy retarget', d.retargetedTarget, Math.abs(d.retargetedTarget - 2.0) < 0.01],
+          ['custom pos', d.customPos, Math.abs(d.customPos) < 0.01],
+          ['custom target', d.customTarget, Math.abs(d.customTarget - 100) < 0.01],
+          ['snappy target', d.tabTarget, Math.abs(d.tabTarget - 200) < 0.01],
+        ]);
+
+        // Bar chart
+        var bars = [
+          { label: 'Tween @150ms', value: d.opacityMidValue, max: 1.0, color: '#4a9eff' },
+          { label: 'Tween @300ms', value: d.opacityEndValue, max: 1.0, color: '#4a9eff' },
+          { label: 'Retarget from', value: d.retargetedFrom, max: 1.0, color: '#e94560' },
+          { label: 'Linear start', value: d.linearStart, max: 100.0, color: '#888' },
+          { label: 'Spring frame1', value: d.dialogPos1, max: 1.0, color: '#4ade80' },
+          { label: 'Spring final', value: d.dialogFinalPos, max: 1.0, color: '#4ade80' },
+          { label: 'Bouncy retarget', value: d.retargetedTarget, max: 2.0, color: '#fbbf24' },
+          { label: 'Custom target', value: d.customTarget, max: 100.0, color: '#fbbf24' },
+          { label: 'Snappy target', value: d.tabTarget, max: 200.0, color: '#fbbf24' },
+        ];
+
+        document.getElementById('bars').innerHTML = bars.map(function(b) {
+          var pct = Math.min(100, Math.max(0, (b.value / b.max) * 100));
+          return '<div class="bar-row">' +
+            '<span class="bar-label">' + b.label + '</span>' +
+            '<div class="bar" style="width: ' + pct + '%; background: ' + b.color + ';"></div>' +
+            '<span class="bar-value">' + fmt(b.value) + '</span>' +
+            '</div>';
+        }).join('');
+      });
+  </script>
+</body>
+</html>

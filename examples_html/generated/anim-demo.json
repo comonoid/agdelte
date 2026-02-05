@@ -1,0 +1,15 @@
+{
+  "opacityMidValue": 0.875,
+  "opacityEndValue": 1,
+  "opacityDone": true,
+  "retargetedFrom": 0.875,
+  "linearStart": 0,
+  "dialogPos1": 0.03072,
+  "dialogSettled": true,
+  "dialogFinalPos": 1.0000963851772886,
+  "retargetedTarget": 2,
+  "customPos": 0,
+  "customTarget": 100,
+  "customStiffness": 300,
+  "tabTarget": 200
+}

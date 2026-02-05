@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CSS Demo - Agdelte</title>
+  <link rel="stylesheet" href="common.css">
+  <link rel="stylesheet" href="generated/css-demo.css">
+</head>
+<body>
+  <a href="../index.html" class="back">&larr; Back to examples</a>
+
+  <h1>CSS Demo</h1>
+  <p class="subtitle">Phase 5 + 9: Stylesheet rendering &mdash; Agda code generates CSS at compile time</p>
+
+  <div class="css-output">
+    <h3 style="color: var(--primary); margin-bottom: 0.5rem;">Generated CSS (from css-demo.css)</h3>
+    <pre id="css-code">Loading...</pre>
+  </div>
+
+  <div class="preview-box">
+    <h3>Live Preview (generated CSS applied via &lt;link&gt;)</h3>
+    <div class="preview-area">
+      <p style="color: #888; font-size: 0.85rem; margin-bottom: 1rem;">Each element below demonstrates a rule from the generated CSS</p>
+
+      <p style="font-size: 0.8rem; color: #999; margin-bottom: 0.25rem;">.card + .card:hover</p>
+      <div class="card" style="margin-bottom: 1.5rem;">
+        Hover me &mdash; shadow + lift via transition
+      </div>
+
+      <p style="font-size: 0.8rem; color: #999; margin-bottom: 0.25rem;">@keyframes fadeIn</p>
+      <div class="card" id="fade-card" style="opacity: 0;">
+        I fade in on load
+        <span id="replay-btn" style="margin-left: 1rem; color: #4a9eff; cursor: pointer; font-size: 0.85rem;">[replay]</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="info">
+    <p>Source: <code>examples/CssDemo.agda</code></p>
+    <p>Generated: <code>examples_html/generated/css-demo.css</code></p>
+    <p>Pipeline: <code>agda --js &rarr; generate-css.js &rarr; .css file &rarr; &lt;link&gt;</code></p>
+  </div>
+
+  <script>
+    // Load CSS source for display (same file the browser applies via <link>)
+    fetch('generated/css-demo.css')
+      .then(r => r.text())
+      .then(css => { document.getElementById('css-code').textContent = css; });
+
+    // Trigger fadeIn after page is ready
+    const fadeCard = document.getElementById('fade-card');
+    fadeCard.style.animation = 'fadeIn 1s ease forwards';
+
+    // Replay fadeIn on click
+    document.getElementById('replay-btn').addEventListener('click', () => {
+      fadeCard.style.opacity = '0';
+      fadeCard.style.animation = 'none';
+      requestAnimationFrame(() => { fadeCard.style.animation = 'fadeIn 1s ease forwards'; });
+    });
+  </script>
+</body>
+</html>
