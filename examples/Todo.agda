@@ -15,6 +15,7 @@ open import Data.Product using (_×_; _,_)
 open import Relation.Nullary using (yes; no)
 
 open import Agdelte.Reactive.Node
+open import Agdelte.Css
 
 ------------------------------------------------------------------------
 -- TodoItem
@@ -132,76 +133,137 @@ modelHasCompleted m = hasCompleted (todos m)
 -- Template: reactive bindings (no Virtual DOM)
 ------------------------------------------------------------------------
 
--- Style helpers
-appStyle : Attr Model Msg
-appStyle = styles "max-width" "500px; margin: 40px auto; font-family: sans-serif"
+-- Reusable style fragments
+accentBtn : Style
+accentBtn =
+    "background" ∶ "#b83f45"
+  ∷ "color"      ∶ "white"
+  ∷ "border"     ∶ "none"
+  ∷ "cursor"     ∶ "pointer"
+  ∷ []
 
-headerStyle : Attr Model Msg
-headerStyle = styles "text-align" "center; color: #b83f45; font-size: 80px; font-weight: 200"
+-- Composed styles
+appStyle : Style
+appStyle =
+    "max-width"   ∶ "500px"
+  ∷ "margin"      ∶ "40px auto"
+  ∷ "font-family" ∶ "sans-serif"
+  ∷ []
 
-inputSectionStyle : Attr Model Msg
-inputSectionStyle = styles "display" "flex; gap: 8px; margin-bottom: 16px"
+headerStyle : Style
+headerStyle =
+    "text-align"  ∶ "center"
+  ∷ "color"       ∶ "#b83f45"
+  ∷ "font-size"   ∶ "80px"
+  ∷ "font-weight" ∶ "200"
+  ∷ []
 
-inputStyle' : Attr Model Msg
-inputStyle' = styles "flex" "1; padding: 12px; font-size: 16px; border: none; outline: none"
+inputSectionStyle : Style
+inputSectionStyle =
+    "display"       ∶ "flex"
+  ∷ "gap"           ∶ "8px"
+  ∷ "margin-bottom" ∶ "16px"
+  ∷ []
 
-addBtnStyle : Attr Model Msg
-addBtnStyle = styles "padding" "12px 24px; background: #b83f45; color: white; border: none; cursor: pointer"
+inputStyle' : Style
+inputStyle' =
+    "flex"      ∶ "1"
+  ∷ "padding"   ∶ "12px"
+  ∷ "font-size" ∶ "16px"
+  ∷ "border"    ∶ "none"
+  ∷ "outline"   ∶ "none"
+  ∷ []
 
-listStyle : Attr Model Msg
-listStyle = styles "list-style" "none; padding: 0; margin: 0"
+addBtnStyle : Style
+addBtnStyle = "padding" ∶ "12px 24px" ∷ [] <> accentBtn
 
-footerStyle : Attr Model Msg
-footerStyle = styles "display" "flex; justify-content: space-between; padding: 12px; color: #777"
+listStyle : Style
+listStyle =
+    "list-style" ∶ "none"
+  ∷ "padding"    ∶ "0"
+  ∷ "margin"     ∶ "0"
+  ∷ []
 
-clearStyle : Attr Model Msg
-clearStyle = styles "padding" "6px 12px; background: #b83f45; color: white; border: none; border-radius: 4px; cursor: pointer"
+footerStyle : Style
+footerStyle =
+    "display"         ∶ "flex"
+  ∷ "justify-content" ∶ "space-between"
+  ∷ "padding"         ∶ "12px"
+  ∷ "color"           ∶ "#777"
+  ∷ []
+
+clearStyle : Style
+clearStyle =
+    "padding"       ∶ "6px 12px"
+  ∷ "border-radius" ∶ "4px"
+  ∷ [] <> accentBtn
 
 -- Key handler for input
 handleKey : String → Msg
 handleKey "Enter" = AddTodo
 handleKey _       = NoOp
 
+-- Item styles
+itemStyle : Style
+itemStyle =
+    "display"     ∶ "flex"
+  ∷ "align-items" ∶ "center"
+  ∷ "padding"     ∶ "8px"
+  ∷ []
+
+baseText : Style
+baseText = "flex" ∶ "1" ∷ []
+
+completedText : Style
+completedText = baseText
+  <> ( "text-decoration" ∶ "line-through"
+     ∷ "color"           ∶ "#999"
+     ∷ [] )
+
+deleteStyle : Style
+deleteStyle =
+    "background" ∶ "none"
+  ∷ "border"     ∶ "none"
+  ∷ "color"      ∶ "#cc9a9a"
+  ∷ "font-size"  ∶ "20px"
+  ∷ "cursor"     ∶ "pointer"
+  ∷ []
+
 -- View single todo item (used in foreach)
 viewTodoItem : TodoItem → ℕ → Node Model Msg
 viewTodoItem item idx =
-  li (keyAttr (show (todoId item)) ∷ class "todo-item" ∷ itemStyle ∷ [])
+  li (keyAttr (show (todoId item)) ∷ class "todo-item" ∷ toAttrs itemStyle)
     ( input (type' "checkbox" ∷ checkboxAttrs ∷ onClick (ToggleTodo (todoId item)) ∷ [])
-    ∷ span (textStyle ∷ []) [ text (todoText item) ]
-    ∷ button (onClick (RemoveTodo (todoId item)) ∷ class "delete-btn" ∷ deleteStyle ∷ [])
+    ∷ span (toAttrs textStyle) [ text (todoText item) ]
+    ∷ button (onClick (RemoveTodo (todoId item)) ∷ class "delete-btn" ∷ toAttrs deleteStyle)
         [ text "×" ]
     ∷ [] )
   where
-    itemStyle = styles "display" "flex; align-items: center; padding: 8px"
     checkboxAttrs = if completed item then checked else class ""
-    textStyle = if completed item
-                then styles "text-decoration" "line-through; color: #999; flex: 1"
-                else styles "flex" "1"
-    deleteStyle = styles "background" "none; border: none; color: #cc9a9a; font-size: 20px; cursor: pointer"
+    textStyle = if completed item then completedText else baseText
 
 -- Main template
 todoTemplate : Node Model Msg
 todoTemplate =
-  div (class "todo-app" ∷ appStyle ∷ [])
-    ( h1 (headerStyle ∷ []) [ text "todos" ]
-    ∷ div (class "input-section" ∷ inputSectionStyle ∷ [])
+  div (class "todo-app" ∷ toAttrs appStyle)
+    ( h1 (toAttrs headerStyle) [ text "todos" ]
+    ∷ div (class "input-section" ∷ toAttrs inputSectionStyle)
         ( input (type' "text"
                ∷ placeholder "What needs to be done?"
                ∷ valueBind inputText
                ∷ onInput UpdateInput
                ∷ onKeyDown handleKey
-               ∷ inputStyle'
-               ∷ [])
-        ∷ button (onClick AddTodo ∷ addBtnStyle ∷ [])
+               ∷ toAttrs inputStyle')
+        ∷ button (onClick AddTodo ∷ toAttrs addBtnStyle)
             [ text "Add" ]
         ∷ [] )
-    ∷ ul (class "todo-list" ∷ listStyle ∷ [])
+    ∷ ul (class "todo-list" ∷ toAttrs listStyle)
         [ foreachKeyed todos (λ item → show (todoId item)) viewTodoItem ]  -- keyed reactive list!
     ∷ when hasTodos (
-        div (class "footer" ∷ footerStyle ∷ [])
+        div (class "footer" ∷ toAttrs footerStyle)
           ( span [] [ bindF itemsLeftStr ]  -- auto-updates!
           ∷ when modelHasCompleted (
-              button (onClick ClearCompleted ∷ clearStyle ∷ [])
+              button (onClick ClearCompleted ∷ toAttrs clearStyle)
                 [ text "Clear completed" ]
             )
           ∷ [] )
