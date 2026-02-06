@@ -8,6 +8,21 @@
 
 import { interpretEvent, unsubscribe, wsConnections } from './events.js';
 
+// ─────────────────────────────────────────────────────────────────────
+// SVG/MathML namespace support
+// ─────────────────────────────────────────────────────────────────────
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
+
+// Namespaced attributes (xlink:href, xml:lang, etc.)
+const ATTR_NS = {
+  'xlink:href': 'http://www.w3.org/1999/xlink',
+  'xlink:title': 'http://www.w3.org/1999/xlink',
+  'xml:lang': 'http://www.w3.org/XML/1998/namespace',
+  'xml:space': 'http://www.w3.org/XML/1998/namespace',
+};
+
 /**
  * Execute Task (monadic chain)
  */
@@ -276,6 +291,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   let model = init;
   const rootScope = createScope(null);
   let currentScope = rootScope;
+  let currentNs = null;  // null = HTML, SVG_NS, or MATHML_NS
 
   let currentSubscription = null;
   let currentEventFingerprint = null;
@@ -355,7 +371,19 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       },
 
       elem: (tag, attrs, children) => {
-        const el = document.createElement(tag);
+        const prevNs = currentNs;
+
+        // Entering namespace
+        if (tag === 'svg') currentNs = SVG_NS;
+        else if (tag === 'math') currentNs = MATHML_NS;
+
+        // Create element in current namespace
+        const el = currentNs
+          ? document.createElementNS(currentNs, tag)
+          : document.createElement(tag);
+
+        // Exiting namespace (children go back to HTML)
+        if (tag === 'foreignObject' || tag === 'annotation-xml') currentNs = null;
 
         const attrArray = listToArray(attrs);
         for (const attr of attrArray) {
@@ -368,6 +396,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           if (childNode) el.appendChild(childNode);
         }
 
+        currentNs = prevNs;  // restore after subtree
         return el;
       },
 
@@ -500,6 +529,21 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   }
 
   /**
+   * Set attribute with namespace support
+   */
+  function setAttr(el, name, value) {
+    const ns = ATTR_NS[name];
+    if (ns) {
+      el.setAttributeNS(ns, name, value);
+    } else if (name === 'disabled' || name === 'checked') {
+      if (value === 'true') el.setAttribute(name, '');
+      else el.removeAttribute(name);
+    } else {
+      el.setAttribute(name, value);
+    }
+  }
+
+  /**
    * Apply attribute to element
    */
   function applyAttr(el, attr) {
@@ -508,18 +552,13 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         if (name === 'disabled' || name === 'checked') {
           if (value === 'true') el.setAttribute(name, '');
         } else {
-          el.setAttribute(name, value);
+          setAttr(el, name, value);
         }
       },
       attrBind: (name, binding) => {
         const extract = NodeModule.Binding.extract(binding);
         const value = extract(model);
-        if (name === 'disabled' || name === 'checked') {
-          if (value === 'true') el.setAttribute(name, '');
-          else el.removeAttribute(name);
-        } else {
-          el.setAttribute(name, value);
-        }
+        setAttr(el, name, value);
         currentScope.attrBindings.push({ node: el, binding, attrName: name, lastValue: value, slots: null });
       },
       on: (event, msg) => {
@@ -532,9 +571,27 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       },
       onValue: (event, handler) => {
         el.addEventListener(event, (e) => {
-          const value = event === 'keydown' || event === 'keyup'
-            ? e.key
-            : e.target.value || '';
+          let value;
+          if (event === 'keydown' || event === 'keyup') {
+            value = e.key;
+          } else if (event === 'wheel') {
+            value = String(e.deltaY);
+            e.preventDefault();
+          } else if (e.clientX !== undefined && e.clientY !== undefined) {
+            // Pointer/mouse event - convert to SVG coords if in SVG
+            const svg = el.closest('svg');
+            if (svg && svg.getScreenCTM) {
+              const pt = svg.createSVGPoint();
+              pt.x = e.clientX;
+              pt.y = e.clientY;
+              const svgPt = pt.matrixTransform(svg.getScreenCTM().inverse());
+              value = svgPt.x + ',' + svgPt.y;
+            } else {
+              value = e.clientX + ',' + e.clientY;
+            }
+          } else {
+            value = e.target.value || '';
+          }
           dispatch(handler(value));
         });
       },
@@ -639,12 +696,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       const extract = NodeModule.Binding.extract(b.binding);
       const newVal = extract(newModel);
       if (newVal !== b.lastValue) {
-        if (b.attrName === 'disabled' || b.attrName === 'checked') {
-          if (newVal === 'true') b.node.setAttribute(b.attrName, '');
-          else b.node.removeAttribute(b.attrName);
-        } else {
-          b.node.setAttribute(b.attrName, newVal);
-        }
+        setAttr(b.node, b.attrName, newVal);
         b.lastValue = newVal;
       }
     }

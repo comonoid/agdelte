@@ -3,6 +3,21 @@
  * DOM element creation and patching
  */
 
+// ─────────────────────────────────────────────────────────────────────
+// SVG/MathML namespace support
+// ─────────────────────────────────────────────────────────────────────
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
+
+// Namespaced attributes (xlink:href, xml:lang, etc.)
+const ATTR_NS = {
+  'xlink:href': 'http://www.w3.org/1999/xlink',
+  'xlink:title': 'http://www.w3.org/1999/xlink',
+  'xml:lang': 'http://www.w3.org/XML/1998/namespace',
+  'xml:space': 'http://www.w3.org/XML/1998/namespace',
+};
+
 /**
  * Convert Agda List to JavaScript Array
  * Agda List: [] = null or { head, tail } structure
@@ -61,9 +76,10 @@ export function toArray(agdaList) {
  * Create real DOM from virtual DOM
  * @param {Object} vnode - Virtual node
  * @param {Function} dispatch - Message dispatcher
+ * @param {string|null} ns - Current namespace (null = HTML, SVG_NS, MATHML_NS)
  * @returns {Node} - Real DOM node
  */
-export function createElement(vnode, dispatch) {
+export function createElement(vnode, dispatch, ns = null) {
   if (vnode === null || vnode === undefined) {
     return document.createTextNode('');
   }
@@ -79,8 +95,17 @@ export function createElement(vnode, dispatch) {
   const attrs = toArray(vnode.attrs || []);
   const children = toArray(vnode.children || []);
 
-  // Create element
-  const el = document.createElement(tag);
+  // Entering namespace
+  if (tag === 'svg') ns = SVG_NS;
+  else if (tag === 'math') ns = MATHML_NS;
+
+  // Create element in current namespace
+  const el = ns
+    ? document.createElementNS(ns, tag)
+    : document.createElement(tag);
+
+  // Exiting namespace (children go back to HTML)
+  const childNs = (tag === 'foreignObject' || tag === 'annotation-xml') ? null : ns;
 
   // Apply attributes
   for (const attr of attrs) {
@@ -94,17 +119,29 @@ export function createElement(vnode, dispatch) {
       // pair can be [key, child] or { _1: key, _2: child }
       const key = Array.isArray(pair) ? pair[0] : (pair.fst || pair._1);
       const child = Array.isArray(pair) ? pair[1] : (pair.snd || pair._2);
-      const childEl = createElement(child, dispatch);
+      const childEl = createElement(child, dispatch, childNs);
       if (childEl.dataset) childEl.dataset.key = key;
       el.appendChild(childEl);
     }
   } else {
     for (const child of children) {
-      el.appendChild(createElement(child, dispatch));
+      el.appendChild(createElement(child, dispatch, childNs));
     }
   }
 
   return el;
+}
+
+/**
+ * Set attribute with namespace support
+ */
+function setAttr(el, name, value) {
+  const ns = ATTR_NS[name];
+  if (ns) {
+    el.setAttributeNS(ns, name, value);
+  } else {
+    el.setAttribute(name, value);
+  }
 }
 
 /**
@@ -121,7 +158,7 @@ function applyAttribute(el, attr, dispatch) {
       } else if (name === 'checked' && 'checked' in el) {
         el.checked = !!value;
       } else {
-        el.setAttribute(name, value);
+        setAttr(el, name, value);
       }
       break;
 
@@ -217,7 +254,7 @@ function applyAttribute(el, attr, dispatch) {
     default:
       // Fallback: regular attribute
       if (name && value !== undefined) {
-        el.setAttribute(name, value);
+        setAttr(el, name, value);
       }
   }
 }
@@ -254,14 +291,27 @@ function removeAttribute(el, attr) {
 }
 
 /**
+ * Detect namespace from vnode tag
+ */
+function detectNs(vnode, parentNs) {
+  if (!vnode || typeof vnode === 'string' || vnode.tag === 'TEXT') return parentNs;
+  const tag = vnode.tag;
+  if (tag === 'svg') return SVG_NS;
+  if (tag === 'math') return MATHML_NS;
+  if (tag === 'foreignObject' || tag === 'annotation-xml') return null;
+  return parentNs;
+}
+
+/**
  * DOM patching: apply diff between old and new VDOM
  * @param {Node} dom - Current DOM node
  * @param {Object} oldVnode - Old virtual node
  * @param {Object} newVnode - New virtual node
  * @param {Function} dispatch - Dispatcher
+ * @param {string|null} ns - Current namespace
  * @returns {Node} - Updated DOM node
  */
-export function patch(dom, oldVnode, newVnode, dispatch) {
+export function patch(dom, oldVnode, newVnode, dispatch, ns = null) {
   // If nodes are identical — do nothing
   if (oldVnode === newVnode) {
     return dom;
@@ -275,12 +325,12 @@ export function patch(dom, oldVnode, newVnode, dispatch) {
 
   // If old node is null — create new
   if (oldVnode === null || oldVnode === undefined) {
-    return createElement(newVnode, dispatch);
+    return createElement(newVnode, dispatch, ns);
   }
 
   // If types differ — full replacement
   if (getNodeType(oldVnode) !== getNodeType(newVnode)) {
-    const newDom = createElement(newVnode, dispatch);
+    const newDom = createElement(newVnode, dispatch, ns);
     dom.parentNode?.replaceChild(newDom, dom);
     return newDom;
   }
@@ -298,14 +348,16 @@ export function patch(dom, oldVnode, newVnode, dispatch) {
 
   // Different tags — replace
   if (oldVnode.tag !== newVnode.tag) {
-    const newDom = createElement(newVnode, dispatch);
+    const newNs = detectNs(newVnode, ns);
+    const newDom = createElement(newVnode, dispatch, newNs);
     dom.parentNode?.replaceChild(newDom, dom);
     return newDom;
   }
 
   // Same tag — patch attributes and children
+  const childNs = detectNs(newVnode, ns);
   patchAttributes(dom, toArray(oldVnode.attrs || []), toArray(newVnode.attrs || []), dispatch);
-  patchChildren(dom, oldVnode, newVnode, dispatch);
+  patchChildren(dom, oldVnode, newVnode, dispatch, childNs);
 
   return dom;
 }
@@ -337,13 +389,13 @@ function patchAttributes(el, oldAttrs, newAttrs, dispatch) {
 /**
  * Patch children
  */
-function patchChildren(el, oldVnode, newVnode, dispatch) {
+function patchChildren(el, oldVnode, newVnode, dispatch, ns = null) {
   const oldChildren = toArray(oldVnode.children || []);
   const newChildren = toArray(newVnode.children || []);
 
   // Keyed diffing
   if (newVnode.keyed && oldVnode.keyed) {
-    patchKeyedChildren(el, oldChildren, newChildren, dispatch);
+    patchKeyedChildren(el, oldChildren, newChildren, dispatch, ns);
     return;
   }
 
@@ -356,13 +408,13 @@ function patchChildren(el, oldVnode, newVnode, dispatch) {
 
     if (i >= oldChildren.length) {
       // Add new
-      el.appendChild(createElement(newChild, dispatch));
+      el.appendChild(createElement(newChild, dispatch, ns));
     } else if (i >= newChildren.length) {
       // Remove extra
       el.removeChild(el.childNodes[newChildren.length]);
     } else {
       // Patch existing
-      patch(el.childNodes[i], oldChild, newChild, dispatch);
+      patch(el.childNodes[i], oldChild, newChild, dispatch, ns);
     }
   }
 }
@@ -370,7 +422,7 @@ function patchChildren(el, oldVnode, newVnode, dispatch) {
 /**
  * Patch keyed children (efficient diffing)
  */
-function patchKeyedChildren(el, oldChildren, newChildren, dispatch) {
+function patchKeyedChildren(el, oldChildren, newChildren, dispatch, ns = null) {
   const oldMap = new Map(oldChildren);
   const newMap = new Map(newChildren);
 
@@ -393,7 +445,7 @@ function patchKeyedChildren(el, oldChildren, newChildren, dispatch) {
 
     if (!oldChild) {
       // New element
-      dom = createElement(newChild, dispatch);
+      dom = createElement(newChild, dispatch, ns);
       dom.dataset.key = key;
 
       if (prevDom) {
@@ -403,7 +455,7 @@ function patchKeyedChildren(el, oldChildren, newChildren, dispatch) {
       }
     } else {
       // Update existing
-      dom = patch(dom, oldChild, newChild, dispatch);
+      dom = patch(dom, oldChild, newChild, dispatch, ns);
 
       // Move if needed
       if (prevDom && prevDom.nextSibling !== dom) {
