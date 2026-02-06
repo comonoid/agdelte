@@ -15,6 +15,14 @@ open import Agdelte.Css.Show using (showFloat)
 open import Agdelte.Reactive.Node using (Node; Attr; attr; elem)
 
 ------------------------------------------------------------------------
+-- String equality (for JS compilation)
+------------------------------------------------------------------------
+
+private
+  postulate strEq : String → String → Bool
+  {-# COMPILE JS strEq = (a) => (b) => a === b #-}
+
+------------------------------------------------------------------------
 -- Duration
 ------------------------------------------------------------------------
 
@@ -178,11 +186,8 @@ animate attrName from' to' anim = elem "animate"
   ∷ attr "additive" (showAdditive (additive anim))
   ∷ attr "calcMode" (showCalcMode (calcMode anim))
   ∷ attr "restart" (showRestart (restart anim))
-  ∷ (if animId anim == "" then [] else attr "id" (animId anim) ∷ [])
+  ∷ (if strEq (animId anim) "" then [] else attr "id" (animId anim) ∷ [])
   ) []
-  where
-    postulate _==_ : String → String → Bool
-    {-# COMPILE JS _==_ = (a, b) => a === b #-}
 
 -- Value animation with keyframes: values="v1;v2;v3"
 animateValues : ∀ {M Msg}
@@ -198,11 +203,8 @@ animateValues attrName vals anim = elem "animate"
   ∷ attr "repeatCount" (showRepeatCount (repeatCount anim))
   ∷ attr "fill" (showFillMode (fill' anim))
   ∷ attr "calcMode" (showCalcMode (calcMode anim))
-  ∷ (if animId anim == "" then [] else attr "id" (animId anim) ∷ [])
+  ∷ (if strEq (animId anim) "" then [] else attr "id" (animId anim) ∷ [])
   ) []
-  where
-    postulate _==_ : String → String → Bool
-    {-# COMPILE JS _==_ = (a, b) => a === b #-}
 
 -- Transform animation
 data TransformType : Set where
@@ -231,11 +233,8 @@ animateTransform ttype from' to' anim = elem "animateTransform"
   ∷ attr "repeatCount" (showRepeatCount (repeatCount anim))
   ∷ attr "fill" (showFillMode (fill' anim))
   ∷ attr "additive" (showAdditive (additive anim))
-  ∷ (if animId anim == "" then [] else attr "id" (animId anim) ∷ [])
+  ∷ (if strEq (animId anim) "" then [] else attr "id" (animId anim) ∷ [])
   ) []
-  where
-    postulate _==_ : String → String → Bool
-    {-# COMPILE JS _==_ = (a, b) => a === b #-}
 
 -- Motion along path
 animateMotion : ∀ {M Msg}
@@ -250,11 +249,8 @@ animateMotion pathData autoRotate anim = elem "animateMotion"
   ∷ attr "repeatCount" (showRepeatCount (repeatCount anim))
   ∷ attr "fill" (showFillMode (fill' anim))
   ∷ (if autoRotate then attr "rotate" "auto" ∷ [] else [])
-  ++L (if animId anim == "" then [] else attr "id" (animId anim) ∷ [])
+  ++L (if strEq (animId anim) "" then [] else attr "id" (animId anim) ∷ [])
   ) []
-  where
-    postulate _==_ : String → String → Bool
-    {-# COMPILE JS _==_ = (a, b) => a === b #-}
 
 -- Set (discrete state change)
 smilSet : ∀ {M Msg}
@@ -268,11 +264,8 @@ smilSet attrName to' anim = elem "set"
   ∷ attr "begin" (showTiming (begin' anim))
   ∷ attr "dur" (showDuration (dur anim))
   ∷ attr "fill" (showFillMode (fill' anim))
-  ∷ (if animId anim == "" then [] else attr "id" (animId anim) ∷ [])
+  ∷ (if strEq (animId anim) "" then [] else attr "id" (animId anim) ∷ [])
   ) []
-  where
-    postulate _==_ : String → String → Bool
-    {-# COMPILE JS _==_ = (a, b) => a === b #-}
 
 ------------------------------------------------------------------------
 -- Choreography helpers

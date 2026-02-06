@@ -48,7 +48,7 @@ updateModel Shrink m with Model.radius m
 
 svgTemplate : Node Model Msg
 svgTemplate =
-  div [ class "svg-test" ]
+  div (class "svg-test" ∷ style "text-align" "center" ∷ [])
     ( h1 [] [ text "SVG Test" ]
     ∷ svg ( viewBox_ "0 0 200 200"
           ∷ width_ "200"
@@ -77,8 +77,9 @@ svgTemplate =
     ∷ div [ style "margin-top" "10px" ]
         ( button [ onClick Shrink ] [ text "−" ]
         ∷ button [ onClick Grow ] [ text "+" ]
-        ∷ bind (stringBinding λ m → " Radius: " ++ show (Model.radius m))
         ∷ [])
+    ∷ div []
+        [ bind (stringBinding λ m → "Radius: " ++ show (Model.radius m)) ]
     ∷ [] )
 
 ------------------------------------------------------------------------

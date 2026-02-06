@@ -7,7 +7,7 @@ module Agdelte.Svg.Events where
 
 open import Data.Float using (Float)
 open import Data.String using (String)
-open import Agdelte.Reactive.Node using (Attr; on; onValue)
+open import Agdelte.Reactive.Node using (Attr; on; onValue; onValueScreen)
 open import Agdelte.Svg.Path using (Point; _,_)
 
 ------------------------------------------------------------------------
@@ -18,22 +18,19 @@ open import Agdelte.Svg.Path using (Point; _,_)
 -- The runtime will extract x,y from the event and format as "x,y"
 -- Use with onSvgPoint to parse back
 
+postulate parsePointJS : String → Float → Float → (Float → Float → Point) → Point
+{-# COMPILE JS parsePointJS = s => defX => defY => mk => {
+  const parts = s.split(',');
+  if (parts.length === 2) {
+    const x = parseFloat(parts[0]);
+    const y = parseFloat(parts[1]);
+    if (!isNaN(x) && !isNaN(y)) return mk(x)(y);
+  }
+  return mk(defX)(defY);
+} #-}
+
 parsePoint : String → Point
-parsePoint s = x' , y'
-  where
-    postulate parsePointJS : String → Float → Float → (Float → Float → Point) → Point
-    {-# COMPILE JS parsePointJS = (s, defX, defY, mk) => {
-      const parts = s.split(',');
-      if (parts.length === 2) {
-        const x = parseFloat(parts[0]);
-        const y = parseFloat(parts[1]);
-        if (!isNaN(x) && !isNaN(y)) return mk(x)(y);
-      }
-      return mk(defX)(defY);
-    } #-}
-    x' = 0.0
-    y' = 0.0
-    -- Note: actual parsing happens via onSvgPoint in runtime
+parsePoint s = parsePointJS s 0.0 0.0 _,_
 
 ------------------------------------------------------------------------
 -- SVG Click with coordinates
@@ -84,9 +81,26 @@ onSvgMouseUp handler = onValue "mouseup" (λ s → handler (parsePoint s))
 -- Wheel event (for zoom)
 ------------------------------------------------------------------------
 
+-- Parse float from string
+postulate parseFloatJS : String → Float
+{-# COMPILE JS parseFloatJS = s => parseFloat(s) || 0 #-}
+
 -- Returns delta as string "deltaY" (positive = zoom out, negative = zoom in)
 onSvgWheel : ∀ {M Msg} → (Float → Msg) → Attr M Msg
-onSvgWheel handler = onValue "wheel" (λ s → handler (parseFloat s))
-  where
-    postulate parseFloat : String → Float
-    {-# COMPILE JS parseFloat = s => parseFloat(s) || 0 #-}
+onSvgWheel handler = onValue "wheel" (λ s → handler (parseFloatJS s))
+
+------------------------------------------------------------------------
+-- Screen coordinate events (for pan/drag - more stable than SVG coords)
+------------------------------------------------------------------------
+
+-- These use clientX/clientY directly (screen pixels)
+-- Better for drag operations because viewBox changes don't affect them
+
+onScreenPointerDown : ∀ {M Msg} → (Point → Msg) → Attr M Msg
+onScreenPointerDown handler = onValueScreen "pointerdown" (λ s → handler (parsePoint s))
+
+onScreenPointerMove : ∀ {M Msg} → (Point → Msg) → Attr M Msg
+onScreenPointerMove handler = onValueScreen "pointermove" (λ s → handler (parsePoint s))
+
+onScreenPointerUp : ∀ {M Msg} → (Point → Msg) → Attr M Msg
+onScreenPointerUp handler = onValueScreen "pointerup" (λ s → handler (parsePoint s))

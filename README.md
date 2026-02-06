@@ -198,6 +198,9 @@ The key difference from Virtual DOM: `template` is **data**, not a function. Bin
 | [doc/api/agent.md](doc/api/agent.md) | Agent coalgebra, Wiring, SharedAgent, Diagram |
 | [doc/api/signal.md](doc/api/signal.md) | Synchronous streams: const, map, delay, fold |
 | [doc/api/session.md](doc/api/session.md) | Session types: send/recv, dual, offer/choose |
+| [doc/api/css.md](doc/api/css.md) | Typed CSS: Decl, Length, Color, Layout, Stylesheet |
+| [doc/api/svg.md](doc/api/svg.md) | Typed SVG: Elements, Path, Transform, SMIL, Events |
+| [doc/api/anim.md](doc/api/anim.md) | Model-driven animations: Tween, Spring |
 | [doc/api/ffi.md](doc/api/ffi.md) | Browser/Server postulates, Serialize |
 
 ### Additional Documents
@@ -271,6 +274,29 @@ src/
     │   ├── Request.agda         -- HTTP requests
     │   └── Time.agda            -- Time primitives
     │
+    ├── Css/                     -- CSS DSL
+    │   ├── Decl.agda            -- CSS declarations
+    │   ├── Length.agda          -- Length units (px, em, rem, %)
+    │   ├── Color.agda           -- Color types (rgb, hsl, hex)
+    │   ├── Layout.agda          -- Flexbox, Grid
+    │   ├── Transition.agda      -- CSS transitions
+    │   ├── Animation.agda       -- CSS @keyframes
+    │   ├── Stylesheet.agda      -- Full stylesheet generation
+    │   └── Render.agda          -- CSS rendering to String
+    │
+    ├── Svg/                     -- SVG DSL
+    │   ├── Core.agda            -- Core types and rendering
+    │   ├── Attributes.agda      -- Typed SVG attributes
+    │   ├── Elements.agda        -- SVG elements (rect, circle, path, etc.)
+    │   ├── Path.agda            -- Path commands (M, L, C, A, Z)
+    │   ├── Transform.agda       -- Transform operations
+    │   ├── Smil.agda            -- SMIL declarative animations
+    │   └── Events.agda          -- SVG pointer events with coordinates
+    │
+    ├── Anim/                    -- Model-driven animations
+    │   ├── Tween.agda           -- Tween animations with easing
+    │   └── Spring.agda          -- Spring physics animations
+    │
     ├── Theory/                  -- Mathematical foundation (optional)
     │   ├── Poly.agda            -- Polynomial functors, Coalg, Lens
     │   ├── PolySignal.agda      -- Signal ≅ Coalg (Mono A ⊤)
@@ -308,6 +334,14 @@ examples/
     SessionDual.agda             -- Session duality example
     SessionFormDemo.agda         -- Session form demo
     Worker.agda                  -- Web worker example
+    CssDemo.agda                 -- CSS DSL demo
+    CssFullDemo.agda             -- CSS full demo (all phases)
+    AnimDemo.agda                -- Tween/Spring animations
+    SvgTest.agda                 -- Basic SVG demo
+    SvgSmil.agda                 -- SMIL declarative animations
+    SvgPanZoom.agda              -- Interactive pan/zoom
+    SvgChart.agda                -- Data-driven bar chart
+    SvgLineDraw.agda             -- Self-drawing paths
 
 runtime/
     index.js                     -- Entry point, exports
@@ -419,6 +453,9 @@ See [examples/README.md](examples/README.md) for details.
 - **Formal verification** — `Optic ≅ Poly.Lens` for monomial case, lens law proofs, `ReactiveApp ↔ Coalg` formal connection, session duality proof
 - **Effects** — Signal (coinductive streams), Event (subscriptions), Cmd (commands), Task (monadic chains)
 - **Primitives** — interval, animationFrame, keyboard, mouse, HTTP, WebSocket, workers
+- **CSS DSL** — typed CSS generation: Decl, Length, Color, Layout, Transitions, Animations, Stylesheet
+- **SVG DSL** — namespace-aware SVG: typed elements, Path commands, Transform, SMIL animations, pointer events
+- **Animations** — model-driven Tween/Spring with compile-time keyframe generation
 
 ## Philosophy
 

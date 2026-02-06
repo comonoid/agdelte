@@ -15,6 +15,31 @@ import { interpretEvent, unsubscribe, wsConnections } from './events.js';
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
 
+// SMIL animation elements that need manual start when dynamically created
+const SMIL_TAGS = ['animate', 'animateTransform', 'animateMotion', 'set'];
+
+/**
+ * Start SMIL animations that don't auto-start when dynamically created
+ */
+function startSmilAnimations(container) {
+  // Use requestAnimationFrame to ensure DOM is fully painted
+  requestAnimationFrame(() => {
+    for (const tag of SMIL_TAGS) {
+      const anims = container.getElementsByTagName(tag);
+      for (const anim of anims) {
+        // Only start animations with immediate begin (0ms, 0s, or numeric offset)
+        const begin = anim.getAttribute('begin') || '0s';
+        // Match: 0, 0s, 0ms, 100ms, 1s, etc. (not event-based like "click")
+        if (/^\d/.test(begin)) {
+          if (typeof anim.beginElement === 'function') {
+            try { anim.beginElement(); } catch (e) { /* ignore */ }
+          }
+        }
+      }
+    }
+  });
+}
+
 // Namespaced attributes (xlink:href, xml:lang, etc.)
 const ATTR_NS = {
   'xlink:href': 'http://www.w3.org/1999/xlink',
@@ -595,6 +620,18 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           dispatch(handler(value));
         });
       },
+      // Screen coordinates (no SVG conversion) - better for drag/pan
+      onValueScreen: (event, handler) => {
+        el.addEventListener(event, (e) => {
+          let value;
+          if (e.clientX !== undefined && e.clientY !== undefined) {
+            value = e.clientX + ',' + e.clientY;
+          } else {
+            value = '0,0';
+          }
+          dispatch(handler(value));
+        });
+      },
       style: (name, value) => {
         el.style.setProperty(name, value);
       },
@@ -985,6 +1022,8 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   const dom = renderNode(template);
   if (dom) {
     container.appendChild(dom);
+    // Start SMIL animations (they don't auto-start when dynamically created)
+    startSmilAnimations(container);
   }
 
   // Initial subscriptions

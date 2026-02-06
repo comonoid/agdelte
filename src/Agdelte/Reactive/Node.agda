@@ -74,6 +74,8 @@ data Attr (Model Msg : Set) : Set₁ where
   on : String → Msg → Attr Model Msg
   -- Event with value (e.g., onInput)
   onValue : String → (String → Msg) → Attr Model Msg
+  -- Event with screen coordinates (for drag/pan - no SVG conversion)
+  onValueScreen : String → (String → Msg) → Attr Model Msg
   -- Style
   style : String → String → Attr Model Msg
   -- Dynamic style
@@ -266,6 +268,7 @@ zoomAttr get wrap (attr name val) = attr name val
 zoomAttr get wrap (attrBind name b) = attrBind name (focusBinding get b)
 zoomAttr get wrap (on event msg) = on event (wrap msg)
 zoomAttr get wrap (onValue event handler) = onValue event (wrap ∘ handler)
+zoomAttr get wrap (onValueScreen event handler) = onValueScreen event (wrap ∘ handler)
 zoomAttr get wrap (style name val) = style name val
 zoomAttr get wrap (styleBind name b) = styleBind name (focusBinding get b)
 

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SVG Pan/Zoom Demo - Agdelte</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .pan-zoom-demo {
+      text-align: center;
+      padding: 2rem;
+    }
+    .pan-zoom-demo svg {
+      margin: 1rem 0;
+      user-select: none;
+    }
+    .pan-zoom-demo button {
+      padding: 0.5rem 1rem;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="app" data-agdelte="SvgPanZoom"></div>
+
+  <script type="module">
+    import { mountReactive } from '../runtime/reactive.js';
+
+    const appEl = document.querySelector('[data-agdelte]');
+    const moduleName = appEl.dataset.agdelte;
+
+    mountReactive(moduleName, appEl).then(app => {
+      console.log('Pan/Zoom demo mounted');
+      window.app = app;
+    });
+  </script>
+</body>
+</html>

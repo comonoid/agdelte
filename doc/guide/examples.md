@@ -31,6 +31,11 @@ All examples use **Reactive Bindings** (like Svelte) — no Virtual DOM.
 | [CSS Demo](#css-demo) | Stylesheet, rule, media, keyframeRule, renderStylesheet | CSS |
 | [CSS Full Demo](#css-full-demo) | All CSS phases: variables, layout, transitions, animations | CSS |
 | [Anim Demo](#anim-demo) | Tween, Spring, compile-time verification | CSS |
+| [SVG Test](#svg-test) | SVG namespace, typed attributes, reactive bindings | SVG |
+| [SMIL Animations](#smil-animations) | Declarative animations, choreography, motion paths | SVG |
+| [SVG Pan/Zoom](#svg-panzoom) | Interactive viewport, SVG events, coordinate conversion | SVG |
+| [SVG Bar Chart](#svg-bar-chart) | Data visualization, foreach, reactive bindings | SVG |
+| [Line Drawing](#line-drawing) | Stroke-dasharray trick, SMIL animate | SVG |
 
 ---
 
@@ -732,6 +737,150 @@ Source: `examples/AnimDemo.agda`
 
 ---
 
+## SVG Test
+
+**Demonstrates:** Basic SVG rendering with namespace-aware elements, typed attributes, and reactive bindings.
+
+```agda
+open import Agdelte.Svg
+
+svgTemplate : Node Model Msg
+svgTemplate =
+  svg (viewBox_ "0 0 200 200" ∷ width_ "200" ∷ height_ "200" ∷ [])
+    ( rect' (x_ "0" ∷ y_ "0" ∷ width_ "200" ∷ height_ "200" ∷ fillC (hex "#f0f0f0") ∷ []) []
+    ∷ circle' (cxF 100.0 ∷ cyF 100.0
+              ∷ attrBind "r" (stringBinding λ m → show (radius m))
+              ∷ fillC (hex "#4a9eff") ∷ []) []
+    ∷ [])
+```
+
+**Key point:** `Agdelte.Svg` re-exports all SVG modules. Elements use `createElementNS` with SVG namespace automatically. Typed attributes (`cxF`, `fillC`) provide compile-time validation.
+
+Source: `examples/SvgTest.agda`
+
+---
+
+## SMIL Animations
+
+**Demonstrates:** Declarative SVG animations without JavaScript: choreographed sequences, click triggers, hover effects, motion paths.
+
+```agda
+open import Agdelte.Svg
+
+-- Choreographed sequence: fade in → pulse → color shift
+circle' (cxF 150.0 ∷ cyF 100.0 ∷ rF 30.0 ∷ opacity_ "0" ∷ [])
+  ( animate "opacity" "0" "1"
+      (freezeEnd (withId "fadeIn" (record defaultSmil { dur = ms 800 })))
+  ∷ animateValues "r" ("30" ∷ "40" ∷ "30" ∷ [])
+      (withId "pulse" (record defaultSmil { dur = ms 600 ; begin' = syncEnd "fadeIn" }))
+  ∷ animate "fill" "#4a9eff" "#ff6b6b"
+      (freezeEnd (record defaultSmil { dur = ms 400 ; begin' = syncEnd "pulse" }))
+  ∷ [])
+
+-- Click to expand
+circle' (cxF 150.0 ∷ cyF 250.0 ∷ rF 25.0 ∷ [])
+  ( animate "r" "25" "50"
+      (freezeEnd (onClick' (record defaultSmil { dur = ms 300 })))
+  ∷ [])
+```
+
+**Key point:** SMIL animations are declarative — the browser handles timing and interpolation. `syncEnd`, `syncBegin`, `onClick'` create choreographed sequences. No JavaScript animation loop needed.
+
+Source: `examples/SvgSmil.agda`
+
+---
+
+## SVG Pan/Zoom
+
+**Demonstrates:** Interactive SVG viewport manipulation with pointer events and coordinate conversion.
+
+```agda
+open import Agdelte.Svg
+
+record Model : Set where
+  field viewBox : ViewBox ; isDragging : Bool ; lastX lastY : Float
+
+updateModel (Drag p) m with isDragging m
+... | true =
+  let dx = Point.x p - lastX m
+      dy = Point.y p - lastY m
+  in record m { viewBox = panViewBox (0.0 - dx) (0.0 - dy) (viewBox m) ; ... }
+
+panZoomTemplate =
+  svg ( attrBind "viewBox" (stringBinding λ m → showViewBox (viewBox m))
+      ∷ onSvgPointerDown StartDrag
+      ∷ onSvgPointerMove Drag
+      ∷ onSvgPointerUp (λ _ → StopDrag)
+      ∷ [])
+    (... shapes ...)
+```
+
+**Key point:** `onSvgPointerDown/Move` handlers receive coordinates in SVG space (via `getScreenCTM().inverse()`). `panViewBox`/`zoomViewBox` manipulate the ViewBox directly.
+
+Source: `examples/SvgPanZoom.agda`
+
+---
+
+## SVG Bar Chart
+
+**Demonstrates:** Data visualization with `foreach`, reactive bindings, and interactive selection.
+
+```agda
+open import Agdelte.Svg
+
+record BarData : Set where
+  field barLabel : String ; barValue : ℕ ; barColor : Color
+
+renderBar : BarData × ℕ → ℕ → Node Model Msg
+renderBar (bar , idx) _ =
+  g (onClick (SelectBar idx) ∷ [])
+    ( rect' ( xF xPos
+            ∷ attrBind "y" (stringBinding λ m → ...)
+            ∷ attrBind "height" (stringBinding λ m → ...)
+            ∷ attrBind "fill" (stringBinding λ m →
+                if idx ≡ᵇ selectedIdx m then "#1e40af" else getColorAt idx (bars m))
+            ∷ []) []
+    ∷ svgText (...) [ bind (stringBinding λ m → show (getValueAt idx (bars m))) ]
+    ∷ [] )
+
+chartTemplate =
+  svg (...)
+    ( yAxis ∷ foreach (λ m → indexBars (bars m)) renderBar ∷ [] )
+```
+
+**Key point:** `foreach` generates bars from model data. Each bar has reactive bindings for position, height, and color. Click events update selection.
+
+Source: `examples/SvgChart.agda`
+
+---
+
+## Line Drawing
+
+**Demonstrates:** Self-drawing paths using stroke-dasharray/dashoffset trick with SMIL animation.
+
+```agda
+open import Agdelte.Svg
+
+starPath = "M150 20 L179 90 L255 90 L194 140 L218 215 L150 170 L82 215 L106 140 L45 90 L121 90 Z"
+starLength = 530.0
+
+drawingPathSmil pathD len strokeColor =
+  path' ( d_ pathD
+        ∷ stroke_ strokeColor ∷ fill_ "none"
+        ∷ attr "stroke-dasharray" (showFloat len)
+        ∷ attr "stroke-dashoffset" (showFloat len)  -- start hidden
+        ∷ [])
+    ( animate "stroke-dashoffset" (showFloat len) "0"
+        (freezeEnd (record defaultSmil { dur = sec 2.0 ; begin' = onEvent "click" }))
+    ∷ [] )
+```
+
+**Key point:** `stroke-dasharray = pathLength` with `stroke-dashoffset` transitioning from pathLength to 0 creates the drawing effect. SMIL animates the dashoffset smoothly.
+
+Source: `examples/SvgLineDraw.agda`
+
+---
+
 ## Running Examples
 
 ```bash
@@ -763,6 +912,11 @@ http://localhost:8080/examples_html/stress-test.html
 http://localhost:8080/examples_html/css-demo.html
 http://localhost:8080/examples_html/css-full-demo.html
 http://localhost:8080/examples_html/anim-demo.html
+http://localhost:8080/examples_html/svg-test.html
+http://localhost:8080/examples_html/svg-smil.html
+http://localhost:8080/examples_html/svg-panzoom.html
+http://localhost:8080/examples_html/svg-chart.html
+http://localhost:8080/examples_html/svg-linedraw.html
 
 # Server examples (Haskell-compiled, run in terminal)
 npm run build:shared-demo && npm run run:shared-demo
