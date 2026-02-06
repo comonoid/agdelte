@@ -21,6 +21,7 @@
 | [Signal](api/signal.md) | Synchronous streams: const, map, delay/pre, fold |
 | [Session](api/session.md) | Session types: send/recv, dual, offer/choose, protocol builders |
 | [CSS](api/css.md) | Typed CSS DSL: Decl, Length, Color, Layout, Transitions, Animations, Stylesheet |
+| [SVG](api/svg.md) | Typed SVG DSL: Elements, Attributes, Path, Transform, ViewBox, SMIL, Events |
 | [Anim](api/anim.md) | Model-driven animations: Tween, Spring (gentle, snappy, bouncy) |
 | [FFI](api/ffi.md) | Browser/Server postulates, Serialize, Testing |
 
