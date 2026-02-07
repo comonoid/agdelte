@@ -43,7 +43,7 @@ data SceneNode (Model Msg : Set) : Set₁ where
   bindText3D    : (Model → String) → TextStyle → Transform → SceneNode Model Msg
   bindLight     : (Model → Light) → SceneNode Model Msg
   -- Animation
-  animate : (Float → Transform) → SceneNode Model Msg → SceneNode Model Msg
+  animate : (ℕ → Transform) → SceneNode Model Msg → SceneNode Model Msg
 
 data Geometry : Set where
   box      : Vec3 → Geometry
@@ -322,8 +322,8 @@ material). No manual time management needed.
 ```agda
 data SceneNode (Model Msg : Set) : Set₁ where
   ...
-  animate : (Float → Transform) → SceneNode Model Msg → SceneNode Model Msg
-  --        time in seconds          wraps existing node
+  animate : (ℕ → Transform) → SceneNode Model Msg → SceneNode Model Msg
+  --        time in ms (ℕ)          wraps existing node
 ```
 
 Wraps any node. Runtime calls the function each frame, applies result
@@ -768,7 +768,7 @@ data Easing : Set where
   cubicBezier : Float → Float → Float → Float → Easing
 
 data Duration : Set where
-  ms : Float → Duration
+  ms : ℕ → Duration       -- reuse from Css.Easing
   s  : Float → Duration
 ```
 
@@ -819,7 +819,7 @@ data SceneNode (Model Msg : Set) : Set₁ where
   bindTransform : (Model → Transform) → SceneNode Model Msg → SceneNode Model Msg
 
   -- Continuous animation
-  animate : (Float → Transform) → SceneNode Model Msg → SceneNode Model Msg
+  animate : (ℕ → Transform) → SceneNode Model Msg → SceneNode Model Msg
 
 data SceneAttr (Model Msg : Set) : Set₁ where
   -- Events (color picking)
@@ -1094,6 +1094,291 @@ template =
         ∷ [] )
     ∷ [] )
 ```
+
+---
+
+## Codebase alignment issues
+
+The types in this document were designed in isolation. Comparing with the
+actual Agdelte codebase reveals 10 mismatches that must be resolved before
+implementation. Each entry lists the discrepancy, the existing code, and a
+proposed resolution.
+
+### A1. Duration: Float vs ℕ
+
+**Problem:** webgl.md defines `ms : Float → Duration`, but the codebase uses
+`ms : ℕ → Duration` everywhere.
+
+**Existing code** (`Css/Easing.agda:48-49`):
+```agda
+data Duration : Set where
+  ms : ℕ → Duration
+  s  : Float → Duration
+```
+
+**In this doc** (Animation section, consolidated types):
+```agda
+data Duration : Set where
+  ms : Float → Duration    -- WRONG: should be ℕ
+  s  : Float → Duration
+```
+
+**Resolution:** Use existing `Duration` from `Css.Easing`. Change `ms 150` in
+examples to `ms 150` (already works — ℕ literal). No new Duration type needed.
+
+### A2. Easing already exists
+
+**Problem:** webgl.md redefines `Easing` from scratch, missing constructors
+that already exist.
+
+**Existing code** (`Css/Easing.agda:28-31`):
+```agda
+data Easing : Set where
+  ease linear easeIn easeOut easeInOut : Easing
+  cubicBezier : Float → Float → Float → Float → Easing
+  raw         : String → Easing
+```
+
+Plus `Float → Float` evaluation functions (`linearFn`, `easeInFn`, `easeOutFn`,
+`easeInOutFn`).
+
+**In this doc:** Redefines Easing without `ease` and `raw` constructors.
+
+**Resolution:** Import `Easing` and `Duration` from `Css.Easing`. For WebGL
+transitions, the runtime evaluates easing via the existing `*Fn` functions.
+No new Easing type needed.
+
+### A3. Tween/Spring already exist
+
+**Problem:** webgl.md defines `transition` from scratch. The codebase already
+has a full Tween system (`Anim/Tween.agda`) with elapsed/duration tracking,
+easing, lerp, retarget, and a Spring system (`Anim/Spring.agda`) with physics
+simulation, presets (gentle/snappy/bouncy), and stable fixed-step ticking.
+
+**Existing code** (`Anim/Tween.agda:31-39`):
+```agda
+record Tween (A : Set) : Set where
+  constructor mkTween
+  field
+    elapsed  : ℕ           -- ms elapsed so far
+    duration : ℕ           -- total ms
+    from     : A
+    to       : A
+    easing   : Float → Float
+    lerp     : A → A → Float → A
+```
+
+`retargetTween` snapshots current value as new start — exactly what's needed
+when a binding value changes mid-transition.
+
+**Existing code** (`Anim/Spring.agda:30-38`):
+```agda
+record Spring : Set where
+  constructor mkSpring
+  field
+    position velocity target stiffness damping : Float
+```
+
+With `tickSpringStable` (subdivided Euler for large dt) and presets
+(`gentle`, `snappy`, `bouncy`).
+
+**Resolution:** WebGL transitions should use `Tween` internally. The runtime
+creates a `Tween Vec3` for position, `Tween Vec3` for scale, SLERP tween
+for rotation. `retargetTween` handles interruptions. Optionally allow
+`spring` attribute alongside `transition` for spring-driven animations.
+
+### A4. Node is the universal type
+
+**Problem:** Everything in Agdelte composes to `Node M Msg`. SVG elements are
+just `elem "circle"`, `elem "rect"` etc. — all `Node M Msg`. But webgl.md
+introduces a separate `SceneNode` type that doesn't compose with `Node`.
+
+**Existing pattern** (`Svg/Elements.agda`):
+```agda
+circle' : ∀ {M Msg} → List (Attr M Msg) → List (Node M Msg) → Node M Msg
+circle' = elem "circle"
+```
+
+SVG is fully embedded in the Node tree. WebGL should follow the same pattern.
+
+**Resolution:** `glCanvas` is a `Node` that embeds a `Scene`. This is already
+shown in the doc (`glCanvas : List (Attr Model Msg) → Scene Model Msg → Node
+Model Msg`). The `SceneNode` type is intentionally separate because WebGL
+scene graph nodes are NOT DOM nodes — they're GPU objects managed by
+`reactive-gl.js`. The `glCanvas` bridge is the integration point.
+
+This is acceptable: SVG works because SVG elements ARE DOM nodes. WebGL meshes
+are not. The key requirement is that `glCanvas` returns `Node M Msg` so it
+composes with the rest of the tree. ✓ Already satisfied.
+
+### A5. Binding record vs raw functions
+
+**Problem:** The codebase uses `Binding` records with `extract` + `equals`
+fields for change detection. webgl.md uses raw functions `(Model → Transform)`.
+
+**Existing code** (`Reactive/Node.agda:27-32`):
+```agda
+record Binding (Model : Set) (A : Set) : Set where
+  constructor mkBinding
+  field
+    extract : Model → A
+    equals  : A → A → Bool
+```
+
+**In this doc:**
+```agda
+bindTransform : (Model → Transform) → SceneNode Model Msg → SceneNode Model Msg
+```
+
+**Resolution:** The Agda types can stay as `(Model → X)` — this is the user-
+facing API. The **runtime** (`reactive-gl.js`) wraps these in binding objects
+with `lastValue` comparison, just like `reactive.js` does for DOM bindings.
+The `equals` for WebGL types is structural (compare floats in typed arrays).
+
+No change needed in Agda types. Runtime implementation detail.
+
+### A6. SceneAttr vs Attr
+
+**Problem:** `Attr` is the existing attribute type with `on`/`onValue`/`attr`/
+`style` etc. webgl.md defines a separate `SceneAttr` type.
+
+**Existing code** (`Reactive/Node.agda:68-82`):
+```agda
+data Attr (Model Msg : Set) : Set₁ where
+  attr      : String → String → Attr Model Msg
+  attrBind  : String → Binding Model String → Attr Model Msg
+  on        : String → Msg → Attr Model Msg
+  onValue   : String → (String → Msg) → Attr Model Msg
+  style     : String → String → Attr Model Msg
+  styleBind : String → Binding Model String → Attr Model Msg
+```
+
+**Resolution:** `SceneAttr` is intentionally separate. `Attr` is for DOM
+attributes (strings, CSS styles, DOM events). `SceneAttr` is for GPU objects
+(transitions that interpolate transforms, events dispatched via color picking,
+not DOM event listeners). They live in different worlds.
+
+However, the **event helpers** (`onClick`, `onHover`) could follow the naming
+convention from `Attr`. In the codebase, `onClick` is a smart constructor
+(`Node.agda:176`): `onClick = on "click"`. For WebGL, `onClick` is a
+`SceneAttr` constructor — different type, same name. This is fine: they're
+in different modules.
+
+No structural change needed. Separate `SceneAttr` is correct.
+
+### A7. Color: two different types
+
+**Problem:** `Css/Color.agda` defines `Color` as CSS color values (`hex`, `rgb`
+with ℕ 0-255, `rgba`, `hsl`, `named`, `var`, `raw`). webgl.md postulates a
+separate `Color` as GPU color values (`rgb : Float → Float → Float → Color`
+with floats 0-1).
+
+**Existing code** (`Css/Color.agda:21-28`):
+```agda
+data Color : Set where
+  hex  : String → Color               -- "#ff0000"
+  rgb  : ℕ → ℕ → ℕ → Color
+  rgba : ℕ → ℕ → ℕ → Float → Color
+  hsl  : ℕ → ℕ → ℕ → Color
+  named : String → Color              -- "red"
+  var   : String → Color              -- CSS custom property
+  raw   : String → Color
+```
+
+**In this doc:**
+```agda
+postulate
+  Color : Set
+  rgb  : Float → Float → Float → Color        -- 0.0-1.0
+  rgba : Float → Float → Float → Float → Color
+```
+
+**Resolution:** These are genuinely different types. CSS Color uses ℕ (0-255)
+and supports CSS-specific constructors (hex, hsl, named, var). WebGL Color
+uses Float (0.0-1.0) and maps directly to `gl.uniform3f`. Rename the WebGL
+type to `GlColor` or keep it in a separate module (`WebGL.Color`). Do NOT
+reuse `Css.Color` — the representations are incompatible.
+
+Alternatively: add `glRgb : Float → Float → Float → Color` constructor to
+`Css.Color` and have the runtime branch on constructor when rendering. This
+unifies the type but adds GPU-specific constructors to a CSS module. Probably
+cleaner to keep them separate.
+
+**Decision:** Separate types. `Css.Color` is a CSS serialization format
+(ℕ 0–255, hex, hsl, named, var → `showColor → String`). `WebGL.Color` is a
+GPU runtime value (Float 0–1 → `gl.uniform3f`). Different representations,
+different semantics, no benefit to unifying.
+
+### A8. Time as ℕ everywhere
+
+**Problem:** Codebase uses ℕ (milliseconds) for all time values. Tween:
+`elapsed : ℕ`, `duration : ℕ`. Spring: `tickSpring : Spring → ℕ → Spring`.
+But webgl.md uses Float for time in `animate`:
+
+```agda
+animate : (Float → Transform) → SceneNode Model Msg → SceneNode Model Msg
+--        time in ms (ℕ)
+```
+
+**Resolution:** Change `animate` signature to use ℕ (milliseconds):
+```agda
+animate : (ℕ → Transform) → SceneNode Model Msg → SceneNode Model Msg
+--        time in ms
+```
+
+This is consistent with the rest of the codebase. The runtime passes
+`performance.now()` truncated to ℕ. If fractional time is needed for
+smooth animation math, the user converts inside the function:
+`λ ms → let t = toFloat ms / 1000.0 in ...`
+
+### A9. Missing zoomNode integration
+
+**Problem:** `zoomNode` (`Node.agda:321`) is the core composition mechanism.
+It remaps model/message types AND adds automatic `scopeProj` for subtree
+skipping. webgl.md doesn't discuss how `Scene` composes with `zoomNode`.
+
+**Existing code** (`Reactive/Node.agda:321-322`):
+```agda
+zoomNode : ∀ {M M' Msg Msg'} → (M → M') → (Msg' → Msg) → Node M' Msg' → Node M Msg
+zoomNode get wrap node = scopeProj get (zoomNode' get wrap node)
+```
+
+Plus `zoomNodeL` (with Lens + Prism), `zoomNodeS` (with fingerprint).
+
+**Resolution:** Add `zoomScene` for remapping Scene model/message types:
+
+```agda
+zoomScene : ∀ {M M' Msg Msg'} → (M → M') → (Msg' → Msg)
+          → Scene M' Msg' → Scene M Msg
+
+zoomSceneL : ∀ {M M' Msg Msg'} → Lens M M' → Prism Msg Msg'
+           → Scene M' Msg' → Scene M Msg
+```
+
+This allows embedding a WebGL component that has its own Model/Msg types
+inside a parent app. `glCanvas attrs (zoomScene get wrap childScene)`.
+Essential for component composition.
+
+### A10. Events pattern
+
+**Problem:** SVG events (`Svg/Events.agda`) are smart constructors that return
+`Attr M Msg` via `on`/`onValue`. Example:
+
+```agda
+onSvgClick : ∀ {M Msg} → (Point → Msg) → Attr M Msg
+onSvgClick handler = onValue "click" (λ s → handler (parsePoint s))
+```
+
+WebGL events are `SceneAttr` constructors. There's no `on`/`onValue` pattern.
+
+**Resolution:** As discussed in A6, `SceneAttr` events are dispatched via
+color picking, not DOM events. The `on "click"` pattern doesn't apply because
+there's no DOM element per mesh. However, the **canvas-level** DOM events
+(actual click/mousemove on the `<canvas>`) DO use `on`/`onValue` internally
+in the runtime. The `SceneAttr` is a higher-level abstraction that the runtime
+translates to canvas event handlers + color picking + optional ray casting.
+
+No change needed. The pattern difference is inherent to the architecture.
 
 ---
 
