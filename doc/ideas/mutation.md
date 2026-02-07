@@ -247,7 +247,7 @@ optimisation if allocation pressure from `update` becomes measurable.
   `probeSlots`, `updateScope`, `createScope`
 - No changes to any `.agda` file
 - No changes to `hs/` server code
-- No changes to `runtime/events.js` or `runtime/dom.js`
+- No changes to `runtime/events.js`
 
 ## Open questions
 

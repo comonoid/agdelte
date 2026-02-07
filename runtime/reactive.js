@@ -19,23 +19,57 @@ const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
 const SMIL_TAGS = ['animate', 'animateTransform', 'animateMotion', 'set'];
 
 /**
- * Start SMIL animations that don't auto-start when dynamically created
+ * Start SMIL animations that don't auto-start when dynamically created.
+ * Handles:
+ * - Numeric begin values: "0s", "1s", "100ms", "0.5s"
+ * - Syncbase refs: "anim1.end", "anim1.begin+1s" (starts the referenced anim first)
+ * Does NOT auto-start:
+ * - Event-based: "click", "mouseover" (browser handles these)
+ * - "indefinite" (requires explicit beginElement() call)
  */
 function startSmilAnimations(container) {
   // Use requestAnimationFrame to ensure DOM is fully painted
   requestAnimationFrame(() => {
+    // First pass: collect all animations and their dependencies
+    const allAnims = [];
+    const animById = new Map();
+
     for (const tag of SMIL_TAGS) {
-      const anims = container.getElementsByTagName(tag);
-      for (const anim of anims) {
-        // Only start animations with immediate begin (0ms, 0s, or numeric offset)
-        const begin = anim.getAttribute('begin') || '0s';
-        // Match: 0, 0s, 0ms, 100ms, 1s, etc. (not event-based like "click")
-        if (/^\d/.test(begin)) {
-          if (typeof anim.beginElement === 'function') {
-            try { anim.beginElement(); } catch (e) { /* ignore */ }
-          }
+      for (const anim of container.getElementsByTagName(tag)) {
+        allAnims.push(anim);
+        const id = anim.getAttribute('id');
+        if (id) animById.set(id, anim);
+      }
+    }
+
+    // Track which animations we've started
+    const started = new Set();
+
+    function startAnim(anim) {
+      if (started.has(anim)) return;
+      started.add(anim);
+
+      const begin = anim.getAttribute('begin') || '0s';
+
+      // Check for syncbase reference (e.g., "anim1.end", "anim1.begin+1s")
+      const syncMatch = begin.match(/^([a-zA-Z_][\w-]*)\.(?:begin|end)/);
+      if (syncMatch) {
+        const refId = syncMatch[1];
+        const refAnim = animById.get(refId);
+        if (refAnim) startAnim(refAnim); // Start dependency first
+      }
+
+      // Start if numeric begin (0, 0s, 0.5s, 100ms, etc.)
+      if (/^[\d.]/.test(begin)) {
+        if (typeof anim.beginElement === 'function') {
+          try { anim.beginElement(); } catch (e) { /* ignore */ }
         }
       }
+    }
+
+    // Start all animations
+    for (const anim of allAnims) {
+      startAnim(anim);
     }
   });
 }
@@ -107,12 +141,31 @@ function executeCmd(cmd, dispatch) {
         (error) => dispatch(handler((cb) => cb['err'](error)))
       );
     },
-    'focus': (sel) => document.querySelector(sel)?.focus(),
-    'blur': (sel) => document.querySelector(sel)?.blur(),
+    'focus': (sel) => {
+      const el = document.querySelector(sel);
+      if (el) el.focus();
+      else console.warn(`Cmd.focus: element not found: "${sel}"`);
+    },
+    'blur': (sel) => {
+      const el = document.querySelector(sel);
+      if (el) el.blur();
+      else console.warn(`Cmd.blur: element not found: "${sel}"`);
+    },
     'scrollTo': (x, y) => window.scrollTo(Number(x), Number(y)),
-    'scrollIntoView': (sel) => document.querySelector(sel)?.scrollIntoView({ behavior: 'smooth' }),
-    'writeClipboard': (text) => navigator.clipboard.writeText(text).catch(() => {}),
-    'readClipboard': (handler) => navigator.clipboard.readText().then((t) => dispatch(handler(t))).catch(() => dispatch(handler(''))),
+    'scrollIntoView': (sel) => {
+      const el = document.querySelector(sel);
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+      else console.warn(`Cmd.scrollIntoView: element not found: "${sel}"`);
+    },
+    'writeClipboard': (text) => navigator.clipboard.writeText(text).catch((e) => {
+      console.warn('Cmd.writeClipboard failed:', e.message);
+    }),
+    'readClipboard': (handler) => navigator.clipboard.readText()
+      .then((t) => dispatch(handler(t)))
+      .catch((e) => {
+        console.warn('Cmd.readClipboard failed:', e.message);
+        dispatch(handler(''));
+      }),
     'getItem': (key, handler) => {
       const value = localStorage.getItem(key);
       dispatch(handler(value !== null ? (cb) => cb['just'](value) : (cb) => cb['nothing']()));
@@ -286,6 +339,20 @@ function destroyScope(scope) {
   if (scope.parent) {
     const idx = scope.parent.children.indexOf(scope);
     if (idx !== -1) scope.parent.children.splice(idx, 1);
+  }
+  // Cancel pending transition timeouts to prevent memory leaks
+  for (const cond of scope.conditionals) {
+    if (cond.leaveTimeoutId) {
+      clearTimeout(cond.leaveTimeoutId);
+      cond.leaveTimeoutId = null;
+    }
+  }
+  // Cancel pending animation RAF to prevent memory leaks
+  for (const b of scope.styleBindings) {
+    if (b.node && b.node._pendingAnimationRaf) {
+      cancelAnimationFrame(b.node._pendingAnimationRaf);
+      b.node._pendingAnimationRaf = null;
+    }
   }
   // Clear all arrays
   scope.bindings.length = 0;
@@ -605,13 +672,21 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           } else if (e.clientX !== undefined && e.clientY !== undefined) {
             // Pointer/mouse event - convert to SVG coords if in SVG
             const svg = el.closest('svg');
-            if (svg && svg.getScreenCTM) {
-              const pt = svg.createSVGPoint();
-              pt.x = e.clientX;
-              pt.y = e.clientY;
-              const svgPt = pt.matrixTransform(svg.getScreenCTM().inverse());
-              value = svgPt.x + ',' + svgPt.y;
+            const ctm = svg && svg.getScreenCTM && svg.getScreenCTM();
+            if (ctm) {
+              try {
+                const pt = svg.createSVGPoint();
+                pt.x = e.clientX;
+                pt.y = e.clientY;
+                const svgPt = pt.matrixTransform(ctm.inverse());
+                value = svgPt.x + ',' + svgPt.y;
+              } catch (err) {
+                // Fallback if matrix transform fails (e.g., singular matrix)
+                console.warn('SVG coordinate conversion failed, using screen coords:', err.message);
+                value = e.clientX + ',' + e.clientY;
+              }
             } else {
+              // Not in SVG or CTM unavailable - use screen coordinates
               value = e.clientX + ',' + e.clientY;
             }
           } else {
@@ -751,8 +826,15 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         // Re-trigger same animation: browser ignores setting the same value,
         // so briefly clear and re-apply on next frame
         const el = b.node, val = newVal;
+        // Cancel any pending animation reset to prevent race conditions
+        if (el._pendingAnimationRaf) {
+          cancelAnimationFrame(el._pendingAnimationRaf);
+        }
         el.style.animation = 'none';
-        requestAnimationFrame(() => { el.style.animation = val; });
+        el._pendingAnimationRaf = requestAnimationFrame(() => {
+          el._pendingAnimationRaf = null;
+          el.style.animation = val;
+        });
       }
     }
 
@@ -769,11 +851,18 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           // Enter transition
           if (cond.transition && newNode && newNode.classList) {
             newNode.classList.add(cond.transition.enterClass);
-            requestAnimationFrame(() => {
-              requestAnimationFrame(() => {
+            // Use duration if specified, otherwise remove on next frame
+            if (cond.transition.duration > 0) {
+              setTimeout(() => {
                 if (newNode.classList) newNode.classList.remove(cond.transition.enterClass);
+              }, cond.transition.duration);
+            } else {
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  if (newNode.classList) newNode.classList.remove(cond.transition.enterClass);
+                });
               });
-            });
+            }
           }
 
           cond.node.replaceWith(newNode);
@@ -789,7 +878,9 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
             const leaving = cond.node;
             leaving.classList.add(cond.transition.leaveClass);
             const placeholder = document.createComment(cond.transition ? 'whenT' : 'when');
-            setTimeout(() => {
+            // Store timeout ID so it can be cancelled on destroy
+            cond.leaveTimeoutId = setTimeout(() => {
+              cond.leaveTimeoutId = null;
               if (leaving.parentNode) {
                 leaving.replaceWith(placeholder);
                 // Update tracking if this cond still points to leaving
@@ -836,35 +927,40 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   function updateUnkeyedList(parentScope, list, oldModel, newModel) {
     const newItems = listToArray(list.getList(newModel));
     const oldItems = list.renderedItems;
+    const parent = list.marker.parentNode;
 
-    if (newItems.length !== oldItems.length) {
-      // Length changed: destroy old scopes, rebuild
-      for (const entry of oldItems) {
-        entry.node.remove();
-        if (entry.scope) destroyScope(entry.scope);
+    // Greedy matching: reuse first min(old, new) items, remove extras, add new ones
+    const minLen = Math.min(oldItems.length, newItems.length);
+
+    // Update existing items (reuse scopes)
+    for (let i = 0; i < minLen; i++) {
+      if (oldItems[i].scope) {
+        updateScope(oldItems[i].scope, oldModel, newModel);
       }
+    }
 
-      list.renderedItems = [];
-      const parent = list.marker.parentNode;
-      const insertBefore = list.marker.nextSibling;
+    // Remove extra old items
+    for (let i = minLen; i < oldItems.length; i++) {
+      oldItems[i].node.remove();
+      if (oldItems[i].scope) destroyScope(oldItems[i].scope);
+    }
 
-      newItems.forEach((item, idx) => {
-        const itemScope = createScope(parentScope);
-        const itemNode = withScope(itemScope, () =>
-          renderNode(list.render(item)(BigInt(idx)))
-        );
-        if (itemNode) {
-          list.renderedItems.push({ item, node: itemNode, scope: itemScope });
-          parent.insertBefore(itemNode, insertBefore);
-        }
-      });
-    } else {
-      // Same length: update bindings within each item's scope
-      for (const entry of oldItems) {
-        if (entry.scope) {
-          updateScope(entry.scope, oldModel, newModel);
-        }
+    // Add new items
+    const insertBefore = list.marker.nextSibling;
+    for (let i = minLen; i < newItems.length; i++) {
+      const itemScope = createScope(parentScope);
+      const itemNode = withScope(itemScope, () =>
+        renderNode(list.render(newItems[i])(BigInt(i)))
+      );
+      if (itemNode) {
+        parent.insertBefore(itemNode, insertBefore);
+        oldItems.push({ item: newItems[i], node: itemNode, scope: itemScope });
       }
+    }
+
+    // Truncate array if items were removed
+    if (oldItems.length > newItems.length) {
+      oldItems.length = newItems.length;
     }
   }
 
@@ -881,8 +977,17 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       oldKeyMap.set(oldItems[i].key, oldItems[i]);
     }
 
-    // Build new key set
+    // Build new key set and check for duplicates
     const newKeys = newItems.map(item => list.keyFn(item));
+    {
+      const seen = new Set();
+      for (const key of newKeys) {
+        if (seen.has(key)) {
+          console.warn(`foreachKeyed: duplicate key "${key}" detected. This may cause rendering issues.`);
+        }
+        seen.add(key);
+      }
+    }
 
     // Check if anything changed
     const keysChanged = newKeys.length !== oldItems.length ||
@@ -911,17 +1016,25 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       }
     }
 
-    // Build/reuse items in new order
-    let insertBefore = list.marker.nextSibling;
-    // First, remove all old items from DOM (we'll re-insert in order)
+    // Find the insertion point BEFORE removing items
+    // It's the first sibling after all our list items
+    let insertBefore = null;
+    if (oldItems.length > 0) {
+      // Get the node after the last item
+      const lastItem = oldItems[oldItems.length - 1];
+      insertBefore = lastItem.node.nextSibling;
+    } else {
+      insertBefore = list.marker.nextSibling;
+    }
+
+    // Remove all old items from DOM (we'll re-insert in order)
     for (const entry of oldItems) {
       if (newKeySet.has(entry.key) && entry.node.parentNode) {
         entry.node.remove();
       }
     }
 
-    // Now insert in correct order
-    insertBefore = list.marker.nextSibling;
+    // Now insert in correct order (insertBefore was saved before removal)
     for (let i = 0; i < newItems.length; i++) {
       const key = newKeys[i];
       const oldEntry = oldKeyMap.get(key);

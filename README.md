@@ -185,6 +185,7 @@ The key difference from Virtual DOM: `template` is **data**, not a function. Bin
 | [doc/guide/architecture.md](doc/guide/architecture.md) | Core architecture and design |
 | [doc/guide/examples.md](doc/guide/examples.md) | Guide to all examples |
 | [doc/guide/getting-started.md](doc/guide/getting-started.md) | Prerequisites, build, run |
+| [doc/KNOWN_ISSUES.md](doc/KNOWN_ISSUES.md) | Known issues and limitations |
 
 ### API Reference
 
@@ -344,14 +345,11 @@ examples/
     SvgLineDraw.agda             -- Self-drawing paths
 
 runtime/
-    index.js                     -- Entry point, exports
     reactive.js                  -- Main: runReactiveApp, renderNode, updateBindings
     reactive-auto.js             -- Auto-loader (data-agdelte attribute)
     events.js                    -- Event interpretation, subscribe/unsubscribe
-    dom.js                       -- DOM manipulation helpers
     primitives.js                -- Primitive event sources
-    auto.js                      -- Auto-discovery
-    widget.js                    -- Widget runtime
+    svg-events.js                -- SVG coordinate conversion helpers
     workers/
         fibonacci.js             -- Fibonacci worker example
         fibonacci-progress.js    -- Fibonacci with progress reporting

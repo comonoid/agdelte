@@ -13,6 +13,14 @@
 // WebSocket connections pool (shared with commands)
 export const wsConnections = new Map();
 
+// Helper: format worker error with details (filename, line, stack)
+function formatWorkerError(e) {
+  const parts = [e.message || 'Worker error'];
+  if (e.filename) parts.push(`at ${e.filename}:${e.lineno || '?'}:${e.colno || '?'}`);
+  if (e.error?.stack) parts.push(`\nStack: ${e.error.stack}`);
+  return parts.join(' ');
+}
+
 // Worker channel connections (shared with commands for channelSend)
 export const channelConnections = new Map();
 
@@ -65,7 +73,7 @@ class WorkerPool {
       };
       activeWorker.onerror = (e) => {
         if (task.cancelled) return;
-        onError(e.message || 'Worker error');
+        onError(formatWorkerError(e));
         this.active--;
         // Don't reuse errored worker — create fresh
         try { activeWorker.terminate(); } catch(_) {}
@@ -452,7 +460,7 @@ export function interpretEvent(event, dispatch) {
       };
 
       w.onerror = (e) => {
-        dispatch(onError(e.message || 'Worker error'));
+        dispatch(onError(formatWorkerError(e)));
       };
 
       // Send input to worker
@@ -494,7 +502,7 @@ export function interpretEvent(event, dispatch) {
       };
 
       w.onerror = (e) => {
-        dispatch(onError(e.message || 'Worker error'));
+        dispatch(onError(formatWorkerError(e)));
       };
 
       w.postMessage(input);
@@ -623,6 +631,7 @@ export function interpretEvent(event, dispatch) {
 
     // allocShared: allocate SharedArrayBuffer
     // Scott: allocShared(numBytes, handler)
+    // NOTE: Requires COOP/COEP headers. See doc/KNOWN_ISSUES.md
     allocShared: (numBytes, handler) => {
       const n = typeof numBytes === 'bigint' ? Number(numBytes) : numBytes;
       try {
@@ -650,7 +659,7 @@ export function interpretEvent(event, dispatch) {
       };
 
       w.onerror = (e) => {
-        dispatch(onError(e.message || 'Worker error'));
+        dispatch(onError(formatWorkerError(e)));
       };
 
       // Send input + shared buffer to worker
@@ -679,7 +688,7 @@ export function interpretEvent(event, dispatch) {
       };
 
       w.onerror = (e) => {
-        dispatch(onError(e.message || 'Worker error'));
+        dispatch(onError(formatWorkerError(e)));
       };
 
       // Register for channelSend

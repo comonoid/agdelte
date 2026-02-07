@@ -175,14 +175,38 @@ pre = elem "pre"
 onClick : ∀ {Model Msg} → Msg → Attr Model Msg
 onClick = on "click"
 
+onDoubleClick : ∀ {Model Msg} → Msg → Attr Model Msg
+onDoubleClick = on "dblclick"
+
 onInput : ∀ {Model Msg} → (String → Msg) → Attr Model Msg
 onInput = onValue "input"
 
 onKeyDown : ∀ {Model Msg} → (String → Msg) → Attr Model Msg
 onKeyDown = onValue "keydown"
 
+onKeyUp : ∀ {Model Msg} → (String → Msg) → Attr Model Msg
+onKeyUp = onValue "keyup"
+
 onChange : ∀ {Model Msg} → (String → Msg) → Attr Model Msg
 onChange = onValue "change"
+
+onSubmit : ∀ {Model Msg} → Msg → Attr Model Msg
+onSubmit = on "submit"
+
+onFocus : ∀ {Model Msg} → Msg → Attr Model Msg
+onFocus = on "focus"
+
+onBlur : ∀ {Model Msg} → Msg → Attr Model Msg
+onBlur = on "blur"
+
+onMouseEnter : ∀ {Model Msg} → Msg → Attr Model Msg
+onMouseEnter = on "mouseenter"
+
+onMouseLeave : ∀ {Model Msg} → Msg → Attr Model Msg
+onMouseLeave = on "mouseleave"
+
+onMouseMove : ∀ {Model Msg} → (String → Msg) → Attr Model Msg
+onMouseMove = onValue "mousemove"
 
 -- Attribute helpers
 class : ∀ {Model Msg} → String → Attr Model Msg

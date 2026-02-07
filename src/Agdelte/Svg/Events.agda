@@ -2,6 +2,22 @@
 
 -- SVG Event Helpers
 -- Event handlers with SVG coordinate conversion
+--
+-- COORDINATE SYSTEMS:
+--
+-- SVG Coordinates (onSvgPointerDown, onSvgPointerMove, onSvgPointerUp):
+--   - Coordinates in SVG user space (affected by viewBox)
+--   - Use for: drawing, placing elements, hit testing within SVG
+--   - Changes when viewBox changes (e.g., during pan/zoom)
+--
+-- Screen Coordinates (onScreenPointerDown, onScreenPointerMove, onScreenPointerUp):
+--   - Raw pixel coordinates from the event (clientX, clientY)
+--   - Use for: drag operations, gestures, UI interactions
+--   - Stable regardless of SVG transformations
+--
+-- Example: For a pan/zoom SVG:
+--   - Use Screen coords for drag delta calculation (stable reference)
+--   - Use SVG coords to place new elements at cursor position
 
 module Agdelte.Svg.Events where
 
@@ -25,6 +41,9 @@ postulate parsePointJS : String → Float → Float → (Float → Float → Poi
     const x = parseFloat(parts[0]);
     const y = parseFloat(parts[1]);
     if (!isNaN(x) && !isNaN(y)) return mk(x)(y);
+    console.warn('parsePoint: invalid coordinates in "' + s + '", using defaults');
+  } else if (s && s !== '0,0') {
+    console.warn('parsePoint: malformed input "' + s + '", expected "x,y" format');
   }
   return mk(defX)(defY);
 } #-}
@@ -83,7 +102,14 @@ onSvgMouseUp handler = onValue "mouseup" (λ s → handler (parsePoint s))
 
 -- Parse float from string
 postulate parseFloatJS : String → Float
-{-# COMPILE JS parseFloatJS = s => parseFloat(s) || 0 #-}
+{-# COMPILE JS parseFloatJS = s => {
+  const n = parseFloat(s);
+  if (isNaN(n)) {
+    if (s && s !== '0') console.warn('parseFloat: invalid number "' + s + '"');
+    return 0;
+  }
+  return n;
+} #-}
 
 -- Returns delta as string "deltaY" (positive = zoom out, negative = zoom in)
 onSvgWheel : ∀ {M Msg} → (Float → Msg) → Attr M Msg

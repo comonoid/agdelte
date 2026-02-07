@@ -45,7 +45,7 @@ data Msg : Set where
 updateModel : Msg → Model → Model
 updateModel Tick m = if running m then record m { tenths = suc (tenths m) } else m
 updateModel Toggle m = record m { running = not (running m) }
-updateModel Reset m = record m { tenths = 0 }  -- Does not stop the timer!
+updateModel Reset m = record m { tenths = 0 ; running = false }
 
 ------------------------------------------------------------------------
 -- Formatting

@@ -20,7 +20,7 @@ src/Agdelte/           -- Agda library modules
 
 examples/              -- Browser examples (JS backend)
 server/                -- Server examples (GHC backend)
-runtime/               -- JavaScript runtime (reactive.js, events.js, dom.js)
+runtime/               -- JavaScript runtime (reactive.js, events.js, primitives.js)
 hs/                    -- Haskell support modules (Http, WebSocket, AgentServer)
 scripts/               -- Build tools (generate-css.js, generate-anim-data.js)
 examples_html/         -- HTML pages for browser examples

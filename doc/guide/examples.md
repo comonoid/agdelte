@@ -784,7 +784,7 @@ circle' (cxF 150.0 ∷ cyF 250.0 ∷ rF 25.0 ∷ [])
   ∷ [])
 ```
 
-**Key point:** SMIL animations are declarative — the browser handles timing and interpolation. `syncEnd`, `syncBegin`, `onClick'` create choreographed sequences. No JavaScript animation loop needed.
+**Key point:** SMIL animations are declarative — the browser handles timing and interpolation. `syncEnd`, `syncBegin`, `onClick'` create choreographed sequences. No JavaScript animation loop needed. The runtime automatically starts animations with numeric or syncbase timing when DOM is created.
 
 Source: `examples/SvgSmil.agda`
 

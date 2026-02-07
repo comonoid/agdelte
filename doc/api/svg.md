@@ -623,6 +623,17 @@ circle' (cxF 50.0 ∷ cyF 50.0 ∷ rF 10.0 ∷ [])
   ∷ [])
 ```
 
+### Dynamic Creation
+
+SMIL animations in dynamically created SVG content don't auto-start in browsers. The runtime automatically handles this:
+
+- Animations with numeric `begin` values (`0s`, `1s`, `100ms`) are started via `beginElement()`
+- Syncbase references (`anim1.end`, `anim1.begin+1s`) trigger dependency chain - referenced animations start first
+- Event-based timing (`click`, `mouseover`) works natively - browser handles these
+- `indefinite` animations require explicit triggering (e.g., via click handler)
+
+This happens transparently - no manual intervention needed for most cases.
+
 ## Namespace Handling
 
 The runtime automatically handles SVG namespace:

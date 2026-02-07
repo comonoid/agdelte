@@ -117,6 +117,15 @@ data WsMsg : Set where
 |----------|------|-------------|
 | `workerChannel` | `String → (String → A) → (String → A) → Event A` | Long-lived bidirectional worker (scriptUrl, onMsg, onErr) |
 
+### Error Handling
+
+Worker errors include detailed information:
+- Error message
+- Source file and line/column (when available)
+- Stack trace (when available)
+
+The `onError` callback receives a formatted string with all available details.
+
 ## Concurrency Combinators
 
 | Function | Type | Description |
