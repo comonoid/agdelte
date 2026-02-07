@@ -12,6 +12,13 @@
   <h1>Session Form</h1>
   <p class="subtitle">Multi-step form with typed state transitions (SessionExec pattern)</p>
 
+  <div class="instructions">
+    <strong>Expected:</strong> A multi-step registration form. Step 1: enter Name, Step 2: enter Email,
+    Step 3: enter Age. Step 4: review (shows all entered data). Step 5: "Registration Complete".
+    Each step has a progress indicator (e.g. "Step 1/3"). <em>Next</em> advances to the next step,
+    <em>Back</em> goes back. Each phase only saves its own field. The form follows a typed session protocol.
+  </div>
+
   <div id="app" data-agdelte="SessionFormDemo">
     <p class="loading">Loading compiled Agda...</p>
   </div>

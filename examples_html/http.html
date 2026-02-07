@@ -12,6 +12,13 @@
   <h1>HTTP Demo</h1>
   <p class="subtitle">HTTP requests via Event subscriptions</p>
 
+  <div class="instructions">
+    <strong>Expected:</strong> A <em>Fetch</em> button. Clicking it sends an HTTP GET request.
+    While loading, the status shows "Loading..." and the button is disabled (<code>disabledBind</code>).
+    On success, the response body is displayed. On error, an error message appears.
+    Each click makes a fresh request.
+  </div>
+
   <div id="app" data-agdelte="Http">
     <p class="loading">Loading compiled Agda...</p>
   </div>

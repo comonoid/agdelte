@@ -16,6 +16,13 @@
   </style>
 </head>
 <body>
+  <div style="max-width:600px;margin:1rem auto;padding:0.75rem 1rem;background:rgba(74,158,255,0.08);border-left:3px solid #4a9eff;border-radius:0 8px 8px 0;color:#bbb;font-size:0.9rem;line-height:1.5;">
+    <strong>Expected:</strong> Multiple SVG elements with SMIL animations: (1) A circle that fades in, pulses (radius change),
+    then shifts color &mdash; a choreographed sequence. (2) A circle that expands on click.
+    (3) A rectangle that changes color on hover. (4) A circle moving along a motion path.
+    Animations run automatically in the browser (no JS animation loop). Click/hover interactions are native SVG.
+  </div>
+
   <div id="app" data-agdelte="SvgSmil"></div>
 
   <script type="module">

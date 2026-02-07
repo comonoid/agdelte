@@ -23,6 +23,14 @@
 <body>
   <a href="../index.html" class="back">&larr; Back to examples</a>
 
+  <div class="instructions">
+    <strong>Expected:</strong> A 3D scene (800x600 canvas) with: a blue sphere (left), a box (center), a green
+    cylinder (right), and a small yellow sphere orbiting continuously. Ambient + directional lighting.
+    Click the center box to scale it up (smooth transition, 300ms). Click the sphere or cylinder to increment
+    a click counter. DOM buttons: <em>Left/Right</em> move the center box, <em>Scale +/&minus;</em> resize it.
+    A status line shows posX, scale, and clicks. The orbiting sphere never stops.
+  </div>
+
   <div id="app" data-agdelte="WebGLTest">
     <p class="loading">Loading compiled Agda...</p>
   </div>

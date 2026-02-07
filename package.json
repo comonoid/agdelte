@@ -38,6 +38,7 @@
     "build:svg-chart": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/SvgChart.agda",
     "build:svg-linedraw": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/SvgLineDraw.agda",
     "build:webgl-test": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/WebGLTest.agda",
+    "build:webgl-full-demo": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/WebGLFullDemo.agda",
     "build:all": "npm run build:counter && npm run build:timer && npm run build:todo && npm run build:keyboard && npm run build:http && npm run build:task && npm run build:websocket && npm run build:router && npm run build:composition && npm run build:transitions && npm run build:combinators && npm run build:optic-dynamic && npm run build:worker && npm run build:parallel && npm run build:session-form && npm run build:stress-test && npm run build:remote-agent && npm run build:server && npm run build:multi-agent && npm run build:shared-demo && npm run build:inspector-demo",
     "css:demo": "node scripts/generate-css.js jAgda.CssDemo appCSS examples_html/generated/css-demo.css",
     "css:full-demo": "node scripts/generate-css.js jAgda.CssFullDemo appCSS examples_html/generated/css-full-demo.css",

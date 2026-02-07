@@ -12,6 +12,13 @@
   <h1>Composition Demo</h1>
   <p class="subtitle">Two counters composed with _∥_</p>
 
+  <div class="instructions">
+    <strong>Expected:</strong> Two independent counters side by side (Left / Right), each with +/&minus; buttons.
+    Below them, a shared <em>Total</em> that shows the sum of both counters. Each counter operates independently
+    (via <code>zoomNode</code>), but the total updates reactively from the combined model.
+    A <em>Reset</em> button sets both counters to 0.
+  </div>
+
   <div id="app" data-agdelte="Composition">
     <p class="loading">Loading compiled Agda...</p>
   </div>

@@ -23,6 +23,7 @@
 | [CSS](api/css.md) | Typed CSS DSL: Decl, Length, Color, Layout, Transitions, Animations, Stylesheet |
 | [SVG](api/svg.md) | Typed SVG DSL: Elements, Attributes, Path, Transform, ViewBox, SMIL, Events |
 | [Anim](api/anim.md) | Model-driven animations: Tween, Spring (gentle, snappy, bouncy) |
+| [WebGL](api/webgl.md) | 3D scene graphs: Camera, Light, Material, SceneNode, Scene, zoomScene |
 | [FFI](api/ffi.md) | Browser/Server postulates, Serialize, Testing |
 
 ## Theory

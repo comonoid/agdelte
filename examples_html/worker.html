@@ -12,6 +12,13 @@
   <h1>Web Worker Demo</h1>
   <p class="subtitle">Heavy computation offloaded to a background thread</p>
 
+  <div class="instructions">
+    <strong>Expected:</strong> An input number (adjustable with +/&minus;) and a <em>Compute</em> button.
+    Clicking Compute sends the number to a Web Worker that calculates Fibonacci in a background thread.
+    The button is disabled during computation. The result appears below when done. The UI stays responsive
+    during computation (no freeze). A computation count tracks total runs.
+  </div>
+
   <div id="app" data-agdelte="Worker">
     <p class="loading">Loading compiled Agda...</p>
   </div>

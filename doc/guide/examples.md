@@ -36,6 +36,8 @@ All examples use **Reactive Bindings** (like Svelte) — no Virtual DOM.
 | [SVG Pan/Zoom](#svg-panzoom) | Interactive viewport, SVG events, coordinate conversion | SVG |
 | [SVG Bar Chart](#svg-bar-chart) | Data visualization, foreach, reactive bindings | SVG |
 | [Line Drawing](#line-drawing) | Stroke-dasharray trick, SMIL animate | SVG |
+| [WebGL Test](#webgl-test) | Perspective camera, phong, animate, bindTransform, onClick | WebGL |
+| [WebGL Full Demo](#webgl-full-demo) | All WebGL features: cameras, materials, lights, text3D, groups, events | WebGL |
 
 ---
 
@@ -924,6 +926,92 @@ Source: `examples/SvgLineDraw.agda`
 
 ---
 
+## WebGL Test
+
+**Demonstrates:** Basic 3D scene with perspective camera, phong/unlit materials, lights, interactive objects, transitions, continuous animation.
+
+```agda
+open import Agdelte.WebGL.Types
+  renaming (onClick to glClick)
+
+scene : Scene Model Msg
+scene = mkScene
+  (fixed (perspective 1.0 0.1 100.0) (vec3 0.0 2.0 8.0) (vec3 0.0 0.0 0.0))
+  ( light (ambient white 0.15)
+  ∷ light (directional white 0.9 (vec3 -0.5 -1.0 -0.3))
+  ∷ mesh (sphere 0.9) (phong (rgb 0.2 0.5 0.8) 64.0) [ glClick ClickLeft ]
+      (mkTransform (vec3 -2.5 0.0 0.0) identityQuat (vec3 1.0 1.0 1.0))
+  ∷ bindTransform centerTransform
+      (bindMaterial centerMaterial (box (vec3 1.5 1.5 1.5))
+         (glClick ClickCenter ∷ transition (ms 300) easeInOut ∷ [])
+         identityTransform)
+  ∷ animate orbitTransform
+      (mesh (sphere 0.4) (phong (rgb 0.9 0.8 0.2) 128.0) [] identityTransform)
+  ∷ [] )
+
+webglTemplate : Node Model Msg
+webglTemplate =
+  div [ class "webgl-demo" ]
+    ( h1 [] [ text "Agdelte WebGL" ]
+    ∷ glCanvas (attr "width" "800" ∷ attr "height" "600" ∷ []) scene
+    ∷ ... )
+```
+
+**Key point:** `Scene` is a declarative scene graph: `mkScene Camera (List SceneNode)`. `bindTransform`/`bindMaterial` create reactive 3D bindings (same concept as DOM `bind`, but for transforms and materials). `animate` receives elapsed time as Float for continuous motion. `glCanvas` embeds the scene in the DOM template.
+
+Source: `examples/WebGLTest.agda`
+
+---
+
+## WebGL Full Demo
+
+**Demonstrates:** All remaining WebGL features: `fromModel` reactive camera (ortho/perspective switching), `pbr`/`flat`/`textured` materials, `point`/`spot` lights, `bindLight`, `icon`, `text3D`/`bindText3D`, `group`, `onHover`/`onLeave`, `onScroll`, `onClickAt`, `onDrag`, `focusable`/`onKeyDown`.
+
+```agda
+open import Agdelte.WebGL.Types
+  renaming (onClick to glClick; onHover to glHover; onLeave to glLeave;
+            onScroll to glScroll; onClickAt to glClickAt; onDrag to glDrag;
+            focusable to glFocusable; onKeyDown to glKeyDown)
+
+scene : Scene Model Msg
+scene = mkScene
+  -- Reactive camera: switches ortho/perspective from model
+  (fromModel cameraProjection cameraPos cameraTarget)
+  ( light (ambient (rgb 0.3 0.3 0.4) 0.3)
+  ∷ light (spot (rgb 0.8 0.8 1.0) 0.7 (vec3 -3.0 5.0 0.0) ...)
+  ∷ bindLight pointLightFromModel    -- reactive light intensity!
+  -- PBR sphere with hover
+  ∷ bindMaterial pbrMaterial (sphere 0.8)
+      (glClick (SelectObj 1) ∷ glHover (HoverObj 1) ∷ glLeave (LeaveObj 1) ∷ ...)
+      ...
+  -- Textured box with surface click
+  ∷ mesh (box ...) (textured (loadTexture "textures/crate.png") white)
+      [ glClickAt (λ _ → ClickedAt) ] ...
+  -- Draggable cylinder
+  ∷ mesh (cylinder 0.5 1.5) (flat ...) [ glDrag (λ _ _ → Dragged) ] ...
+  -- Focusable box (keyboard)
+  ∷ mesh (box ...) (phong ...)
+      (glFocusable ∷ glKeyDown (λ _ → KeyPressed) ∷ glScroll (λ _ → Scrolled) ∷ ...) ...
+  -- Group: two spheres under common transform
+  ∷ group (mkTransform ...) (mesh ... ∷ mesh ... ∷ [])
+  -- Static + reactive text
+  ∷ text3D "WebGL Full Demo" labelStyle [] ...
+  ∷ bindText3D statsText infoStyle [] ...
+  -- Icon
+  ∷ icon (loadTexture "textures/info-icon.png") (vec2 0.5 0.5) [] ...
+  ∷ [] )
+```
+
+**Key point:** `fromModel` makes camera reactive — projection, position, and target are all functions of model state. `bindLight` reactively updates light intensity. `onHover`/`onLeave` use color-picking for hover detection on 3D objects. `onClickAt` provides surface hit coordinates (Vec3). `onDrag` provides start+current Vec3 during drag. `focusable` + `onKeyDown` enable keyboard interaction on individual 3D objects. `text3D`/`bindText3D` render MSDF text in 3D space. `group` provides hierarchical transforms.
+
+```bash
+npm run build:webgl-full-demo
+```
+
+Source: `examples/WebGLFullDemo.agda`
+
+---
+
 ## Running Examples
 
 ```bash
@@ -960,6 +1048,8 @@ http://localhost:8080/examples_html/svg-smil.html
 http://localhost:8080/examples_html/svg-panzoom.html
 http://localhost:8080/examples_html/svg-chart.html
 http://localhost:8080/examples_html/svg-linedraw.html
+http://localhost:8080/examples_html/webgl-test.html
+http://localhost:8080/examples_html/webgl-full-demo.html
 
 # Server examples (Haskell-compiled, run in terminal)
 npm run build:shared-demo && npm run run:shared-demo

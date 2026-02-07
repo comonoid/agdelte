@@ -202,6 +202,7 @@ The key difference from Virtual DOM: `template` is **data**, not a function. Bin
 | [doc/api/css.md](doc/api/css.md) | Typed CSS: Decl, Length, Color, Layout, Stylesheet |
 | [doc/api/svg.md](doc/api/svg.md) | Typed SVG: Elements, Path, Transform, SMIL, Events |
 | [doc/api/anim.md](doc/api/anim.md) | Model-driven animations: Tween, Spring |
+| [doc/api/webgl.md](doc/api/webgl.md) | WebGL scene graphs: Camera, Light, Material, SceneNode, Scene |
 | [doc/api/ffi.md](doc/api/ffi.md) | Browser/Server postulates, Serialize |
 
 ### Additional Documents
@@ -298,6 +299,9 @@ src/
     │   ├── Tween.agda           -- Tween animations with easing
     │   └── Spring.agda          -- Spring physics animations
     │
+    ├── WebGL/                   -- WebGL 3D scene graphs
+    │   └── Types.agda           -- Camera, Light, Material, SceneNode, Scene
+    │
     ├── Theory/                  -- Mathematical foundation (optional)
     │   ├── Poly.agda            -- Polynomial functors, Coalg, Lens
     │   ├── PolySignal.agda      -- Signal ≅ Coalg (Mono A ⊤)
@@ -343,10 +347,13 @@ examples/
     SvgPanZoom.agda              -- Interactive pan/zoom
     SvgChart.agda                -- Data-driven bar chart
     SvgLineDraw.agda             -- Self-drawing paths
+    WebGLTest.agda               -- WebGL basics (perspective, phong, animate)
+    WebGLFullDemo.agda           -- WebGL full demo (all features)
 
 runtime/
     reactive.js                  -- Main: runReactiveApp, renderNode, updateBindings
     reactive-auto.js             -- Auto-loader (data-agdelte attribute)
+    reactive-gl.js               -- WebGL runtime (3D scene graph rendering)
     events.js                    -- Event interpretation, subscribe/unsubscribe
     primitives.js                -- Primitive event sources
     svg-events.js                -- SVG coordinate conversion helpers
@@ -454,6 +461,7 @@ See [examples/README.md](examples/README.md) for details.
 - **CSS DSL** — typed CSS generation: Decl, Length, Color, Layout, Transitions, Animations, Stylesheet
 - **SVG DSL** — namespace-aware SVG: typed elements, Path commands, Transform, SMIL animations, pointer events
 - **Animations** — model-driven Tween/Spring with compile-time keyframe generation
+- **WebGL DSL** — declarative 3D scene graphs: cameras, lights, materials (unlit/flat/phong/pbr/textured), text3D, groups, interactive events, continuous animation
 
 ## Philosophy
 

@@ -21,6 +21,13 @@
   </style>
 </head>
 <body>
+  <div style="max-width:600px;margin:1rem auto;padding:0.75rem 1rem;background:rgba(74,158,255,0.08);border-left:3px solid #4a9eff;border-radius:0 8px 8px 0;color:#bbb;font-size:0.9rem;line-height:1.5;">
+    <strong>Expected:</strong> An SVG canvas with colored shapes. Click-and-drag to pan the viewport.
+    Scroll wheel (or +/&minus; buttons) to zoom in/out. A <em>Reset</em> button returns to the default view.
+    Coordinates are converted from screen to SVG space via <code>getScreenCTM().inverse()</code>.
+    The current viewBox values are displayed reactively.
+  </div>
+
   <div id="app" data-agdelte="SvgPanZoom"></div>
 
   <script type="module">

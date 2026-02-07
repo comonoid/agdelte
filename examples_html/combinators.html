@@ -12,6 +12,14 @@
   <h1>Combinators</h1>
   <p class="subtitle">foldE + mapFilterE: stateful event pipeline</p>
 
+  <div class="instructions">
+    <strong>Expected:</strong> <em>Start</em> begins a pipeline: interval fires every 300ms, <code>foldE</code> counts
+    internally, <code>mapFilterE</code> classifies each tick as regular or batch (every 5th).
+    Two counters display: total Ticks and Batch Ticks. <em>Stop</em> pauses, <em>Reset</em> clears.
+    The explanation section shows the pipeline logic. You should see ticks incrementing fast,
+    and batch ticks incrementing every 5th tick.
+  </div>
+
   <div id="app" data-agdelte="Combinators">
     <p class="loading">Loading compiled Agda...</p>
   </div>

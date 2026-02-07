@@ -13,6 +13,13 @@
   <h1>CSS Demo</h1>
   <p class="subtitle">Stylesheet rendering &mdash; Agda code generates CSS at compile time</p>
 
+  <div class="instructions">
+    <strong>Expected:</strong> Two sections. (1) <em>Live Preview</em>: a card with hover effect (shadow + lift via CSS transition)
+    and a fadeIn card that appears with animation on load (click <em>[replay]</em> to re-trigger).
+    (2) <em>Generated CSS</em>: the raw CSS text generated from Agda code, displayed in a code block.
+    All styles come from <code>css-demo.css</code> generated at compile time &mdash; no runtime CSS injection.
+  </div>
+
   <div class="css-output">
     <h3 style="color: var(--primary); margin-bottom: 0.5rem;">Generated CSS (from css-demo.css)</h3>
     <pre id="css-code">Loading...</pre>

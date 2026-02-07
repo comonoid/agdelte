@@ -16,6 +16,12 @@
   </style>
 </head>
 <body>
+  <div style="max-width:600px;margin:1rem auto;padding:0.75rem 1rem;background:rgba(74,158,255,0.08);border-left:3px solid #4a9eff;border-radius:0 8px 8px 0;color:#bbb;font-size:0.9rem;line-height:1.5;">
+    <strong>Expected:</strong> SVG paths that draw themselves when triggered. Click the SVG to start the drawing animation.
+    A star, spiral, or other shape appears as if being drawn by an invisible pen (stroke-dashoffset trick).
+    The animation is pure SMIL &mdash; no JavaScript animation loop. Click <em>[replay]</em> to re-trigger.
+  </div>
+
   <div id="app" data-agdelte="SvgLineDraw"></div>
 
   <script type="module">

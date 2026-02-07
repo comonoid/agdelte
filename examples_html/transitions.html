@@ -45,6 +45,15 @@
   <h1>Transitions</h1>
   <p class="subtitle">whenT: conditional rendering with CSS enter/leave animations</p>
 
+  <div class="instructions">
+    <strong>Expected:</strong> Two sections. (1) A <em>Toggle Panel</em> button &mdash; clicking it slides a panel
+    in/out with CSS animation (slideDown/slideUp, 300ms). (2) A <em>Show Notification</em> button &mdash;
+    clicking it shows a toast notification that slides in from the right, then auto-dismisses after 3 seconds
+    with a slide-out animation (400ms). The dismiss &times; button also works. Transition classes
+    (<code>panel-enter</code>, <code>panel-leave</code>, <code>notif-enter</code>, <code>notif-leave</code>)
+    are managed by <code>whenT</code>.
+  </div>
+
   <div id="app" data-agdelte="Transitions">
     <p class="loading">Loading compiled Agda...</p>
   </div>

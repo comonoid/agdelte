@@ -12,6 +12,13 @@
   <h1>Task Chain Demo</h1>
   <p class="subtitle">Monadic HTTP request chains with do-notation</p>
 
+  <div class="instructions">
+    <strong>Expected:</strong> A <em>Run Chain</em> button. Clicking it executes a sequential HTTP chain
+    (Task monad). The status shows progress through each step. On completion, the combined
+    result of the chained requests is displayed. The chain demonstrates do-notation style
+    sequential dependencies (each request depends on the previous one's result).
+  </div>
+
   <div id="app" data-agdelte="Task">
     <p class="loading">Loading compiled Agda...</p>
   </div>
