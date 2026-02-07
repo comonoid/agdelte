@@ -7,7 +7,7 @@ module Agdelte.Primitive.Keyboard where
 open import Data.String using (String)
 open import Data.Bool using (Bool)
 open import Data.Product using (_×_)
-open import Agdelte.Core.Event
+open import Agdelte.Core.Event using (Event)
 
 ------------------------------------------------------------------------
 -- Keyboard Event Data

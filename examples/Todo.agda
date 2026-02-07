@@ -8,14 +8,18 @@ module Todo where
 open import Data.Nat using (ℕ; zero; suc; _+_; _∸_)
 open import Data.Nat.Show using (show)
 open import Data.Bool using (Bool; true; false; not; if_then_else_)
-open import Data.String using (String; _++_; _≟_)
+open import Data.String using (String; _++_)
 open import Data.List using (List; []; _∷_; [_]; map; length; null)
 open import Data.List.Base using (filterᵇ)
 open import Data.Product using (_×_; _,_)
-open import Relation.Nullary using (yes; no)
 
 open import Agdelte.Reactive.Node
-open import Agdelte.Css
+open import Agdelte.Css.Decl using (Style; _∶_; _<>_; toAttrs)
+open import Agdelte.Css.Length using (px)
+open import Agdelte.Css.Color using (hex; named)
+open import Agdelte.Css.Properties using (padding'; padding2; background';
+                                          color'; fontSize'; borderRadius';
+                                          maxWidth'; gap'; margin')
 
 ------------------------------------------------------------------------
 -- TodoItem
@@ -81,11 +85,8 @@ removeItem targetId = filterᵇ (λ item → not (todoId item ≡ᵇ targetId))
 keepActive : List TodoItem → List TodoItem
 keepActive = filterᵇ (λ item → not (completed item))
 
--- Check for empty string
-isEmpty : String → Bool
-isEmpty s with s ≟ ""
-... | yes _ = true
-... | no _  = false
+-- Check for empty string (FFI-only, Agda definition not used at runtime)
+postulate isEmpty : String → Bool
 
 {-# COMPILE JS isEmpty = s => s === "" #-}
 

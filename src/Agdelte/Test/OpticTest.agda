@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K #-}
 
--- Phase 6: Optic tests — propositional equality proofs
+-- Optic tests — propositional equality proofs
 -- Tests for Prism, Traversal, Affine, Optic composition, routeMsg
 
 module Agdelte.Test.OpticTest where

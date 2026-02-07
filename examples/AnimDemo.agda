@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K #-}
 
--- AnimDemo: Phase 8 — model-driven animations (Tween + Spring)
+-- AnimDemo: model-driven animations (Tween + Spring)
 --
 -- These produce Float values, not CSS strings. In a real app they'd
 -- drive styleBind (e.g. "opacity" bound to tween output), but here

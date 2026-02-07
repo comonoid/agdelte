@@ -2,7 +2,7 @@
 
 -- Css.Properties: typed CSS property constructors
 --
--- Each constructor returns a Decl, composable with Phase 1's Style.
+-- Each constructor returns a Decl, composable with Style.
 -- Typed constructors validate property-value pairing at compile time:
 --   padding' (px 16)         ✓  Length → Decl
 --   color' (hex "#333")      ✓  Color → Decl

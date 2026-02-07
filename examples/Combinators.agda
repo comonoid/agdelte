@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K #-}
 
--- Combinators: stateful event combinators (Phase 5)
+-- Combinators: stateful event combinators
 -- Demonstrates: foldE (internal state), mapFilterE (filter + transform)
 
 module Combinators where
@@ -101,7 +101,7 @@ combinatorsTemplate =
   div [ class "combinators-demo" ]
     ( h1 [] [ text "Combinators" ]
     ∷ p [ class "description" ]
-        [ text "foldE + mapFilterE: stateful event pipeline (Phase 5)" ]
+        [ text "foldE + mapFilterE: stateful event pipeline" ]
 
     ∷ div [ class "controls" ]
         ( button (onClick Toggle ∷ class "btn" ∷ []) [ bindF toggleText ]

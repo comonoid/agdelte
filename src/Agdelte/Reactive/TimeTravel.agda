@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K --guardedness #-}
 
--- Phase 8 (polynomials.md): Time-Travel Debugging
+-- Time-Travel Debugging
 --
 -- Wraps a ReactiveApp to record state history.
 -- Adds Undo/Redo messages that navigate through past states.

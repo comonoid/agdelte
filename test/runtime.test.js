@@ -82,7 +82,7 @@ test('onKey creates keyboard event spec', () => {
 });
 
 // ========================================
-// Combinator Runtime Tests (Phase 5)
+// Combinator Runtime Tests
 // ========================================
 
 console.log('\n=== Combinator Runtime Tests ===\n');

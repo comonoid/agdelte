@@ -5,7 +5,7 @@
 module Agdelte.Primitive.Interval where
 
 open import Data.Nat using (ℕ)
-open import Agdelte.Core.Event
+open import Agdelte.Core.Event using (Event)
 
 ------------------------------------------------------------------------
 -- Interval Event

@@ -62,7 +62,7 @@ dual (choose s₁ s₂) = offer (dual s₁) (dual s₂)
 dual done            = done
 
 -- dual is an involution: dual (dual s) ≡ s
--- (proof deferred to Phase 10)
+-- (proof deferred)
 
 ------------------------------------------------------------------------
 -- Interpretation: Session → Agent interface types

@@ -1,7 +1,7 @@
 {-# OPTIONS --without-K #-}
 
 -- SVG Test Example
--- Basic SVG rendering test for Phase 0-2
+-- Basic SVG rendering test
 
 module SvgTest where
 

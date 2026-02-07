@@ -449,6 +449,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   let currentEventFingerprint = null;
   let isUpdating = false;
   let pendingMessages = [];
+  const afterUpdateCallbacks = [];  // registered by glCanvas nodes
 
   /**
    * Execute renderNode within a specific scope
@@ -486,6 +487,9 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       // Update bindings
       updateScope(rootScope, oldModel, model);
 
+      // Update GL scopes (registered by glCanvas nodes)
+      for (const cb of afterUpdateCallbacks) cb(oldModel, model);
+
       // Update subscriptions
       updateSubscriptions();
 
@@ -499,6 +503,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         }
         model = update(nextMsg)(nextOld);
         updateScope(rootScope, nextOld, model);
+        for (const cb of afterUpdateCallbacks) cb(nextOld, model);
         updateSubscriptions();
       }
     } finally {
@@ -676,6 +681,29 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         });
 
         return container;
+      },
+
+      glCanvas: (_typeS, attrs, scene) => {
+        const canvas = document.createElement('canvas');
+
+        const { items: attrArray } = listToArray(attrs);
+        for (const attr of attrArray) {
+          applyAttr(canvas, attr);
+        }
+
+        // Store scene data and app hooks for reactive-gl.js
+        canvas.__glScene = scene;
+        canvas.__glDispatch = dispatch;
+        canvas.__glGetModel = () => model;
+
+        // Register afterUpdate callback for this canvas.
+        // reactive-gl.js will replace this with the real GL scope updater.
+        canvas.__glUpdate = null;
+        afterUpdateCallbacks.push((oldModel, newModel) => {
+          if (canvas.__glUpdate) canvas.__glUpdate(oldModel, newModel);
+        });
+
+        return canvas;
       }
     });
   }
@@ -1220,7 +1248,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   console.log(`Reactive app mounted: ${counts.text} text bindings, ${counts.attr} attr bindings, ${counts.style} style bindings`);
 
   // ─────────────────────────────────────────────────────────────────
-  // Phase 8B: Big Lens — handle incoming peek/over WS messages
+  // Big Lens — handle incoming peek/over WS messages
   // ─────────────────────────────────────────────────────────────────
 
   let bigLensWs = null;
@@ -1286,7 +1314,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   }
 
   // ─────────────────────────────────────────────────────────────────
-  // Phase 8 (polynomials.md): Time-Travel Debugging
+  // Time-Travel Debugging
   // ─────────────────────────────────────────────────────────────────
 
   let historyPast = [];      // previous models (newest first)
@@ -1307,6 +1335,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     historyFuture.unshift(structuredClone ? structuredClone(model) : JSON.parse(JSON.stringify(model)));
     model = historyPast.shift();
     updateScope(rootScope, oldModel, model);
+    for (const cb of afterUpdateCallbacks) cb(oldModel, model);
     updateSubscriptions();
   }
 
@@ -1316,6 +1345,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     historyPast.unshift(structuredClone ? structuredClone(model) : JSON.parse(JSON.stringify(model)));
     model = historyFuture.shift();
     updateScope(rootScope, oldModel, model);
+    for (const cb of afterUpdateCallbacks) cb(oldModel, model);
     updateSubscriptions();
   }
 
@@ -1329,7 +1359,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   }
 
   // ─────────────────────────────────────────────────────────────────
-  // Phase 8 (polynomials.md): Hot Reload
+  // Hot Reload
   // ─────────────────────────────────────────────────────────────────
 
   function hotReload(newModuleExports) {

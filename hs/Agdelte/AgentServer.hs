@@ -4,7 +4,7 @@
 -- Multiple agents can be registered at different paths
 -- WebSocket clients on /ws receive broadcasts on any agent state change
 --
--- Phase 8: Client ID tracking + peek/over protocol for Big Lens
+-- Client ID tracking + peek/over protocol for Big Lens
 module Agdelte.AgentServer
   ( AgentDef(..)
   , runAgentServer
@@ -68,7 +68,7 @@ httpHandler routes registry broadcast req = do
   -- Parse path: /agent-path/action or /client/clientId/action
   let (agentPath', action) = splitPath path
 
-  -- Client peek/over via HTTP (Phase 8B)
+  -- Client peek/over via HTTP
   case T.stripPrefix "/client/" path of
     Just rest -> handleClientRequest registry rest body
     Nothing ->

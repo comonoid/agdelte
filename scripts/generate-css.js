@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// generate-css.js — Agdelte CSS build tool (Phase 9)
+// generate-css.js — Agdelte CSS build tool
 //
 // Compiles an Agda Stylesheet value to a .css file.
 //

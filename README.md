@@ -211,7 +211,7 @@ The key difference from Virtual DOM: `template` is **data**, not a function. Bin
 | [doc/internals/runtime.md](doc/internals/runtime.md) | JavaScript runtime implementation |
 | [doc/theory/combinators.md](doc/theory/combinators.md) | All combinators with types |
 | [doc/theory/time-model.md](doc/theory/time-model.md) | Time model: ticks, dt |
-| [doc/theory/polynomials.md](doc/theory/polynomials.md) | Polynomial functors: theory and phases |
+| [doc/theory/polynomials.md](doc/theory/polynomials.md) | Polynomial functors: theory |
 | [doc/comparison/vs-svelte.md](doc/comparison/vs-svelte.md) | Comparison with Svelte 5 |
 | [doc/comparison/vs-vue3.md](doc/comparison/vs-vue3.md) | Comparison with Vue 3 |
 
@@ -336,7 +336,7 @@ examples/
     SessionFormDemo.agda         -- Session form demo
     Worker.agda                  -- Web worker example
     CssDemo.agda                 -- CSS DSL demo
-    CssFullDemo.agda             -- CSS full demo (all phases)
+    CssFullDemo.agda             -- CSS full demo
     AnimDemo.agda                -- Tween/Spring animations
     SvgTest.agda                 -- Basic SVG demo
     SvgSmil.agda                 -- SMIL declarative animations

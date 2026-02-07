@@ -5,7 +5,7 @@
 -- Agent IS a coalgebra of the polynomial p(y) = O × y^I
 -- This module makes the correspondence explicit and proves it.
 --
--- Since Phase 9, AgentLens IS Poly.Lens (Mono O₁ I₁) (Mono O₂ I₂),
+-- AgentLens IS Poly.Lens (Mono O₁ I₁) (Mono O₂ I₂),
 -- so the lens correspondence is definitional (id).
 
 module Agdelte.Theory.AgentCoalg where
@@ -90,7 +90,7 @@ agent-coalg-step : ∀ {S I O} (a : Agent S I O) (s : S) (i : I)
 agent-coalg-step _ _ _ = refl
 
 ------------------------------------------------------------------------
--- AgentLens = Poly.Lens (definitional since Phase 9)
+-- AgentLens = Poly.Lens (definitional)
 ------------------------------------------------------------------------
 
 -- AgentLens I₁ O₁ I₂ O₂ is now defined as Lens (Mono O₁ I₁) (Mono O₂ I₂)

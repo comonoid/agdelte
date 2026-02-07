@@ -2,8 +2,8 @@
 
 -- Css.Easing: CSS easing functions and duration types
 --
--- Shared between CSS transitions/animations (Phase 7) and
--- model-driven animations (Phase 8).
+-- Shared between CSS transitions/animations and
+-- model-driven animations.
 --
 -- CSS usage:
 --   transition' (trans "opacity" (ms 300) ease ∷ [])

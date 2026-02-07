@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K #-}
 
--- Optics hierarchy for widget composition and network navigation (Phase 6)
+-- Optics hierarchy for widget composition and network navigation
 --
 -- Concrete types (Lens, Prism, Traversal, Affine) for API contracts:
 --   zoomNode : Lens M M' → Prism Msg Msg' → ...
@@ -8,7 +8,7 @@
 -- Unified Optic for composition and Big Optic:
 --   _∘O_ : Optic B C → Optic A B → Optic A C
 --
--- Phase 9 will prove: Optic ≅ Poly.Lens for monomial case
+-- TODO: prove Optic ≅ Poly.Lens for monomial case
 
 module Agdelte.Reactive.Optic where
 

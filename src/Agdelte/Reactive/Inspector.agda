@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K --guardedness #-}
 
--- Phase 8 (polynomials.md): Network Inspector
+-- Network Inspector
 --
 -- Inspect agent network state via IOOptic (Big Lens).
 -- Given a Diagram, construct IOOptic for each slot,

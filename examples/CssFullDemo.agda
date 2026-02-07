@@ -1,8 +1,8 @@
 {-# OPTIONS --without-K #-}
 
--- CssFullDemo: end-to-end test for all CSS phases
--- Phases covered: 1 (Decl), 2 (Types), 3 (Conditional), 4 (Variables),
---                 5 (Stylesheet), 6 (Layout), 7 (Animation), 9 (Generate)
+-- CssFullDemo: end-to-end test for all CSS features
+-- Covers: Decl, Types, Conditional, Variables,
+--         Stylesheet, Layout, Animation, Generate
 
 module CssFullDemo where
 
@@ -38,7 +38,7 @@ open import Agdelte.Css.Stylesheet using (Rule; rule; media; keyframe; rawRule;
                                            Stylesheet; renderStylesheet)
 
 ------------------------------------------------------------------------
--- Phase 4: CSS Variables
+-- CSS Variables
 ------------------------------------------------------------------------
 
 -- Define theme variables (rendered as inline style on :root or container)
@@ -60,7 +60,7 @@ themedCard =
   ∷ []
 
 ------------------------------------------------------------------------
--- Phase 6: Layout helpers
+-- Layout helpers
 ------------------------------------------------------------------------
 
 -- Horizontal toolbar: flex row, centered, with gap
@@ -84,7 +84,7 @@ page : Style
 page = stack (rem 2.0) <> (maxWidth' (px 960) ∷ margin2 zero (pct 50.0) ∷ [])
 
 ------------------------------------------------------------------------
--- Phase 3: Conditional styles
+-- Conditional styles
 ------------------------------------------------------------------------
 
 baseStyle : Style
@@ -110,7 +110,7 @@ inactiveCard : Style
 inactiveCard = cardStyle false
 
 ------------------------------------------------------------------------
--- Phase 7: Transitions & Animations
+-- Transitions & Animations
 ------------------------------------------------------------------------
 
 -- Transition shorthand
@@ -148,21 +148,21 @@ delay3 = staggerDelay 3 50
 
 appCSS : Stylesheet
 appCSS =
-    -- Phase 4: Theme variables on :root
+    -- Theme variables on :root
     rule ":root" themeVars
-    -- Preset keyframes (Phase 7)
+    -- Preset keyframes
   ∷ keyframeRule fadeIn
   ∷ keyframeRule fadeOut
   ∷ keyframeRule slideInUp
   ∷ keyframeRule pulse
   ∷ keyframeRule shake
   ∷ keyframeRule spin
-    -- Phase 6: Layout rules
+    -- Layout rules
   ∷ rule ".toolbar" toolbar
   ∷ rule ".sidebar" sidebar
   ∷ rule ".card-grid" cardGrid
   ∷ rule ".page" page
-    -- Phase 2+7: Card with typed properties
+    -- Card with typed properties
   ∷ rule ".card" (
         padding' (rem 1.0)
       ∷ background' (hex "#fff")
@@ -173,7 +173,7 @@ appCSS =
         "box-shadow" ∶ "0 4px 12px rgba(0,0,0,0.15)"
       ∷ "transform" ∶ "translateY(-2px)"
       ∷ [])
-    -- Phase 4: Themed card using variable references
+    -- Themed card using variable references
   ∷ rule ".card--themed" themedCard
     -- Responsive
   ∷ media "(max-width: 768px)" (

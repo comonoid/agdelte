@@ -1,12 +1,12 @@
 {-# OPTIONS --without-K --guardedness #-}
 
--- Phase 8: Big Lens — Network-Wide Optic
+-- Big Lens — Network-Wide Optic
 --
 -- Extends the Optic abstraction to span:
---   LocalOptic   — pure peek/over (Phase 6, already in Optic.agda)
+--   LocalOptic   — pure peek/over (Optic.agda)
 --   AgentOptic   — HTTP GET/POST to server agents
 --   ClientOptic  — WebSocket peek/over to browser clients
---   ProcessOptic — Unix socket (Phase 7, already in ProcessOptic.agda)
+--   ProcessOptic — Unix socket (ProcessOptic.agda)
 --
 -- Key idea: IOOptic is the effectful counterpart of Optic.
 -- Same peek/over interface, but in IO and string-serialized.
@@ -79,7 +79,7 @@ processAgentOptic socketPath = mkIOOptic peekIO overIO
 -- ClientOptic: WebSocket-backed IOOptic to a browser client
 ------------------------------------------------------------------------
 
--- For Phase 8B: the server sends WS messages to a specific client.
+-- The server sends WS messages to a specific client.
 -- Protocol:
 --   peek → send {"peek":"model"} → client responds with serialized model
 --   over → send {"over":"MsgPayload"} → client dispatches, responds with new state

@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K --guardedness #-}
 
--- Phase 8D: Wiring Diagrams — declarative agent-client topology
+-- Wiring Diagrams — declarative agent-client topology
 --
 -- A Diagram describes which agents exist and how they connect:
 --   - Agent outputs can broadcast to all WS clients

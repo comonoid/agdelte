@@ -60,6 +60,7 @@ initForm = mkForm enterName "" ""
 
 _++_ : String → String → String
 _++_ = primStringAppend
+infixr 5 _++_
 
 showPhase : FormPhase → String
 showPhase enterName  = "Enter your name"

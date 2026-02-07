@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K #-}
 
--- CssDemo: test module for generate-css.js (Phase 9)
+-- CssDemo: test module for generate-css.js
 
 module CssDemo where
 

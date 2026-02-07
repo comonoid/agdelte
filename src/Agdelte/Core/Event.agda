@@ -70,7 +70,7 @@ postulate SharedBuffer : Set
 -- Event as data type (AST) - stays in Set
 ------------------------------------------------------------------------
 
--- Design notes (Phase 5):
+-- Design notes:
 --
 -- NO_UNIVERSE_CHECK: foldE and mapFilterE quantify over a hidden type B
 -- (∀ {B : Set} → ...), which lifts the constructor to Set₁. But Event
@@ -154,7 +154,7 @@ data Event (A : Set) : Set where
   debounce : ℕ → Event A → Event A    -- delay after pause
   throttle : ℕ → Event A → Event A    -- rate limiting
 
-  -- === Stateful combinators (Phase 5) ===
+  -- === Stateful combinators ===
   -- foldE: accumulate state across event occurrences
   -- Runtime maintains internal state A; on each B from inner event,
   -- computes new A = step(B, oldA), dispatches new A
@@ -342,7 +342,7 @@ _<$>_ = mapE
 infixl 4 _<$>_
 
 ------------------------------------------------------------------------
--- Stateful combinators (Phase 5)
+-- Stateful combinators
 ------------------------------------------------------------------------
 
 -- accumE: apply function events to accumulator, emit result

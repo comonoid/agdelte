@@ -10,7 +10,7 @@ open import Data.Product using (_×_; _,_; proj₁; proj₂)
 open import Function using (_∘_; id)
 
 ------------------------------------------------------------------------
--- Lens: get/set pair with laws (not proven here, see Phase 9)
+-- Lens: get/set pair with laws (not proven here)
 ------------------------------------------------------------------------
 
 record Lens (Outer Inner : Set) : Set where

@@ -8,7 +8,7 @@ open import Data.String using (String)
 open import Data.List using (List)
 open import Data.Product using (_×_)
 open import Data.Maybe using (Maybe)
-open import Agdelte.Core.Event
+open import Agdelte.Core.Event using (Event)
 
 ------------------------------------------------------------------------
 -- HTTP Request Types

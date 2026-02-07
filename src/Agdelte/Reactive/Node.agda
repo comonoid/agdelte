@@ -119,6 +119,11 @@ data Node (Model Msg : Set) : Set₁ where
   -- Used automatically by zoomNode — no manual fingerprint needed.
   scopeProj : ∀ {M' : Set} → (Model → M') → Node Model Msg → Node Model Msg
 
+  -- WebGL canvas: DOM attributes + opaque scene data.
+  -- Scene type (S) is defined in the WebGL module; Node.agda doesn't import it.
+  -- Runtime creates <canvas>, stores scene for reactive-gl.js to initialize.
+  glCanvas : ∀ {S : Set} → List (Attr Model Msg) → S → Node Model Msg
+
 ------------------------------------------------------------------------
 -- Smart constructors for common patterns
 ------------------------------------------------------------------------
@@ -315,6 +320,8 @@ zoomNode' get wrap (scope fp node) =
   scope (fp ∘ get) (zoomNode' get wrap node)
 zoomNode' get wrap (scopeProj proj node) =
   scopeProj (proj ∘ get) (zoomNode' get wrap node)
+zoomNode' get wrap (glCanvas attrs scene) =
+  glCanvas (map (zoomAttr get wrap) attrs) scene
 
 -- Transform node: remap model/message AND wrap in automatic scopeProj cutoff.
 -- Every zoomNode call gets free subtree-skipping via deepEqual.
@@ -322,7 +329,7 @@ zoomNode : ∀ {M M' Msg Msg'} → (M → M') → (Msg' → Msg) → Node M' Msg
 zoomNode get wrap node = scopeProj get (zoomNode' get wrap node)
 
 ------------------------------------------------------------------------
--- Zoom with Lens + Prism (Phase 6: typed component composition)
+-- Zoom with Lens + Prism (typed component composition)
 ------------------------------------------------------------------------
 
 open import Agdelte.Reactive.Optic using (Prism; Lens; get; build)

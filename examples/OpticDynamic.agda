@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K #-}
 
--- OpticDynamic: Dynamic optic navigation (Phase 6 advanced)
+-- OpticDynamic: Dynamic optic navigation
 -- Demonstrates: ixList (indexed access), Traversal (batch ops),
 --   _∘O_ (runtime optic composition), peek (safe access)
 

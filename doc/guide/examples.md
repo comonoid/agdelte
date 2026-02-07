@@ -29,7 +29,7 @@ All examples use **Reactive Bindings** (like Svelte) — no Virtual DOM.
 | [SharedAgent Demo](#sharedagent-demo) | share, asLinear, peekShared, stepShared, registry | Server |
 | [Inspector Demo](#inspector-demo) | Diagram, inspectDiagram, wireSlot, refOptic, sendAndPrint | Server |
 | [CSS Demo](#css-demo) | Stylesheet, rule, media, keyframeRule, renderStylesheet | CSS |
-| [CSS Full Demo](#css-full-demo) | All CSS phases: variables, layout, transitions, animations | CSS |
+| [CSS Full Demo](#css-full-demo) | All CSS features: variables, layout, transitions, animations | CSS |
 | [Anim Demo](#anim-demo) | Tween, Spring, compile-time verification | CSS |
 | [SVG Test](#svg-test) | SVG namespace, typed attributes, reactive bindings | SVG |
 | [SMIL Animations](#smil-animations) | Declarative animations, choreography, motion paths | SVG |
@@ -688,33 +688,33 @@ Source: `examples/CssDemo.agda`
 
 ## CSS Full Demo
 
-**Demonstrates:** All CSS phases end-to-end: typed properties, composition, variables, layout helpers, conditional styles, transitions, animations, media queries, and stylesheet generation.
+**Demonstrates:** All CSS features end-to-end: typed properties, composition, variables, layout helpers, conditional styles, transitions, animations, media queries, and stylesheet generation.
 
 ```agda
--- Phase 4: CSS variables
+-- CSS variables
 themeVars : Style
 themeVars = cssVar "primary" "#4a9eff" ∷ cssVar "radius" "8px" ∷ []
 
--- Phase 2+4: Typed properties with variable references
+-- Typed properties with variable references
 themedCard : Style
 themedCard = color' (named "white") ∷ backgroundColor' (var "primary")
            ∷ "border-radius" ∶ varRef "radius" ∷ []
 
--- Phase 3: Conditional styles
+-- Conditional styles
 cardStyle : Bool → Style
 cardStyle active = styleWhen active
   ("border" ∶ "2px solid var(--primary)" ∷ [])
   ("border" ∶ "2px solid transparent" ∷ [])
 
--- Phase 6: Layout
+-- Layout
 toolbar : Style
 toolbar = row <> center <> "padding" ∶ "0.5rem" ∷ []
 
--- Phase 7: Transitions + animations
+-- Transitions + animations
 hoverTransition : Decl
 hoverTransition = transition' (trans "all" (ms 200) ease ∷ [])
 
--- Phase 9: Full stylesheet
+-- Full stylesheet
 appCSS : Stylesheet
 appCSS = rule ":root" themeVars
        ∷ rule ".card" (padding' (px 16) ∷ hoverTransition ∷ [])

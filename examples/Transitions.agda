@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K #-}
 
--- Transitions: whenT with CSS enter/leave transitions (Phase 3)
+-- Transitions: whenT with CSS enter/leave transitions
 -- Demonstrates conditional rendering with animations
 
 module Transitions where

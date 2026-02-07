@@ -7,7 +7,7 @@ module Agdelte.Primitive.Time where
 open import Data.Nat using (ℕ)
 open import Data.Float using (Float)
 open import Data.String using (String)
-open import Agdelte.Core.Event
+open import Agdelte.Core.Event using (Event)
 open import Agdelte.Core.Signal
 
 ------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K #-}
 
--- Pure testing framework for event combinators (Phase 5)
+-- Pure testing framework for event combinators
 -- No DOM, no browser — test transformations as pure functions on lists
 --
 -- Key idea: represent an event stream as List (List A)
