@@ -603,6 +603,49 @@ Source: `server/InspectorDemo.agda`
 
 ---
 
+## Building Server Examples
+
+Server examples require GHC (Haskell compiler) and compile via Agda's GHC backend.
+
+### Prerequisites
+
+```bash
+# Install GHC and cabal
+# Ubuntu/Debian:
+sudo apt install ghc cabal-install
+
+# macOS:
+brew install ghc cabal-install
+
+# Update cabal package list
+cabal update
+```
+
+### Build & Run
+
+```bash
+# HttpAgent (simple HTTP server)
+npm run build:server && _build/Main
+
+# SharedAgent Demo
+npm run build:shared-demo && _build/SharedAgentDemo
+
+# Inspector Demo
+npm run build:inspector-demo && _build/InspectorDemo
+
+# MultiAgent (requires multiple terminals)
+npm run build:multi-agent && _build/MultiAgent
+```
+
+### Haskell Support Modules
+
+Server examples use Haskell FFI modules in `hs/`:
+- `Http.hs` — HTTP server primitives
+- `WebSocket.hs` — WebSocket support
+- `AgentServer.hs` — Agent server wiring
+
+---
+
 ## CSS Demo
 
 **Demonstrates:** Static CSS generation from Agda. `Stylesheet`, `rule`, `media`, `keyframeRule`, `renderStylesheet`.

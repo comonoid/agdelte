@@ -12,6 +12,7 @@
   },
   "scripts": {
     "test": "node test/runtime.test.js",
+    "verify": "bash scripts/verify-build.sh",
     "build:counter": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/Counter.agda",
     "build:timer": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/Timer.agda",
     "build:todo": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/Todo.agda",

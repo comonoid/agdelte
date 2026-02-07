@@ -28,7 +28,25 @@ export const channelConnections = new Map();
 const POOL_IDLE_TIMEOUT = 30000; // 30s without tasks → cleanup
 const POOL_CHECK_INTERVAL = 5000;
 
+/**
+ * Manages a pool of Web Workers for parallel task execution.
+ *
+ * Features:
+ * - Reuses workers to avoid creation overhead
+ * - Queues tasks when all workers busy
+ * - Auto-cleanup after idle timeout (30s)
+ * - Cancellable tasks
+ *
+ * @example
+ * const pool = new WorkerPool(4, '/workers/compute.js');
+ * const handle = pool.submit(inputData, onResult, onError);
+ * handle.cancel(); // Cancel if needed
+ */
 class WorkerPool {
+  /**
+   * @param {number} maxSize - Maximum concurrent workers
+   * @param {string} scriptUrl - Worker script URL
+   */
   constructor(maxSize, scriptUrl) {
     this.maxSize = maxSize;
     this.scriptUrl = scriptUrl;
@@ -39,6 +57,13 @@ class WorkerPool {
     this._cleanupTimer = setInterval(() => this._cleanup(), POOL_CHECK_INTERVAL);
   }
 
+  /**
+   * Submit a task to the pool.
+   * @param {*} input - Data to send to worker via postMessage
+   * @param {Function} onMessage - Called with MessageEvent on worker response
+   * @param {Function} onError - Called with error string on failure
+   * @returns {{ cancel: Function }} Handle with cancel() method
+   */
   submit(input, onMessage, onError) {
     this.lastUsed = Date.now();
     let cancelled = false;
@@ -123,6 +148,7 @@ class WorkerPool {
         Date.now() - this.lastUsed > POOL_IDLE_TIMEOUT) {
       this.idle.forEach(w => w.terminate());
       this.idle = [];
+      this._isEmpty = true;  // Mark for removal from registry
     }
   }
 
@@ -131,11 +157,22 @@ class WorkerPool {
     this.idle.forEach(w => w.terminate());
     this.idle = [];
     this.queue = [];
+    this._isEmpty = true;
   }
 }
 
 // Global pool registry: key = "poolSize:scriptUrl"
 const workerPools = new Map();
+
+// Periodic cleanup of empty pools from registry
+setInterval(() => {
+  for (const [key, pool] of workerPools) {
+    if (pool._isEmpty) {
+      pool.destroy();
+      workerPools.delete(key);
+    }
+  }
+}, POOL_CHECK_INTERVAL * 2);
 
 function getPool(poolSize, scriptUrl) {
   const poolSizeNum = typeof poolSize === 'bigint' ? Number(poolSize) : poolSize;
@@ -358,6 +395,8 @@ export function interpretEvent(event, dispatch) {
     },
 
     // wsConnect: WebSocket connection
+    // Note: Multiple connections to same URL are supported via wsConnections Map
+    // wsSend uses the most recent connection for each URL
     wsConnect: (url, handler) => {
       const ws = new WebSocket(url);
 
@@ -375,14 +414,22 @@ export function interpretEvent(event, dispatch) {
 
       ws.onclose = () => {
         dispatch(handler(mkWsMsg('WsClosed')));
+        // Clean up only if this is still the active connection
+        if (wsConnections.get(url) === ws) {
+          wsConnections.delete(url);
+        }
       };
 
-      // Register for wsSend
+      // Register for wsSend (overwrites previous - last connection wins)
       wsConnections.set(url, ws);
 
       return {
         unsubscribe: () => {
-          wsConnections.delete(url);
+          // Clean up only if this is still the active connection
+          if (wsConnections.get(url) === ws) {
+            wsConnections.delete(url);
+          }
+          ws.onerror = null;  // Prevent stale error handler
           if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
             ws.close();
           }
@@ -760,7 +807,9 @@ function mkKeyboardEvent(e) {
       e.ctrlKey,
       e.altKey,
       e.shiftKey,
-      e.metaKey
+      e.metaKey,
+      e.repeat,
+      e.location
     )
   };
 }

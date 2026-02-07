@@ -46,6 +46,26 @@ record ReactiveApp (Model Msg : Set) : Set₁ where
 4. No tree diffing. Ever.
 ```
 
+### Model Design Guidelines
+
+For optimal runtime performance:
+
+| Guideline | Reason |
+|-----------|--------|
+| **≤20 fields per record** | Slot detection is O(N) per binding at setup |
+| **≤20 nesting levels** | Deep equality limit (`MAX_DEEP_EQUAL_DEPTH`) |
+| **Use nested records** | Separate bindings for sub-models, better change detection |
+| **Flatten when possible** | Simpler models are faster to compare |
+
+Example of good structure:
+```agda
+record Model : Set where
+  field
+    user    : UserModel      -- nested: bindings via zoomNode
+    items   : List Item      -- list: handled by foreach
+    ui      : UIState        -- nested: separate concerns
+```
+
 ### Polynomial Interpretation
 
 `ReactiveApp M Msg ≅ Coalg(y^Msg)` — an app is a coalgebra of the polynomial `y^Msg`. The `update` function is the coalgebra structure map. Composition `_∥_` corresponds to the product of polynomials. Proof: `PolyApp.agda`.

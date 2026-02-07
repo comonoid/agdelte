@@ -104,6 +104,32 @@ data WsMsg : Set where
 | `worker` | `String → String → (String → A) → (String → A) → Event A` | Spawn worker (scriptUrl, input, onResult, onError) |
 | `workerWithProgress` | `String → String → (String → A) → (String → A) → (String → A) → Event A` | Worker with progress protocol |
 
+### Worker Message Protocol
+
+**Simple worker** (`worker`): Worker should post a single result string.
+
+```javascript
+// worker.js
+self.onmessage = (e) => {
+  const result = compute(e.data);
+  self.postMessage(result);  // Single response, worker can be reused
+};
+```
+
+**Progress worker** (`workerWithProgress`): Worker posts progress updates, then final result.
+
+```javascript
+// worker-progress.js
+self.onmessage = (e) => {
+  for (let i = 0; i < 100; i++) {
+    // Progress update (any string NOT starting with "done:")
+    self.postMessage(`${i}%`);
+  }
+  // Final result (MUST start with "done:")
+  self.postMessage("done:" + JSON.stringify(result));
+};
+```
+
 ## Worker Pools
 
 | Function | Type | Description |
@@ -111,11 +137,23 @@ data WsMsg : Set where
 | `poolWorker` | `ℕ → String → String → (String → A) → (String → A) → Event A` | Pool worker (poolSize, scriptUrl, input, onOk, onErr) |
 | `poolWorkerWithProgress` | `ℕ → String → String → (String → A) → (String → A) → (String → A) → Event A` | Pool worker with progress |
 
+### Pool Size Recommendations
+
+| Use Case | Pool Size |
+|----------|-----------|
+| CPU-intensive | `navigator.hardwareConcurrency` (usually 4-8) |
+| I/O-bound | 2-4× core count |
+| Light tasks | 2-4 |
+
+Pools auto-cleanup after 30 seconds of inactivity.
+
 ## Worker Channels
 
 | Function | Type | Description |
 |----------|------|-------------|
 | `workerChannel` | `String → (String → A) → (String → A) → Event A` | Long-lived bidirectional worker (scriptUrl, onMsg, onErr) |
+
+For long-running workers that send multiple messages. Use `channelSend` command to send messages back.
 
 ### Error Handling
 
@@ -126,6 +164,13 @@ Worker errors include detailed information:
 
 The `onError` callback receives a formatted string with all available details.
 
+### Cancellation
+
+All worker subscriptions return `unsubscribe()`. Calling it:
+- Terminates the worker immediately (simple workers)
+- Removes from pool queue if pending (pool workers)
+- Does NOT wait for graceful shutdown
+
 ## Concurrency Combinators
 
 | Function | Type | Description |
@@ -135,9 +180,19 @@ The `onError` callback receives a formatted string with all available details.
 | `parallelAll` | `List (Event A) → Event (List A)` | Collect all results into list |
 | `raceTimeout` | `ℕ → A → Event A → Event A` | Race with timeout fallback |
 
-## SharedArrayBuffer
+## SharedArrayBuffer (Advanced)
+
+For high-performance worker communication with zero-copy memory sharing.
 
 | Function | Type | Description |
 |----------|------|-------------|
-| `allocShared` | `ℕ → (SharedBuffer → A) → Event A` | Allocate shared buffer (requires COOP/COEP) |
+| `allocShared` | `ℕ → (SharedBuffer → A) → Event A` | Allocate shared buffer |
 | `workerShared` | `SharedBuffer → String → String → (String → A) → (String → A) → Event A` | Worker with shared buffer access |
+
+**Requires server headers:**
+```
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
+
+Most apps should use regular `worker` / `workerWithProgress` instead — they work everywhere without special configuration.

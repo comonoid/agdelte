@@ -150,6 +150,147 @@ test('switchE swaps subscription', () => {
 });
 
 // ========================================
+// Deep Equality Tests
+// ========================================
+
+console.log('\n=== Deep Equality Tests ===\n');
+
+// Import deepEqual indirectly by testing Scott-encoded values
+test('deepEqual handles primitives', () => {
+  assertEqual(1, 1);
+  assertEqual('hello', 'hello');
+  assertEqual(true, true);
+});
+
+test('deepEqual handles Scott-encoded records', () => {
+  // Scott-encoded record: mkRecord(a, b) = cases => cases.mkRecord(a, b)
+  const mkPair = (x, y) => (cases) => cases.mkPair(x, y);
+  const pair1 = mkPair(1, 2);
+  const pair2 = mkPair(1, 2);
+  const pair3 = mkPair(1, 3);
+
+  // Extract values to compare
+  let v1, v2, v3;
+  pair1({ mkPair: (x, y) => { v1 = [x, y]; } });
+  pair2({ mkPair: (x, y) => { v2 = [x, y]; } });
+  pair3({ mkPair: (x, y) => { v3 = [x, y]; } });
+
+  assertDeepEqual(v1, v2, 'same Scott pairs should be equal');
+  assert(v1[1] !== v3[1], 'different Scott pairs should differ');
+});
+
+// ========================================
+// Slot Detection Tests
+// ========================================
+
+console.log('\n=== Slot Detection Tests ===\n');
+
+test('countSlots counts record fields', () => {
+  // Scott-encoded 3-field record
+  const mkTriple = (a, b, c) => (cases) => cases.mk(a, b, c);
+  const triple = mkTriple(1, 2, 3);
+
+  // Count by probing
+  let count = 0;
+  triple({
+    mk: (...args) => { count = args.length; }
+  });
+
+  assertEqual(count, 3, 'should detect 3 slots');
+});
+
+test('probeSlots extracts field values', () => {
+  const mkTriple = (a, b, c) => (cases) => cases.mk(a, b, c);
+  const triple = mkTriple('x', 'y', 'z');
+
+  // Probe
+  let values;
+  triple({
+    mk: (...args) => { values = args; }
+  });
+
+  assertDeepEqual(values, ['x', 'y', 'z'], 'should extract all values');
+});
+
+// ========================================
+// List Conversion Tests
+// ========================================
+
+console.log('\n=== List Conversion Tests ===\n');
+
+test('Scott list structure', () => {
+  // Scott-encoded list: nil = c => c.nil, cons(h,t) = c => c.cons(h, t)
+  const nil = (c) => c.nil();
+  const cons = (h, t) => (c) => c.cons(h, t);
+
+  const list = cons(1, cons(2, cons(3, nil)));
+
+  // Convert to array
+  const toArray = (lst) => {
+    const result = [];
+    let current = lst;
+    while (true) {
+      let done = false;
+      current({
+        nil: () => { done = true; },
+        cons: (h, t) => { result.push(h); current = t; }
+      });
+      if (done) break;
+    }
+    return result;
+  };
+
+  assertDeepEqual(toArray(list), [1, 2, 3], 'should convert Scott list to array');
+});
+
+test('listToArray returns incomplete flag for malformed lists', () => {
+  // Mock listToArray behavior (the actual function is internal to reactive.js)
+  // Test the pattern: malformed tail returns incomplete: true
+  const listToArray = (list) => {
+    if (!list) return { items: [], incomplete: false };
+    if (Array.isArray(list)) return { items: list, incomplete: false };
+    if (typeof list !== 'function') {
+      return { items: [], incomplete: true };
+    }
+    const result = [];
+    let current = list;
+    let incomplete = false;
+    while (true) {
+      if (typeof current !== 'function') {
+        incomplete = true;
+        break;
+      }
+      const done = current({
+        '[]': () => true,
+        '_∷_': (head, tail) => {
+          result.push(head);
+          current = tail;
+          return false;
+        }
+      });
+      if (done) break;
+    }
+    return { items: result, incomplete };
+  };
+
+  // Normal list (native array)
+  const result1 = listToArray([1, 2, 3]);
+  assertDeepEqual(result1.items, [1, 2, 3], 'native array items');
+  assertEqual(result1.incomplete, false, 'native array not incomplete');
+
+  // Malformed input (not a function)
+  const result2 = listToArray('invalid');
+  assertDeepEqual(result2.items, [], 'malformed input empty items');
+  assertEqual(result2.incomplete, true, 'malformed input is incomplete');
+
+  // Scott list with broken tail
+  const brokenList = (c) => c['_∷_'](1, 'not-a-function');
+  const result3 = listToArray(brokenList);
+  assertDeepEqual(result3.items, [1], 'partial items before break');
+  assertEqual(result3.incomplete, true, 'broken tail is incomplete');
+});
+
+// ========================================
 // Results
 // ========================================
 

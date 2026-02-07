@@ -47,12 +47,14 @@ data WsMsg : Set where
 record KeyboardEvent : Set where
   constructor mkKeyboardEvent
   field
-    key   : String
-    code  : String
-    ctrl  : Bool
-    alt   : Bool
-    shift : Bool
-    meta  : Bool
+    key      : String   -- Key value ("a", "Enter", "ArrowUp")
+    code     : String   -- Physical key code ("KeyA", "Enter", "ArrowUp")
+    ctrl     : Bool     -- Ctrl/Control modifier
+    alt      : Bool     -- Alt/Option modifier
+    shift    : Bool     -- Shift modifier
+    meta     : Bool     -- Meta/Command/Windows modifier
+    repeat   : Bool     -- True if key held down (auto-repeat)
+    location : ℕ        -- 0=standard, 1=left, 2=right, 3=numpad
 
 open KeyboardEvent public
 

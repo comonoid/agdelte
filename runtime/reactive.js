@@ -3,7 +3,10 @@
  * Renders ReactiveApp with direct DOM updates (no Virtual DOM)
  * Like Svelte - bindings track which DOM nodes need updating
  *
- * Phase 3: Binding scopes, keyed foreach, when transitions
+ * Error Handling Pattern:
+ * - console.error: Fatal errors (module load failed, invariant violations)
+ * - console.warn: Recoverable issues (element not found, fallback used, depth exceeded)
+ * - Silent: Expected edge cases (empty cmd, missing optional features)
  */
 
 import { interpretEvent, unsubscribe, wsConnections } from './events.js';
@@ -83,7 +86,12 @@ const ATTR_NS = {
 };
 
 /**
- * Execute Task (monadic chain)
+ * Execute a Task (monadic chain of async operations).
+ * Tasks are Scott-encoded: task(cases) where cases = { pure, fail, httpGet, httpPost }
+ *
+ * @param {Function} task - Scott-encoded Task value
+ * @param {Function} onSuccess - Called with result when task completes successfully
+ * @param {Function} onError - Called with error message when task fails
  */
 function executeTask(task, onSuccess, onError) {
   task({
@@ -111,7 +119,12 @@ function executeTask(task, onSuccess, onError) {
 }
 
 /**
- * Execute Cmd
+ * Execute a Cmd (side effect).
+ * Commands are Scott-encoded: cmd(cases) where cases include DOM operations,
+ * HTTP requests, clipboard, localStorage, routing, etc.
+ *
+ * @param {Function|null} cmd - Scott-encoded Cmd value, or null for no-op
+ * @param {Function} dispatch - Function to dispatch resulting messages
  */
 function executeCmd(cmd, dispatch) {
   if (!cmd) return;
@@ -204,9 +217,22 @@ async function loadNodeModule() {
 // Deep structural equality for Scott-encoded Agda values
 // ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Maximum nesting depth for deep equality comparison.
+ * Models with deeper nesting will use reference equality for deep parts.
+ * 20 levels is sufficient for any practical UI model structure.
+ * If you need deeper nesting, flatten your model or use nested records.
+ */
+const MAX_DEEP_EQUAL_DEPTH = 20;
+
 function deepEqual(a, b, depth) {
   if (a === b) return true;
-  if (depth > 20) return false;  // guard against infinite recursion
+  if (depth > MAX_DEEP_EQUAL_DEPTH) {
+    if (depth === MAX_DEEP_EQUAL_DEPTH + 1) {
+      console.warn(`deepEqual: max depth (${MAX_DEEP_EQUAL_DEPTH}) exceeded, using reference equality. Consider flattening your model.`);
+    }
+    return false;
+  }
   const ta = typeof a, tb = typeof b;
   if (ta !== tb) return false;
   if (ta !== 'function') return a === b;
@@ -265,22 +291,56 @@ function replaceSlot(model, idx) {
 
 /**
  * Detect which top-level model slots a binding's extract depends on.
- * Runs extract with each slot replaced; if output changes, binding depends on it.
+ *
+ * Algorithm: replace each slot with a unique Symbol sentinel, run extract.
+ * If extract throws or returns different value, that slot is a dependency.
+ *
+ * Optimization: Most bindings depend on 1 slot. Once we find 2+ dependencies,
+ * we return null (skip optimization, fall through to full check).
+ *
+ * Complexity: O(N) where N = number of slots. Called once per binding at setup.
+ * For models with many fields (>20), consider using nested records.
  */
 function detectSlots(extract, model, numSlots) {
   if (numSlots === 0) return null;
-  const deps = [];
+
+  // Get base value once
   let baseValue;
   try { baseValue = extract(model); } catch { return null; }
+
+  // Fast path: probe slots until we find ≤1 dependency
+  // If 2+ deps found, return null (too complex for slot optimization)
+  let singleDep = -1;  // -1 = none found, ≥0 = slot index
   for (let i = 0; i < numSlots; i++) {
+    const sentinel = Symbol();
+    const replaced = (cases) => model(new Proxy({}, {
+      get(_, ctorName) {
+        return (...args) => {
+          const modified = args.slice();
+          modified[i] = sentinel;
+          return cases[ctorName](...modified);
+        };
+      }
+    }));
+
+    let isDep = false;
     try {
-      const modifiedValue = extract(replaceSlot(model, i));
-      if (modifiedValue !== baseValue) deps.push(i);
+      const modifiedValue = extract(replaced);
+      isDep = modifiedValue !== baseValue;
     } catch {
-      deps.push(i); // if it throws, assume dependency
+      isDep = true; // if it throws, assume dependency
+    }
+
+    if (isDep) {
+      if (singleDep >= 0) {
+        // Found 2nd dependency - fall back to full check mode
+        return null;
+      }
+      singleDep = i;
     }
   }
-  return deps.length > 0 ? deps : null;
+
+  return singleDep >= 0 ? [singleDep] : null;
 }
 
 /** Probe a Scott-encoded model, return its constructor args */
@@ -477,12 +537,12 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         // Exiting namespace (children go back to HTML)
         if (tag === 'foreignObject' || tag === 'annotation-xml') currentNs = null;
 
-        const attrArray = listToArray(attrs);
+        const { items: attrArray } = listToArray(attrs);
         for (const attr of attrArray) {
           applyAttr(el, attr);
         }
 
-        const childArray = listToArray(children);
+        const { items: childArray } = listToArray(children);
         for (const child of childArray) {
           const childNode = renderNode(child);
           if (childNode) el.appendChild(childNode);
@@ -554,7 +614,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
         const items = getList(model);
         const renderedItems = [];
-        const itemArray = listToArray(items);
+        const { items: itemArray } = listToArray(items);
 
         itemArray.forEach((item, idx) => {
           const itemScope = createScope(currentScope);
@@ -596,7 +656,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
         const items = getList(model);
         const renderedItems = [];
-        const itemArray = listToArray(items);
+        const { items: itemArray } = listToArray(items);
 
         itemArray.forEach((item, idx) => {
           const key = keyFn(item);
@@ -721,20 +781,24 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
   /**
    * Convert Agda list to JS array
+   * @param {*} list - Agda List (native Array or Scott-encoded)
+   * @returns {{ items: Array, incomplete: boolean }} - items and error flag
    */
   function listToArray(list) {
-    if (!list) return [];
-    if (Array.isArray(list)) return list;
+    if (!list) return { items: [], incomplete: false };
+    if (Array.isArray(list)) return { items: list, incomplete: false };
     if (typeof list !== 'function') {
       console.warn('listToArray: expected function, got', typeof list, list);
-      return [];
+      return { items: [], incomplete: true };
     }
 
     const result = [];
     let current = list;
+    let incomplete = false;
     while (true) {
       if (typeof current !== 'function') {
         console.warn('listToArray: tail is not a function', current);
+        incomplete = true;
         break;
       }
       const done = current({
@@ -747,7 +811,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       });
       if (done) break;
     }
-    return result;
+    return { items: result, incomplete };
   }
 
   // ─────────────────────────────────────────────────────────────────
@@ -755,7 +819,16 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   // ─────────────────────────────────────────────────────────────────
 
   /**
-   * Recursively update all bindings in a scope tree
+   * Recursively update all bindings in a scope tree.
+   *
+   * Optimization layers (checked in order):
+   * 1. Fingerprint cutoff - skip if string fingerprint unchanged
+   * 2. Slot-based tracking - skip if no tracked slots changed
+   * 3. DeepEqual fallback - for non-record models
+   *
+   * @param {Object} scope - Scope object with bindings, children, etc.
+   * @param {*} oldModel - Previous model value
+   * @param {*} newModel - New model value
    */
   function updateScope(scope, oldModel, newModel) {
     // Scope cutoff: string fingerprint only (scopeProj skipped if slot tracking active)
@@ -829,6 +902,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         // Cancel any pending animation reset to prevent race conditions
         if (el._pendingAnimationRaf) {
           cancelAnimationFrame(el._pendingAnimationRaf);
+          el._pendingAnimationRaf = null;
         }
         el.style.animation = 'none';
         el._pendingAnimationRaf = requestAnimationFrame(() => {
@@ -925,7 +999,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
    * Update unkeyed foreach list
    */
   function updateUnkeyedList(parentScope, list, oldModel, newModel) {
-    const newItems = listToArray(list.getList(newModel));
+    const { items: newItems } = listToArray(list.getList(newModel));
     const oldItems = list.renderedItems;
     const parent = list.marker.parentNode;
 
@@ -968,7 +1042,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
    * Update keyed foreach list — key-based reconciliation
    */
   function updateKeyedList(parentScope, list, oldModel, newModel) {
-    const newItems = listToArray(list.getList(newModel));
+    const { items: newItems } = listToArray(list.getList(newModel));
     const oldItems = list.renderedItems;
 
     // Build old key map
