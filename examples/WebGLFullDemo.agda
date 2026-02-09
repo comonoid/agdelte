@@ -362,9 +362,8 @@ updateModel (RotateView sx cx sy cy) m =
        ; baseAngle = baseA ; baseElevation = baseE
        ; orbitStartX = sx ; orbitStartY = sy }) m
 updateModel (PanView sx cx sy cy) m =
-  -- Pan: screen-space pixels → camera-relative parallel translation
-  -- drag right → scene follows right (camera moves left in its local frame)
-  -- drag up → scene follows up (parallel to screen up direction)
+  -- Pan: move camera along its local RIGHT and UP axes (like Blender Shift+MMB)
+  -- Camera looks from position toward target. We move both by the same offset.
   let c = cam m
       sameGesture = if floatEq sx (panStartX c) then floatEq sy (panStartY c) else false
       bpX = if sameGesture then basePanX c else targetX c
@@ -372,22 +371,30 @@ updateModel (PanView sx cx sy cy) m =
       bpZ = if sameGesture then basePanZ c else targetZ c
       dpx = cx F.- sx
       dpy = cy F.- sy
+      sens = distance c F.* panSensitivityBase
       a = angle c
       e = elevation c
-      sens = distance c F.* panSensitivityBase
-      -- Horizontal drag: move perpendicular to view direction in XZ plane
-      moveX = dpx F.* cos a F.* sens
-      moveZ = dpx F.* sin a F.* sens
-      -- Vertical drag: move in screen-up direction (accounts for elevation angle)
-      -- Screen "up" = cos(e)*worldY + sin(e)*towardCamera_XZ
-      -- towardCamera_XZ = (sin(a), 0, cos(a))
-      vertY = dpy F.* cos e F.* sens
-      vertX = dpy F.* sin e F.* sin a F.* sens
-      vertZ = dpy F.* sin e F.* cos a F.* sens
+      -- Camera's local RIGHT vector: perpendicular to view direction in XZ plane
+      -- For orbit camera looking at target: right = (cos(a), 0, -sin(a))
+      rightX = cos a
+      rightZ = 0.0 F.- sin a
+      -- Camera's local UP vector: cross(right, forward)
+      -- forward = (-cos(e)*sin(a), -sin(e), -cos(e)*cos(a))  [normalized, toward target]
+      -- up = cross(right, forward) where right = (cos(a), 0, -sin(a))
+      -- upX = 0*(-cos(e)*cos(a)) - (-sin(a))*(-sin(e)) = -sin(a)*sin(e)
+      -- upY = (-sin(a))*(-cos(e)*sin(a)) - cos(a)*(-cos(e)*cos(a)) = cos(e)*(sin²a + cos²a) = cos(e)
+      -- upZ = cos(a)*(-sin(e)) - 0*(-cos(e)*sin(a)) = -cos(a)*sin(e)
+      upX = (0.0 F.- sin a) F.* sin e
+      upY = cos e
+      upZ = (0.0 F.- cos a) F.* sin e
+      -- Move along right (screen X) and up (screen Y)
+      moveX = ((0.0 F.- dpx) F.* rightX F.+ dpy F.* upX) F.* sens
+      moveY = dpy F.* upY F.* sens
+      moveZ = ((0.0 F.- dpx) F.* rightZ F.+ dpy F.* upZ) F.* sens
   in updateCam (λ _ → record c
-       { targetX = bpX F.- moveX F.+ vertX
-       ; targetY = bpY F.+ vertY
-       ; targetZ = bpZ F.+ moveZ F.+ vertZ
+       { targetX = bpX F.+ moveX
+       ; targetY = bpY F.+ moveY
+       ; targetZ = bpZ F.+ moveZ
        ; basePanX = bpX ; basePanY = bpY ; basePanZ = bpZ
        ; panStartX = sx ; panStartY = sy }) m
 updateModel (Zoom delta) m =

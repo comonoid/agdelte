@@ -445,15 +445,15 @@ function destroyScope(scope) {
 export async function runReactiveApp(moduleExports, container, options = {}) {
   await loadNodeModule();
 
-  // Extract app, subs, cmd from module (mutable for hot reload)
+  // Extract app record
   const appRecord = moduleExports.app;
-  let subsFunc = moduleExports.subs || null;
-  let cmdFunc = moduleExports.cmd || null;
 
   // Extract ReactiveApp fields (mutable for hot reload)
   const init = NodeModule.ReactiveApp.init(appRecord);
   let update = NodeModule.ReactiveApp.update(appRecord);
   let template = NodeModule.ReactiveApp.template(appRecord);
+  let cmdFunc = NodeModule.ReactiveApp.cmd(appRecord);
+  let subsFunc = NodeModule.ReactiveApp.subs(appRecord);
 
   // State
   let model = init;
@@ -1247,6 +1247,8 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
     if (newFingerprint === currentEventFingerprint) return;
 
+    console.log(`[subs] fingerprint changed: "${currentEventFingerprint}" → "${newFingerprint}"`);
+
     if (currentSubscription) {
       unsubscribe(currentSubscription);
     }
@@ -1405,8 +1407,8 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     // Replace mutable function references
     update = NodeModule.ReactiveApp.update(newAppRecord);
     const newTemplate = NodeModule.ReactiveApp.template(newAppRecord);
-    subsFunc = newModuleExports.subs || null;
-    cmdFunc = newModuleExports.cmd || null;
+    cmdFunc = NodeModule.ReactiveApp.cmd(newAppRecord);
+    subsFunc = NodeModule.ReactiveApp.subs(newAppRecord);
 
     // Tear down old DOM
     if (currentSubscription) {
