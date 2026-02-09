@@ -764,6 +764,89 @@ export function interpretEvent(event, dispatch) {
       return {
         unsubscribe: () => window.removeEventListener('popstate', listener)
       };
+    },
+
+    // animationFrame: dispatch message on every animation frame
+    animationFrame: (msg) => {
+      let running = true;
+      const loop = () => {
+        if (!running) return;
+        dispatch(msg);
+        requestAnimationFrame(loop);
+      };
+      requestAnimationFrame(loop);
+      return {
+        unsubscribe: () => { running = false; }
+      };
+    },
+
+    // animationFrameWithTime: dispatch with timestamp (ms since origin)
+    animationFrameWithTime: (handler) => {
+      let running = true;
+      const loop = (timestamp) => {
+        if (!running) return;
+        dispatch(handler(timestamp));
+        requestAnimationFrame(loop);
+      };
+      requestAnimationFrame(loop);
+      return {
+        unsubscribe: () => { running = false; }
+      };
+    },
+
+    // springLoop: animated spring that ticks until settled
+    // Scott: springLoop(position, velocity, target, stiffness, damping, onTick, onSettled)
+    // onTick receives current position each frame
+    // onSettled is dispatched when spring settles
+    springLoop: (position, velocity, target, stiffness, damping, onTick, onSettled) => {
+      let running = true;
+      let lastTime = null;
+      let pos = Number(position);
+      let vel = Number(velocity);
+      const tgt = Number(target);
+      const stiff = Number(stiffness);
+      const damp = Number(damping);
+
+      const tick = (dt) => {
+        const dtSec = dt / 1000;
+        const force = stiff * (tgt - pos) - damp * vel;
+        vel = vel + force * dtSec;
+        pos = pos + vel * dtSec;
+      };
+
+      const isSettled = () => {
+        return Math.abs(pos - tgt) < 0.01 && Math.abs(vel) < 0.01;
+      };
+
+      const loop = (timestamp) => {
+        if (!running) return;
+        if (lastTime === null) {
+          lastTime = timestamp;
+        }
+        const dt = Math.min(timestamp - lastTime, 64); // cap to avoid spiral of death
+        lastTime = timestamp;
+
+        // Tick in 4ms steps for stability
+        let remaining = dt;
+        while (remaining >= 4) {
+          tick(4);
+          remaining -= 4;
+        }
+        if (remaining > 0) tick(remaining);
+
+        dispatch(onTick(pos));
+
+        if (isSettled()) {
+          running = false;
+          dispatch(onSettled);
+        } else {
+          requestAnimationFrame(loop);
+        }
+      };
+      requestAnimationFrame(loop);
+      return {
+        unsubscribe: () => { running = false; }
+      };
     }
   });
 }
@@ -882,6 +965,23 @@ function subscribeLegacy(eventSpec, dispatch) {
       document.addEventListener(config.eventType || 'keydown', listener);
       return {
         unsubscribe: () => document.removeEventListener(config.eventType || 'keydown', listener)
+      };
+    }
+
+    case 'clipboardEvent': {
+      const listener = (e) => {
+        let data = '';
+        if (config.event === 'paste') {
+          data = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+        }
+        const msg = config.handler(data);
+        if (msg !== null && msg !== undefined) {
+          dispatch(msg);
+        }
+      };
+      document.addEventListener(config.event, listener);
+      return {
+        unsubscribe: () => document.removeEventListener(config.event, listener)
       };
     }
 

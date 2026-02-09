@@ -14,6 +14,7 @@ open import Data.List using (List; []; _∷_; map)
 open import Data.Product using (_×_; _,_)
 open import Data.Unit using (⊤; tt)
 open import Function using (_∘_; id)
+open import Data.Float using (Float)
 
 private
   variable
@@ -97,6 +98,15 @@ data Event (A : Set) : Set where
   interval : ℕ → A → Event A
   timeout  : ℕ → A → Event A
 
+  -- === Animation ===
+  -- Fire on every animation frame (~60fps)
+  animationFrame : A → Event A
+  -- Fire on every frame with timestamp (ms since navigation start)
+  animationFrameWithTime : (Float → A) → Event A
+  -- Spring animation: fires each frame with current position until settled
+  -- springLoop spring onTick onSettled
+  springLoop : Float → Float → Float → Float → Float → (Float → A) → A → Event A
+
   -- === Keyboard ===
   -- Handler returns Maybe A (nothing = ignore)
   onKeyDown : (KeyboardEvent → Maybe A) → Event A
@@ -176,6 +186,10 @@ mapE : (A → B) → Event A → Event B
 mapE f never = never
 mapE f (interval n a) = interval n (f a)
 mapE f (timeout n a) = timeout n (f a)
+mapE f (animationFrame a) = animationFrame (f a)
+mapE f (animationFrameWithTime h) = animationFrameWithTime (f ∘ h)
+mapE f (springLoop pos vel tgt stiff damp onTick onSettled) =
+  springLoop pos vel tgt stiff damp (f ∘ onTick) (f onSettled)
 mapE f (onKeyDown h) = onKeyDown (λ e → Data.Maybe.map f (h e))
   where import Data.Maybe
 mapE f (onKeyUp h) = onKeyUp (λ e → Data.Maybe.map f (h e))
@@ -212,6 +226,12 @@ filterE : (A → Bool) → Event A → Event A
 filterE p never = never
 filterE p (interval n a) = if p a then interval n a else never
 filterE p (timeout n a) = if p a then timeout n a else never
+filterE p (animationFrame a) = if p a then animationFrame a else never
+filterE p (animationFrameWithTime h) =
+  mapFilterE (λ t → let a = h t in if p a then just a else nothing) (animationFrameWithTime id)
+filterE p (springLoop pos vel tgt stiff damp onTick onSettled) =
+  mapFilterE (λ a → if p a then just a else nothing)
+             (springLoop pos vel tgt stiff damp onTick onSettled)
 filterE p (onKeyDown h) = onKeyDown (λ e → filterMaybe p (h e))
 filterE p (onKeyUp h) = onKeyUp (λ e → filterMaybe p (h e))
 filterE p (httpGet url onOk onErr) = httpGet url onOk onErr  -- filter applied in runtime

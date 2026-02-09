@@ -106,3 +106,27 @@ snappy from to = mkSpring from 0.0 to 400.0 28.0
 -- Bouncy, playful
 bouncy : F.Float → F.Float → Spring
 bouncy from to = mkSpring from 0.0 to 180.0 8.0
+
+------------------------------------------------------------------------
+-- Spring Event (convenience function for Event subscription)
+------------------------------------------------------------------------
+
+open import Agdelte.Core.Event using (Event; springLoop)
+
+-- Animate a spring until settled
+-- springEvent spring onTick onSettled
+-- Creates an Event that fires onTick(position) each frame until settled
+springEvent : ∀ {A : Set} → Spring → (F.Float → A) → A → Event A
+springEvent s onTick onSettled =
+  springLoop (Spring.position s) (Spring.velocity s) (Spring.target s)
+             (Spring.stiffness s) (Spring.damping s) onTick onSettled
+
+-- Convenience for common presets with Event
+gentleEvent : ∀ {A : Set} → F.Float → F.Float → (F.Float → A) → A → Event A
+gentleEvent from to = springEvent (gentle from to)
+
+snappyEvent : ∀ {A : Set} → F.Float → F.Float → (F.Float → A) → A → Event A
+snappyEvent from to = springEvent (snappy from to)
+
+bouncyEvent : ∀ {A : Set} → F.Float → F.Float → (F.Float → A) → A → Event A
+bouncyEvent from to = springEvent (bouncy from to)

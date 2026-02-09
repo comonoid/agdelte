@@ -189,6 +189,15 @@ function executeCmd(cmd, dispatch) {
     },
     'setItem': (key, value) => localStorage.setItem(key, value),
     'removeItem': (key) => localStorage.removeItem(key),
+    // Clipboard
+    'clipboard': (text) => {
+      navigator.clipboard.writeText(text).catch(err => console.warn('Clipboard write failed:', err));
+    },
+    'clipboardNotify': (text, onSuccess) => {
+      navigator.clipboard.writeText(text)
+        .then(() => dispatch(onSuccess('Copied!')))
+        .catch(err => console.warn('Clipboard write failed:', err));
+    },
     'wsSend': (url, message) => {
       const ws = wsConnections.get(url);
       if (!ws) {
@@ -1215,6 +1224,10 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       never: () => 'never',
       interval: (ms, msg) => `interval(${ms})`,
       timeout: (ms, msg) => `timeout(${ms})`,
+      animationFrame: (msg) => 'animationFrame',
+      animationFrameWithTime: (handler) => 'animationFrameWithTime',
+      springLoop: (pos, vel, tgt, stiff, damp, onTick, onSettled) =>
+        `springLoop(${pos},${vel},${tgt},${stiff},${damp})`,
       onKeyDown: (handler) => 'onKeyDown',
       onKeyUp: (handler) => 'onKeyUp',
       onKeys: (pairs) => 'onKeys',
