@@ -313,6 +313,996 @@
 }
 
 /* ========================================================================
+   DataGrid
+   ======================================================================== */
+
+.agdelte-grid {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--agdelte-border);
+  border-radius: var(--agdelte-border-radius);
+  overflow: hidden;
+}
+
+.agdelte-grid__header {
+  display: flex;
+  background: var(--agdelte-bg-hover);
+  border-bottom: 1px solid var(--agdelte-border);
+  font-weight: 600;
+}
+
+.agdelte-grid__body {
+  display: flex;
+  flex-direction: column;
+}
+
+.agdelte-grid__row {
+  display: flex;
+  border-bottom: 1px solid var(--agdelte-border);
+  transition: background var(--agdelte-transition);
+}
+
+.agdelte-grid__row:last-child {
+  border-bottom: none;
+}
+
+.agdelte-grid__row:hover {
+  background: var(--agdelte-bg-hover);
+}
+
+.agdelte-grid__row--clickable {
+  cursor: pointer;
+}
+
+.agdelte-grid__row--clickable:hover {
+  background: var(--agdelte-bg-active);
+}
+
+.agdelte-grid__cell {
+  padding: var(--agdelte-spacing-sm) var(--agdelte-spacing-md);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agdelte-grid__cell--header {
+  font-weight: 600;
+  color: var(--agdelte-text);
+}
+
+.agdelte-grid__action {
+  padding: var(--agdelte-spacing-xs) var(--agdelte-spacing-sm);
+  background: var(--agdelte-primary);
+  color: var(--agdelte-text-light);
+  border: none;
+  border-radius: var(--agdelte-border-radius);
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.agdelte-grid__action:hover {
+  background: var(--agdelte-primary-hover);
+}
+
+/* Simple table */
+.agdelte-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--agdelte-border);
+}
+
+.agdelte-table th,
+.agdelte-table td {
+  padding: var(--agdelte-spacing-sm) var(--agdelte-spacing-md);
+  border: 1px solid var(--agdelte-border);
+  text-align: left;
+}
+
+.agdelte-table th {
+  background: var(--agdelte-bg-hover);
+  font-weight: 600;
+}
+
+.agdelte-table tr:hover {
+  background: var(--agdelte-bg-hover);
+}
+
+/* ========================================================================
+   Checkbox
+   ======================================================================== */
+
+.agdelte-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--agdelte-spacing-sm);
+  cursor: pointer;
+  padding: var(--agdelte-spacing-xs) 0;
+}
+
+.agdelte-checkbox__input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--agdelte-primary);
+}
+
+.agdelte-checkbox__label {
+  color: var(--agdelte-text);
+  user-select: none;
+}
+
+.agdelte-checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--agdelte-spacing-xs);
+}
+
+/* Inline variant */
+.agdelte-checkbox-group--inline {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--agdelte-spacing-md);
+}
+
+/* ========================================================================
+   RadioGroup
+   ======================================================================== */
+
+.agdelte-radio {
+  display: flex;
+  align-items: center;
+  gap: var(--agdelte-spacing-sm);
+  cursor: pointer;
+  padding: var(--agdelte-spacing-xs) 0;
+}
+
+.agdelte-radio__input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--agdelte-primary);
+}
+
+.agdelte-radio__label {
+  color: var(--agdelte-text);
+  user-select: none;
+}
+
+.agdelte-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--agdelte-spacing-xs);
+}
+
+/* Inline variant */
+.agdelte-radio-group--inline {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--agdelte-spacing-md);
+}
+
+/* ========================================================================
+   Slider
+   ======================================================================== */
+
+.agdelte-slider {
+  display: flex;
+  flex-direction: column;
+  gap: var(--agdelte-spacing-xs);
+}
+
+.agdelte-slider--compact {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--agdelte-spacing-sm);
+}
+
+.agdelte-slider__label {
+  color: var(--agdelte-text);
+  font-weight: 500;
+}
+
+.agdelte-slider__input {
+  width: 100%;
+  height: 6px;
+  cursor: pointer;
+  accent-color: var(--agdelte-primary);
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--agdelte-border);
+  border-radius: 3px;
+}
+
+.agdelte-slider__input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  background: var(--agdelte-primary);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform var(--agdelte-transition);
+}
+
+.agdelte-slider__input::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+.agdelte-slider__input::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: var(--agdelte-primary);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.agdelte-slider__value {
+  color: var(--agdelte-text);
+  font-weight: 500;
+  min-width: 40px;
+  text-align: center;
+}
+
+.agdelte-slider--compact .agdelte-slider__input {
+  flex: 1;
+  max-width: 200px;
+}
+
+/* ========================================================================
+   Pagination
+   ======================================================================== */
+
+.agdelte-pagination {
+  display: flex;
+  align-items: center;
+  gap: var(--agdelte-spacing-sm);
+}
+
+.agdelte-pagination--compact {
+  gap: var(--agdelte-spacing-xs);
+}
+
+.agdelte-pagination__btn {
+  padding: var(--agdelte-spacing-xs) var(--agdelte-spacing-sm);
+  background: var(--agdelte-bg);
+  border: 1px solid var(--agdelte-border);
+  border-radius: var(--agdelte-border-radius);
+  cursor: pointer;
+  color: var(--agdelte-text);
+  transition: all var(--agdelte-transition);
+}
+
+.agdelte-pagination__btn:hover:not(:disabled) {
+  background: var(--agdelte-bg-hover);
+  border-color: var(--agdelte-primary);
+}
+
+.agdelte-pagination__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.agdelte-pagination__page {
+  min-width: 32px;
+  height: 32px;
+  padding: var(--agdelte-spacing-xs);
+  background: var(--agdelte-bg);
+  border: 1px solid var(--agdelte-border);
+  border-radius: var(--agdelte-border-radius);
+  cursor: pointer;
+  color: var(--agdelte-text);
+  transition: all var(--agdelte-transition);
+}
+
+.agdelte-pagination__page:hover {
+  background: var(--agdelte-bg-hover);
+  border-color: var(--agdelte-primary);
+}
+
+.agdelte-pagination__page--active {
+  background: var(--agdelte-primary);
+  border-color: var(--agdelte-primary);
+  color: var(--agdelte-text-light);
+}
+
+.agdelte-pagination__info,
+.agdelte-pagination__current {
+  color: var(--agdelte-text);
+  padding: 0 var(--agdelte-spacing-sm);
+}
+
+.agdelte-pagination__ellipsis {
+  color: var(--agdelte-text-muted);
+  padding: 0 var(--agdelte-spacing-xs);
+}
+
+/* ========================================================================
+   Accordion
+   ======================================================================== */
+
+.agdelte-accordion {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--agdelte-border);
+  border-radius: var(--agdelte-border-radius);
+  overflow: hidden;
+}
+
+.agdelte-accordion__item {
+  border-bottom: 1px solid var(--agdelte-border);
+}
+
+.agdelte-accordion__item:last-child {
+  border-bottom: none;
+}
+
+.agdelte-accordion__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: var(--agdelte-spacing-md);
+  background: var(--agdelte-bg);
+  border: none;
+  cursor: pointer;
+  font-size: inherit;
+  color: var(--agdelte-text);
+  text-align: left;
+  transition: background var(--agdelte-transition);
+}
+
+.agdelte-accordion__header:hover {
+  background: var(--agdelte-bg-hover);
+}
+
+.agdelte-accordion__title {
+  font-weight: 500;
+}
+
+.agdelte-accordion__icon {
+  font-size: 0.75rem;
+  color: var(--agdelte-text-muted);
+  transition: transform var(--agdelte-transition);
+}
+
+.agdelte-accordion__icon--open {
+  transform: rotate(180deg);
+}
+
+.agdelte-accordion__content {
+  padding: var(--agdelte-spacing-md);
+  background: var(--agdelte-bg);
+  border-top: 1px solid var(--agdelte-border);
+  animation: agdelte-slide-down var(--agdelte-transition);
+}
+
+/* ========================================================================
+   Sidebar
+   ======================================================================== */
+
+.agdelte-sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 240px;
+  background: var(--agdelte-bg);
+  border-right: 1px solid var(--agdelte-border);
+  transition: width var(--agdelte-transition);
+}
+
+.agdelte-sidebar--collapsed {
+  width: 60px;
+}
+
+.agdelte-sidebar__header {
+  display: flex;
+  align-items: center;
+  gap: var(--agdelte-spacing-sm);
+  padding: var(--agdelte-spacing-md);
+  border-bottom: 1px solid var(--agdelte-border);
+  font-weight: 600;
+  color: var(--agdelte-text);
+}
+
+.agdelte-sidebar__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--agdelte-border-radius);
+  cursor: pointer;
+  color: var(--agdelte-text);
+  transition: background var(--agdelte-transition);
+}
+
+.agdelte-sidebar__toggle:hover {
+  background: var(--agdelte-bg-hover);
+}
+
+.agdelte-sidebar__title {
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.agdelte-sidebar__nav {
+  list-style: none;
+  margin: 0;
+  padding: var(--agdelte-spacing-sm);
+}
+
+.agdelte-sidebar__item {
+  margin-bottom: var(--agdelte-spacing-xs);
+}
+
+.agdelte-sidebar__link {
+  display: flex;
+  align-items: center;
+  gap: var(--agdelte-spacing-sm);
+  width: 100%;
+  padding: var(--agdelte-spacing-sm) var(--agdelte-spacing-md);
+  background: transparent;
+  border: none;
+  border-radius: var(--agdelte-border-radius);
+  cursor: pointer;
+  color: var(--agdelte-text);
+  text-align: left;
+  font-size: inherit;
+  transition: all var(--agdelte-transition);
+}
+
+.agdelte-sidebar__link:hover {
+  background: var(--agdelte-bg-hover);
+}
+
+.agdelte-sidebar__link--active {
+  background: var(--agdelte-primary);
+  color: var(--agdelte-text-light);
+}
+
+.agdelte-sidebar__link--active:hover {
+  background: var(--agdelte-primary-hover);
+}
+
+.agdelte-sidebar__icon {
+  flex-shrink: 0;
+  font-size: 1.25rem;
+}
+
+.agdelte-sidebar__label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agdelte-sidebar--collapsed .agdelte-sidebar__link {
+  justify-content: center;
+  padding: var(--agdelte-spacing-sm);
+}
+
+/* ========================================================================
+   Breadcrumb
+   ======================================================================== */
+
+.agdelte-breadcrumb {
+  padding: var(--agdelte-spacing-sm) 0;
+}
+
+.agdelte-breadcrumb__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: var(--agdelte-spacing-xs);
+}
+
+.agdelte-breadcrumb__item {
+  display: flex;
+  align-items: center;
+}
+
+.agdelte-breadcrumb__link {
+  background: transparent;
+  border: none;
+  padding: var(--agdelte-spacing-xs) var(--agdelte-spacing-sm);
+  color: var(--agdelte-primary);
+  cursor: pointer;
+  font-size: inherit;
+  border-radius: var(--agdelte-border-radius);
+  transition: all var(--agdelte-transition);
+}
+
+.agdelte-breadcrumb__link:hover {
+  background: var(--agdelte-bg-hover);
+  text-decoration: underline;
+}
+
+.agdelte-breadcrumb__separator {
+  color: var(--agdelte-text-muted);
+  margin: 0 var(--agdelte-spacing-xs);
+}
+
+.agdelte-breadcrumb__current {
+  color: var(--agdelte-text);
+  font-weight: 500;
+  padding: var(--agdelte-spacing-xs) var(--agdelte-spacing-sm);
+}
+
+/* ========================================================================
+   TreeView
+   ======================================================================== */
+
+.agdelte-tree {
+  font-size: inherit;
+}
+
+.agdelte-tree__node {
+  display: flex;
+  flex-direction: column;
+}
+
+.agdelte-tree__header {
+  display: flex;
+  align-items: center;
+  gap: var(--agdelte-spacing-xs);
+}
+
+.agdelte-tree__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--agdelte-text-muted);
+  font-size: 0.625rem;
+  transition: transform var(--agdelte-transition);
+}
+
+.agdelte-tree__toggle:hover {
+  color: var(--agdelte-text);
+}
+
+.agdelte-tree__toggle--open {
+  transform: rotate(90deg);
+}
+
+.agdelte-tree__spacer {
+  width: 20px;
+  height: 20px;
+}
+
+.agdelte-tree__label {
+  background: transparent;
+  border: none;
+  padding: var(--agdelte-spacing-xs) var(--agdelte-spacing-sm);
+  cursor: pointer;
+  color: var(--agdelte-text);
+  border-radius: var(--agdelte-border-radius);
+  transition: background var(--agdelte-transition);
+  text-align: left;
+  font-size: inherit;
+}
+
+.agdelte-tree__label:hover {
+  background: var(--agdelte-bg-hover);
+}
+
+.agdelte-tree__children {
+  margin-left: var(--agdelte-spacing-md);
+  border-left: 1px solid var(--agdelte-border);
+  animation: agdelte-slide-down var(--agdelte-transition);
+}
+
+/* ========================================================================
+   Tooltip
+   ======================================================================== */
+
+.agdelte-tooltip {
+  position: relative;
+  display: inline-block;
+}
+
+.agdelte-tooltip__trigger {
+  cursor: help;
+}
+
+.agdelte-tooltip__content {
+  position: absolute;
+  z-index: 1000;
+  padding: var(--agdelte-spacing-xs) var(--agdelte-spacing-sm);
+  background: var(--agdelte-text);
+  color: var(--agdelte-text-light);
+  border-radius: var(--agdelte-border-radius);
+  font-size: 0.875rem;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--agdelte-transition), visibility var(--agdelte-transition);
+  pointer-events: none;
+}
+
+.agdelte-tooltip:hover .agdelte-tooltip__content {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Tooltip positions */
+.agdelte-tooltip--top .agdelte-tooltip__content {
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: var(--agdelte-spacing-xs);
+}
+
+.agdelte-tooltip--bottom .agdelte-tooltip__content {
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: var(--agdelte-spacing-xs);
+}
+
+.agdelte-tooltip--left .agdelte-tooltip__content {
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-right: var(--agdelte-spacing-xs);
+}
+
+.agdelte-tooltip--right .agdelte-tooltip__content {
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: var(--agdelte-spacing-xs);
+}
+
+/* Popover */
+.agdelte-popover {
+  position: relative;
+  display: inline-block;
+}
+
+.agdelte-popover__trigger {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+}
+
+.agdelte-popover__content {
+  position: absolute;
+  z-index: 1000;
+  top: 100%;
+  left: 0;
+  margin-top: var(--agdelte-spacing-xs);
+  padding: var(--agdelte-spacing-md);
+  background: var(--agdelte-bg);
+  border: 1px solid var(--agdelte-border);
+  border-radius: var(--agdelte-border-radius);
+  box-shadow: var(--agdelte-shadow-lg);
+  animation: agdelte-scale-in var(--agdelte-transition);
+}
+
+.agdelte-popover__close {
+  position: absolute;
+  top: var(--agdelte-spacing-xs);
+  right: var(--agdelte-spacing-xs);
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 1.25rem;
+  color: var(--agdelte-text-muted);
+  line-height: 1;
+}
+
+.agdelte-popover__close:hover {
+  color: var(--agdelte-text);
+}
+
+/* Help/Info icons */
+.agdelte-help-icon,
+.agdelte-info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--agdelte-text-muted);
+  color: var(--agdelte-text-light);
+  font-size: 0.625rem;
+  font-weight: bold;
+  cursor: help;
+}
+
+/* ========================================================================
+   Progress
+   ======================================================================== */
+
+.agdelte-progress {
+  width: 100%;
+  height: 8px;
+  background: var(--agdelte-bg-active);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.agdelte-progress__bar {
+  height: 100%;
+  background: var(--agdelte-primary);
+  border-radius: 4px;
+  transition: width var(--agdelte-transition);
+}
+
+.agdelte-progress--indeterminate .agdelte-progress__bar {
+  width: 30%;
+  animation: agdelte-progress-indeterminate 1.5s ease-in-out infinite;
+}
+
+@keyframes agdelte-progress-indeterminate {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+
+.agdelte-progress-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--agdelte-spacing-xs);
+}
+
+.agdelte-progress__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.agdelte-progress__label {
+  color: var(--agdelte-text);
+  font-weight: 500;
+}
+
+.agdelte-progress__value {
+  color: var(--agdelte-text-muted);
+  font-size: 0.875rem;
+}
+
+/* Spinner */
+.agdelte-spinner {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--agdelte-border);
+  border-top-color: var(--agdelte-primary);
+  border-radius: 50%;
+  animation: agdelte-spin 0.8s linear infinite;
+}
+
+.agdelte-spinner--sm {
+  width: 16px;
+  height: 16px;
+}
+
+.agdelte-spinner--md {
+  width: 24px;
+  height: 24px;
+}
+
+.agdelte-spinner--lg {
+  width: 40px;
+  height: 40px;
+  border-width: 3px;
+}
+
+.agdelte-spinner__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.agdelte-spinner-container {
+  display: flex;
+  align-items: center;
+  gap: var(--agdelte-spacing-sm);
+}
+
+.agdelte-spinner__text {
+  color: var(--agdelte-text-muted);
+}
+
+@keyframes agdelte-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Skeleton */
+.agdelte-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--agdelte-bg-active) 25%,
+    var(--agdelte-bg-hover) 50%,
+    var(--agdelte-bg-active) 75%
+  );
+  background-size: 200% 100%;
+  animation: agdelte-skeleton-shimmer 1.5s infinite;
+  border-radius: var(--agdelte-border-radius);
+}
+
+.agdelte-skeleton--text {
+  height: 1em;
+  margin-bottom: var(--agdelte-spacing-xs);
+}
+
+.agdelte-skeleton--text:last-child {
+  width: 70%;
+}
+
+.agdelte-skeleton--circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.agdelte-skeleton--rect {
+  min-height: 100px;
+}
+
+.agdelte-skeleton-paragraph {
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes agdelte-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Loading wrapper */
+.agdelte-loading-wrapper {
+  position: relative;
+}
+
+.agdelte-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.8);
+  z-index: 10;
+}
+
+/* ========================================================================
+   Stepper
+   ======================================================================== */
+
+.agdelte-stepper {
+  display: flex;
+  align-items: flex-start;
+}
+
+.agdelte-stepper--vertical {
+  flex-direction: column;
+}
+
+.agdelte-stepper__step {
+  display: flex;
+  align-items: flex-start;
+  flex: 1;
+  position: relative;
+}
+
+.agdelte-stepper--vertical .agdelte-stepper__step {
+  flex: none;
+  margin-bottom: var(--agdelte-spacing-md);
+}
+
+.agdelte-stepper__indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.agdelte-stepper__number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--agdelte-bg-active);
+  color: var(--agdelte-text-muted);
+  font-weight: 600;
+  font-size: 0.875rem;
+  transition: all var(--agdelte-transition);
+}
+
+.agdelte-stepper__step--active .agdelte-stepper__number {
+  background: var(--agdelte-primary);
+  color: var(--agdelte-text-light);
+}
+
+.agdelte-stepper__step--completed .agdelte-stepper__number {
+  background: var(--agdelte-success);
+  color: var(--agdelte-text-light);
+}
+
+.agdelte-stepper__step--completed .agdelte-stepper__number::after {
+  content: "✓";
+}
+
+.agdelte-stepper__content {
+  display: flex;
+  flex-direction: column;
+  margin-left: var(--agdelte-spacing-sm);
+  padding-top: var(--agdelte-spacing-xs);
+}
+
+.agdelte-stepper__label {
+  font-weight: 500;
+  color: var(--agdelte-text);
+}
+
+.agdelte-stepper__step--active .agdelte-stepper__label {
+  color: var(--agdelte-primary);
+}
+
+.agdelte-stepper__description {
+  font-size: 0.875rem;
+  color: var(--agdelte-text-muted);
+  margin-top: var(--agdelte-spacing-xs);
+}
+
+.agdelte-stepper__line {
+  flex: 1;
+  height: 2px;
+  background: var(--agdelte-border);
+  margin: 15px var(--agdelte-spacing-sm) 0;
+}
+
+.agdelte-stepper__step--completed .agdelte-stepper__line {
+  background: var(--agdelte-success);
+}
+
+.agdelte-stepper--vertical .agdelte-stepper__line {
+  width: 2px;
+  height: 24px;
+  margin: var(--agdelte-spacing-xs) 0 0 15px;
+  flex: none;
+}
+
+/* Clickable stepper */
+.agdelte-stepper--clickable .agdelte-stepper__step {
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: var(--agdelte-spacing-xs);
+  border-radius: var(--agdelte-border-radius);
+  transition: background var(--agdelte-transition);
+}
+
+.agdelte-stepper--clickable .agdelte-stepper__step:hover {
+  background: var(--agdelte-bg-hover);
+}
+
+/* ========================================================================
    Animations
    ======================================================================== */
 

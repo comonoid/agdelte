@@ -3,9 +3,10 @@
 // generate-css.js — Agdelte CSS build tool
 //
 // Compiles an Agda Stylesheet value to a .css file.
+// Uses Agda's .agdai caching - skips generation if CSS is newer than compiled module.
 //
 // Usage:
-//   node scripts/generate-css.js <module> <export> <output> [--hash]
+//   node scripts/generate-css.js <module> <export> <output> [--hash] [--force]
 //
 // Arguments:
 //   module   Compiled module path relative to _build/
@@ -15,6 +16,7 @@
 //   output   Output .css file path
 //            e.g. dist/app.css
 //   --hash   Append content hash to filename (app.a1b2c3d4.css)
+//   --force  Regenerate even if CSS is up to date
 //
 // Example:
 //   # Compile the Agda module first:
@@ -24,13 +26,14 @@
 //   node scripts/generate-css.js jAgda.MyApp.Styles appCSS dist/app.css
 //   node scripts/generate-css.js jAgda.MyApp.Styles appCSS dist/app.css --hash
 
-import { writeFileSync, mkdirSync } from 'fs';
+import { writeFileSync, mkdirSync, statSync, existsSync } from 'fs';
 import { createHash } from 'crypto';
 import { dirname, basename, extname, join, resolve } from 'path';
 import { pathToFileURL } from 'url';
 
 const args = process.argv.slice(2);
 const hashFlag = args.includes('--hash');
+const forceFlag = args.includes('--force');
 const positional = args.filter(a => !a.startsWith('--'));
 
 if (positional.length < 3) {
@@ -47,6 +50,22 @@ const [moduleName, exportName, outputPath] = positional;
 const buildDir = resolve(process.cwd(), '_build');
 const modulePath = join(buildDir, `${moduleName}.mjs`);
 const stylesheetPath = join(buildDir, 'jAgda.Agdelte.Css.Stylesheet.mjs');
+const outputResolved = resolve(outputPath);
+
+// Check if CSS is up to date (skip if output is newer than compiled module)
+if (!forceFlag && existsSync(outputResolved) && existsSync(modulePath)) {
+  try {
+    const cssMtime = statSync(outputResolved).mtimeMs;
+    const mjsMtime = statSync(modulePath).mtimeMs;
+
+    if (cssMtime > mjsMtime) {
+      console.log(`${outputPath} (up to date)`);
+      process.exit(0);
+    }
+  } catch (e) {
+    // If stat fails, regenerate
+  }
+}
 
 // Dynamic import of compiled modules
 const [stylesheetMod, userMod] = await Promise.all([

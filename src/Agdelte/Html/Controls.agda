@@ -12,5 +12,27 @@ open import Agdelte.Html.Controls.TabBar public
 open import Agdelte.Html.Controls.Modal public
 open import Agdelte.Html.Controls.Toast public
 
+-- Data Display
+open import Agdelte.Html.Controls.DataGrid public
+
 -- Forms & Input
 open import Agdelte.Html.Controls.Dropdown public
+open import Agdelte.Html.Controls.Checkbox public
+open import Agdelte.Html.Controls.RadioGroup public
+open import Agdelte.Html.Controls.Slider public
+
+-- Navigation
+open import Agdelte.Html.Controls.Pagination public
+
+-- Layout
+open import Agdelte.Html.Controls.Accordion public
+open import Agdelte.Html.Controls.Sidebar public
+open import Agdelte.Html.Controls.Breadcrumb public
+open import Agdelte.Html.Controls.TreeView public
+
+-- Feedback
+open import Agdelte.Html.Controls.Tooltip public
+open import Agdelte.Html.Controls.Progress public
+
+-- Wizard
+open import Agdelte.Html.Controls.Stepper public
