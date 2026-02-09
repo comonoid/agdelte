@@ -268,6 +268,14 @@
   color: var(--agdelte-text);
 }
 
+.agdelte-table__row--selected {
+  background-color: #1e3a5f;
+}
+
+.agdelte-dropdown__trigger {
+  color: var(--agdelte-text);
+}
+
 .controls-demo {
   max-width: 800px;
   margin: 0px;

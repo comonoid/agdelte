@@ -6,9 +6,10 @@
 
 module ControlsDemo where
 
-open import Data.String using (String) renaming (_++_ to _++ˢ_)
+open import Data.String using (String; _≟_) renaming (_++_ to _++ˢ_)
+open import Relation.Nullary using (yes; no)
 open import Data.List using (List; []; _∷_; _++_; map; length)
-open import Data.Nat using (ℕ; zero; suc; _≡ᵇ_; _*_; _+_; _<ᵇ_)
+open import Data.Nat using (ℕ; zero; suc; _≡ᵇ_; _*_; _+_; _<ᵇ_; _∸_; _%_)
 open import Data.Bool using (Bool; true; false; if_then_else_; not; _∧_)
 open import Data.Maybe using (Maybe; just; nothing)
 open import Function using (const; _∘_)
@@ -203,6 +204,9 @@ record Model : Set where
     currentStep     : ℕ
     -- Tooltip: Popover
     popoverOpen     : Bool
+    -- Data: Grid
+    selectedRow     : Maybe ℕ
+    gridPage        : ℕ       -- current page (1-indexed)
 
 open Model public
 
@@ -231,6 +235,8 @@ initModel = mkModel
   false                -- isLoading
   0                    -- currentStep
   false                -- popoverOpen
+  nothing              -- selectedRow
+  1                    -- gridPage
 
 ------------------------------------------------------------------------
 -- Messages
@@ -278,6 +284,10 @@ data Msg : Set where
   GoToStep       : ℕ → Msg
   -- Tooltip: Popover
   TogglePopover  : Msg
+  -- Data: Grid
+  SelectRow      : ℕ → Msg
+  GridPrevPage   : Msg
+  GridNextPage   : Msg
 
 ------------------------------------------------------------------------
 -- Update
@@ -376,6 +386,14 @@ updateModel PrevStep m = record m { currentStep = if currentStep m ≡ᵇ 0 then
 updateModel (GoToStep n) m = record m { currentStep = clamp 0 3 n }
 -- Tooltip: Popover
 updateModel TogglePopover m = record m { popoverOpen = not (popoverOpen m) }
+-- Data: Grid
+updateModel (SelectRow n) m = record m { selectedRow = just n }
+updateModel GridPrevPage m = record m { gridPage = if gridPage m ≡ᵇ 1 then 1 else gridPage m ∸ 1 ; selectedRow = nothing }
+  where open import Data.Nat using (_∸_)
+updateModel GridNextPage m = record m { gridPage = if gridPage m <ᵇ gridTotalPages then gridPage m + 1 else gridPage m ; selectedRow = nothing }
+  where
+    gridTotalPages : ℕ
+    gridTotalPages = 5  -- 50 rows / 10 per page
 
 ------------------------------------------------------------------------
 -- View
@@ -519,15 +537,125 @@ tabLayout =
     ∷ [] )
 
 ------------------------------------------------------------------------
--- Tab 6: Data (DataGrid)
+-- Tab 6: Data (DataGrid with Pagination)
 ------------------------------------------------------------------------
+
+-- String equality for bindings
+eqStr : String → String → Bool
+eqStr a b with a ≟ b
+... | yes _ = true
+... | no _  = false
+
+-- Sample data: 50 employees
+record Employee : Set where
+  constructor mkEmployee
+  field
+    empName : String
+    empAge  : ℕ
+    empRole : String
+
+open Employee public
+
+-- Name list
+names : List String
+names = "Alice" ∷ "Bob" ∷ "Carol" ∷ "David" ∷ "Emma" ∷ "Frank" ∷ "Grace" ∷ "Henry"
+      ∷ "Ivy" ∷ "Jack" ∷ "Kate" ∷ "Leo" ∷ "Mia" ∷ "Noah" ∷ "Olivia" ∷ "Peter"
+      ∷ "Quinn" ∷ "Ryan" ∷ "Sofia" ∷ "Tom" ∷ "Uma" ∷ "Victor" ∷ "Wendy" ∷ "Xavier"
+      ∷ "Yuki" ∷ "Zoe" ∷ "Aaron" ∷ "Beth" ∷ "Chris" ∷ "Diana" ∷ "Eric" ∷ "Fiona"
+      ∷ "George" ∷ "Hannah" ∷ "Ivan" ∷ "Julia" ∷ "Kevin" ∷ "Laura" ∷ "Mike" ∷ "Nina"
+      ∷ "Oscar" ∷ "Paula" ∷ "Quentin" ∷ "Rachel" ∷ "Steve" ∷ "Tina" ∷ "Ulrich" ∷ "Vera"
+      ∷ "Walter" ∷ "Xena" ∷ []
+
+-- Role list
+roles : List String
+roles = "Engineer" ∷ "Designer" ∷ "Manager" ∷ "Analyst" ∷ "Developer" ∷ []
+
+-- Lookup by index
+{-# TERMINATING #-}
+lookupAt : ∀ {A : Set} → ℕ → List A → A → A
+lookupAt _ [] def = def
+lookupAt 0 (x ∷ _) _ = x
+lookupAt (suc n) (_ ∷ xs) def = lookupAt n xs def
+
+getName : ℕ → String
+getName n = lookupAt n names "Unknown"
+
+getRole : ℕ → String
+getRole n = lookupAt (n % 5) roles "Developer"
+
+-- Generate employee data
+{-# TERMINATING #-}
+genEmployees : ℕ → List Employee
+genEmployees 0 = []
+genEmployees (suc n) = mkEmployee (getName idx) (22 + (idx * 7) % 30) (getRole idx) ∷ genEmployees n
+  where
+    idx = 50 ∸ suc n
+
+allEmployees : List Employee
+allEmployees = genEmployees 50
+
+-- Grid constants
+pageSize : ℕ
+pageSize = 10
+
+gridTotalPages : ℕ
+gridTotalPages = 5
+
+-- Get slice of list
+{-# TERMINATING #-}
+drop : ∀ {A : Set} → ℕ → List A → List A
+drop 0 xs = xs
+drop _ [] = []
+drop (suc n) (_ ∷ xs) = drop n xs
+
+{-# TERMINATING #-}
+take : ∀ {A : Set} → ℕ → List A → List A
+take 0 _ = []
+take _ [] = []
+take (suc n) (x ∷ xs) = x ∷ take n xs
+
+getPage : ℕ → List Employee
+getPage page = take pageSize (drop ((page ∸ 1) * pageSize) allEmployees)
+  where open import Data.Nat using (_∸_)
+
+-- Helper: row class based on selection
+rowClass : ℕ → Model → String
+rowClass n m with selectedRow m
+... | nothing = ""
+... | just sel = if n ≡ᵇ sel then "agdelte-table__row--selected" else ""
+
+-- Render a single row
+renderRow : ℕ → Employee → Node Model Msg
+renderRow idx emp =
+  elem "tr" ( attrBind "class" (mkBinding (rowClass idx) eqStr)
+            ∷ onClick (SelectRow idx)
+            ∷ style "cursor" "pointer"
+            ∷ [] )
+    ( elem "td" [] ( text (empName emp) ∷ [] )
+    ∷ elem "td" [] ( text (primShowNat (empAge emp)) ∷ [] )
+    ∷ elem "td" [] ( text (empRole emp) ∷ [] )
+    ∷ [] )
+
+-- Render rows with indices
+{-# TERMINATING #-}
+renderRows : ℕ → List Employee → List (Node Model Msg)
+renderRows _ [] = []
+renderRows idx (e ∷ es) = renderRow idx e ∷ renderRows (suc idx) es
+
+-- Get selected employee info
+getSelectedInfo : Model → String
+getSelectedInfo m with selectedRow m
+... | nothing = "None"
+... | just idx with drop idx (getPage (gridPage m))
+...   | [] = "None"
+...   | (e ∷ _) = empName e ++ˢ " (" ++ˢ empRole e ++ˢ ", " ++ˢ primShowNat (empAge e) ++ˢ ")"
 
 tabData : Node Model Msg
 tabData =
   div ( class "tab-content" ∷ [] )
-    ( h3 [] ( text "DataGrid" ∷ [] )
-    ∷ p [] ( text "Tabular data display with typed columns:" ∷ [] )
-    -- Simple HTML table demo (DataGrid wraps this pattern)
+    ( h3 [] ( text "Paginated DataGrid" ∷ [] )
+    ∷ p [] ( text "50 employees, 10 per page. Click to select:" ∷ [] )
+    -- Table with dynamic rows
     ∷ elem "table" ( class "agdelte-table" ∷ [] )
         ( elem "thead" []
             ( elem "tr" []
@@ -537,25 +665,30 @@ tabData =
                 ∷ [] )
             ∷ [] )
         ∷ elem "tbody" []
-            ( elem "tr" []
-                ( elem "td" [] ( text "Alice" ∷ [] )
-                ∷ elem "td" [] ( text "28" ∷ [] )
-                ∷ elem "td" [] ( text "Engineer" ∷ [] )
-                ∷ [] )
-            ∷ elem "tr" []
-                ( elem "td" [] ( text "Bob" ∷ [] )
-                ∷ elem "td" [] ( text "35" ∷ [] )
-                ∷ elem "td" [] ( text "Designer" ∷ [] )
-                ∷ [] )
-            ∷ elem "tr" []
-                ( elem "td" [] ( text "Carol" ∷ [] )
-                ∷ elem "td" [] ( text "42" ∷ [] )
-                ∷ elem "td" [] ( text "Manager" ∷ [] )
-                ∷ [] )
+            -- Render current page rows using foreachKeyed (key = name)
+            ( foreachKeyed (λ m → getPage (gridPage m))
+                           empName
+                           (λ emp idx → renderRow idx emp)
             ∷ [] )
         ∷ [] )
+    -- Pagination controls
+    ∷ div ( class "btn-group" ∷ style "margin-top" "12px" ∷ [] )
+        ( button ( class "demo-btn" ∷ onClick GridPrevPage ∷ [] )
+            ( text "← Prev" ∷ [] )
+        ∷ span ( style "padding" "10px" ∷ [] )
+            ( text "Page "
+            ∷ bindF (λ m → primShowNat (gridPage m))
+            ∷ text " of "
+            ∷ text (primShowNat gridTotalPages)
+            ∷ [] )
+        ∷ button ( class "demo-btn" ∷ onClick GridNextPage ∷ [] )
+            ( text "Next →" ∷ [] )
+        ∷ [] )
+    -- Selection display
     ∷ div ( class "display-box" ∷ [] )
-        ( text "DataGrid API: mkGridConfig columns rowKey onClick" ∷ [] )
+        ( text "Selected: "
+        ∷ bindF getSelectedInfo
+        ∷ [] )
     ∷ [] )
 
 ------------------------------------------------------------------------

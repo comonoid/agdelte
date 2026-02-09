@@ -247,6 +247,9 @@ examplesCSS =
   ∷ rule ".agdelte-table" (color' (var "agdelte-text") ∷ [])
   ∷ rule ".agdelte-table th" (color' (var "agdelte-text") ∷ [])
   ∷ rule ".agdelte-table td" (color' (var "agdelte-text") ∷ [])
+  ∷ rule ".agdelte-table__row--selected" (backgroundColor' (hex "#1e3a5f") ∷ [])
+  -- Dropdown dark theme override
+  ∷ rule ".agdelte-dropdown__trigger" (color' (var "agdelte-text") ∷ [])
   -- Aliases (backwards compat)
   ∷ rule ".controls-demo" demoContainer
   ∷ rule ".toast-buttons" btnGroup
