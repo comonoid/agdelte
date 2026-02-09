@@ -135,6 +135,10 @@ function executeCmd(cmd, dispatch) {
       executeCmd(cmd1, dispatch);
       executeCmd(cmd2, dispatch);
     },
+    'delay': (ms, msg) => {
+      const msNum = typeof ms === 'bigint' ? Number(ms) : Number(ms);
+      setTimeout(() => dispatch(msg), msNum);
+    },
     'httpGet': (url, onSuccess, onError) => {
       fetch(url)
         .then((r) => r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`)))

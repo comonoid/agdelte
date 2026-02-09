@@ -28,6 +28,9 @@ data Cmd (A : Set) : Set where
   -- Command composition (executed in parallel)
   _<>_ : Cmd A → Cmd A → Cmd A
 
+  -- Delayed message (fires after N milliseconds)
+  delay : ℕ → A → Cmd A
+
   -- HTTP requests (simple API)
   httpGet  : String → (String → A) → (String → A) → Cmd A
   httpPost : String → String → (String → A) → (String → A) → Cmd A
@@ -71,6 +74,7 @@ infixr 5 _<>_
 mapCmd : (A → B) → Cmd A → Cmd B
 mapCmd f ε = ε
 mapCmd f (c₁ <> c₂) = mapCmd f c₁ <> mapCmd f c₂
+mapCmd f (delay ms msg) = delay ms (f msg)
 mapCmd f (httpGet url onOk onErr) = httpGet url (f ∘ onOk) (f ∘ onErr)
 mapCmd f (httpPost url body onOk onErr) = httpPost url body (f ∘ onOk) (f ∘ onErr)
 mapCmd f (attempt task handler) = attempt task (f ∘ handler)

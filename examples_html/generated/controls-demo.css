@@ -1,0 +1,88 @@
+.controls-demo {
+  max-width: 800px;
+  margin: 0px;
+  padding: 1rem;
+}
+
+.tab-content {
+  padding: 1rem;
+  min-height: 200px;
+}
+
+.demo-btn {
+  padding: 10px;
+  margin: 4px;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+  border: none;
+}
+
+.demo-btn.info {
+  padding: 10px;
+  margin: 4px;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+  border: none;
+  background-color: #3b82f6;
+  color: white;
+}
+
+.demo-btn.success {
+  padding: 10px;
+  margin: 4px;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+  border: none;
+  background-color: #10b981;
+  color: white;
+}
+
+.demo-btn.warning {
+  padding: 10px;
+  margin: 4px;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+  border: none;
+  background-color: #f59e0b;
+  color: #1f2937;
+}
+
+.demo-btn.error {
+  padding: 10px;
+  margin: 4px;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+  border: none;
+  background-color: #ef4444;
+  color: white;
+}
+
+.toast-buttons {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.selected-display {
+  margin-top: 16px;
+  padding: 12px;
+  background-color: #e8f4e8;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  color: #1f2937;
+  font-weight: 500;
+}
+
+.timeout-input {
+  margin-bottom: 16px;
+  padding: 12px;
+  background-color: #f0f4f8;
+  border-radius: 4px;
+  color: #1f2937;
+}
