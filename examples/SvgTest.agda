@@ -87,7 +87,7 @@ svgTemplate =
 ------------------------------------------------------------------------
 
 svgApp : ReactiveApp Model Msg
-svgApp = mkReactiveApp (mkModel 30) updateModel svgTemplate
+svgApp = simpleApp (mkModel 30) updateModel svgTemplate
 
 app : ReactiveApp Model Msg
 app = svgApp

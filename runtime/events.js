@@ -290,7 +290,7 @@ export function interpretEvent(event, dispatch) {
 
       fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'text/plain' },
         body,
         signal: controller.signal
       })
@@ -409,7 +409,11 @@ export function interpretEvent(event, dispatch) {
       };
 
       ws.onerror = (e) => {
-        dispatch(handler(mkWsMsg('WsError', e.message || 'Unknown error')));
+        // WebSocket error events are Event objects, not Error objects
+        // They don't have a .message property - extract what info we can
+        const errorMsg = e.error?.message ||
+                        (ws.readyState === WebSocket.CLOSED ? 'Connection failed' : 'WebSocket error');
+        dispatch(handler(mkWsMsg('WsError', errorMsg)));
       };
 
       ws.onclose = () => {

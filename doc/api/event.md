@@ -57,18 +57,37 @@ data WsMsg : Set where
 |----------|------|-------------|
 | `onUrlChange` | `(String → A) → Event A` | URL change (popstate) |
 
+## Functor Instance
+
+```agda
+-- Event is a Functor
+instance
+  EventFunctor : Functor Event
+  EventFunctor ._<$>_ = mapE
+```
+
+This enables standard `fmap` / `<$>` syntax:
+
+```agda
+open import Category.Functor using (RawFunctor)
+
+-- Transform events using functor syntax
+incrementedTicks : Event ℕ
+incrementedTicks = suc <$> interval 1000 0
+```
+
 ## Combinators
 
 | Function | Type | Description |
 |----------|------|-------------|
 | `merge` | `Event A → Event A → Event A` | Combine events |
-| `mapE` | `(A → B) → Event A → Event B` | Transform |
+| `mapE` | `(A → B) → Event A → Event B` | Transform (= fmap) |
 | `filterE` | `(A → Bool) → Event A → Event A` | Filter |
 | `debounce` | `ℕ → Event A → Event A` | After N ms pause |
 | `throttle` | `ℕ → Event A → Event A` | Max once per N ms |
 | `mergeAll` | `List (Event A) → Event A` | Merge list |
 | `_<\|>_` | `Event A → Event A → Event A` | Infix merge |
-| `_<$>_` | `(A → B) → Event A → Event B` | Infix mapE |
+| `_<$>_` | `(A → B) → Event A → Event B` | Infix mapE (functor) |
 
 ## Stateful Combinators
 

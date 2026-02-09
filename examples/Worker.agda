@@ -15,6 +15,7 @@ open import Data.Product using (_×_; _,_)
 open import Function using (_∘_; const)
 
 open import Agdelte.Core.Event
+open import Agdelte.Core.Cmd using (Cmd; ε)
 open import Agdelte.Reactive.Node
 
 ------------------------------------------------------------------------
@@ -118,8 +119,8 @@ workerTemplate =
 -- Subscriptions: spawn worker when Computing
 ------------------------------------------------------------------------
 
-subs : Model → Event Msg
-subs m with status m
+subs' : Model → Event Msg
+subs' m with status m
 ... | Computing = worker
     "/runtime/workers/fibonacci.js"
     (show (fibInput m))
@@ -132,4 +133,4 @@ subs m with status m
 ------------------------------------------------------------------------
 
 app : ReactiveApp Model Msg
-app = mkReactiveApp initialModel updateModel workerTemplate
+app = mkReactiveApp initialModel updateModel workerTemplate (λ _ _ → ε) subs'

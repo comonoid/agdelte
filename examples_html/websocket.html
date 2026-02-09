@@ -13,10 +13,11 @@
   <p class="subtitle">Real-time echo client with WebSocket</p>
 
   <div class="instructions">
-    <strong>Expected:</strong> A <em>Connect</em> button and a text input. After connecting to an echo server,
-    type a message and click <em>Send</em>. The sent message appears on the right, the echoed response
-    on the left (chat-style layout). Status shows connected/disconnected/error.
-    <em>Disconnect</em> closes the WebSocket. Requires an echo WebSocket server at the configured URL.
+    <strong>Expected:</strong> A <em>Connect</em> button and a text input. After connecting to the local echo server
+    (<code>ws://localhost:8080/echo</code>, built into <code>serve.cjs</code>),
+    type a message and click <em>Send</em>. The sent message appears on the right (blue, "You"),
+    the echoed response on the left (green, "Echo") &mdash; the same text back.
+    Status shows connected/disconnected/error. <em>Disconnect</em> closes the WebSocket.
   </div>
 
   <div id="app" data-agdelte="WebSocket">

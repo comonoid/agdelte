@@ -81,9 +81,9 @@ updateModel (UrlChanged path) m = record m
 -- Command
 ------------------------------------------------------------------------
 
-cmd : Msg → Model → Cmd Msg
-cmd (Navigate r) _ = pushUrl (routeToPath r)
-cmd _ _ = ε
+cmd' : Msg → Model → Cmd Msg
+cmd' (Navigate r) _ = pushUrl (routeToPath r)
+cmd' _ _ = ε
 
 ------------------------------------------------------------------------
 -- Helpers
@@ -189,14 +189,12 @@ routerTemplate =
 -- Subscriptions
 ------------------------------------------------------------------------
 
-subs : Model → Event Msg
-subs _ = onUrlChange UrlChanged
+subs' : Model → Event Msg
+subs' _ = onUrlChange UrlChanged
 
 ------------------------------------------------------------------------
 -- App
 ------------------------------------------------------------------------
 
 app : ReactiveApp Model Msg
-app = mkReactiveApp initialModel updateModel routerTemplate
-
--- cmd and subs are exported separately (see above)
+app = mkReactiveApp initialModel updateModel routerTemplate cmd' subs'

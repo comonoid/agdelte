@@ -15,6 +15,7 @@ open import Data.Product using (_×_; _,_)
 open import Function using (_∘_; const)
 
 open import Agdelte.Core.Event
+open import Agdelte.Core.Cmd using (Cmd; ε)
 open import Agdelte.Reactive.Node
 
 ------------------------------------------------------------------------
@@ -119,8 +120,8 @@ keyboardTemplate =
 -- Subscriptions: global keyboard events
 ------------------------------------------------------------------------
 
-subs : Model → Event Msg
-subs _ = onKeys
+subs' : Model → Event Msg
+subs' _ = onKeys
   ( ("ArrowUp"    , MoveUp)
   ∷ ("ArrowDown"  , MoveDown)
   ∷ ("ArrowLeft"  , MoveLeft)
@@ -133,6 +134,4 @@ subs _ = onKeys
 ------------------------------------------------------------------------
 
 app : ReactiveApp Model Msg
-app = mkReactiveApp initialModel updateModel keyboardTemplate
-
--- subs is exported separately (see above)
+app = mkReactiveApp initialModel updateModel keyboardTemplate (λ _ _ → ε) subs'

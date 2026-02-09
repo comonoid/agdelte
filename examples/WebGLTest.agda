@@ -94,7 +94,7 @@ scene : Scene Model Msg
 scene = mkScene
   (fixed (perspective 1.0 0.1 100.0) (vec3 0.0 2.0 8.0) (vec3 0.0 0.0 0.0))
   -- Lights
-  ( light (ambient white 0.15)
+  ( light (ambient white 0.25)
   ∷ light (directional white 0.9 (vec3 -0.5 -1.0 -0.3))
   -- Left box: phong, click to increment counter
   ∷ mesh (sphere 0.9)
@@ -148,4 +148,4 @@ webglTemplate =
 ------------------------------------------------------------------------
 
 app : ReactiveApp Model Msg
-app = mkReactiveApp initModel updateModel webglTemplate
+app = simpleApp initModel updateModel webglTemplate

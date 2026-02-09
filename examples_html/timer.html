@@ -13,9 +13,10 @@
   <p class="subtitle">Reactive bindings with interval subscriptions</p>
 
   <div class="instructions">
-    <strong>Expected:</strong> A seconds counter with <em>Start/Stop</em> and <em>Reset</em> buttons.
-    Clicking <em>Start</em> begins counting up once per second. <em>Stop</em> pauses, <em>Reset</em> returns to 0.
-    The display updates each second while running. The timer stops when paused (no background ticks).
+    <strong>Expected:</strong> A timer (MM:SS.d) with <em>Start/Pause</em> and <em>Reset</em> buttons.
+    Clicking <em>Start</em> begins counting up (100ms ticks). The button label changes to <em>Pause</em>.
+    <em>Pause</em> stops the timer but keeps the value. <em>Reset</em> sets the value to 0:00.0 <strong>and</strong> stops the timer.
+    The display updates every 0.1s while running.
   </div>
 
   <div id="app" data-agdelte="Timer">

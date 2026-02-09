@@ -276,4 +276,4 @@ todoTemplate =
 ------------------------------------------------------------------------
 
 app : ReactiveApp Model Msg
-app = mkReactiveApp initialModel updateModel todoTemplate
+app = simpleApp initialModel updateModel todoTemplate

@@ -9,7 +9,7 @@
  * - Silent: Expected edge cases (empty cmd, missing optional features)
  */
 
-import { interpretEvent, unsubscribe, wsConnections } from './events.js';
+import { interpretEvent, unsubscribe, wsConnections, channelConnections } from './events.js';
 
 // ─────────────────────────────────────────────────────────────────────
 // SVG/MathML namespace support
@@ -99,7 +99,7 @@ function executeTask(task, onSuccess, onError) {
     'fail': (error) => onError(error),
     'httpGet': (url, onOk, onErr) => {
       fetch(url)
-        .then(async (response) => {
+        .then((response) => {
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           return response.text();
         })
@@ -108,7 +108,7 @@ function executeTask(task, onSuccess, onError) {
     },
     'httpPost': (url, body, onOk, onErr) => {
       fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body })
-        .then(async (response) => {
+        .then((response) => {
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           return response.text();
         })
@@ -137,13 +137,13 @@ function executeCmd(cmd, dispatch) {
     },
     'httpGet': (url, onSuccess, onError) => {
       fetch(url)
-        .then(async (r) => r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`)))
+        .then((r) => r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`)))
         .then((text) => dispatch(onSuccess(text)))
         .catch((error) => dispatch(onError(error.message)));
     },
     'httpPost': (url, body, onSuccess, onError) => {
       fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body })
-        .then(async (r) => r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`)))
+        .then((r) => r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`)))
         .then((text) => dispatch(onSuccess(text)))
         .catch((error) => dispatch(onError(error.message)));
     },
@@ -187,7 +187,23 @@ function executeCmd(cmd, dispatch) {
     'removeItem': (key) => localStorage.removeItem(key),
     'wsSend': (url, message) => {
       const ws = wsConnections.get(url);
-      if (ws?.readyState === WebSocket.OPEN) ws.send(message);
+      if (!ws) {
+        console.warn(`Cmd.wsSend: no WebSocket connection for "${url}"`);
+        return;
+      }
+      if (ws.readyState !== WebSocket.OPEN) {
+        console.warn(`Cmd.wsSend: WebSocket not open (state: ${ws.readyState})`);
+        return;
+      }
+      ws.send(message);
+    },
+    'channelSend': (scriptUrl, message) => {
+      const worker = channelConnections.get(scriptUrl);
+      if (!worker) {
+        console.warn(`Cmd.channelSend: no worker channel for "${scriptUrl}"`);
+        return;
+      }
+      worker.postMessage(message);
     },
     'pushUrl': (url) => history.pushState(null, '', url),
     'replaceUrl': (url) => history.replaceState(null, '', url),
@@ -465,8 +481,14 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   /**
    * Dispatch message
    */
+  const MAX_PENDING_MESSAGES = 1000;
+
   function dispatch(msg) {
     if (isUpdating) {
+      if (pendingMessages.length >= MAX_PENDING_MESSAGES) {
+        console.error(`Dispatch queue overflow (>${MAX_PENDING_MESSAGES} messages). Check for infinite dispatch loops.`);
+        return;
+      }
       pendingMessages.push(msg);
       return;
     }
@@ -823,7 +845,14 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     const result = [];
     let current = list;
     let incomplete = false;
+    const MAX_LIST_ITERATIONS = 100000;
+    let iterations = 0;
     while (true) {
+      if (iterations++ > MAX_LIST_ITERATIONS) {
+        console.error('listToArray: possible infinite loop (>100000 items or cyclic list)');
+        incomplete = true;
+        break;
+      }
       if (typeof current !== 'function') {
         console.warn('listToArray: tail is not a function', current);
         incomplete = true;
@@ -1016,11 +1045,22 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       }
     }
 
-    // Recurse into child scopes (that aren't managed by conditionals/lists)
-    // Note: conditional and list scopes are updated above, so children
-    // array contains only "structural" children from elem nesting.
-    // Actually, all child scopes are created by when/foreach, so
-    // we don't need extra recursion here — it's handled above.
+    // Recurse into structural child scopes (scope / scopeProj).
+    // Skip children owned by conditionals or lists — they're updated above.
+    const ownedScopes = new Set();
+    for (const cond of scope.conditionals) {
+      if (cond.scope) ownedScopes.add(cond.scope);
+    }
+    for (const list of scope.lists) {
+      for (const entry of list.renderedItems) {
+        if (entry.scope) ownedScopes.add(entry.scope);
+      }
+    }
+    for (const child of scope.children) {
+      if (!ownedScopes.has(child)) {
+        updateScope(child, oldModel, newModel);
+      }
+    }
   }
 
   /**
@@ -1107,6 +1147,10 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
     // Keys changed: reconcile
     const parent = list.marker.parentNode;
+    if (!parent) {
+      console.warn('List marker not in DOM, skipping update');
+      return;
+    }
     const newRendered = [];
     const newKeySet = new Set(newKeys);
 
@@ -1118,23 +1162,16 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       }
     }
 
-    // Find the insertion point BEFORE removing items
-    // It's the first sibling after all our list items
-    let insertBefore = null;
-    if (oldItems.length > 0) {
-      // Get the node after the last item
-      const lastItem = oldItems[oldItems.length - 1];
-      insertBefore = lastItem.node.nextSibling;
-    } else {
-      insertBefore = list.marker.nextSibling;
-    }
-
-    // Remove all old items from DOM (we'll re-insert in order)
+    // Remove all old items from DOM that will be reused (we'll re-insert in order)
     for (const entry of oldItems) {
       if (newKeySet.has(entry.key) && entry.node.parentNode) {
         entry.node.remove();
       }
     }
+
+    // Use marker.nextSibling as stable insertion point AFTER all removals
+    // This ensures correct positioning regardless of what was removed
+    const insertBefore = list.marker.nextSibling;
 
     // Now insert in correct order (insertBefore was saved before removal)
     for (let i = 0; i < newItems.length; i++) {

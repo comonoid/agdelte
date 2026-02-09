@@ -18,6 +18,9 @@ open import Data.Maybe using (Maybe; just; nothing)
 open import Function using (_∘_; id; const)
 open import Relation.Nullary using (yes; no)
 
+open import Agdelte.Core.Event using (Event; never)
+open import Agdelte.Core.Cmd using (Cmd; ε)
+
 ------------------------------------------------------------------------
 -- Binding: a reactive connection from Model to DOM
 ------------------------------------------------------------------------
@@ -262,23 +265,24 @@ vmodel : ∀ {Model Msg} → (Model → String) → (String → Msg) → List (A
 vmodel get msg = valueBind get ∷ onInput msg ∷ []
 
 ------------------------------------------------------------------------
--- ReactiveApp: Application with reactive template
+-- ReactiveApp: Application with reactive template (full TEA)
 ------------------------------------------------------------------------
 
--- Simple app without subscriptions
+-- Full application with commands and subscriptions (The Elm Architecture)
 record ReactiveApp (Model Msg : Set) : Set₁ where
   constructor mkReactiveApp
   field
     init     : Model
     update   : Msg → Model → Model
     template : Node Model Msg        -- NOT a function! Structure with bindings
+    cmd      : Msg → Model → Cmd Msg -- Side effects (HTTP, WebSocket send, etc.)
+    subs     : Model → Event Msg     -- Subscriptions (timers, keyboard, etc.)
 
 open ReactiveApp public
 
--- For apps with subscriptions (Timer, WebSocket, etc.):
--- Use ReactiveApp + separate subs function in your module, e.g.:
---   app : ReactiveApp Model Msg
---   subs : Model → Event Msg
+-- Simple app constructor (no commands or subscriptions)
+simpleApp : ∀ {Model Msg} → Model → (Msg → Model → Model) → Node Model Msg → ReactiveApp Model Msg
+simpleApp init' update' template' = mkReactiveApp init' update' template' (λ _ _ → ε) (const never)
 
 ------------------------------------------------------------------------
 -- Internal: transform binding to work with larger model

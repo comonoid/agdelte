@@ -210,4 +210,4 @@ formTemplate =
 ------------------------------------------------------------------------
 
 app : ReactiveApp Model Msg
-app = mkReactiveApp initModel updateModel formTemplate
+app = simpleApp initModel updateModel formTemplate

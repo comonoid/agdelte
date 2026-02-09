@@ -340,7 +340,7 @@ h1 {
 .composition-demo .counter-component, .optic-demo .counter-component { background: rgba(0,0,0,0.2); border-radius: 8px; padding: 1.5rem; }
 .composition-demo .description, .optic-demo .description { color: #888; margin-bottom: 0.5rem; }
 .composition-demo .total, .optic-demo .total { color: var(--success); font-size: 1.2rem; font-weight: 600; margin-bottom: 1.5rem; }
-.composition-demo .counter-controls, .optic-demo .counter-controls { display: flex; align-items: center; justify-content: center; gap: 0.75rem; }
+.composition-demo .counter-controls, .optic-demo .counter-controls { display: flex; align-items: center; justify-content: center; gap: 0.75rem; flex-wrap: wrap; }
 .composition-demo .reset-btn, .optic-demo .reset-btn {
   background: var(--accent);
   border: none;
@@ -349,7 +349,7 @@ h1 {
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.85rem;
-  margin-left: 0.5rem;
+  flex-basis: 100%;
 }
 .composition-demo .reset-btn:hover, .optic-demo .reset-btn:hover { background: #d83550; }
 

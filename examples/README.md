@@ -119,9 +119,18 @@ template =
     ∷ button [ onClick Inc ] [ text "+" ]
     ∷ [] )
 
--- app: assemble application
+-- app: assemble application (simple - no cmd/subs)
 app : ReactiveApp Model Msg
-app = mkReactiveApp init update template
+app = simpleApp init update template
+
+-- Or with commands and subscriptions (full TEA):
+app = mkReactiveApp init update template cmd' subs'
+  where
+    cmd' : Msg → Model → Cmd Msg
+    cmd' _ _ = ε
+
+    subs' : Model → Event Msg
+    subs' _ = never
 ```
 
 **Key difference from Virtual DOM**: `template` is data, not a function. Bindings track which DOM nodes need updating.

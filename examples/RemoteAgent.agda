@@ -73,10 +73,10 @@ updateModel (GotError e) m = record m { status = Error e }
 -- Cmd (side effects triggered by messages)
 ------------------------------------------------------------------------
 
-cmd : Msg → Model → Cmd Msg
-cmd PollState _ = agentQuery (serverUrl ++ "/state") GotState GotError
-cmd StepAgent _ = agentStep! (serverUrl ++ "/step") GotStep GotError
-cmd _ _ = ε
+cmd' : Msg → Model → Cmd Msg
+cmd' PollState _ = agentQuery (serverUrl ++ "/state") GotState GotError
+cmd' StepAgent _ = agentStep! (serverUrl ++ "/step") GotStep GotError
+cmd' _ _ = ε
 
 ------------------------------------------------------------------------
 -- Helpers
@@ -133,7 +133,4 @@ remoteTemplate =
 ------------------------------------------------------------------------
 
 app : ReactiveApp Model Msg
-app = mkReactiveApp initialModel updateModel remoteTemplate
-
--- cmd and subs are exported separately (see above)
--- Runtime picks them up: cmd : Msg → Model → Cmd Msg
+app = mkReactiveApp initialModel updateModel remoteTemplate cmd' (const never)

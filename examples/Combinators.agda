@@ -15,6 +15,7 @@ open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Unit using (⊤; tt)
 
 open import Agdelte.Core.Event
+open import Agdelte.Core.Cmd using (Cmd; ε)
 open import Agdelte.Reactive.Node
 
 ------------------------------------------------------------------------
@@ -70,8 +71,8 @@ updateModel Reset m = record m { tickCount = 0 ; batchCount = 0 ; lastBatchAt = 
 isBatch : ℕ → Bool
 isBatch n = (n % 5) ≡ᵇ 0
 
-subs : Model → Event Msg
-subs m = if running m
+subs' : Model → Event Msg
+subs' m = if running m
   then mapFilterE classify (foldE 0 (λ _ n → suc n) (interval 300 tt))
   else never
   where
@@ -135,6 +136,4 @@ combinatorsTemplate =
 ------------------------------------------------------------------------
 
 app : ReactiveApp Model Msg
-app = mkReactiveApp initialModel updateModel combinatorsTemplate
-
--- subs exported separately
+app = mkReactiveApp initialModel updateModel combinatorsTemplate (λ _ _ → ε) subs'

@@ -114,4 +114,4 @@ compositionTemplate =
 ------------------------------------------------------------------------
 
 app : ReactiveApp Model Msg
-app = mkReactiveApp initialModel updateModel compositionTemplate
+app = simpleApp initialModel updateModel compositionTemplate

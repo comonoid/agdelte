@@ -15,6 +15,7 @@ open import Data.Product using (_×_; _,_)
 open import Function using (_∘_; const)
 
 open import Agdelte.Core.Event
+open import Agdelte.Core.Cmd using (Cmd; ε)
 open import Agdelte.Reactive.Node
 
 ------------------------------------------------------------------------
@@ -101,8 +102,8 @@ httpTemplate =
 -- Subscriptions: HTTP requests when Loading
 ------------------------------------------------------------------------
 
-subs : Model → Event Msg
-subs m with status m
+subs' : Model → Event Msg
+subs' m with status m
 ... | Loading = httpGet
     "https://jsonplaceholder.typicode.com/posts/1"
     GotData
@@ -114,6 +115,4 @@ subs m with status m
 ------------------------------------------------------------------------
 
 app : ReactiveApp Model Msg
-app = mkReactiveApp initialModel updateModel httpTemplate
-
--- subs is exported separately (see above)
+app = mkReactiveApp initialModel updateModel httpTemplate (λ _ _ → ε) subs'

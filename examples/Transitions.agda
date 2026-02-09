@@ -12,6 +12,7 @@ open import Data.String using (String; _++_)
 open import Data.List using (List; []; _∷_; [_])
 
 open import Agdelte.Core.Event
+open import Agdelte.Core.Cmd using (Cmd; ε)
 open import Agdelte.Reactive.Node
 
 ------------------------------------------------------------------------
@@ -54,8 +55,8 @@ updateModel AutoDismiss m = record m { notifVisible = false }
 -- Subscriptions: auto-dismiss notification after 3s
 ------------------------------------------------------------------------
 
-subs : Model → Event Msg
-subs m = if notifVisible m
+subs' : Model → Event Msg
+subs' m = if notifVisible m
   then timeout 3000 AutoDismiss
   else never
 
@@ -113,6 +114,4 @@ transitionsTemplate =
 ------------------------------------------------------------------------
 
 app : ReactiveApp Model Msg
-app = mkReactiveApp initialModel updateModel transitionsTemplate
-
--- subs exported separately (auto-dismiss)
+app = mkReactiveApp initialModel updateModel transitionsTemplate (λ _ _ → ε) subs'

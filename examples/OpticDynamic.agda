@@ -199,4 +199,4 @@ opticDynamicTemplate =
 ------------------------------------------------------------------------
 
 app : ReactiveApp Model Msg
-app = mkReactiveApp initialModel updateModel opticDynamicTemplate
+app = simpleApp initialModel updateModel opticDynamicTemplate

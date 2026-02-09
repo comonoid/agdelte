@@ -16,6 +16,7 @@ open import Data.List using (List; []; _∷_; [_])
 open import Function using (_∘_; const; id)
 
 open import Agdelte.Core.Event
+open import Agdelte.Core.Cmd using (Cmd; ε)
 open import Agdelte.Reactive.Node
 
 ------------------------------------------------------------------------
@@ -270,8 +271,8 @@ stressTemplate =
 -- Subscriptions
 ------------------------------------------------------------------------
 
-subs : Model → Event Msg
-subs m =
+subs' : Model → Event Msg
+subs' m =
   if running m
   then merge (interval 1 Frame) (interval 1000 Measure)
   else never
@@ -281,4 +282,4 @@ subs m =
 ------------------------------------------------------------------------
 
 app : ReactiveApp Model Msg
-app = mkReactiveApp initModel updateModel stressTemplate
+app = mkReactiveApp initModel updateModel stressTemplate (λ _ _ → ε) subs'

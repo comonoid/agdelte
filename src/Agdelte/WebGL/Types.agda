@@ -31,6 +31,15 @@ postulate
 {-# COMPILE JS vec3 = x => y => z => ({ x, y, z }) #-}
 {-# COMPILE JS quat = x => y => z => w => ({ x, y, z, w }) #-}
 
+postulate
+  vec3X : Vec3 → Float
+  vec3Y : Vec3 → Float
+  vec3Z : Vec3 → Float
+
+{-# COMPILE JS vec3X = v => v.x #-}
+{-# COMPILE JS vec3Y = v => v.y #-}
+{-# COMPILE JS vec3Z = v => v.z #-}
+
 identityQuat : Quat
 identityQuat = quat 0.0 0.0 0.0 1.0
 
@@ -167,12 +176,15 @@ data SceneAttr (Msg : Set) : Set where
   -- Events (color picking + ray cast)
   onClickAt  : (Vec3 → Msg) → SceneAttr Msg
   onDrag     : (Vec3 → Vec3 → Msg) → SceneAttr Msg
+  onMiddleDrag : (Vec3 → Vec3 → Msg) → SceneAttr Msg  -- middle mouse button drag
+  onScreenDrag : (Vec3 → Vec3 → Msg) → SceneAttr Msg  -- left drag, screen pixel coords (x=px, y=px, z=0)
   -- Focus / keyboard
   focusable  : SceneAttr Msg
   onKeyDown  : (KeyEvent → Msg) → SceneAttr Msg
   onInput    : (String → Msg) → SceneAttr Msg
   -- Animation
-  transition : Duration → Easing → SceneAttr Msg
+  transition      : Duration → Easing → SceneAttr Msg
+  animateOnHover  : SceneAttr Msg    -- parent animate node only ticks while hovered
 
 ------------------------------------------------------------------------
 -- Text types (MSDF font rendering)
@@ -253,10 +265,13 @@ mapSceneAttrs wrap (onLeave msg ∷ rest)        = onLeave (wrap msg) ∷ mapSce
 mapSceneAttrs wrap (onScroll handler ∷ rest)   = onScroll (λ f → wrap (handler f)) ∷ mapSceneAttrs wrap rest
 mapSceneAttrs wrap (onClickAt handler ∷ rest)  = onClickAt (λ v → wrap (handler v)) ∷ mapSceneAttrs wrap rest
 mapSceneAttrs wrap (onDrag handler ∷ rest)     = onDrag (λ s c → wrap (handler s c)) ∷ mapSceneAttrs wrap rest
+mapSceneAttrs wrap (onMiddleDrag handler ∷ rest) = onMiddleDrag (λ s c → wrap (handler s c)) ∷ mapSceneAttrs wrap rest
+mapSceneAttrs wrap (onScreenDrag handler ∷ rest) = onScreenDrag (λ s c → wrap (handler s c)) ∷ mapSceneAttrs wrap rest
 mapSceneAttrs wrap (focusable ∷ rest)          = focusable ∷ mapSceneAttrs wrap rest
 mapSceneAttrs wrap (onKeyDown handler ∷ rest)  = onKeyDown (λ e → wrap (handler e)) ∷ mapSceneAttrs wrap rest
 mapSceneAttrs wrap (onInput handler ∷ rest)    = onInput (λ s → wrap (handler s)) ∷ mapSceneAttrs wrap rest
 mapSceneAttrs wrap (transition d e ∷ rest)     = transition d e ∷ mapSceneAttrs wrap rest
+mapSceneAttrs wrap (animateOnHover ∷ rest)    = animateOnHover ∷ mapSceneAttrs wrap rest
 
 mutual
   zoomSceneNode : ∀ {M M' Msg Msg'} → (M → M') → (Msg' → Msg)

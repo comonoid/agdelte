@@ -17,6 +17,7 @@ open import Data.Product using (_×_; _,_)
 open import Function using (_∘_; const; id)
 
 open import Agdelte.Core.Event
+open import Agdelte.Core.Cmd using (Cmd; ε)
 open import Agdelte.Reactive.Node
 
 ------------------------------------------------------------------------
@@ -149,8 +150,8 @@ parallelTemplate =
 -- Subscriptions
 ------------------------------------------------------------------------
 
-subs : Model → Event Msg
-subs m =
+subs' : Model → Event Msg
+subs' m =
   let progSub = if computing m
         then workerWithProgress
                "/runtime/workers/fibonacci-progress.js"
@@ -179,4 +180,4 @@ subs m =
 ------------------------------------------------------------------------
 
 app : ReactiveApp Model Msg
-app = mkReactiveApp initModel updateModel parallelTemplate
+app = mkReactiveApp initModel updateModel parallelTemplate (λ _ _ → ε) subs'

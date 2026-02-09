@@ -60,6 +60,7 @@ initModel = mkModel initBars 999 999  -- 999 means no selection
 
 data Msg : Set where
   SelectBar : ℕ → Msg
+  Deselect  : Msg
   HoverBar  : ℕ → Msg
   LeaveBar  : Msg
   AddValue  : ℕ → Msg
@@ -94,6 +95,7 @@ subFromBar n b = record b { barValue = clamp 0 100 (BarData.barValue b ∸ n) }
 
 updateModel : Msg → Model → Model
 updateModel (SelectBar idx) m = record m { selectedIdx = idx }
+updateModel Deselect m = record m { selectedIdx = 999 }
 updateModel (HoverBar idx) m = record m { hoveredIdx = idx }
 updateModel LeaveBar m = record m { hoveredIdx = 999 }
 updateModel (AddValue idx) m = record m
@@ -277,7 +279,13 @@ chartTemplate =
           ∷ style "border-radius" "8px"
           ∷ onSvgWheel WheelSelected
           ∷ [])
-        ( yAxis
+        ( -- Background rect to catch clicks on empty space
+          rect' ( xF -5.0 ∷ yF -10.0
+                ∷ widthF (chartWidth +F 10.0) ∷ heightF (chartHeight +F 50.0)
+                ∷ fill_ "transparent"
+                ∷ onClick Deselect
+                ∷ []) []
+        ∷ yAxis
         ∷ foreach (λ m → indexBars (Model.bars m)) renderBar
         ∷ [] )
     ∷ chartControls
@@ -288,7 +296,7 @@ chartTemplate =
 ------------------------------------------------------------------------
 
 chartApp : ReactiveApp Model Msg
-chartApp = mkReactiveApp initModel updateModel chartTemplate
+chartApp = simpleApp initModel updateModel chartTemplate
 
 app : ReactiveApp Model Msg
 app = chartApp

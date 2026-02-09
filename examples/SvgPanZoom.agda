@@ -187,7 +187,7 @@ panZoomTemplate =
 ------------------------------------------------------------------------
 
 panZoomApp : ReactiveApp Model Msg
-panZoomApp = mkReactiveApp initModel updateModel panZoomTemplate
+panZoomApp = simpleApp initModel updateModel panZoomTemplate
 
 app : ReactiveApp Model Msg
 app = panZoomApp

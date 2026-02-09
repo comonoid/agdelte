@@ -12,6 +12,7 @@ open import Data.String using (String; _++_; length)
 open import Data.List using ([]; _∷_; [_])
 
 open import Agdelte.Core.Event
+open import Agdelte.Core.Cmd using (Cmd; ε)
 open import Agdelte.Reactive.Node
 
 ------------------------------------------------------------------------
@@ -92,8 +93,8 @@ timerTemplate =
 -- Subscriptions: interval when timer is running
 ------------------------------------------------------------------------
 
-subs : Model → Event Msg
-subs m = if running m
+subs' : Model → Event Msg
+subs' m = if running m
          then interval 100 Tick  -- Every 0.1 seconds
          else never
 
@@ -102,6 +103,4 @@ subs m = if running m
 ------------------------------------------------------------------------
 
 app : ReactiveApp Model Msg
-app = mkReactiveApp initialModel updateModel timerTemplate
-
--- subs is exported separately (see above)
+app = mkReactiveApp initialModel updateModel timerTemplate (λ _ _ → ε) subs'

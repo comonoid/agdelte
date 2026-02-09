@@ -111,11 +111,22 @@ npm run build:inspector-demo && npm run run:inspector-demo
 module MyExample where
 
 open import Agdelte.Reactive.Node
-open import Agdelte.Core.Event    -- if needed
-open import Agdelte.Core.Cmd      -- if needed
+open import Agdelte.Core.Event    -- for subscriptions
+open import Agdelte.Core.Cmd      -- for commands (ε = no-op)
 
--- Model, Msg, update, template, app
--- Optional: subs, cmd (exported separately)
+-- Define Model, Msg, updateModel, template
+
+-- Simple app (no side effects):
+app = simpleApp initialModel updateModel myTemplate
+
+-- Or full TEA with commands and subscriptions:
+app = mkReactiveApp initialModel updateModel myTemplate cmd' subs'
+  where
+    cmd' : Msg → Model → Cmd Msg
+    cmd' _ _ = ε  -- no commands
+
+    subs' : Model → Event Msg
+    subs' _ = never  -- no subscriptions
 ```
 
 2. Add build script to `package.json`:

@@ -180,7 +180,7 @@ lineDrawTemplate =
 ------------------------------------------------------------------------
 
 lineDrawApp : ReactiveApp Model Msg
-lineDrawApp = mkReactiveApp initModel updateModel lineDrawTemplate
+lineDrawApp = simpleApp initModel updateModel lineDrawTemplate
 
 app : ReactiveApp Model Msg
 app = lineDrawApp

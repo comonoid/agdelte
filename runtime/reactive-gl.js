@@ -3,6 +3,28 @@
  *
  * Interprets Scott-encoded Scene values from Agdelte.WebGL.Types
  * and renders them using WebGL2. Supports:
+ */
+
+// ---------------------------------------------------------------------------
+// Configuration constants (centralized for maintainability)
+// ---------------------------------------------------------------------------
+
+const CONFIG = {
+  MAX_LIGHTS: 8,               // Maximum lights per scene (matches shader arrays)
+  MAX_LIST_ITEMS: 10000,       // Maximum items in Scott-encoded lists
+  MAX_NAT_VALUE: 100000,       // Maximum for Scott-encoded natural numbers
+  SPHERE_SLICES: 24,           // Sphere geometry horizontal segments
+  SPHERE_STACKS: 16,           // Sphere geometry vertical segments
+  CYLINDER_SEGMENTS: 24,       // Cylinder geometry segments
+  FONT_ATLAS_SIZE: 1024,       // Font atlas texture size
+  FONT_RENDER_SIZE: 48,        // Font rendering size for atlas
+  PICK_HOVER_THROTTLE: 16,     // Hover event throttle (ms) ~60fps
+  DRAG_THRESHOLD: 3,           // Pixels before drag starts
+};
+
+/**
+ * Interprets Scott-encoded Scene values from Agdelte.WebGL.Types
+ * and renders them using WebGL2. Supports:
  *   - Static geometry (box, sphere, plane, cylinder), transforms, cameras
  *   - Materials: unlit, flat (ambient-only), phong, pbr (Cook-Torrance), textured
  *   - Lights: ambient, directional, point, spot; bindLight (reactive)
@@ -205,6 +227,8 @@ function interpretSceneAttr(attr) {
     onScroll: (handler) => ({ type: 'onScroll', handler }),
     onClickAt: (handler) => ({ type: 'onClickAt', handler }),
     onDrag: (handler) => ({ type: 'onDrag', handler }),
+    onMiddleDrag: (handler) => ({ type: 'onMiddleDrag', handler }),
+    onScreenDrag: (handler) => ({ type: 'onScreenDrag', handler }),
     focusable: () => ({ type: 'focusable' }),
     onKeyDown: (handler) => ({ type: 'onKeyDown', handler }),
     onInput: (handler) => ({ type: 'onInput', handler }),
@@ -212,7 +236,8 @@ function interpretSceneAttr(attr) {
       type: 'transition',
       durationMs: interpretDuration(duration),
       easing: interpretEasing(easing)
-    })
+    }),
+    animateOnHover: () => ({ type: 'animateOnHover' })
   });
 }
 
@@ -253,7 +278,7 @@ function scottNatToNumber(n) {
   // Scott-encoded: walk zero/suc chain
   let result = 0;
   let current = n;
-  for (let i = 0; i < 100000; i++) {
+  for (let i = 0; i < CONFIG.MAX_NAT_VALUE; i++) {
     let done = false;
     current({
       'zero': () => { done = true; },
@@ -317,8 +342,7 @@ function listToArray(list) {
   if (Array.isArray(list)) return list;
   const items = [];
   let current = list;
-  const MAX = 10000;
-  for (let i = 0; i < MAX; i++) {
+  for (let i = 0; i < CONFIG.MAX_LIST_ITEMS; i++) {
     let done = false;
     current({
       '[]': () => { done = true; },
@@ -335,6 +359,46 @@ function listToArray(list) {
 // ---------------------------------------------------------------------------
 // Shader sources
 // ---------------------------------------------------------------------------
+
+// Shared GLSL snippets (DRY principle)
+const GLSL_LIGHT_UNIFORMS = `
+// Lights: up to 8
+uniform int u_numLights;
+uniform int u_lightType[8];         // 0=ambient, 1=directional, 2=point, 3=spot
+uniform vec3 u_lightColor[8];
+uniform float u_lightIntensity[8];
+uniform vec3 u_lightDir[8];         // direction (directional/spot)
+uniform vec3 u_lightPos[8];         // position (point/spot)
+uniform float u_lightRange[8];      // range (point/spot)
+uniform float u_lightAngle[8];      // cone angle in radians (spot)
+uniform float u_lightFalloff[8];    // edge falloff (spot)
+`;
+
+// Attenuation calculation helper
+const GLSL_ATTENUATION = `
+float calcAttenuation(int lightIdx, vec3 worldPos) {
+  if (u_lightType[lightIdx] == 0 || u_lightType[lightIdx] == 1) return 1.0;
+  vec3 toLight = u_lightPos[lightIdx] - worldPos;
+  float dist = length(toLight);
+  float atten = clamp(1.0 - dist / max(u_lightRange[lightIdx], 0.001), 0.0, 1.0);
+  atten *= atten;  // quadratic falloff
+  if (u_lightType[lightIdx] == 3) {
+    // Spot light cone
+    vec3 L = toLight / max(dist, 0.001);
+    vec3 spotDir = normalize(u_lightDir[lightIdx]);
+    float cosAngle = dot(-L, spotDir);
+    float cosOuter = cos(u_lightAngle[lightIdx]);
+    float cosInner = cos(u_lightAngle[lightIdx] * (1.0 - u_lightFalloff[lightIdx]));
+    atten *= clamp((cosAngle - cosOuter) / max(cosInner - cosOuter, 0.001), 0.0, 1.0);
+  }
+  return atten;
+}
+
+vec3 getLightDir(int lightIdx, vec3 worldPos) {
+  if (u_lightType[lightIdx] == 1) return normalize(-u_lightDir[lightIdx]);
+  return normalize(u_lightPos[lightIdx] - worldPos);
+}
+`;
 
 const VERT_SRC = `#version 300 es
 precision highp float;
@@ -425,16 +489,18 @@ void main() {
     if (u_lightType[i] == 0) {
       // Ambient
       result += u_color.rgb * lc;
-    } else if (u_flatMode == 1) {
-      // Flat material: skip non-ambient lights
-      continue;
     } else if (u_lightType[i] == 1) {
       // Directional (Blinn-Phong)
       vec3 L = normalize(-u_lightDir[i]);
       float diff = max(dot(N, L), 0.0);
-      vec3 H = normalize(L + V);
-      float spec = pow(max(dot(N, H), 0.0), u_shininess);
-      result += u_color.rgb * lc * diff + lc * spec;
+      if (u_flatMode == 1) {
+        // Flat material: diffuse only, no specular
+        result += u_color.rgb * lc * diff;
+      } else {
+        vec3 H = normalize(L + V);
+        float spec = pow(max(dot(N, H), 0.0), u_shininess);
+        result += u_color.rgb * lc * diff + lc * spec;
+      }
     } else if (u_lightType[i] == 2) {
       // Point light
       vec3 toLight = u_lightPos[i] - v_worldPos;
@@ -443,9 +509,13 @@ void main() {
       float atten = clamp(1.0 - dist / max(u_lightRange[i], 0.001), 0.0, 1.0);
       atten *= atten;  // quadratic falloff
       float diff = max(dot(N, L), 0.0);
-      vec3 H = normalize(L + V);
-      float spec = pow(max(dot(N, H), 0.0), u_shininess);
-      result += (u_color.rgb * lc * diff + lc * spec) * atten;
+      if (u_flatMode == 1) {
+        result += u_color.rgb * lc * diff * atten;
+      } else {
+        vec3 H = normalize(L + V);
+        float spec = pow(max(dot(N, H), 0.0), u_shininess);
+        result += (u_color.rgb * lc * diff + lc * spec) * atten;
+      }
     } else if (u_lightType[i] == 3) {
       // Spot light
       vec3 toLight = u_lightPos[i] - v_worldPos;
@@ -461,9 +531,13 @@ void main() {
       float spotAtten = clamp((cosAngle - cosOuter) / max(cosInner - cosOuter, 0.001), 0.0, 1.0);
       atten *= spotAtten;
       float diff = max(dot(N, L), 0.0);
-      vec3 H = normalize(L + V);
-      float spec = pow(max(dot(N, H), 0.0), u_shininess);
-      result += (u_color.rgb * lc * diff + lc * spec) * atten;
+      if (u_flatMode == 1) {
+        result += u_color.rgb * lc * diff * atten;
+      } else {
+        vec3 H = normalize(L + V);
+        float spec = pow(max(dot(N, H), 0.0), u_shininess);
+        result += (u_color.rgb * lc * diff + lc * spec) * atten;
+      }
     }
   }
 
@@ -615,7 +689,7 @@ void main() {
 }
 `;
 
-// Textured shader — samples texture, multiplied by tint color
+// Textured shader — Phong-lit texture sampling (texture * tint as base color)
 const TEX_VERT_SRC = `#version 300 es
 precision highp float;
 
@@ -628,10 +702,15 @@ uniform mat4 u_view;
 uniform mat4 u_proj;
 
 out vec2 v_uv;
+out vec3 v_normal;
+out vec3 v_worldPos;
 
 void main() {
+  vec4 worldPos = u_model * vec4(a_position, 1.0);
+  v_worldPos = worldPos.xyz;
+  v_normal = normalize(mat3(u_model) * a_normal);
   v_uv = a_uv;
-  gl_Position = u_proj * u_view * u_model * vec4(a_position, 1.0);
+  gl_Position = u_proj * u_view * worldPos;
 }
 `;
 
@@ -640,14 +719,76 @@ precision highp float;
 
 uniform sampler2D u_texture;
 uniform vec4 u_color;  // tint
+uniform float u_shininess;
+uniform vec3 u_cameraPos;
+
+// Lights: up to 8
+uniform int u_numLights;
+uniform int u_lightType[8];
+uniform vec3 u_lightColor[8];
+uniform float u_lightIntensity[8];
+uniform vec3 u_lightDir[8];
+uniform vec3 u_lightPos[8];
+uniform float u_lightRange[8];
+uniform float u_lightAngle[8];
+uniform float u_lightFalloff[8];
 
 in vec2 v_uv;
+in vec3 v_normal;
+in vec3 v_worldPos;
 
 out vec4 fragColor;
 
 void main() {
   vec4 texColor = texture(u_texture, v_uv);
-  fragColor = texColor * u_color;
+  vec3 baseColor = texColor.rgb * u_color.rgb;
+
+  vec3 N = normalize(v_normal);
+  vec3 V = normalize(u_cameraPos - v_worldPos);
+  vec3 result = vec3(0.0);
+
+  for (int i = 0; i < 8; i++) {
+    if (i >= u_numLights) break;
+    vec3 lc = u_lightColor[i] * u_lightIntensity[i];
+
+    if (u_lightType[i] == 0) {
+      result += baseColor * lc;
+    } else if (u_lightType[i] == 1) {
+      vec3 L = normalize(-u_lightDir[i]);
+      float diff = max(dot(N, L), 0.0);
+      vec3 H = normalize(L + V);
+      float spec = pow(max(dot(N, H), 0.0), u_shininess);
+      result += baseColor * lc * diff + lc * spec;
+    } else if (u_lightType[i] == 2) {
+      vec3 toLight = u_lightPos[i] - v_worldPos;
+      float dist = length(toLight);
+      vec3 L = toLight / max(dist, 0.001);
+      float atten = clamp(1.0 - dist / max(u_lightRange[i], 0.001), 0.0, 1.0);
+      atten *= atten;
+      float diff = max(dot(N, L), 0.0);
+      vec3 H = normalize(L + V);
+      float spec = pow(max(dot(N, H), 0.0), u_shininess);
+      result += (baseColor * lc * diff + lc * spec) * atten;
+    } else if (u_lightType[i] == 3) {
+      vec3 toLight = u_lightPos[i] - v_worldPos;
+      float dist = length(toLight);
+      vec3 L = toLight / max(dist, 0.001);
+      float atten = clamp(1.0 - dist / max(u_lightRange[i], 0.001), 0.0, 1.0);
+      atten *= atten;
+      vec3 spotDir = normalize(u_lightDir[i]);
+      float cosAngle = dot(-L, spotDir);
+      float cosOuter = cos(u_lightAngle[i]);
+      float cosInner = cos(u_lightAngle[i] * (1.0 - u_lightFalloff[i]));
+      float spotAtten = clamp((cosAngle - cosOuter) / max(cosInner - cosOuter, 0.001), 0.0, 1.0);
+      atten *= spotAtten;
+      float diff = max(dot(N, L), 0.0);
+      vec3 H = normalize(L + V);
+      float spec = pow(max(dot(N, H), 0.0), u_shininess);
+      result += (baseColor * lc * diff + lc * spec) * atten;
+    }
+  }
+
+  fragColor = vec4(result, texColor.a * u_color.a);
 }
 `;
 
@@ -963,28 +1104,27 @@ function rayIntersectEntry(ray, entry, parentMat) {
 
     switch (geo.type) {
       case 'sphere': {
-        // Unit sphere (radius 1) in local space, scaled by transform
-        localT = raySphere(localRay, { x: 0, y: 0, z: 0 }, 1.0);
+        localT = raySphere(localRay, { x: 0, y: 0, z: 0 }, geo.radius);
         break;
       }
       case 'box': {
         // Box geometry dims are full width; half-extents = dims/2
-        // In local space the box is centered at origin with half-extents 0.5
-        // (the TRS scale already accounts for dims)
-        localT = rayAABB(localRay, 0.5, 0.5, 0.5);
+        const bd = geo.dims;
+        localT = rayAABB(localRay, bd.x * 0.5, bd.y * 0.5, bd.z * 0.5);
         break;
       }
       case 'cylinder': {
-        // Approximate cylinder as a box for now (height along Y)
-        localT = rayAABB(localRay, 0.5, 0.5, 0.5);
+        // Approximate cylinder as a box (height along Y)
+        localT = rayAABB(localRay, geo.radius, geo.height * 0.5, geo.radius);
         break;
       }
       case 'plane': {
         localT = rayPlane(localRay);
-        // Check bounds: plane goes from -0.5 to 0.5 in X and Z
+        // Check bounds: plane extends to ±(size/2) in X and Z
         if (localT !== null) {
           const lp = rayAt(localRay, localT);
-          if (Math.abs(lp.x) > 0.5 || Math.abs(lp.z) > 0.5) localT = null;
+          const hw = geo.size.x * 0.5, hh = geo.size.y * 0.5;
+          if (Math.abs(lp.x) > hw || Math.abs(lp.z) > hh) localT = null;
         }
         break;
       }
@@ -992,7 +1132,8 @@ function rayIntersectEntry(ray, entry, parentMat) {
         localT = rayPlane(localRay);
         if (localT !== null) {
           const lp = rayAt(localRay, localT);
-          if (Math.abs(lp.x) > 0.5 || Math.abs(lp.z) > 0.5) localT = null;
+          const qw = geo.size.x * 0.5, qh = geo.size.y * 0.5;
+          if (Math.abs(lp.x) > qw || Math.abs(lp.z) > qh) localT = null;
         }
         break;
       }
@@ -1077,6 +1218,41 @@ function rayPickGroup(ray, entry, parentMat, results) {
   }
 }
 
+/**
+ * Find ray hit point for a specific pickId (handles groups with parent transforms).
+ */
+function rayPickForId(ray, renderList, targetPickId) {
+  for (const entry of renderList) {
+    if (entry.type === 'mesh' && entry.pickId === targetPickId) {
+      const hit = rayIntersectEntry(ray, entry, null);
+      if (hit) return hit.point;
+    } else if (entry.type === 'group') {
+      const result = rayPickGroupForId(ray, entry, null, targetPickId);
+      if (result) return result;
+    }
+  }
+  return null;
+}
+
+function rayPickGroupForId(ray, entry, parentMat, targetPickId) {
+  if (entry.type === 'mesh') {
+    if (entry.pickId === targetPickId) {
+      const hit = rayIntersectEntry(ray, entry, parentMat);
+      if (hit) return hit.point;
+    }
+  } else if (entry.type === 'group') {
+    const tfm = entry.transform;
+    const groupMat = parentMat
+      ? mat4Multiply(parentMat, mat4FromTRS(tfm.pos, tfm.rot, tfm.scale))
+      : mat4FromTRS(tfm.pos, tfm.rot, tfm.scale);
+    for (const child of entry.children) {
+      const result = rayPickGroupForId(ray, child, groupMat, targetPickId);
+      if (result) return result;
+    }
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Geometry generation
 // ---------------------------------------------------------------------------
@@ -1099,6 +1275,15 @@ function createBoxGeometry(gl, dims) {
     1, 0, 0,  1, 0, 0,  1, 0, 0,  1, 0, 0,
    -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0,
   ]);
+  // Each face: bottom-left, bottom-right, top-right, top-left
+  const uvs = new Float32Array([
+    0,0, 1,0, 1,1, 0,1,  // front
+    0,0, 1,0, 1,1, 0,1,  // back
+    0,0, 1,0, 1,1, 0,1,  // top
+    0,0, 1,0, 1,1, 0,1,  // bottom
+    0,0, 1,0, 1,1, 0,1,  // right
+    0,0, 1,0, 1,1, 0,1,  // left
+  ]);
   const indices = new Uint16Array([
      0,  1,  2,   0,  2,  3,
      4,  5,  6,   4,  6,  7,
@@ -1107,7 +1292,7 @@ function createBoxGeometry(gl, dims) {
     16, 17, 18,  16, 18, 19,
     20, 21, 22,  20, 22, 23,
   ]);
-  return uploadGeometry(gl, positions, normals, indices);
+  return uploadGeometry(gl, positions, normals, indices, uvs);
 }
 
 function createSphereGeometry(gl, radius) {
@@ -1138,14 +1323,17 @@ function createPlaneGeometry(gl, size) {
   const hw = size.x * 0.5, hh = size.y * 0.5;
   const positions = new Float32Array([-hw, 0, -hh, hw, 0, -hh, hw, 0, hh, -hw, 0, hh]);
   const normals = new Float32Array([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0]);
+  // Tile UVs based on size (1 unit = 1 tile repeat)
+  const uvs = new Float32Array([0, 0, size.x, 0, size.x, size.y, 0, size.y]);
   const indices = new Uint16Array([0, 1, 2, 0, 2, 3]);
-  return uploadGeometry(gl, positions, normals, indices);
+  return uploadGeometry(gl, positions, normals, indices, uvs);
 }
 
 function createCylinderGeometry(gl, radius, height) {
   const segments = 24;
   const positions = [], normals = [], indices = [];
   const hh = height * 0.5;
+  // Side wall
   for (let i = 0; i <= segments; i++) {
     const theta = (i / segments) * 2 * Math.PI;
     const cosT = Math.cos(theta), sinT = Math.sin(theta);
@@ -1157,6 +1345,32 @@ function createCylinderGeometry(gl, radius, height) {
   for (let i = 0; i < segments; i++) {
     const a = i * 2, b = a + 1, c = a + 2, d = a + 3;
     indices.push(a, b, c, b, d, c);
+  }
+  // Top cap
+  const topCenter = positions.length / 3;
+  positions.push(0, hh, 0);
+  normals.push(0, 1, 0);
+  for (let i = 0; i < segments; i++) {
+    const theta = (i / segments) * 2 * Math.PI;
+    positions.push(radius * Math.cos(theta), hh, radius * Math.sin(theta));
+    normals.push(0, 1, 0);
+  }
+  for (let i = 0; i < segments; i++) {
+    const next = (i + 1) % segments;
+    indices.push(topCenter, topCenter + 1 + i, topCenter + 1 + next);
+  }
+  // Bottom cap
+  const botCenter = positions.length / 3;
+  positions.push(0, -hh, 0);
+  normals.push(0, -1, 0);
+  for (let i = 0; i < segments; i++) {
+    const theta = (i / segments) * 2 * Math.PI;
+    positions.push(radius * Math.cos(theta), -hh, radius * Math.sin(theta));
+    normals.push(0, -1, 0);
+  }
+  for (let i = 0; i < segments; i++) {
+    const next = (i + 1) % segments;
+    indices.push(botCenter, botCenter + 1 + next, botCenter + 1 + i);
   }
   return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), new Uint16Array(indices));
 }
@@ -1225,8 +1439,8 @@ function createTextureCache(gl, scheduleFrame) {
       gl.generateMipmap(gl.TEXTURE_2D);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
       entry.tex = tex;
       entry.loaded = true;
       scheduleFrame();  // re-render with loaded texture
@@ -1249,7 +1463,7 @@ function createTextureCache(gl, scheduleFrame) {
  * Each glyph: { x, y, w, h, advance, xOff, yOff } in atlas pixel coords.
  */
 function createFontAtlas(gl, fontFamily, fontSize) {
-  const atlasSize = 512;
+  const atlasSize = 1024;
   const canvas2d = document.createElement('canvas');
   canvas2d.width = atlasSize;
   canvas2d.height = atlasSize;
@@ -1258,7 +1472,7 @@ function createFontAtlas(gl, fontFamily, fontSize) {
   // Font setup — render at high resolution for quality
   const renderSize = Math.max(48, fontSize);
   ctx.font = `${renderSize}px ${fontFamily}`;
-  ctx.textBaseline = 'top';
+  ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = 'white';
 
   // ASCII range 32-126 + some useful Unicode
@@ -1267,20 +1481,24 @@ function createFontAtlas(gl, fontFamily, fontSize) {
   // Add a few common Unicode chars
   for (const c of '…—–·×÷±≤≥≠∞°') chars.push(c);
 
-  const padding = 2;
+  const padding = 4;
   let curX = padding, curY = padding;
   let rowHeight = 0;
   const glyphs = new Map();
 
-  // Measure line height
-  const metrics = ctx.measureText('M');
-  const lineHeight = metrics.actualBoundingBoxDescent !== undefined
-    ? (metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent)
-    : renderSize;
+  // Measure full line height including descenders using a string with ascenders+descenders
+  const fullMetrics = ctx.measureText('Mgypq|');
+  const ascent = fullMetrics.actualBoundingBoxAscent || renderSize * 0.8;
+  const descent = fullMetrics.actualBoundingBoxDescent || renderSize * 0.2;
+  const lineHeight = ascent + descent;
 
   for (const ch of chars) {
     const m = ctx.measureText(ch);
-    const w = Math.ceil(m.width) + padding * 2;
+    // Use actual bounding box width for proper glyph cell sizing
+    const bbLeft = m.actualBoundingBoxLeft || 0;
+    const bbRight = m.actualBoundingBoxRight || m.width;
+    const glyphW = Math.ceil(bbLeft + bbRight);
+    const w = glyphW + padding * 2;
     const h = Math.ceil(lineHeight) + padding * 2;
 
     if (curX + w > atlasSize) {
@@ -1290,12 +1508,16 @@ function createFontAtlas(gl, fontFamily, fontSize) {
     }
     if (curY + h > atlasSize) break; // atlas full
 
-    ctx.fillText(ch, curX + padding, curY + padding);
+    // Draw glyph with alphabetic baseline positioned so full ascent+descent fits
+    const drawX = curX + padding + bbLeft;
+    const drawY = curY + padding + Math.ceil(ascent);
+    ctx.fillText(ch, drawX, drawY);
     glyphs.set(ch, {
       x: curX, y: curY,
       w, h,
       advance: m.width / renderSize, // normalized to unit size
-      xOff: 0, yOff: 0,
+      xOff: -bbLeft / renderSize,
+      yOff: 0,
     });
 
     curX += w + padding;
@@ -1730,16 +1952,35 @@ function createTexProgram(gl) {
     gl.deleteProgram(prog);
     throw new Error('Tex program link error: ' + log);
   }
-  return {
-    program: prog,
-    uniforms: {
-      model:   gl.getUniformLocation(prog, 'u_model'),
-      view:    gl.getUniformLocation(prog, 'u_view'),
-      proj:    gl.getUniformLocation(prog, 'u_proj'),
-      color:   gl.getUniformLocation(prog, 'u_color'),
-      texture: gl.getUniformLocation(prog, 'u_texture'),
-    }
+  const uniforms = {
+    model:     gl.getUniformLocation(prog, 'u_model'),
+    view:      gl.getUniformLocation(prog, 'u_view'),
+    proj:      gl.getUniformLocation(prog, 'u_proj'),
+    color:     gl.getUniformLocation(prog, 'u_color'),
+    texture:   gl.getUniformLocation(prog, 'u_texture'),
+    shininess: gl.getUniformLocation(prog, 'u_shininess'),
+    cameraPos: gl.getUniformLocation(prog, 'u_cameraPos'),
+    numLights: gl.getUniformLocation(prog, 'u_numLights'),
+    lightType: [],
+    lightColor: [],
+    lightIntensity: [],
+    lightDir: [],
+    lightPos: [],
+    lightRange: [],
+    lightAngle: [],
+    lightFalloff: [],
   };
+  for (let i = 0; i < 8; i++) {
+    uniforms.lightType.push(gl.getUniformLocation(prog, `u_lightType[${i}]`));
+    uniforms.lightColor.push(gl.getUniformLocation(prog, `u_lightColor[${i}]`));
+    uniforms.lightIntensity.push(gl.getUniformLocation(prog, `u_lightIntensity[${i}]`));
+    uniforms.lightDir.push(gl.getUniformLocation(prog, `u_lightDir[${i}]`));
+    uniforms.lightPos.push(gl.getUniformLocation(prog, `u_lightPos[${i}]`));
+    uniforms.lightRange.push(gl.getUniformLocation(prog, `u_lightRange[${i}]`));
+    uniforms.lightAngle.push(gl.getUniformLocation(prog, `u_lightAngle[${i}]`));
+    uniforms.lightFalloff.push(gl.getUniformLocation(prog, `u_lightFalloff[${i}]`));
+  }
+  return { program: prog, uniforms };
 }
 
 function createPickProgram(gl) {
@@ -1770,6 +2011,7 @@ function createPickProgram(gl) {
  * Renders at full canvas resolution with RGBA8 color + depth.
  */
 function createPickFramebuffer(gl, width, height) {
+  if (width <= 0 || height <= 0) return null;
   const fb = gl.createFramebuffer();
   gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
 
@@ -1992,6 +2234,28 @@ function findTransition(attrs) {
   return null;
 }
 
+/**
+ * Search for a transition attr in a scene node subtree.
+ * If the node has attrs, check them directly.
+ * If the node is a group/animate (no attrs), search its children/child.
+ */
+function findTransitionInSubtree(node) {
+  if (!node) return null;
+  // Stop at bindTransform boundaries — each bindTransform finds its own transition
+  if (node.type === 'bindTransform') return null;
+  if (node.attrs) return findTransition(node.attrs);
+  // group: check children
+  if (node.type === 'group' && node.children) {
+    for (const child of node.children) {
+      const t = findTransitionInSubtree(child);
+      if (t) return t;
+    }
+  }
+  // animate: check single child
+  if (node.child) return findTransitionInSubtree(node.child);
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // GL Bindings — reactive scene graph nodes
 // ---------------------------------------------------------------------------
@@ -2121,15 +2385,65 @@ function collectNode(node, overrideTransform, renderList, bindings, model, pickR
       const scottTransform = node.timeFn(0.0);
       const initialTransform = interpretTransform(scottTransform);
 
-      // Process child with initial transform
+      // If a parent bindTransform provides an override, compose it with the
+      // animated transform by adding positions together. Store the override
+      // so tickAnimateNodes can compose each frame.
+      const baseOffset = overrideTransform || null;
+      const composedInitial = baseOffset
+        ? { pos: { x: initialTransform.pos.x + baseOffset.pos.x,
+                    y: initialTransform.pos.y + baseOffset.pos.y,
+                    z: initialTransform.pos.z + baseOffset.pos.z },
+            rot: initialTransform.rot, scale: initialTransform.scale }
+        : initialTransform;
+
+      // Process child with composed transform
       const childEntries = [];
-      collectNode(node.child, initialTransform, childEntries, bindings, model, pickRegistry, lights, animateNodes);
+      const lightsBefore = lights.length;
+      collectNode(node.child, composedInitial, childEntries, bindings, model, pickRegistry, lights, animateNodes);
+      const lightsAfter = lights.length;
 
       // Register animate node: each frame, call timeFn(t) and update child entries
-      animateNodes.push({
+      const animEntry = {
         timeFn: node.timeFn,
         targets: childEntries,
-      });
+        baseOffset,   // stored for composing in tickAnimateNodes
+      };
+
+      // If the child added lights, track their indices so we can update
+      // their positions each frame from the animated transform
+      if (lightsAfter > lightsBefore) {
+        animEntry.lightIndices = [];
+        animEntry.lightsRef = lights;
+        for (let i = lightsBefore; i < lightsAfter; i++) {
+          animEntry.lightIndices.push(i);
+        }
+      }
+
+      // Check if any child entry has animateOnHover attr — if so, this
+      // animate node only ticks while its children are hovered.
+      let isHoverOnly = false;
+      const hoverPickIds = new Set();
+      for (const ce of childEntries) {
+        if (ce.pickId != null) {
+          const reg = pickRegistry.map.get(ce.pickId);
+          if (reg && reg.attrs) {
+            for (const a of reg.attrs) {
+              if (a.type === 'animateOnHover') {
+                isHoverOnly = true;
+              }
+            }
+          }
+          if (isHoverOnly) hoverPickIds.add(ce.pickId);
+        }
+      }
+      if (isHoverOnly) {
+        animEntry.hoverOnly = true;
+        animEntry.hoverPickIds = hoverPickIds;
+        animEntry.accumTime = 0;      // accumulated hover time in seconds
+        animEntry.lastTimestamp = null; // last frame timestamp when hovered
+      }
+
+      animateNodes.push(animEntry);
 
       renderList.push(...childEntries);
       break;
@@ -2141,13 +2455,21 @@ function collectNode(node, overrideTransform, renderList, bindings, model, pickR
       const initialTransform = interpretTransform(scottTransform);
 
       // Create a mutable render entry from the child
-      // The child could be a mesh, bindMaterial, group, etc.
+      // The child could be a mesh, bindMaterial, group, animate, etc.
       const childEntries = [];
+      const animBefore = animateNodes.length;
       collectNode(node.child, initialTransform, childEntries, bindings, model, pickRegistry, lights, animateNodes);
+      const animAfter = animateNodes.length;
 
-      // Look for transition spec in child's attrs
-      const childAttrs = node.child ? node.child.attrs : null;
-      const trans = childAttrs ? findTransition(childAttrs) : null;
+      // If the child added animate entries, collect them so we can update their
+      // baseOffset when the model changes (compose bindTransform + animate).
+      const childAnimEntries = [];
+      for (let i = animBefore; i < animAfter; i++) {
+        childAnimEntries.push(animateNodes[i]);
+      }
+
+      // Look for transition spec in child's attrs (search into groups/animate)
+      const trans = findTransitionInSubtree(node.child);
 
       // Register binding: on model change, re-extract and update all child entries
       bindings.push({
@@ -2155,6 +2477,7 @@ function collectNode(node, overrideTransform, renderList, bindings, model, pickR
         extract: node.extract,
         lastValue: initialTransform,
         targets: childEntries,  // entries whose transform we update
+        childAnimEntries,       // animate entries to update baseOffset on
         // Transition animation state
         transition: trans,      // null or { durationMs, easing }
         animation: null,        // active animation: { from, to, startTime, durationMs, easingFn }
@@ -2292,6 +2615,12 @@ function updateGLBindings(bindings, newModel, now) {
             entry.transform = newVal;
           }
         }
+        // Also update baseOffset on any child animate entries (compose transforms)
+        if (b.childAnimEntries) {
+          for (const anim of b.childAnimEntries) {
+            anim.baseOffset = newVal;
+          }
+        }
         b.lastValue = newVal;
         dirty = true;
       }
@@ -2389,12 +2718,45 @@ function tickAnimations(bindings, now) {
  * Tick all animate nodes — call timeFn(t) and update child entry transforms.
  * t is in seconds (Float).
  */
-function tickAnimateNodes(animateNodes, timeSeconds) {
+function tickAnimateNodes(animateNodes, timeSeconds, hoveredId) {
   for (const anim of animateNodes) {
-    const scottTransform = anim.timeFn(timeSeconds);
-    const newTransform = interpretTransform(scottTransform);
+    // For hover-only animations, accumulate time only when hovered
+    let effectiveTime = timeSeconds;
+    if (anim.hoverOnly) {
+      const isHovered = anim.hoverPickIds.has(hoveredId);
+      if (isHovered) {
+        // Accumulate time delta
+        const dt = anim.lastTimestamp !== null ? (timeSeconds - anim.lastTimestamp) : 0;
+        anim.accumTime += dt;
+        anim.lastTimestamp = timeSeconds;
+      } else {
+        // Not hovered — freeze, reset timestamp so we recalculate delta on re-hover
+        anim.lastTimestamp = null;
+      }
+      effectiveTime = anim.accumTime;
+    }
+
+    const scottTransform = anim.timeFn(effectiveTime);
+    const rawTransform = interpretTransform(scottTransform);
+
+    // Compose with base offset from parent bindTransform (if any)
+    const newTransform = anim.baseOffset
+      ? { pos: { x: rawTransform.pos.x + anim.baseOffset.pos.x,
+                  y: rawTransform.pos.y + anim.baseOffset.pos.y,
+                  z: rawTransform.pos.z + anim.baseOffset.pos.z },
+          rot: rawTransform.rot, scale: rawTransform.scale }
+      : rawTransform;
+
     for (const entry of anim.targets) {
       entry.transform = newTransform;
+    }
+    // Update positions of any lights that were children of this animate node
+    if (anim.lightIndices) {
+      for (const idx of anim.lightIndices) {
+        const lt = anim.lightsRef[idx];
+        if (lt.position) lt.position = newTransform.pos;
+        else if (lt.pos) lt.pos = newTransform.pos;  // spot lights use .pos
+      }
     }
   }
 }
@@ -2456,7 +2818,7 @@ function renderEntry(gl, programs, geoCache, texCache, fontCache, entry, parentM
       gl.uniform3f(prog.uniforms.cameraPos, cameraPos.x, cameraPos.y, cameraPos.z);
       uploadLights(gl, prog, lights);
     } else if (mat.type === 'textured' && programs.tex) {
-      // Textured material
+      // Textured material (Phong-lit with texture sampling)
       const prog = programs.tex;
       gl.useProgram(prog.program);
       gl.uniformMatrix4fv(prog.uniforms.proj, false, programs._projMat);
@@ -2464,6 +2826,9 @@ function renderEntry(gl, programs, geoCache, texCache, fontCache, entry, parentM
       gl.uniformMatrix4fv(prog.uniforms.model, false, modelMat);
       const t = mat.tint;
       gl.uniform4f(prog.uniforms.color, t.r, t.g, t.b, t.a);
+      gl.uniform1f(prog.uniforms.shininess, 32.0);
+      gl.uniform3f(prog.uniforms.cameraPos, cameraPos.x, cameraPos.y, cameraPos.z);
+      uploadLights(gl, prog, lights);
       // Bind texture
       const texEntry = texCache ? texCache.getTexture(mat.url) : null;
       if (texEntry) {
@@ -2783,16 +3148,23 @@ function initGLCanvas(canvas) {
   const rawNodes = listToArray(sceneData.nodes).map(interpretSceneNode);
 
   // Compile shaders (unlit + phong + pbr + textured + picking)
-  const programs = {
-    unlit: createProgram(gl),
-    phong: createPhongProgram(gl),
-    pbr:   createPbrProgram(gl),
-    tex:   createTexProgram(gl),
-    text:  createTextRenderProgram(gl),
-    _projMat: null,
-    _viewMat: null,
-  };
-  const pickProg = createPickProgram(gl);
+  let programs;
+  let pickProg;
+  try {
+    programs = {
+      unlit: createProgram(gl),
+      phong: createPhongProgram(gl),
+      pbr:   createPbrProgram(gl),
+      tex:   createTexProgram(gl),
+      text:  createTextRenderProgram(gl),
+      _projMat: null,
+      _viewMat: null,
+    };
+    pickProg = createPickProgram(gl);
+  } catch(e) {
+    console.error('[reactive-gl] Shader compilation failed:', e.message);
+    return;
+  }
   const geoCache = new Map();
   const fontCache = createFontCache(gl);
 
@@ -2849,7 +3221,7 @@ function initGLCanvas(canvas) {
   function doFrame(timestamp) {
     // Tick continuous animate nodes (time in seconds)
     if (hasAnimations) {
-      tickAnimateNodes(animateNodes, timestamp / 1000.0);
+      tickAnimateNodes(animateNodes, timestamp / 1000.0, hoveredId);
     }
 
     // Tick declarative transition animations
@@ -2898,7 +3270,8 @@ function initGLCanvas(canvas) {
 
   let hoveredId = 0;  // currently hovered pick ID (0 = none)
   let focusedId = 0;  // currently focused pick ID for keyboard events
-  let dragState = null; // { pickId, startPoint: Vec3 } — active drag
+  let dragState = null; // { pickId, startPoint: Vec3, viewMat, projMat } — active drag
+  let didDrag = false;  // true if mousemove occurred during drag — suppresses click
 
   function ensurePickBuffer() {
     if (pickDirty && pickFB) {
@@ -2936,12 +3309,14 @@ function initGLCanvas(canvas) {
    */
   function getRayHitAt(event, pickId) {
     if (!pickId || pickId === 0) return null;
-    const regEntry = pickRegistry.map.get(pickId);
-    if (!regEntry) return null;
     const ray = screenToRay(event.clientX, event.clientY, canvas, projMat, viewMat);
     if (!ray) return null;
-    const hit = rayIntersectEntry(ray, regEntry.entry, null);
-    return hit ? hit.point : null;
+    // Use rayPickEntries which correctly handles group parent transforms
+    const result = rayPickEntries(ray, renderList, pickRegistry);
+    if (result && result.pickId === pickId) return result.point;
+    // Fallback: if the closest hit is a different object, still try to find our pickId
+    // by scanning all hits (rare case when objects overlap)
+    return rayPickForId(ray, renderList, pickId);
   }
 
   /**
@@ -2956,6 +3331,8 @@ function initGLCanvas(canvas) {
 
   if (hasPickables) {
     canvas.addEventListener('click', (e) => {
+      // Suppress click if a drag just occurred (mousedown → mousemove → mouseup → click)
+      if (didDrag) { didDrag = false; return; }
       ensurePickBuffer();
       const id = getPickIdAt(e);
       if (!dispatch || id === 0) return;
@@ -2982,56 +3359,114 @@ function initGLCanvas(canvas) {
     });
 
     canvas.addEventListener('mousedown', (e) => {
+      if (!dispatch) return;
+      const isMiddle = e.button === 1;
+
       ensurePickBuffer();
       const id = getPickIdAt(e);
-      if (!dispatch || id === 0) return;
-      const entry = pickRegistry.map.get(id);
-      if (!entry) return;
 
-      // Start drag if entry has onDrag
-      for (const attr of entry.attrs) {
-        if (attr.type === 'onDrag') {
-          const point = getRayHitAt(e, id);
-          if (point) {
-            dragState = { pickId: id, startPoint: point };
+      let targetId = id;
+      let targetEntry = id !== 0 ? pickRegistry.map.get(id) : null;
+
+      // Determine which attr type to use based on button and available attrs
+      let attrType;
+      if (isMiddle) {
+        attrType = 'onMiddleDrag';
+      } else {
+        // Left button: prefer onScreenDrag (screen-space orbit), fallback to onDrag (world-space)
+        if (targetEntry && targetEntry.attrs.some(a => a.type === 'onScreenDrag')) {
+          attrType = 'onScreenDrag';
+        } else if (targetEntry && targetEntry.attrs.some(a => a.type === 'onDrag')) {
+          attrType = 'onDrag';
+        } else {
+          attrType = 'onScreenDrag'; // will try fallback below
+        }
+      }
+
+      // Fallback: if picked object lacks the attr, search all entries
+      if (!targetEntry || !targetEntry.attrs.some(a => a.type === attrType)) {
+        for (const [eid, entry] of pickRegistry.map) {
+          if (entry.attrs.some(a => a.type === attrType)) {
+            targetId = eid;
+            targetEntry = entry;
+            break;
+          }
+        }
+      }
+
+      if (!targetEntry || targetId === 0) return;
+
+      // Start drag if entry has the right attr type
+      for (const attr of targetEntry.attrs) {
+        if (attr.type === attrType) {
+          if (attrType === 'onScreenDrag' || attrType === 'onMiddleDrag') {
+            // Screen-space drag: store pixel coordinates, no raycasting needed
+            dragState = {
+              pickId: targetId,
+              startPoint: { x: e.clientX, y: e.clientY, z: 0 },
+              attrType: attrType
+            };
             e.preventDefault();
+          } else {
+            // World-space drag (onDrag): raycast to floor plane
+            let point;
+            if (id !== 0) {
+              point = getRayHitAt(e, id);
+            } else {
+              const ray = screenToRay(e.clientX, e.clientY, canvas, projMat, viewMat);
+              if (ray && Math.abs(ray.dir.y) > 1e-10) {
+                const t = -ray.origin.y / ray.dir.y;
+                if (t >= 0) point = rayAt(ray, t);
+              }
+            }
+            if (point) {
+              dragState = {
+                pickId: targetId,
+                startPoint: point,
+                dragViewMat: viewMat.slice(),
+                dragProjMat: projMat.slice(),
+                attrType: attrType
+              };
+              e.preventDefault();
+            }
           }
           break;
         }
       }
     });
 
+    // Prevent middle-click auto-scroll
+    canvas.addEventListener('auxclick', (e) => { if (e.button === 1) e.preventDefault(); });
+
     canvas.addEventListener('mousemove', (e) => {
       // Handle active drag
       if (dragState && dispatch) {
-        const ray = screenToRay(e.clientX, e.clientY, canvas, projMat, viewMat);
-        if (ray) {
-          // Project current mouse position onto a plane at the drag start point's depth
-          // Use the plane perpendicular to the camera view direction at startPoint
-          const camDir = {
-            x: dragState.startPoint.x - cameraPos.x,
-            y: dragState.startPoint.y - cameraPos.y,
-            z: dragState.startPoint.z - cameraPos.z,
-          };
-          const camDirLen = Math.hypot(camDir.x, camDir.y, camDir.z);
-          if (camDirLen > 1e-10) {
-            const n = { x: camDir.x / camDirLen, y: camDir.y / camDirLen, z: camDir.z / camDirLen };
-            // Plane: dot(n, p - startPoint) = 0
-            // Ray: origin + t * dir
-            // t = dot(n, startPoint - origin) / dot(n, dir)
-            const denom = n.x * ray.dir.x + n.y * ray.dir.y + n.z * ray.dir.z;
+        didDrag = true;
+
+        if (dragState.attrType === 'onScreenDrag' || dragState.attrType === 'onMiddleDrag') {
+          // Screen-space drag: pass pixel coordinates directly as Vec3 {x, y, z:0}
+          const currentPoint = { x: e.clientX, y: e.clientY, z: 0 };
+          const entry = pickRegistry.map.get(dragState.pickId);
+          if (entry) {
+            for (const attr of entry.attrs) {
+              if (attr.type === dragState.attrType) {
+                dispatch(attr.handler(dragState.startPoint)(currentPoint));
+              }
+            }
+          }
+        } else {
+          // World-space drag (onDrag) — use snapshotted matrices
+          const ray = screenToRay(e.clientX, e.clientY, canvas, dragState.dragProjMat, dragState.dragViewMat);
+          if (ray) {
+            const denom = ray.dir.y;
             if (Math.abs(denom) > 1e-10) {
-              const dx = dragState.startPoint.x - ray.origin.x;
-              const dy = dragState.startPoint.y - ray.origin.y;
-              const dz = dragState.startPoint.z - ray.origin.z;
-              const t = (n.x * dx + n.y * dy + n.z * dz) / denom;
+              const t = (dragState.startPoint.y - ray.origin.y) / denom;
               if (t >= 0) {
                 const currentPoint = rayAt(ray, t);
                 const entry = pickRegistry.map.get(dragState.pickId);
                 if (entry) {
                   for (const attr of entry.attrs) {
-                    if (attr.type === 'onDrag') {
-                      // onDrag : (Vec3 → Vec3 → Msg) — start, current
+                    if (attr.type === dragState.attrType) {
                       dispatch(attr.handler(dragState.startPoint)(currentPoint));
                     }
                   }
@@ -3067,16 +3502,31 @@ function initGLCanvas(canvas) {
     });
 
     canvas.addEventListener('wheel', (e) => {
+      if (!dispatch) return;
+      e.preventDefault();
       ensurePickBuffer();
       const id = getPickIdAt(e);
-      if (!dispatch || id === 0) return;
-      const entry = pickRegistry.map.get(id);
-      if (!entry) return;
-      for (const attr of entry.attrs) {
-        if (attr.type === 'onScroll') {
-          e.preventDefault();
-          // deltaY normalized: positive = scroll down, negative = scroll up
-          dispatch(attr.handler(e.deltaY));
+      const dispatched = new Set();
+      // Per-object scroll (color-picked object under cursor)
+      if (id !== 0) {
+        const entry = pickRegistry.map.get(id);
+        if (entry) {
+          for (const attr of entry.attrs) {
+            if (attr.type === 'onScroll') {
+              dispatch(attr.handler(e.deltaY));
+              dispatched.add(id);
+            }
+          }
+        }
+      }
+      // Always also dispatch to ALL other objects with onScroll (canvas-level zoom)
+      for (const [eid, entry] of pickRegistry.map) {
+        if (dispatched.has(eid)) continue;
+        for (const attr of entry.attrs) {
+          if (attr.type === 'onScroll') {
+            dispatch(attr.handler(e.deltaY));
+            dispatched.add(eid);
+          }
         }
       }
     }, { passive: false });
@@ -3163,13 +3613,26 @@ function initGLCanvas(canvas) {
   canvas.__glContext = gl;
 
   // --- Resize handling (HiDPI aware) ---
+  // Lock CSS size to the initial layout size to prevent resize loops.
+  // Without explicit CSS width/height, setting canvas.width changes intrinsic
+  // CSS size, which triggers ResizeObserver again → exponential growth.
+  let cssLocked = false;
   function handleResize() {
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
+
+    // Lock CSS dimensions on first resize to prevent feedback loop
+    if (!cssLocked && rect.width > 0 && rect.height > 0) {
+      canvas.style.width = rect.width + 'px';
+      canvas.style.height = rect.height + 'px';
+      cssLocked = true;
+    }
+
     const drawW = Math.round(rect.width * dpr);
     const drawH = Math.round(rect.height * dpr);
 
-    // Skip if nothing changed
+    // Skip zero-size (element not yet laid out) or unchanged
+    if (drawW <= 0 || drawH <= 0) return;
     if (canvas.width === drawW && canvas.height === drawH) return;
 
     canvas.width = drawW;

@@ -8,24 +8,47 @@ From `Agdelte.Reactive.Node`.
 
 ```agda
 record ReactiveApp (Model Msg : Set) : Set₁ where
+  constructor mkReactiveApp
   field
     init     : Model
     update   : Msg → Model → Model
     template : Node Model Msg
+    cmd      : Msg → Model → Cmd Msg   -- Side effects
+    subs     : Model → Event Msg       -- Subscriptions
 ```
 
-### Constructor
+### Constructors
+
+**Full constructor** (5 arguments):
 
 ```agda
-mkReactiveApp : Model → (Msg → Model → Model) → Node Model Msg → ReactiveApp Model Msg
+mkReactiveApp : Model → (Msg → Model → Model) → Node Model Msg
+              → (Msg → Model → Cmd Msg) → (Model → Event Msg)
+              → ReactiveApp Model Msg
 ```
 
-### Subscriptions and Commands (separate exports)
+**Simple helper** (3 arguments, for apps without cmd/subs):
 
 ```agda
--- Exported separately from module:
-subs : Model → Event Msg      -- optional
-cmd  : Msg → Model → Cmd Msg  -- optional
+simpleApp : Model → (Msg → Model → Model) → Node Model Msg → ReactiveApp Model Msg
+simpleApp init update template = mkReactiveApp init update template (λ _ _ → ε) (const never)
+```
+
+### Example
+
+```agda
+-- Simple app (no side effects)
+app = simpleApp initialModel updateModel myTemplate
+
+-- Full TEA with commands and subscriptions
+app = mkReactiveApp initialModel updateModel myTemplate cmd' subs'
+  where
+    cmd' : Msg → Model → Cmd Msg
+    cmd' SendRequest _ = httpPost "/api" data GotResponse
+    cmd' _ _ = ε
+
+    subs' : Model → Event Msg
+    subs' m = if running m then interval 100 Tick else never
 ```
 
 ---

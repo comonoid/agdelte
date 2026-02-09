@@ -220,7 +220,7 @@ smilTemplate =
 ------------------------------------------------------------------------
 
 smilApp : ReactiveApp Model Msg
-smilApp = mkReactiveApp (mkModel tt) updateModel smilTemplate
+smilApp = simpleApp (mkModel tt) updateModel smilTemplate
 
 app : ReactiveApp Model Msg
 app = smilApp

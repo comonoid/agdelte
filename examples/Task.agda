@@ -75,9 +75,9 @@ updateModel (GotResult (err e)) m = mkModel (error e) "Error!"
 -- Command
 ------------------------------------------------------------------------
 
-cmd : Msg → Model → Cmd Msg
-cmd FetchChain _ = attempt fetchChain GotResult
-cmd _ _ = ε
+cmd' : Msg → Model → Cmd Msg
+cmd' FetchChain _ = attempt fetchChain GotResult
+cmd' _ _ = ε
 
 ------------------------------------------------------------------------
 -- Helpers
@@ -126,14 +126,12 @@ taskTemplate =
 -- Subs (none for this demo)
 ------------------------------------------------------------------------
 
-subs : Model → Event Msg
-subs = const never
+subs' : Model → Event Msg
+subs' = const never
 
 ------------------------------------------------------------------------
 -- App
 ------------------------------------------------------------------------
 
 app : ReactiveApp Model Msg
-app = mkReactiveApp initialModel updateModel taskTemplate
-
--- cmd and subs are exported separately (see above)
+app = mkReactiveApp initialModel updateModel taskTemplate cmd' subs'

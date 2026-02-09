@@ -9,7 +9,7 @@ module WebSocket where
 open import Data.Nat using (ℕ; zero; suc)
 open import Data.Nat.Show using (show)
 open import Data.String using (String; _++_)
-open import Data.List using (List; []; _∷_; [_]; length)
+open import Data.List using (List; []; _∷_; [_]; length) renaming (_++_ to _++L_)
 open import Data.Bool using (Bool; true; false; if_then_else_; not)
 open import Function using (_∘_; const)
 
@@ -47,7 +47,7 @@ initialModel : Model
 initialModel = mkModel false Disconnected [] "" zero
 
 wsUrl : String
-wsUrl = "wss://echo.websocket.org"
+wsUrl = "ws://localhost:8080/echo"
 
 ------------------------------------------------------------------------
 -- Messages
@@ -69,14 +69,14 @@ updateModel Connect m = record m { wantConnected = true ; connStatus = Connectin
 updateModel Disconnect m = record m { wantConnected = false ; connStatus = Disconnected ; messages = [] }
 updateModel (WsEvent WsConnected) m = record m { connStatus = Connected }
 updateModel (WsEvent (WsMessage s)) m = record m
-  { messages = Received s ∷ messages m
+  { messages = messages m ++L [ Received s ]
   ; msgCount = suc (msgCount m)
   }
 updateModel (WsEvent WsClosed) m = record m { connStatus = Disconnected ; wantConnected = false }
 updateModel (WsEvent (WsError e)) m = record m { connStatus = Error e ; wantConnected = false }
 updateModel (UpdateInput s) m = record m { inputText = s }
 updateModel SendMessage m = record m
-  { messages = Sent (inputText m) ∷ messages m
+  { messages = messages m ++L [ Sent (inputText m) ]
   ; inputText = ""
   }
 
@@ -84,11 +84,11 @@ updateModel SendMessage m = record m
 -- Command
 ------------------------------------------------------------------------
 
-cmd : Msg → Model → Cmd Msg
-cmd SendMessage m with connStatus m
+cmd' : Msg → Model → Cmd Msg
+cmd' SendMessage m with connStatus m
 ... | Connected = wsSend wsUrl (inputText m)
 ... | _ = ε
-cmd _ _ = ε
+cmd' _ _ = ε
 
 ------------------------------------------------------------------------
 -- Helpers
@@ -184,14 +184,12 @@ wsTemplate =
 -- Subscriptions
 ------------------------------------------------------------------------
 
-subs : Model → Event Msg
-subs m = if wantConnected m then wsConnect wsUrl WsEvent else never
+subs' : Model → Event Msg
+subs' m = if wantConnected m then wsConnect wsUrl WsEvent else never
 
 ------------------------------------------------------------------------
--- App
+-- App (full TEA with cmd and subs integrated)
 ------------------------------------------------------------------------
 
 app : ReactiveApp Model Msg
-app = mkReactiveApp initialModel updateModel wsTemplate
-
--- cmd and subs are exported separately (see above)
+app = mkReactiveApp initialModel updateModel wsTemplate cmd' subs'

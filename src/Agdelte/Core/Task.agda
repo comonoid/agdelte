@@ -9,17 +9,12 @@ module Agdelte.Core.Task where
 open import Data.String using (String)
 open import Function using (_∘_; id)
 
+-- Import shared Result type
+open import Agdelte.Core.Result using (Result; ok; err) public
+
 private
   variable
     A B C : Set
-
-------------------------------------------------------------------------
--- Result — result with possible error
-------------------------------------------------------------------------
-
-data Result (E A : Set) : Set where
-  ok  : A → Result E A
-  err : E → Result E A
 
 mapResult : ∀ {E} → (A → B) → Result E A → Result E B
 mapResult f (ok a)  = ok (f a)

@@ -57,7 +57,7 @@ counterTemplate =
 ------------------------------------------------------------------------
 
 counterApp : ReactiveApp Model Msg
-counterApp = mkReactiveApp 0 updateModel counterTemplate
+counterApp = simpleApp 0 updateModel counterTemplate
 
 app : ReactiveApp Model Msg
 app = counterApp
