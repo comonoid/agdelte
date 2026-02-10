@@ -30,28 +30,67 @@ The runtime interprets Scott-encoded Agda data structures and executes them in t
 
 ```javascript
 function runReactiveApp(app, container) {
-  let model = app.init;
-  const rootScope = createScope();  // Binding scopes
+  let model = wrapMutable(app.init);  // Wrap for in-place mutation
+  const rootScope = createScope();
 
   // 1. Initial render: create DOM, collect bindings in scopes
   const dom = renderNode(app.template, rootScope);
   container.appendChild(dom);
 
+  // Batched dispatch: collect messages, apply in next animation frame
   function dispatch(msg) {
+    batchQueue.push(msg);
+    if (!batchScheduled) {
+      batchScheduled = true;
+      requestAnimationFrame(flushBatch);
+    }
+  }
+
+  // Immediate dispatch: bypass batching (for keyboard, focus)
+  function dispatchSync(msg) {
     const oldModel = model;
+    const newModel = app.update(msg)(model);
+    model = reconcile(model, newModel);  // In-place mutation
+    updateScope(rootScope, oldModel, model);
+  }
 
-    // 2. Update model
-    model = app.update(msg)(oldModel);
-
-    // 3. Update only changed bindings (NO VDOM DIFF!)
-    updateBindings(rootScope, oldModel, model);
-    // Each scope updates its own bindings
-    // Destroyed scopes (when condition false) clean up all child bindings
+  function flushBatch() {
+    const oldModel = model;
+    for (const msg of batchQueue) {
+      const newModel = app.update(msg)(model);
+      model = reconcile(model, newModel);  // In-place slot updates
+    }
+    updateScope(rootScope, oldModel, model);  // ONE DOM update for all messages
+    batchQueue = [];
   }
 }
 ```
 
-**Key difference from Virtual DOM**: No tree reconstruction, no diffing. O(bindings) instead of O(tree).
+**Key differences from Virtual DOM**:
+- No tree reconstruction, no diffing — O(bindings) instead of O(tree)
+- Batching: 10 scroll events = 1 DOM update (not 10)
+- In-place mutation: model reference stable, only changed slots updated
+
+## Batching (rAF Sync)
+
+Messages are collected within a frame, then applied together:
+
+```
+Frame 0: scroll → scroll → scroll → mousemove
+         ↓        ↓        ↓         ↓
+         batchQueue = [msg1, msg2, msg3, msg4]
+
+requestAnimationFrame →
+
+Frame 1: flushBatch()
+         - Apply all 4 messages: model = reconcile(model, update(msg)(model))
+         - ONE updateScope() call
+         - DOM updated once, synced with browser paint
+```
+
+**API:**
+- `dispatch(msg)` — batched (default, use for most events)
+- `dispatchSync(msg)` — immediate (for keyboard input, focus)
 
 ## Scott Encoding
 
@@ -78,6 +117,93 @@ cmd({
 ```
 
 **Note:** Agda `Bool` compiles to native JS `true`/`false`, not Scott-encoded.
+
+## In-Place Mutation
+
+Agda models are immutable, but the runtime uses mutable wrappers for efficiency.
+
+### Problem
+
+Every `update(msg)(model)` creates a new model. For large models with blobs
+(images, audio buffers), this copies the entire model even if only one field changed.
+
+### Solution: wrapMutable + reconcile
+
+```javascript
+// Wrap model with mutable _slots array
+function wrapMutable(model) {
+  const args = probeSlots(model);   // Extract slots via Proxy
+  const ctor = probeCtor(model);    // Extract constructor name
+  const slots = args.map(a => typeof a === 'function' ? wrapMutable(a) : a);
+
+  const wrapper = (cases) => cases[ctor](...slots);
+  wrapper._slots = slots;  // Same array as in closure!
+  wrapper._ctor = ctor;
+  return wrapper;
+}
+
+// Copy changed slots in-place (uses Agda sharing)
+function reconcile(oldModel, newModel) {
+  const newSlots = getSlots(newModel);
+  for (let i = 0; i < oldModel._slots.length; i++) {
+    if (oldModel._slots[i] !== newSlots[i]) {  // Reference comparison
+      oldModel._slots[i] = wrapMutable(newSlots[i]);
+    }
+    // Unchanged slots: same reference → nothing to do
+  }
+  return oldModel;  // Same reference, mutated
+}
+```
+
+**Why Agda sharing makes this efficient:**
+
+```javascript
+// Agda update returns:
+newModel = { time: oldModel.time + 1, audioBuffer: oldModel.audioBuffer }
+//                                    ↑ SAME REFERENCE (Agda reuses it)
+
+// reconcile sees:
+// slot 0: 0 !== 1 → copy value (4 bytes)
+// slot 1: ref === ref → SKIP (100MB untouched!)
+```
+
+### Tagged Arrays (Future)
+
+The runtime is prepared for a future compiler format:
+
+```javascript
+// Current: Scott-encoded function
+model = (cases) => cases["mkModel"](a, b)
+
+// Future: tagged array (naturally mutable)
+model = ["mkModel", a, b]
+
+// Runtime handles both via universal accessors:
+function getSlots(model) {
+  if (isTaggedArray(model)) return model.slice(1);
+  if (model._slots) return model._slots;
+  return probeSlots(model);
+}
+```
+
+### SharedArrayBuffer Support
+
+Large data (audio, images) can be stored as SharedArrayBuffer in model slots:
+
+```javascript
+// Model slot contains SharedArrayBuffer
+model._slots[5] = new Float32Array(new SharedArrayBuffer(44100 * 4));
+
+// On update, reconcile compares by reference:
+// - Same buffer → zero work (no copy)
+// - Different buffer → copy 8-byte pointer
+
+// Workers can access same buffer (zero-copy):
+worker.postMessage({ buffer: model._slots[5].buffer });
+```
+
+**User responsibility:** For overlapping SharedArrayBuffer access from multiple
+workers, use `Atomics` or ensure non-overlapping ranges.
 
 ## Reactive Rendering (No VDOM!)
 
@@ -355,3 +481,8 @@ import Counter from './_build/jAgda.Counter.mjs';
 
 await runReactiveApp(Counter, document.getElementById('app'));
 ```
+
+## See Also
+
+- `doc/todo.md` — future improvements (priority scheduling, time-slicing, workers)
+- `doc/ideas/webgl-builder.md` — WebGL builder library design
