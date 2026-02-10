@@ -20,15 +20,3 @@ fps = 60
 -- Interval between frames in ms
 frameInterval : ℕ
 frameInterval = 16
-
-------------------------------------------------------------------------
--- Animation utilities
-------------------------------------------------------------------------
-
--- Frames per second (approximately)
-fps : ℕ
-fps = 60
-
--- Interval between frames in ms
-frameInterval : ℕ
-frameInterval = 16

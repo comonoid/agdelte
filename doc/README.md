@@ -25,6 +25,8 @@
 | [Anim](api/anim.md) | Model-driven animations: Tween, Spring (gentle, snappy, bouncy) |
 | [WebGL](api/webgl.md) | 3D scene graphs: Camera, Light, Material, SceneNode, Scene, zoomScene |
 | [FFI](api/ffi.md) | Browser/Server postulates, Serialize, Testing |
+| [Html.Controls](api/html-controls.md) | HTML UI widgets: TabBar, Modal, DataGrid, Dropdown, Toast, etc. |
+| [Svg.Controls](api/svg-controls.md) | SVG visualizations: Charts (Line, Bar, Pie, etc.), Gauges, Diagrams |
 
 ## Theory
 
