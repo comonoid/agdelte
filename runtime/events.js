@@ -200,62 +200,68 @@ function mkWsMsg(tag, value) {
 /**
  * Interprets Event AST and creates subscriptions
  * @param {Object} event - Event (Scott-encoded)
- * @param {Function} dispatch - Message dispatcher
+ * @param {Function} dispatch - Message dispatcher (for backward compat, uses normal priority)
+ * @param {Object} [dispatchers] - Optional priority dispatchers { immediate, normal, background }
  * @returns {Object} - { unsubscribe: () => void }
  */
-export function interpretEvent(event, dispatch) {
+export function interpretEvent(event, dispatch, dispatchers = null) {
   if (!event) {
     return { unsubscribe: () => {} };
   }
+
+  // Priority dispatchers: use provided or fall back to single dispatch
+  const dispatchImmediate = dispatchers?.immediate || dispatch;
+  const dispatchNormal = dispatchers?.normal || dispatch;
+  const dispatchBackground = dispatchers?.background || dispatch;
 
   // Scott encoding: call event with handler object
   return event({
     // never: do nothing
     never: () => ({ unsubscribe: () => {} }),
 
-    // interval: periodic event
+    // interval: periodic event (P2 - background)
     interval: (ms, msg) => {
       const msNum = typeof ms === 'bigint' ? Number(ms) : ms;
-      const id = setInterval(() => dispatch(msg), msNum);
+      const id = setInterval(() => dispatchBackground(msg), msNum);
       return { unsubscribe: () => clearInterval(id) };
     },
 
-    // timeout: one-shot event
+    // timeout: one-shot event (P1 - normal)
     timeout: (ms, msg) => {
       const msNum = typeof ms === 'bigint' ? Number(ms) : ms;
-      const id = setTimeout(() => dispatch(msg), msNum);
+      const id = setTimeout(() => dispatchNormal(msg), msNum);
       return { unsubscribe: () => clearTimeout(id) };
     },
 
-    // onKeyDown: keyboard (keydown)
+    // onKeyDown: keyboard (keydown) - P0 (immediate)
     onKeyDown: (handler) => {
       const listener = (e) => {
         const keyEvent = mkKeyboardEvent(e);
         const maybeMsg = handler(keyEvent);
         const msg = extractMaybe(maybeMsg);
         if (msg !== null) {
-          dispatch(msg);
+          dispatchImmediate(msg);
         }
       };
       document.addEventListener('keydown', listener);
       return { unsubscribe: () => document.removeEventListener('keydown', listener) };
     },
 
-    // onKeyUp: keyboard (keyup)
+    // onKeyUp: keyboard (keyup) - P0 (immediate)
     onKeyUp: (handler) => {
       const listener = (e) => {
         const keyEvent = mkKeyboardEvent(e);
         const maybeMsg = handler(keyEvent);
         const msg = extractMaybe(maybeMsg);
         if (msg !== null) {
-          dispatch(msg);
+          dispatchImmediate(msg);
         }
       };
       document.addEventListener('keyup', listener);
       return { unsubscribe: () => document.removeEventListener('keyup', listener) };
     },
 
-    // httpGet: HTTP GET request
+    // httpGet: HTTP GET request - P2 (background)
     httpGet: (url, onSuccess, onError) => {
       const controller = new AbortController();
       let completed = false;
@@ -268,12 +274,12 @@ export function interpretEvent(event, dispatch) {
           }
           const text = await response.text();
           completed = true;
-          dispatch(onSuccess(text));
+          dispatchBackground(onSuccess(text));
         })
         .catch((error) => {
           if (completed || error.name === 'AbortError') return;
           completed = true;
-          dispatch(onError(error.message));
+          dispatchBackground(onError(error.message));
         });
 
       return {
@@ -283,7 +289,7 @@ export function interpretEvent(event, dispatch) {
       };
     },
 
-    // httpPost: HTTP POST request
+    // httpPost: HTTP POST request - P2 (background)
     httpPost: (url, body, onSuccess, onError) => {
       const controller = new AbortController();
       let completed = false;
@@ -301,12 +307,12 @@ export function interpretEvent(event, dispatch) {
           }
           const text = await response.text();
           completed = true;
-          dispatch(onSuccess(text));
+          dispatchBackground(onSuccess(text));
         })
         .catch((error) => {
           if (completed || error.name === 'AbortError') return;
           completed = true;
-          dispatch(onError(error.message));
+          dispatchBackground(onError(error.message));
         });
 
       return {
@@ -318,8 +324,8 @@ export function interpretEvent(event, dispatch) {
 
     // merge: combine two events
     merge: (e1, e2) => {
-      const sub1 = interpretEvent(e1, dispatch);
-      const sub2 = interpretEvent(e2, dispatch);
+      const sub1 = interpretEvent(e1, dispatch, dispatchers);
+      const sub2 = interpretEvent(e2, dispatch, dispatchers);
       return {
         unsubscribe: () => {
           sub1.unsubscribe();
@@ -328,7 +334,7 @@ export function interpretEvent(event, dispatch) {
       };
     },
 
-    // debounce: delay after pause
+    // debounce: delay after pause (P1 - normal)
     debounce: (ms, innerEvent) => {
       const msNum = typeof ms === 'bigint' ? Number(ms) : ms;
       let timeoutId = null;
@@ -338,12 +344,12 @@ export function interpretEvent(event, dispatch) {
         lastMsg = msg;
         if (timeoutId) clearTimeout(timeoutId);
         timeoutId = setTimeout(() => {
-          dispatch(lastMsg);
+          dispatchNormal(lastMsg);
           timeoutId = null;
         }, msNum);
       };
 
-      const sub = interpretEvent(innerEvent, debouncedDispatch);
+      const sub = interpretEvent(innerEvent, debouncedDispatch, dispatchers);
       return {
         unsubscribe: () => {
           if (timeoutId) clearTimeout(timeoutId);
@@ -352,7 +358,7 @@ export function interpretEvent(event, dispatch) {
       };
     },
 
-    // throttle: rate limiting
+    // throttle: rate limiting (P1 - normal)
     throttle: (ms, innerEvent) => {
       const msNum = typeof ms === 'bigint' ? Number(ms) : ms;
       let lastCall = 0;
@@ -369,7 +375,7 @@ export function interpretEvent(event, dispatch) {
             timeoutId = null;
           }
           lastCall = now;
-          dispatch(msg);
+          dispatchNormal(msg);
         } else {
           pendingMsg = msg;
           if (!timeoutId) {
@@ -377,7 +383,7 @@ export function interpretEvent(event, dispatch) {
               lastCall = Date.now();
               timeoutId = null;
               if (pendingMsg !== null) {
-                dispatch(pendingMsg);
+                dispatchNormal(pendingMsg);
                 pendingMsg = null;
               }
             }, remaining);
@@ -385,7 +391,7 @@ export function interpretEvent(event, dispatch) {
         }
       };
 
-      const sub = interpretEvent(innerEvent, throttledDispatch);
+      const sub = interpretEvent(innerEvent, throttledDispatch, dispatchers);
       return {
         unsubscribe: () => {
           if (timeoutId) clearTimeout(timeoutId);
@@ -394,18 +400,18 @@ export function interpretEvent(event, dispatch) {
       };
     },
 
-    // wsConnect: WebSocket connection
+    // wsConnect: WebSocket connection (P2 - background for data, P1 for connection events)
     // Note: Multiple connections to same URL are supported via wsConnections Map
     // wsSend uses the most recent connection for each URL
     wsConnect: (url, handler) => {
       const ws = new WebSocket(url);
 
       ws.onopen = () => {
-        dispatch(handler(mkWsMsg('WsConnected')));
+        dispatchNormal(handler(mkWsMsg('WsConnected')));
       };
 
       ws.onmessage = (e) => {
-        dispatch(handler(mkWsMsg('WsMessage', e.data)));
+        dispatchBackground(handler(mkWsMsg('WsMessage', e.data)));
       };
 
       ws.onerror = (e) => {
@@ -413,11 +419,11 @@ export function interpretEvent(event, dispatch) {
         // They don't have a .message property - extract what info we can
         const errorMsg = e.error?.message ||
                         (ws.readyState === WebSocket.CLOSED ? 'Connection failed' : 'WebSocket error');
-        dispatch(handler(mkWsMsg('WsError', errorMsg)));
+        dispatchNormal(handler(mkWsMsg('WsError', errorMsg)));
       };
 
       ws.onclose = () => {
-        dispatch(handler(mkWsMsg('WsClosed')));
+        dispatchNormal(handler(mkWsMsg('WsClosed')));
         // Clean up only if this is still the active connection
         if (wsConnections.get(url) === ws) {
           wsConnections.delete(url);
@@ -441,21 +447,21 @@ export function interpretEvent(event, dispatch) {
       };
     },
 
-    // foldE: accumulate state across event occurrences
+    // foldE: accumulate state across event occurrences (uses inner event's priority)
     // Scott: foldE(_typeB, init, step, innerEvent)
     foldE: (_typeB, init, step, innerEvent) => {
       let state = init;
       const wrappedDispatch = (inputVal) => {
         state = step(inputVal)(state);
-        dispatch(state);
+        dispatchNormal(state);
       };
-      const sub = interpretEvent(innerEvent, wrappedDispatch);
+      const sub = interpretEvent(innerEvent, wrappedDispatch, dispatchers);
       return {
         unsubscribe: () => sub.unsubscribe()
       };
     },
 
-    // mapFilterE: map + filter via Maybe
+    // mapFilterE: map + filter via Maybe (uses inner event's priority)
     // Scott: mapFilterE(_typeB, f, innerEvent)
     mapFilterE: (_typeB, f, innerEvent) => {
       const wrappedDispatch = (inputVal) => {
@@ -466,10 +472,10 @@ export function interpretEvent(event, dispatch) {
             just: (x) => x,
             nothing: () => null
           });
-          if (result !== null) dispatch(result);
+          if (result !== null) dispatchNormal(result);
         }
       };
-      const sub = interpretEvent(innerEvent, wrappedDispatch);
+      const sub = interpretEvent(innerEvent, wrappedDispatch, dispatchers);
       return {
         unsubscribe: () => sub.unsubscribe()
       };
@@ -478,15 +484,15 @@ export function interpretEvent(event, dispatch) {
     // switchE: start with initial event, switch on meta-event
     // Scott: switchE(initialEvent, metaEvent)
     switchE: (initialEvent, metaEvent) => {
-      let currentSub = interpretEvent(initialEvent, dispatch);
+      let currentSub = interpretEvent(initialEvent, dispatch, dispatchers);
 
       const metaDispatch = (newEvent) => {
         // Unsubscribe from current, switch to new
         currentSub.unsubscribe();
-        currentSub = interpretEvent(newEvent, dispatch);
+        currentSub = interpretEvent(newEvent, dispatch, dispatchers);
       };
 
-      const metaSub = interpretEvent(metaEvent, metaDispatch);
+      const metaSub = interpretEvent(metaEvent, metaDispatch, dispatchers);
 
       return {
         unsubscribe: () => {
@@ -496,22 +502,22 @@ export function interpretEvent(event, dispatch) {
       };
     },
 
-    // worker: Web Worker (structured concurrency — terminate on unsubscribe)
+    // worker: Web Worker (P2 - background for results)
     worker: (scriptUrl, input, onResult, onError) => {
       let w;
       try {
         w = new Worker(scriptUrl, { type: 'module' });
       } catch (e) {
-        dispatch(onError(e.message || 'Failed to create worker'));
+        dispatchBackground(onError(e.message || 'Failed to create worker'));
         return { unsubscribe: () => {} };
       }
 
       w.onmessage = (e) => {
-        dispatch(onResult(typeof e.data === 'string' ? e.data : JSON.stringify(e.data)));
+        dispatchBackground(onResult(typeof e.data === 'string' ? e.data : JSON.stringify(e.data)));
       };
 
       w.onerror = (e) => {
-        dispatch(onError(formatWorkerError(e)));
+        dispatchBackground(onError(formatWorkerError(e)));
       };
 
       // Send input to worker
@@ -524,13 +530,13 @@ export function interpretEvent(event, dispatch) {
       };
     },
 
-    // workerWithProgress: worker that sends progress, result, and error events
+    // workerWithProgress: worker that sends progress, result, and error events (P2 - background)
     workerWithProgress: (scriptUrl, input, onProgress, onResult, onError) => {
       let w;
       try {
         w = new Worker(scriptUrl, { type: 'module' });
       } catch (e) {
-        dispatch(onError(e.message || 'Failed to create worker'));
+        dispatchBackground(onError(e.message || 'Failed to create worker'));
         return { unsubscribe: () => {} };
       }
 
@@ -538,22 +544,22 @@ export function interpretEvent(event, dispatch) {
         const data = e.data;
         if (data && typeof data === 'object') {
           if (data.type === 'progress') {
-            dispatch(onProgress(String(data.value)));
+            dispatchBackground(onProgress(String(data.value)));
           } else if (data.type === 'done') {
-            dispatch(onResult(typeof data.result === 'string' ? data.result : JSON.stringify(data.result)));
+            dispatchBackground(onResult(typeof data.result === 'string' ? data.result : JSON.stringify(data.result)));
           } else if (data.type === 'error') {
-            dispatch(onError(data.message || 'Worker error'));
+            dispatchBackground(onError(data.message || 'Worker error'));
           } else {
             // Default: treat as result
-            dispatch(onResult(JSON.stringify(data)));
+            dispatchBackground(onResult(JSON.stringify(data)));
           }
         } else {
-          dispatch(onResult(typeof data === 'string' ? data : JSON.stringify(data)));
+          dispatchBackground(onResult(typeof data === 'string' ? data : JSON.stringify(data)));
         }
       };
 
       w.onerror = (e) => {
-        dispatch(onError(formatWorkerError(e)));
+        dispatchBackground(onError(formatWorkerError(e)));
       };
 
       w.postMessage(input);
@@ -565,14 +571,14 @@ export function interpretEvent(event, dispatch) {
       };
     },
 
-    // parallel: subscribe to all events in list, collect first result from each
+    // parallel: subscribe to all events in list, collect first result from each (P2 - background)
     // Scott: parallel(_typeB, eventList, mapFn)
     parallel: (_typeB, eventList, mapFn) => {
       const events = agdaListToArray(eventList);
       const total = events.length;
       if (total === 0) {
         // Empty list: dispatch mapped empty list immediately
-        dispatch(mapFn(mkAgdaList([])));
+        dispatchBackground(mapFn(mkAgdaList([])));
         return { unsubscribe: () => {} };
       }
 
@@ -590,11 +596,11 @@ export function interpretEvent(event, dispatch) {
           remaining--;
           if (remaining === 0) {
             finished = true;
-            dispatch(mapFn(mkAgdaList(results)));
+            dispatchBackground(mapFn(mkAgdaList(results)));
             // Unsubscribe all after completion
             subs.forEach(s => s.unsubscribe());
           }
-        });
+        }, dispatchers);
         subs.push(sub);
       });
 
@@ -606,7 +612,7 @@ export function interpretEvent(event, dispatch) {
       };
     },
 
-    // race: subscribe to all events in list, first to fire wins
+    // race: subscribe to all events in list, first to fire wins (uses inner event's priority)
     race: (eventList) => {
       const events = agdaListToArray(eventList);
       if (events.length === 0) {
@@ -620,10 +626,10 @@ export function interpretEvent(event, dispatch) {
         const sub = interpretEvent(evt, (val) => {
           if (finished) return;
           finished = true;
-          dispatch(val);
+          dispatchNormal(val);
           // Unsubscribe all (including self)
           subs.forEach(s => s.unsubscribe());
-        });
+        }, dispatchers);
         subs.push(sub);
       });
 
@@ -635,23 +641,23 @@ export function interpretEvent(event, dispatch) {
       };
     },
 
-    // poolWorker: worker from pool (one-shot task)
+    // poolWorker: worker from pool (one-shot task) (P2 - background)
     // Scott: poolWorker(poolSize, scriptUrl, input, onResult, onError)
     poolWorker: (poolSize, scriptUrl, input, onResult, onError) => {
       const pool = getPool(poolSize, scriptUrl);
       const handle = pool.submit(
         input,
         (e) => {
-          dispatch(onResult(typeof e.data === 'string' ? e.data : JSON.stringify(e.data)));
+          dispatchBackground(onResult(typeof e.data === 'string' ? e.data : JSON.stringify(e.data)));
         },
         (errMsg) => {
-          dispatch(onError(errMsg));
+          dispatchBackground(onError(errMsg));
         }
       );
       return { unsubscribe: () => handle.cancel() };
     },
 
-    // poolWorkerWithProgress: pool worker with progress protocol
+    // poolWorkerWithProgress: pool worker with progress protocol (P2 - background)
     // Scott: poolWorkerWithProgress(poolSize, scriptUrl, input, onProgress, onResult, onError)
     poolWorkerWithProgress: (poolSize, scriptUrl, input, onProgress, onResult, onError) => {
       const pool = getPool(poolSize, scriptUrl);
@@ -661,56 +667,56 @@ export function interpretEvent(event, dispatch) {
           const data = e.data;
           if (data && typeof data === 'object') {
             if (data.type === 'progress') {
-              dispatch(onProgress(String(data.value)));
+              dispatchBackground(onProgress(String(data.value)));
             } else if (data.type === 'done') {
-              dispatch(onResult(typeof data.result === 'string' ? data.result : JSON.stringify(data.result)));
+              dispatchBackground(onResult(typeof data.result === 'string' ? data.result : JSON.stringify(data.result)));
             } else if (data.type === 'error') {
-              dispatch(onError(data.message || 'Worker error'));
+              dispatchBackground(onError(data.message || 'Worker error'));
             } else {
-              dispatch(onResult(JSON.stringify(data)));
+              dispatchBackground(onResult(JSON.stringify(data)));
             }
           } else {
-            dispatch(onResult(typeof data === 'string' ? data : JSON.stringify(data)));
+            dispatchBackground(onResult(typeof data === 'string' ? data : JSON.stringify(data)));
           }
         },
         (errMsg) => {
-          dispatch(onError(errMsg));
+          dispatchBackground(onError(errMsg));
         }
       );
       return { unsubscribe: () => handle.cancel() };
     },
 
-    // allocShared: allocate SharedArrayBuffer
+    // allocShared: allocate SharedArrayBuffer (P1 - normal, synchronous operation)
     // Scott: allocShared(numBytes, handler)
     // NOTE: Requires COOP/COEP headers. See doc/KNOWN_ISSUES.md
     allocShared: (numBytes, handler) => {
       const n = typeof numBytes === 'bigint' ? Number(numBytes) : numBytes;
       try {
         const buffer = new SharedArrayBuffer(n);
-        dispatch(handler(buffer));
+        dispatchNormal(handler(buffer));
       } catch (e) {
         console.error('allocShared failed (COOP/COEP headers required):', e.message);
       }
       return { unsubscribe: () => {} };
     },
 
-    // workerShared: worker with SharedArrayBuffer access
+    // workerShared: worker with SharedArrayBuffer access (P2 - background)
     // Scott: workerShared(buffer, scriptUrl, input, onResult, onError)
     workerShared: (buffer, scriptUrl, input, onResult, onError) => {
       let w;
       try {
         w = new Worker(scriptUrl, { type: 'module' });
       } catch (e) {
-        dispatch(onError(e.message || 'Failed to create worker'));
+        dispatchBackground(onError(e.message || 'Failed to create worker'));
         return { unsubscribe: () => {} };
       }
 
       w.onmessage = (e) => {
-        dispatch(onResult(typeof e.data === 'string' ? e.data : JSON.stringify(e.data)));
+        dispatchBackground(onResult(typeof e.data === 'string' ? e.data : JSON.stringify(e.data)));
       };
 
       w.onerror = (e) => {
-        dispatch(onError(formatWorkerError(e)));
+        dispatchBackground(onError(formatWorkerError(e)));
       };
 
       // Send input + shared buffer to worker
@@ -723,23 +729,23 @@ export function interpretEvent(event, dispatch) {
       };
     },
 
-    // workerChannel: long-lived bidirectional worker connection
+    // workerChannel: long-lived bidirectional worker connection (P2 - background)
     // Scott: workerChannel(scriptUrl, onMessage, onError)
     workerChannel: (scriptUrl, onMessage, onError) => {
       let w;
       try {
         w = new Worker(scriptUrl, { type: 'module' });
       } catch (e) {
-        dispatch(onError(e.message || 'Failed to create worker'));
+        dispatchBackground(onError(e.message || 'Failed to create worker'));
         return { unsubscribe: () => {} };
       }
 
       w.onmessage = (e) => {
-        dispatch(onMessage(typeof e.data === 'string' ? e.data : JSON.stringify(e.data)));
+        dispatchBackground(onMessage(typeof e.data === 'string' ? e.data : JSON.stringify(e.data)));
       };
 
       w.onerror = (e) => {
-        dispatch(onError(formatWorkerError(e)));
+        dispatchBackground(onError(formatWorkerError(e)));
       };
 
       // Register for channelSend
@@ -753,10 +759,10 @@ export function interpretEvent(event, dispatch) {
       };
     },
 
-    // onUrlChange: URL change (popstate)
+    // onUrlChange: URL change (popstate) (P1 - normal, user navigation)
     onUrlChange: (handler) => {
       const listener = () => {
-        dispatch(handler(window.location.pathname + window.location.search));
+        dispatchNormal(handler(window.location.pathname + window.location.search));
       };
 
       window.addEventListener('popstate', listener);
@@ -766,12 +772,12 @@ export function interpretEvent(event, dispatch) {
       };
     },
 
-    // animationFrame: dispatch message on every animation frame
+    // animationFrame: dispatch message on every animation frame (P1 - normal)
     animationFrame: (msg) => {
       let running = true;
       const loop = () => {
         if (!running) return;
-        dispatch(msg);
+        dispatchNormal(msg);
         requestAnimationFrame(loop);
       };
       requestAnimationFrame(loop);
@@ -780,12 +786,12 @@ export function interpretEvent(event, dispatch) {
       };
     },
 
-    // animationFrameWithTime: dispatch with timestamp (ms since origin)
+    // animationFrameWithTime: dispatch with timestamp (ms since origin) (P1 - normal)
     animationFrameWithTime: (handler) => {
       let running = true;
       const loop = (timestamp) => {
         if (!running) return;
-        dispatch(handler(timestamp));
+        dispatchNormal(handler(timestamp));
         requestAnimationFrame(loop);
       };
       requestAnimationFrame(loop);
@@ -794,7 +800,7 @@ export function interpretEvent(event, dispatch) {
       };
     },
 
-    // springLoop: animated spring that ticks until settled
+    // springLoop: animated spring that ticks until settled (P1 - normal for ticks)
     // Scott: springLoop(position, velocity, target, stiffness, damping, onTick, onSettled)
     // onTick receives current position each frame
     // onSettled is dispatched when spring settles
@@ -834,11 +840,11 @@ export function interpretEvent(event, dispatch) {
         }
         if (remaining > 0) tick(remaining);
 
-        dispatch(onTick(pos));
+        dispatchNormal(onTick(pos));
 
         if (isSettled()) {
           running = false;
-          dispatch(onSettled);
+          dispatchNormal(onSettled);
         } else {
           requestAnimationFrame(loop);
         }

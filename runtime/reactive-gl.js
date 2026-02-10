@@ -170,6 +170,42 @@ function interpretSceneNode(node) {
       type: 'animate',
       timeFn,            // Float → Transform (Scott-encoded)
       child: interpretSceneNode(child)
+    }),
+    // Interactive group: all children share the same pick ID
+    interactiveGroup: (attrs, transform, children) => ({
+      type: 'interactiveGroup',
+      attrs: listToArray(attrs).map(interpretSceneAttr),
+      transform: interpretTransform(transform),
+      children: listToArray(children).map(interpretSceneNode)
+    }),
+    // Named part: assigns a name for sub-ID picking within groups
+    named: (name, child) => ({
+      type: 'named',
+      name,
+      child: interpretSceneNode(child)
+    }),
+    // Instanced rendering: many copies with different transforms
+    instanced: (geometry, material, transforms, handler) => ({
+      type: 'instanced',
+      geometry: interpretGeometry(geometry),
+      material: interpretMaterial(material),
+      transforms: listToArray(transforms).map(interpretTransform),
+      handler  // ℕ → Msg (receives instance index on click)
+    }),
+    // Reactive instanced: transforms from model
+    bindInstanced: (geometry, material, extract, handler) => ({
+      type: 'bindInstanced',
+      geometry: interpretGeometry(geometry),
+      material: interpretMaterial(material),
+      extract,  // Model → List Transform
+      handler   // ℕ → Msg
+    }),
+    // Batched group: children merged into single draw call
+    batched: (material, children, transform) => ({
+      type: 'batched',
+      material: interpretMaterial(material),
+      children: listToArray(children).map(interpretSceneNode),
+      transform: interpretTransform(transform)
     })
   });
 }
@@ -569,6 +605,69 @@ out vec4 fragColor;
 
 void main() {
   fragColor = vec4(u_objectId, 1.0);
+}
+`;
+
+// Instanced rendering vertex shader — per-instance transforms via attributes
+const INSTANCED_VERT_SRC = `#version 300 es
+precision highp float;
+
+layout(location = 0) in vec3 a_position;
+layout(location = 1) in vec3 a_normal;
+// Per-instance attributes (using mat4 as 4 vec4s for transform matrix)
+layout(location = 2) in mat4 a_instanceMatrix;
+
+uniform mat4 u_view;
+uniform mat4 u_proj;
+
+out vec3 v_normal;
+out vec3 v_worldPos;
+flat out int v_instanceId;
+
+void main() {
+  vec4 worldPos = a_instanceMatrix * vec4(a_position, 1.0);
+  gl_Position = u_proj * u_view * worldPos;
+  v_worldPos = worldPos.xyz;
+  // Transform normal by inverse-transpose of instance matrix (approximation: just the rotation part)
+  mat3 normalMat = mat3(a_instanceMatrix);
+  v_normal = normalize(normalMat * a_normal);
+  v_instanceId = gl_InstanceID;
+}
+`;
+
+// Instanced pick shader — encodes pickId + instanceIndex in color
+const INSTANCED_PICK_VERT_SRC = `#version 300 es
+precision highp float;
+
+layout(location = 0) in vec3 a_position;
+layout(location = 2) in mat4 a_instanceMatrix;
+
+uniform mat4 u_view;
+uniform mat4 u_proj;
+
+flat out int v_instanceId;
+
+void main() {
+  gl_Position = u_proj * u_view * a_instanceMatrix * vec4(a_position, 1.0);
+  v_instanceId = gl_InstanceID;
+}
+`;
+
+const INSTANCED_PICK_FRAG_SRC = `#version 300 es
+precision highp float;
+
+uniform int u_basePickId;
+
+flat in int v_instanceId;
+
+out vec4 fragColor;
+
+void main() {
+  int pickId = u_basePickId + v_instanceId;
+  float r = float((pickId >>  0) & 0xFF) / 255.0;
+  float g = float((pickId >>  8) & 0xFF) / 255.0;
+  float b = float((pickId >> 16) & 0xFF) / 255.0;
+  fragColor = vec4(r, g, b, 1.0);
 }
 `;
 
@@ -1415,6 +1514,590 @@ function createQuadGeometry(gl, size) {
 }
 
 // ---------------------------------------------------------------------------
+// Extended Primitives (from Builder.Geometry.Primitives)
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a torus (donut shape).
+ * majorRadius: distance from center to tube center
+ * minorRadius: tube radius
+ * majorSegments: segments around the ring
+ * minorSegments: segments around the tube
+ */
+function createTorusGeometry(gl, majorRadius, minorRadius, majorSegments, minorSegments) {
+  const positions = [], normals = [], indices = [];
+  for (let i = 0; i <= majorSegments; i++) {
+    const u = (i / majorSegments) * 2 * Math.PI;
+    const cosU = Math.cos(u), sinU = Math.sin(u);
+    for (let j = 0; j <= minorSegments; j++) {
+      const v = (j / minorSegments) * 2 * Math.PI;
+      const cosV = Math.cos(v), sinV = Math.sin(v);
+      const x = (majorRadius + minorRadius * cosV) * cosU;
+      const y = minorRadius * sinV;
+      const z = (majorRadius + minorRadius * cosV) * sinU;
+      positions.push(x, y, z);
+      // Normal points from tube center to surface
+      const nx = cosV * cosU, ny = sinV, nz = cosV * sinU;
+      normals.push(nx, ny, nz);
+    }
+  }
+  for (let i = 0; i < majorSegments; i++) {
+    for (let j = 0; j < minorSegments; j++) {
+      const a = i * (minorSegments + 1) + j;
+      const b = a + minorSegments + 1;
+      indices.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+  }
+  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), new Uint16Array(indices));
+}
+
+/**
+ * Create a capsule (cylinder with hemispherical caps).
+ */
+function createCapsuleGeometry(gl, radius, height, segments) {
+  const positions = [], normals = [], indices = [];
+  const halfHeight = height * 0.5 - radius; // Cylinder height excluding caps
+  const stacks = Math.floor(segments / 2);
+
+  // Top hemisphere
+  for (let s = 0; s <= stacks; s++) {
+    const phi = (s / stacks) * (Math.PI / 2);
+    const sinP = Math.sin(phi), cosP = Math.cos(phi);
+    for (let l = 0; l <= segments; l++) {
+      const theta = (l / segments) * 2 * Math.PI;
+      const cosT = Math.cos(theta), sinT = Math.sin(theta);
+      const nx = cosT * sinP, ny = cosP, nz = sinT * sinP;
+      positions.push(radius * nx, halfHeight + radius * ny, radius * nz);
+      normals.push(nx, ny, nz);
+    }
+  }
+
+  // Cylinder body (two rings)
+  const cylBase = positions.length / 3;
+  for (let ring = 0; ring <= 1; ring++) {
+    const y = ring === 0 ? halfHeight : -halfHeight;
+    for (let l = 0; l <= segments; l++) {
+      const theta = (l / segments) * 2 * Math.PI;
+      const cosT = Math.cos(theta), sinT = Math.sin(theta);
+      positions.push(radius * cosT, y, radius * sinT);
+      normals.push(cosT, 0, sinT);
+    }
+  }
+
+  // Bottom hemisphere
+  const botBase = positions.length / 3;
+  for (let s = 0; s <= stacks; s++) {
+    const phi = (Math.PI / 2) + (s / stacks) * (Math.PI / 2);
+    const sinP = Math.sin(phi), cosP = Math.cos(phi);
+    for (let l = 0; l <= segments; l++) {
+      const theta = (l / segments) * 2 * Math.PI;
+      const cosT = Math.cos(theta), sinT = Math.sin(theta);
+      const nx = cosT * sinP, ny = cosP, nz = sinT * sinP;
+      positions.push(radius * nx, -halfHeight + radius * ny, radius * nz);
+      normals.push(nx, ny, nz);
+    }
+  }
+
+  // Indices for top hemisphere
+  for (let s = 0; s < stacks; s++) {
+    for (let l = 0; l < segments; l++) {
+      const a = s * (segments + 1) + l;
+      const b = a + segments + 1;
+      indices.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+  }
+
+  // Indices for cylinder body
+  for (let l = 0; l < segments; l++) {
+    const a = cylBase + l;
+    const b = a + segments + 1;
+    indices.push(a, b, a + 1, b, b + 1, a + 1);
+  }
+
+  // Indices for bottom hemisphere
+  for (let s = 0; s < stacks; s++) {
+    for (let l = 0; l < segments; l++) {
+      const a = botBase + s * (segments + 1) + l;
+      const b = a + segments + 1;
+      indices.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+  }
+
+  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), new Uint16Array(indices));
+}
+
+/**
+ * Create a cone (tapered cylinder).
+ * bottomRadius: radius at base
+ * topRadius: radius at top (0 for pointed)
+ * height: height of cone
+ */
+function createConeGeometry(gl, bottomRadius, topRadius, height, segments) {
+  const positions = [], normals = [], indices = [];
+  const hh = height * 0.5;
+  const slope = (bottomRadius - topRadius) / height;
+
+  // Side wall
+  for (let i = 0; i <= segments; i++) {
+    const theta = (i / segments) * 2 * Math.PI;
+    const cosT = Math.cos(theta), sinT = Math.sin(theta);
+    // Normal is perpendicular to sloped surface
+    const len = Math.sqrt(1 + slope * slope);
+    const nx = cosT / len, ny = slope / len, nz = sinT / len;
+    positions.push(topRadius * cosT, hh, topRadius * sinT);
+    normals.push(nx, ny, nz);
+    positions.push(bottomRadius * cosT, -hh, bottomRadius * sinT);
+    normals.push(nx, ny, nz);
+  }
+  for (let i = 0; i < segments; i++) {
+    const a = i * 2, b = a + 1, c = a + 2, d = a + 3;
+    indices.push(a, b, c, b, d, c);
+  }
+
+  // Top cap (if not pointed)
+  if (topRadius > 0.001) {
+    const topCenter = positions.length / 3;
+    positions.push(0, hh, 0);
+    normals.push(0, 1, 0);
+    for (let i = 0; i < segments; i++) {
+      const theta = (i / segments) * 2 * Math.PI;
+      positions.push(topRadius * Math.cos(theta), hh, topRadius * Math.sin(theta));
+      normals.push(0, 1, 0);
+    }
+    for (let i = 0; i < segments; i++) {
+      const next = (i + 1) % segments;
+      indices.push(topCenter, topCenter + 1 + i, topCenter + 1 + next);
+    }
+  }
+
+  // Bottom cap
+  const botCenter = positions.length / 3;
+  positions.push(0, -hh, 0);
+  normals.push(0, -1, 0);
+  for (let i = 0; i < segments; i++) {
+    const theta = (i / segments) * 2 * Math.PI;
+    positions.push(bottomRadius * Math.cos(theta), -hh, bottomRadius * Math.sin(theta));
+    normals.push(0, -1, 0);
+  }
+  for (let i = 0; i < segments; i++) {
+    const next = (i + 1) % segments;
+    indices.push(botCenter, botCenter + 1 + next, botCenter + 1 + i);
+  }
+
+  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), new Uint16Array(indices));
+}
+
+/**
+ * Create an n-sided pyramid.
+ */
+function createPyramidGeometry(gl, baseSize, height, sides) {
+  const positions = [], normals = [], indices = [];
+  const hb = baseSize * 0.5;
+
+  // Generate base vertices
+  const baseVerts = [];
+  for (let i = 0; i < sides; i++) {
+    const theta = (i / sides) * 2 * Math.PI;
+    baseVerts.push({ x: hb * Math.cos(theta), z: hb * Math.sin(theta) });
+  }
+
+  // Side faces
+  const apex = { x: 0, y: height, z: 0 };
+  for (let i = 0; i < sides; i++) {
+    const v0 = baseVerts[i];
+    const v1 = baseVerts[(i + 1) % sides];
+    // Calculate face normal
+    const e1 = { x: v1.x - v0.x, y: 0, z: v1.z - v0.z };
+    const e2 = { x: apex.x - v0.x, y: apex.y, z: apex.z - v0.z };
+    const nx = e1.y * e2.z - e1.z * e2.y;
+    const ny = e1.z * e2.x - e1.x * e2.z;
+    const nz = e1.x * e2.y - e1.y * e2.x;
+    const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+    const normal = { x: nx / len, y: ny / len, z: nz / len };
+
+    const idx = positions.length / 3;
+    positions.push(v0.x, 0, v0.z, v1.x, 0, v1.z, apex.x, apex.y, apex.z);
+    normals.push(normal.x, normal.y, normal.z, normal.x, normal.y, normal.z, normal.x, normal.y, normal.z);
+    indices.push(idx, idx + 1, idx + 2);
+  }
+
+  // Base face
+  const baseCenter = positions.length / 3;
+  positions.push(0, 0, 0);
+  normals.push(0, -1, 0);
+  for (let i = 0; i < sides; i++) {
+    positions.push(baseVerts[i].x, 0, baseVerts[i].z);
+    normals.push(0, -1, 0);
+  }
+  for (let i = 0; i < sides; i++) {
+    const next = (i + 1) % sides;
+    indices.push(baseCenter, baseCenter + 1 + next, baseCenter + 1 + i);
+  }
+
+  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), new Uint16Array(indices));
+}
+
+/**
+ * Create a tube (hollow cylinder/pipe).
+ */
+function createTubeGeometry(gl, innerRadius, outerRadius, height, segments) {
+  const positions = [], normals = [], indices = [];
+  const hh = height * 0.5;
+
+  // Outer wall
+  for (let i = 0; i <= segments; i++) {
+    const theta = (i / segments) * 2 * Math.PI;
+    const cosT = Math.cos(theta), sinT = Math.sin(theta);
+    positions.push(outerRadius * cosT, hh, outerRadius * sinT);
+    normals.push(cosT, 0, sinT);
+    positions.push(outerRadius * cosT, -hh, outerRadius * sinT);
+    normals.push(cosT, 0, sinT);
+  }
+  for (let i = 0; i < segments; i++) {
+    const a = i * 2, b = a + 1, c = a + 2, d = a + 3;
+    indices.push(a, b, c, b, d, c);
+  }
+
+  // Inner wall (normals point inward)
+  const innerBase = positions.length / 3;
+  for (let i = 0; i <= segments; i++) {
+    const theta = (i / segments) * 2 * Math.PI;
+    const cosT = Math.cos(theta), sinT = Math.sin(theta);
+    positions.push(innerRadius * cosT, hh, innerRadius * sinT);
+    normals.push(-cosT, 0, -sinT);
+    positions.push(innerRadius * cosT, -hh, innerRadius * sinT);
+    normals.push(-cosT, 0, -sinT);
+  }
+  for (let i = 0; i < segments; i++) {
+    const a = innerBase + i * 2, b = a + 1, c = a + 2, d = a + 3;
+    indices.push(a, c, b, b, c, d);  // Reversed winding
+  }
+
+  // Top ring
+  const topBase = positions.length / 3;
+  for (let i = 0; i <= segments; i++) {
+    const theta = (i / segments) * 2 * Math.PI;
+    const cosT = Math.cos(theta), sinT = Math.sin(theta);
+    positions.push(outerRadius * cosT, hh, outerRadius * sinT);
+    normals.push(0, 1, 0);
+    positions.push(innerRadius * cosT, hh, innerRadius * sinT);
+    normals.push(0, 1, 0);
+  }
+  for (let i = 0; i < segments; i++) {
+    const a = topBase + i * 2, b = a + 1, c = a + 2, d = a + 3;
+    indices.push(a, b, c, b, d, c);
+  }
+
+  // Bottom ring
+  const botBase = positions.length / 3;
+  for (let i = 0; i <= segments; i++) {
+    const theta = (i / segments) * 2 * Math.PI;
+    const cosT = Math.cos(theta), sinT = Math.sin(theta);
+    positions.push(outerRadius * cosT, -hh, outerRadius * sinT);
+    normals.push(0, -1, 0);
+    positions.push(innerRadius * cosT, -hh, innerRadius * sinT);
+    normals.push(0, -1, 0);
+  }
+  for (let i = 0; i < segments; i++) {
+    const a = botBase + i * 2, b = a + 1, c = a + 2, d = a + 3;
+    indices.push(a, c, b, b, c, d);  // Reversed for bottom
+  }
+
+  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), new Uint16Array(indices));
+}
+
+/**
+ * Create a flat ring (2D washer shape in XZ plane).
+ */
+function createRingGeometry(gl, innerRadius, outerRadius, segments) {
+  const positions = [], normals = [], indices = [];
+
+  for (let i = 0; i <= segments; i++) {
+    const theta = (i / segments) * 2 * Math.PI;
+    const cosT = Math.cos(theta), sinT = Math.sin(theta);
+    positions.push(outerRadius * cosT, 0, outerRadius * sinT);
+    normals.push(0, 1, 0);
+    positions.push(innerRadius * cosT, 0, innerRadius * sinT);
+    normals.push(0, 1, 0);
+  }
+  for (let i = 0; i < segments; i++) {
+    const a = i * 2, b = a + 1, c = a + 2, d = a + 3;
+    indices.push(a, b, c, b, d, c);
+  }
+
+  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), new Uint16Array(indices));
+}
+
+/**
+ * Create a tetrahedron (4 triangular faces).
+ */
+function createTetrahedronGeometry(gl, radius) {
+  // Vertices of a regular tetrahedron
+  const a = radius / Math.sqrt(3);
+  const verts = [
+    { x:  a,  y:  a,  z:  a },
+    { x:  a,  y: -a,  z: -a },
+    { x: -a,  y:  a,  z: -a },
+    { x: -a,  y: -a,  z:  a },
+  ];
+  const faces = [[0, 1, 2], [0, 3, 1], [0, 2, 3], [1, 3, 2]];
+
+  const positions = [], normals = [], indices = [];
+  for (const [i0, i1, i2] of faces) {
+    const v0 = verts[i0], v1 = verts[i1], v2 = verts[i2];
+    // Compute face normal
+    const e1 = { x: v1.x - v0.x, y: v1.y - v0.y, z: v1.z - v0.z };
+    const e2 = { x: v2.x - v0.x, y: v2.y - v0.y, z: v2.z - v0.z };
+    const nx = e1.y * e2.z - e1.z * e2.y;
+    const ny = e1.z * e2.x - e1.x * e2.z;
+    const nz = e1.x * e2.y - e1.y * e2.x;
+    const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+    const n = { x: nx / len, y: ny / len, z: nz / len };
+
+    const idx = positions.length / 3;
+    positions.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
+    normals.push(n.x, n.y, n.z, n.x, n.y, n.z, n.x, n.y, n.z);
+    indices.push(idx, idx + 1, idx + 2);
+  }
+
+  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), new Uint16Array(indices));
+}
+
+/**
+ * Create an octahedron (8 triangular faces).
+ */
+function createOctahedronGeometry(gl, radius) {
+  const verts = [
+    { x: radius, y: 0, z: 0 },
+    { x: -radius, y: 0, z: 0 },
+    { x: 0, y: radius, z: 0 },
+    { x: 0, y: -radius, z: 0 },
+    { x: 0, y: 0, z: radius },
+    { x: 0, y: 0, z: -radius },
+  ];
+  const faces = [
+    [0, 2, 4], [0, 4, 3], [0, 3, 5], [0, 5, 2],
+    [1, 4, 2], [1, 3, 4], [1, 5, 3], [1, 2, 5],
+  ];
+
+  const positions = [], normals = [], indices = [];
+  for (const [i0, i1, i2] of faces) {
+    const v0 = verts[i0], v1 = verts[i1], v2 = verts[i2];
+    const e1 = { x: v1.x - v0.x, y: v1.y - v0.y, z: v1.z - v0.z };
+    const e2 = { x: v2.x - v0.x, y: v2.y - v0.y, z: v2.z - v0.z };
+    const nx = e1.y * e2.z - e1.z * e2.y;
+    const ny = e1.z * e2.x - e1.x * e2.z;
+    const nz = e1.x * e2.y - e1.y * e2.x;
+    const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+    const n = { x: nx / len, y: ny / len, z: nz / len };
+
+    const idx = positions.length / 3;
+    positions.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
+    normals.push(n.x, n.y, n.z, n.x, n.y, n.z, n.x, n.y, n.z);
+    indices.push(idx, idx + 1, idx + 2);
+  }
+
+  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), new Uint16Array(indices));
+}
+
+/**
+ * Create an icosahedron (20 triangular faces).
+ */
+function createIcosahedronGeometry(gl, radius) {
+  const t = (1 + Math.sqrt(5)) / 2;  // Golden ratio
+  const s = radius / Math.sqrt(1 + t * t);
+  const verts = [
+    { x: -s, y:  t*s, z: 0 }, { x:  s, y:  t*s, z: 0 },
+    { x: -s, y: -t*s, z: 0 }, { x:  s, y: -t*s, z: 0 },
+    { x: 0, y: -s, z:  t*s }, { x: 0, y:  s, z:  t*s },
+    { x: 0, y: -s, z: -t*s }, { x: 0, y:  s, z: -t*s },
+    { x:  t*s, y: 0, z: -s }, { x:  t*s, y: 0, z:  s },
+    { x: -t*s, y: 0, z: -s }, { x: -t*s, y: 0, z:  s },
+  ];
+  const faces = [
+    [0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11],
+    [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8],
+    [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9],
+    [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1],
+  ];
+
+  const positions = [], normals = [], indices = [];
+  for (const [i0, i1, i2] of faces) {
+    const v0 = verts[i0], v1 = verts[i1], v2 = verts[i2];
+    const e1 = { x: v1.x - v0.x, y: v1.y - v0.y, z: v1.z - v0.z };
+    const e2 = { x: v2.x - v0.x, y: v2.y - v0.y, z: v2.z - v0.z };
+    const nx = e1.y * e2.z - e1.z * e2.y;
+    const ny = e1.z * e2.x - e1.x * e2.z;
+    const nz = e1.x * e2.y - e1.y * e2.x;
+    const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+    const n = { x: nx / len, y: ny / len, z: nz / len };
+
+    const idx = positions.length / 3;
+    positions.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
+    normals.push(n.x, n.y, n.z, n.x, n.y, n.z, n.x, n.y, n.z);
+    indices.push(idx, idx + 1, idx + 2);
+  }
+
+  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), new Uint16Array(indices));
+}
+
+/**
+ * Create a dodecahedron (12 pentagonal faces, triangulated = 36 triangles).
+ */
+function createDodecahedronGeometry(gl, radius) {
+  const t = (1 + Math.sqrt(5)) / 2;
+  const s = radius / Math.sqrt(3);
+  const a = s, b = s / t, c = s * t;
+
+  const verts = [
+    { x: a, y: a, z: a }, { x: a, y: a, z: -a }, { x: a, y: -a, z: a }, { x: a, y: -a, z: -a },
+    { x: -a, y: a, z: a }, { x: -a, y: a, z: -a }, { x: -a, y: -a, z: a }, { x: -a, y: -a, z: -a },
+    { x: 0, y: b, z: c }, { x: 0, y: b, z: -c }, { x: 0, y: -b, z: c }, { x: 0, y: -b, z: -c },
+    { x: b, y: c, z: 0 }, { x: b, y: -c, z: 0 }, { x: -b, y: c, z: 0 }, { x: -b, y: -c, z: 0 },
+    { x: c, y: 0, z: b }, { x: c, y: 0, z: -b }, { x: -c, y: 0, z: b }, { x: -c, y: 0, z: -b },
+  ];
+
+  // Pentagonal faces (vertex indices)
+  const pentagons = [
+    [0, 16, 2, 10, 8], [0, 8, 4, 14, 12], [16, 0, 12, 1, 17],
+    [1, 12, 14, 5, 9], [2, 16, 17, 3, 13], [13, 3, 11, 7, 15],
+    [3, 17, 1, 9, 11], [4, 8, 10, 6, 18], [14, 4, 18, 19, 5],
+    [5, 19, 7, 11, 9], [6, 10, 2, 13, 15], [7, 19, 18, 6, 15],
+  ];
+
+  const positions = [], normals = [], indices = [];
+
+  for (const pent of pentagons) {
+    // Calculate center and normal
+    let cx = 0, cy = 0, cz = 0;
+    for (const i of pent) {
+      cx += verts[i].x; cy += verts[i].y; cz += verts[i].z;
+    }
+    cx /= 5; cy /= 5; cz /= 5;
+
+    const v0 = verts[pent[0]], v1 = verts[pent[1]], v2 = verts[pent[2]];
+    const e1 = { x: v1.x - v0.x, y: v1.y - v0.y, z: v1.z - v0.z };
+    const e2 = { x: v2.x - v0.x, y: v2.y - v0.y, z: v2.z - v0.z };
+    let nx = e1.y * e2.z - e1.z * e2.y;
+    let ny = e1.z * e2.x - e1.x * e2.z;
+    let nz = e1.x * e2.y - e1.y * e2.x;
+    const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+    nx /= len; ny /= len; nz /= len;
+
+    // Fan triangulation from center
+    const centerIdx = positions.length / 3;
+    positions.push(cx, cy, cz);
+    normals.push(nx, ny, nz);
+
+    for (const i of pent) {
+      positions.push(verts[i].x, verts[i].y, verts[i].z);
+      normals.push(nx, ny, nz);
+    }
+
+    for (let i = 0; i < 5; i++) {
+      const next = (i + 1) % 5;
+      indices.push(centerIdx, centerIdx + 1 + i, centerIdx + 1 + next);
+    }
+  }
+
+  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), new Uint16Array(indices));
+}
+
+/**
+ * Create a rounded box (box with beveled edges).
+ * Simplified: uses bevel by offsetting corner vertices.
+ */
+function createRoundedBoxGeometry(gl, dims, radius, segments) {
+  // For simplicity, create a box with chamfered corners
+  // A proper implementation would use smooth curves
+  const hw = dims.x * 0.5 - radius;
+  const hh = dims.y * 0.5 - radius;
+  const hd = dims.z * 0.5 - radius;
+  const r = radius;
+
+  const positions = [], normals = [], indices = [];
+
+  // Generate rounded corners using spherical patches
+  const corners = [
+    { x:  hw, y:  hh, z:  hd },
+    { x:  hw, y:  hh, z: -hd },
+    { x:  hw, y: -hh, z:  hd },
+    { x:  hw, y: -hh, z: -hd },
+    { x: -hw, y:  hh, z:  hd },
+    { x: -hw, y:  hh, z: -hd },
+    { x: -hw, y: -hh, z:  hd },
+    { x: -hw, y: -hh, z: -hd },
+  ];
+
+  // For each corner, add a spherical cap
+  for (const corner of corners) {
+    const sx = corner.x > 0 ? 1 : -1;
+    const sy = corner.y > 0 ? 1 : -1;
+    const sz = corner.z > 0 ? 1 : -1;
+
+    const base = positions.length / 3;
+    for (let i = 0; i <= segments; i++) {
+      for (let j = 0; j <= segments; j++) {
+        const u = (i / segments) * Math.PI / 2;
+        const v = (j / segments) * Math.PI / 2;
+        const nx = sx * Math.cos(v) * Math.cos(u);
+        const ny = sy * Math.sin(u);
+        const nz = sz * Math.cos(v) * Math.sin(u);
+        positions.push(corner.x + r * nx, corner.y + r * ny, corner.z + r * nz);
+        normals.push(nx, ny, nz);
+      }
+    }
+
+    for (let i = 0; i < segments; i++) {
+      for (let j = 0; j < segments; j++) {
+        const a = base + i * (segments + 1) + j;
+        const b = a + segments + 1;
+        indices.push(a, b, a + 1, b, b + 1, a + 1);
+      }
+    }
+  }
+
+  // Add the 6 main faces (flat quads between corners)
+  // Front face (+Z)
+  let idx = positions.length / 3;
+  positions.push(-hw, -hh, hd + r, hw, -hh, hd + r, hw, hh, hd + r, -hw, hh, hd + r);
+  normals.push(0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1);
+  indices.push(idx, idx + 1, idx + 2, idx, idx + 2, idx + 3);
+
+  // Back face (-Z)
+  idx = positions.length / 3;
+  positions.push(hw, -hh, -hd - r, -hw, -hh, -hd - r, -hw, hh, -hd - r, hw, hh, -hd - r);
+  normals.push(0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1);
+  indices.push(idx, idx + 1, idx + 2, idx, idx + 2, idx + 3);
+
+  // Top face (+Y)
+  idx = positions.length / 3;
+  positions.push(-hw, hh + r, -hd, hw, hh + r, -hd, hw, hh + r, hd, -hw, hh + r, hd);
+  normals.push(0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0);
+  indices.push(idx, idx + 1, idx + 2, idx, idx + 2, idx + 3);
+
+  // Bottom face (-Y)
+  idx = positions.length / 3;
+  positions.push(-hw, -hh - r, hd, hw, -hh - r, hd, hw, -hh - r, -hd, -hw, -hh - r, -hd);
+  normals.push(0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0);
+  indices.push(idx, idx + 1, idx + 2, idx, idx + 2, idx + 3);
+
+  // Right face (+X)
+  idx = positions.length / 3;
+  positions.push(hw + r, -hh, hd, hw + r, -hh, -hd, hw + r, hh, -hd, hw + r, hh, hd);
+  normals.push(1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0);
+  indices.push(idx, idx + 1, idx + 2, idx, idx + 2, idx + 3);
+
+  // Left face (-X)
+  idx = positions.length / 3;
+  positions.push(-hw - r, -hh, -hd, -hw - r, -hh, hd, -hw - r, hh, hd, -hw - r, hh, -hd);
+  normals.push(-1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0);
+  indices.push(idx, idx + 1, idx + 2, idx, idx + 2, idx + 3);
+
+  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), new Uint16Array(indices));
+}
+
+// ---------------------------------------------------------------------------
 // Texture cache — loads images asynchronously, creates GL textures
 // ---------------------------------------------------------------------------
 
@@ -2007,6 +2690,77 @@ function createPickProgram(gl) {
 }
 
 /**
+ * Create instanced phong shader program.
+ * Uses per-instance matrix attributes instead of model uniform.
+ */
+function createInstancedPhongProgram(gl) {
+  const vert = compileShader(gl, gl.VERTEX_SHADER, INSTANCED_VERT_SRC);
+  const frag = compileShader(gl, gl.FRAGMENT_SHADER, PHONG_FRAG_SRC);
+  const prog = gl.createProgram();
+  gl.attachShader(prog, vert);
+  gl.attachShader(prog, frag);
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+    const log = gl.getProgramInfoLog(prog);
+    gl.deleteProgram(prog);
+    throw new Error('Instanced phong program link error: ' + log);
+  }
+  const uniforms = {
+    view:      gl.getUniformLocation(prog, 'u_view'),
+    proj:      gl.getUniformLocation(prog, 'u_proj'),
+    color:     gl.getUniformLocation(prog, 'u_color'),
+    shininess: gl.getUniformLocation(prog, 'u_shininess'),
+    cameraPos: gl.getUniformLocation(prog, 'u_cameraPos'),
+    numLights: gl.getUniformLocation(prog, 'u_numLights'),
+    lightType: [],
+    lightColor: [],
+    lightIntensity: [],
+    lightDir: [],
+    lightPos: [],
+    lightRange: [],
+    lightAngle: [],
+    lightFalloff: [],
+  };
+  for (let i = 0; i < 8; i++) {
+    uniforms.lightType.push(gl.getUniformLocation(prog, `u_lightType[${i}]`));
+    uniforms.lightColor.push(gl.getUniformLocation(prog, `u_lightColor[${i}]`));
+    uniforms.lightIntensity.push(gl.getUniformLocation(prog, `u_lightIntensity[${i}]`));
+    uniforms.lightDir.push(gl.getUniformLocation(prog, `u_lightDir[${i}]`));
+    uniforms.lightPos.push(gl.getUniformLocation(prog, `u_lightPos[${i}]`));
+    uniforms.lightRange.push(gl.getUniformLocation(prog, `u_lightRange[${i}]`));
+    uniforms.lightAngle.push(gl.getUniformLocation(prog, `u_lightAngle[${i}]`));
+    uniforms.lightFalloff.push(gl.getUniformLocation(prog, `u_lightFalloff[${i}]`));
+  }
+  return { program: prog, uniforms };
+}
+
+/**
+ * Create instanced pick shader program.
+ * Renders each instance with pickId = basePickId + instanceIndex.
+ */
+function createInstancedPickProgram(gl) {
+  const vert = compileShader(gl, gl.VERTEX_SHADER, INSTANCED_PICK_VERT_SRC);
+  const frag = compileShader(gl, gl.FRAGMENT_SHADER, INSTANCED_PICK_FRAG_SRC);
+  const prog = gl.createProgram();
+  gl.attachShader(prog, vert);
+  gl.attachShader(prog, frag);
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+    const log = gl.getProgramInfoLog(prog);
+    gl.deleteProgram(prog);
+    throw new Error('Instanced pick program link error: ' + log);
+  }
+  return {
+    program: prog,
+    uniforms: {
+      view:       gl.getUniformLocation(prog, 'u_view'),
+      proj:       gl.getUniformLocation(prog, 'u_proj'),
+      basePickId: gl.getUniformLocation(prog, 'u_basePickId'),
+    }
+  };
+}
+
+/**
  * Create offscreen framebuffer for color picking.
  * Renders at full canvas resolution with RGBA8 color + depth.
  */
@@ -2043,6 +2797,18 @@ function geometryKey(geom) {
     case 'cylinder': return `cylinder:${geom.radius},${geom.height}`;
     case 'quad':     return `quad:${geom.size.x},${geom.size.y}`;
     case 'custom':   return null;  // custom geometry not cacheable
+    // Extended primitives
+    case 'roundedBox': return `roundedBox:${geom.dims.x},${geom.dims.y},${geom.dims.z},${geom.radius},${geom.segments}`;
+    case 'capsule':    return `capsule:${geom.radius},${geom.height},${geom.segments}`;
+    case 'torus':      return `torus:${geom.majorRadius},${geom.minorRadius},${geom.majorSegments},${geom.minorSegments}`;
+    case 'cone':       return `cone:${geom.bottomRadius},${geom.topRadius},${geom.height},${geom.segments}`;
+    case 'pyramid':    return `pyramid:${geom.baseSize},${geom.height},${geom.sides}`;
+    case 'tube':       return `tube:${geom.innerRadius},${geom.outerRadius},${geom.height},${geom.segments}`;
+    case 'ring':       return `ring:${geom.innerRadius},${geom.outerRadius},${geom.segments}`;
+    case 'icosahedron':  return `icosahedron:${geom.radius}`;
+    case 'dodecahedron': return `dodecahedron:${geom.radius}`;
+    case 'octahedron':   return `octahedron:${geom.radius}`;
+    case 'tetrahedron':  return `tetrahedron:${geom.radius}`;
     default:         return null;
   }
 }
@@ -2052,12 +2818,24 @@ function getOrCreateGeometry(gl, cache, geom) {
   if (key && cache.has(key)) return cache.get(key);
   let result;
   switch (geom.type) {
-    case 'box':      result = createBoxGeometry(gl, geom.dims); break;
-    case 'sphere':   result = createSphereGeometry(gl, geom.radius); break;
-    case 'plane':    result = createPlaneGeometry(gl, geom.size); break;
-    case 'cylinder': result = createCylinderGeometry(gl, geom.radius, geom.height); break;
-    case 'quad':     result = createQuadGeometry(gl, geom.size); break;
-    case 'custom':   result = geom.handle; break;  // handle IS the {vao, count} object
+    case 'box':         result = createBoxGeometry(gl, geom.dims); break;
+    case 'sphere':      result = createSphereGeometry(gl, geom.radius); break;
+    case 'plane':       result = createPlaneGeometry(gl, geom.size); break;
+    case 'cylinder':    result = createCylinderGeometry(gl, geom.radius, geom.height); break;
+    case 'quad':        result = createQuadGeometry(gl, geom.size); break;
+    case 'custom':      result = geom.handle; break;  // handle IS the {vao, count} object
+    // Extended primitives from Builder.Geometry.Primitives
+    case 'torus':       result = createTorusGeometry(gl, geom.majorRadius, geom.minorRadius, geom.majorSegments, geom.minorSegments); break;
+    case 'capsule':     result = createCapsuleGeometry(gl, geom.radius, geom.height, geom.segments); break;
+    case 'cone':        result = createConeGeometry(gl, geom.bottomRadius, geom.topRadius, geom.height, geom.segments); break;
+    case 'pyramid':     result = createPyramidGeometry(gl, geom.baseSize, geom.height, geom.sides); break;
+    case 'tube':        result = createTubeGeometry(gl, geom.innerRadius, geom.outerRadius, geom.height, geom.segments); break;
+    case 'ring':        result = createRingGeometry(gl, geom.innerRadius, geom.outerRadius, geom.segments); break;
+    case 'roundedBox':  result = createRoundedBoxGeometry(gl, geom.dims, geom.radius, geom.segments); break;
+    case 'tetrahedron': result = createTetrahedronGeometry(gl, geom.radius); break;
+    case 'octahedron':  result = createOctahedronGeometry(gl, geom.radius); break;
+    case 'icosahedron': result = createIcosahedronGeometry(gl, geom.radius); break;
+    case 'dodecahedron': result = createDodecahedronGeometry(gl, geom.radius); break;
     default: throw new Error('Unknown geometry type: ' + geom.type);
   }
   if (key) cache.set(key, result);
@@ -2254,6 +3032,108 @@ function findTransitionInSubtree(node) {
   // animate: check single child
   if (node.child) return findTransitionInSubtree(node.child);
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Instanced Rendering — per-instance transform matrices
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a Float32Array containing 4x4 transform matrices for each instance.
+ * Each transform = { pos, rot, scale } is converted to a mat4.
+ */
+function buildInstanceMatrices(transforms) {
+  const count = transforms.length;
+  const data = new Float32Array(count * 16);
+  for (let i = 0; i < count; i++) {
+    const t = transforms[i];
+    // Build mat4 from transform (position, rotation quat, scale)
+    const mat = transformToMat4(t);
+    data.set(mat, i * 16);
+  }
+  return data;
+}
+
+/**
+ * Convert an interpreted transform to a Float32Array mat4.
+ */
+function transformToMat4(t) {
+  const { pos, rot, scale } = t;
+  // Build rotation matrix from quaternion
+  const { x: qx, y: qy, z: qz, w: qw } = rot;
+  const xx = qx * qx, yy = qy * qy, zz = qz * qz;
+  const xy = qx * qy, xz = qx * qz, yz = qy * qz;
+  const wx = qw * qx, wy = qw * qy, wz = qw * qz;
+
+  // Column-major mat4 = scale * rot * translate
+  // For WebGL, column-major order
+  return new Float32Array([
+    (1 - 2 * (yy + zz)) * scale.x,
+    2 * (xy + wz) * scale.x,
+    2 * (xz - wy) * scale.x,
+    0,
+
+    2 * (xy - wz) * scale.y,
+    (1 - 2 * (xx + zz)) * scale.y,
+    2 * (yz + wx) * scale.y,
+    0,
+
+    2 * (xz + wy) * scale.z,
+    2 * (yz - wx) * scale.z,
+    (1 - 2 * (xx + yy)) * scale.z,
+    0,
+
+    pos.x,
+    pos.y,
+    pos.z,
+    1
+  ]);
+}
+
+/**
+ * Create or update an instance buffer for instanced rendering.
+ * Returns { buffer, count }.
+ */
+function createInstanceBuffer(gl, transforms) {
+  const data = buildInstanceMatrices(transforms);
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+  return { buffer, count: transforms.length };
+}
+
+/**
+ * Update an existing instance buffer with new transforms.
+ */
+function updateInstanceBuffer(gl, buffer, transforms) {
+  const data = buildInstanceMatrices(transforms);
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+}
+
+/**
+ * Set up instance matrix attributes for instanced rendering.
+ * Instance matrix uses attribute locations 2-5 (mat4 = 4 vec4s).
+ */
+function setupInstanceAttributes(gl, instanceBuffer) {
+  gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+  const bytesPerMatrix = 4 * 16; // 16 floats * 4 bytes per float
+  for (let i = 0; i < 4; i++) {
+    const loc = 2 + i;
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 4, gl.FLOAT, false, bytesPerMatrix, i * 16);
+    gl.vertexAttribDivisor(loc, 1); // Advance once per instance
+  }
+}
+
+/**
+ * Disable instance matrix attributes.
+ */
+function disableInstanceAttributes(gl) {
+  for (let i = 0; i < 4; i++) {
+    gl.disableVertexAttribArray(2 + i);
+    gl.vertexAttribDivisor(2 + i, 0);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2555,6 +3435,116 @@ function collectNode(node, overrideTransform, renderList, bindings, model, pickR
       renderList.push(entry);
       break;
     }
+
+    case 'interactiveGroup': {
+      // All children share the same pick ID (group-level interaction)
+      const groupTransform = overrideTransform || node.transform;
+      const children = [];
+      // Temporarily disable pick registration for children
+      const tempRegistry = { nextId: pickRegistry.nextId, map: new Map() };
+      for (const child of node.children) {
+        collectNode(child, null, children, bindings, model, tempRegistry, lights, animateNodes);
+      }
+      // Children get collected but don't have their own pickIds
+      const entry = {
+        type: 'group',
+        transform: groupTransform,
+        children,
+        isInteractive: true,
+      };
+      // Register the group itself with the attrs
+      registerPickable(entry, node.attrs, pickRegistry);
+      renderList.push(entry);
+      break;
+    }
+
+    case 'named': {
+      // Named part for sub-ID picking within groups
+      // For now, just pass through to child (sub-ID picking is future enhancement)
+      collectNode(node.child, overrideTransform, renderList, bindings, model, pickRegistry, lights, animateNodes);
+      break;
+    }
+
+    case 'instanced': {
+      // WebGL2 instanced rendering: single draw call for many instances
+      const entry = {
+        type: 'instanced',
+        geometry: node.geometry,
+        material: node.material,
+        transforms: node.transforms,
+        handler: node.handler,
+        // Each instance gets a unique pick ID range for clicking
+        basePickId: pickRegistry.nextId,
+      };
+      // Register each instance for picking
+      for (let i = 0; i < node.transforms.length; i++) {
+        const instancePickId = pickRegistry.nextId++;
+        pickRegistry.map.set(instancePickId, {
+          entry,
+          instanceIndex: i,
+          attrs: [{ type: 'onClick', handler: () => node.handler(BigInt(i)) }]
+        });
+      }
+      renderList.push(entry);
+      break;
+    }
+
+    case 'bindInstanced': {
+      // Extract initial transforms from model
+      const scottTransforms = node.extract(model);
+      const initialTransforms = listToArray(scottTransforms).map(interpretTransform);
+
+      const entry = {
+        type: 'instanced',
+        geometry: node.geometry,
+        material: node.material,
+        transforms: initialTransforms,
+        handler: node.handler,
+        basePickId: pickRegistry.nextId,
+      };
+      // Register each instance for picking
+      for (let i = 0; i < initialTransforms.length; i++) {
+        const instancePickId = pickRegistry.nextId++;
+        pickRegistry.map.set(instancePickId, {
+          entry,
+          instanceIndex: i,
+          attrs: [{ type: 'onClick', handler: () => node.handler(BigInt(i)) }]
+        });
+      }
+
+      bindings.push({
+        type: 'instanced',
+        extract: node.extract,
+        handler: node.handler,
+        lastCount: initialTransforms.length,
+        target: entry,
+        pickRegistry,  // Need access to update pick registry on instance count change
+      });
+
+      renderList.push(entry);
+      break;
+    }
+
+    case 'batched': {
+      // Batched group: collect children, merge at render time
+      const children = [];
+      // Children in batched group don't get individual pickIds
+      const tempRegistry = { nextId: pickRegistry.nextId, map: new Map() };
+      for (const child of node.children) {
+        collectNode(child, null, children, bindings, model, tempRegistry, lights, animateNodes);
+      }
+      const entry = {
+        type: 'batched',
+        material: node.material,
+        transform: overrideTransform || node.transform,
+        children,
+        // Merged geometry will be computed at render time
+        mergedVAO: null,
+        mergedCount: 0,
+      };
+      renderList.push(entry);
+      break;
+    }
   }
 }
 
@@ -2660,6 +3650,34 @@ function updateGLBindings(bindings, newModel, now) {
         b.lastValue = newText;
         dirty = true;
       }
+    } else if (b.type === 'instanced') {
+      // Re-extract transforms from model
+      const scottTransforms = b.extract(newModel);
+      const newTransforms = listToArray(scottTransforms).map(interpretTransform);
+
+      // Update transforms
+      b.target.transforms = newTransforms;
+      b.target.instancesDirty = true;  // Rebuild instance buffer at next render
+
+      // Handle instance count changes: update pick registry
+      if (newTransforms.length !== b.lastCount) {
+        const registry = b.pickRegistry;
+        // Remove old pick IDs
+        for (let i = 0; i < b.lastCount; i++) {
+          registry.map.delete(b.target.basePickId + i);
+        }
+        // Add new pick IDs
+        for (let i = 0; i < newTransforms.length; i++) {
+          const instancePickId = b.target.basePickId + i;
+          registry.map.set(instancePickId, {
+            entry: b.target,
+            instanceIndex: i,
+            attrs: [{ type: 'onClick', handler: () => b.handler(BigInt(i)) }]
+          });
+        }
+        b.lastCount = newTransforms.length;
+      }
+      dirty = true;
     }
   }
 
@@ -2921,6 +3939,71 @@ function renderEntry(gl, programs, geoCache, texCache, fontCache, entry, parentM
 
       gl.disable(gl.BLEND);
     }
+  } else if (entry.type === 'instanced') {
+    // Instanced rendering: draw many instances with a single draw call
+    const mat = entry.material;
+    const geo = getOrCreateGeometry(gl, geoCache, entry.geometry);
+
+    // Create or update instance buffer
+    if (!entry.instanceBuffer || entry.instancesDirty) {
+      if (entry.instanceBuffer) {
+        updateInstanceBuffer(gl, entry.instanceBuffer.buffer, entry.transforms);
+        entry.instanceBuffer.count = entry.transforms.length;
+      } else {
+        entry.instanceBuffer = createInstanceBuffer(gl, entry.transforms);
+      }
+      entry.instancesDirty = false;
+    }
+
+    if (entry.instanceBuffer.count === 0) return;
+
+    // Use instanced phong shader for lit materials, or fallback to unlit
+    const prog = programs.instancedPhong || programs.phong;
+    const c = mat.color || mat.tint || { r: 1, g: 1, b: 1, a: 1 };
+    gl.useProgram(prog.program);
+    gl.uniformMatrix4fv(prog.uniforms.proj, false, programs._projMat);
+    gl.uniformMatrix4fv(prog.uniforms.view, false, programs._viewMat);
+    gl.uniform4f(prog.uniforms.color, c.r, c.g, c.b, c.a);
+    gl.uniform1f(prog.uniforms.shininess, mat.shininess || 32.0);
+    gl.uniform3f(prog.uniforms.cameraPos, cameraPos.x, cameraPos.y, cameraPos.z);
+    uploadLights(gl, prog, lights);
+
+    // Bind geometry VAO and set up instance attributes
+    gl.bindVertexArray(geo.vao);
+    setupInstanceAttributes(gl, entry.instanceBuffer.buffer);
+
+    // Draw all instances
+    gl.drawElementsInstanced(
+      gl.TRIANGLES,
+      geo.count,
+      gl.UNSIGNED_SHORT,
+      0,
+      entry.instanceBuffer.count
+    );
+
+    // Cleanup
+    disableInstanceAttributes(gl);
+    gl.bindVertexArray(null);
+
+  } else if (entry.type === 'batched') {
+    // Batched rendering: merge children's geometry into single draw call
+    // For now, just render children individually (full batching is future work)
+    const tfm = entry.transform;
+    const groupMat = parentMat
+      ? mat4Multiply(parentMat, mat4FromTRS(tfm.pos, tfm.rot, tfm.scale))
+      : mat4FromTRS(tfm.pos, tfm.rot, tfm.scale);
+
+    for (const child of entry.children) {
+      // Override child's material with batch material
+      if (child.type === 'mesh') {
+        const savedMat = child.material;
+        child.material = entry.material;
+        renderEntry(gl, programs, geoCache, texCache, fontCache, child, groupMat, lights, cameraPos);
+        child.material = savedMat;
+      } else {
+        renderEntry(gl, programs, geoCache, texCache, fontCache, child, groupMat, lights, cameraPos);
+      }
+    }
   }
 }
 
@@ -3053,21 +4136,63 @@ function renderPickEntry(gl, pickProg, geoCache, entry, parentMat) {
 }
 
 /**
+ * Render instanced entries into the pick buffer.
+ * Uses instanced pick shader to encode basePickId + instanceIndex per pixel.
+ */
+function renderInstancedPick(gl, instancedPickProg, geoCache, entry, projMat, viewMat) {
+  if (entry.type !== 'instanced' || !entry.basePickId || !entry.instanceBuffer) return;
+
+  const geo = getOrCreateGeometry(gl, geoCache, entry.geometry);
+  if (!geo || entry.instanceBuffer.count === 0) return;
+
+  gl.useProgram(instancedPickProg.program);
+  gl.uniformMatrix4fv(instancedPickProg.uniforms.proj, false, projMat);
+  gl.uniformMatrix4fv(instancedPickProg.uniforms.view, false, viewMat);
+  gl.uniform1i(instancedPickProg.uniforms.basePickId, entry.basePickId);
+
+  gl.bindVertexArray(geo.vao);
+  setupInstanceAttributes(gl, entry.instanceBuffer.buffer);
+
+  gl.drawElementsInstanced(
+    gl.TRIANGLES,
+    geo.count,
+    gl.UNSIGNED_SHORT,
+    0,
+    entry.instanceBuffer.count
+  );
+
+  disableInstanceAttributes(gl);
+  gl.bindVertexArray(null);
+}
+
+/**
  * Render the pick buffer — all interactive objects with unique ID colors.
  */
-function renderPickBuffer(gl, pickProg, pickFB, geoCache, renderList, projMat, viewMat) {
+function renderPickBuffer(gl, pickProg, instancedPickProg, pickFB, geoCache, renderList, projMat, viewMat) {
   gl.bindFramebuffer(gl.FRAMEBUFFER, pickFB.fb);
   gl.viewport(0, 0, pickFB.width, pickFB.height);
   gl.clearColor(0, 0, 0, 1);  // ID 0 = background
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.enable(gl.DEPTH_TEST);
 
+  // First pass: render non-instanced pickable objects
   gl.useProgram(pickProg.program);
   gl.uniformMatrix4fv(pickProg.uniforms.proj, false, projMat);
   gl.uniformMatrix4fv(pickProg.uniforms.view, false, viewMat);
 
   for (const entry of renderList) {
-    renderPickEntry(gl, pickProg, geoCache, entry, null);
+    if (entry.type !== 'instanced') {
+      renderPickEntry(gl, pickProg, geoCache, entry, null);
+    }
+  }
+
+  // Second pass: render instanced objects (if shader available)
+  if (instancedPickProg) {
+    for (const entry of renderList) {
+      if (entry.type === 'instanced') {
+        renderInstancedPick(gl, instancedPickProg, geoCache, entry, projMat, viewMat);
+      }
+    }
   }
 
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -3147,9 +4272,11 @@ function initGLCanvas(canvas) {
   const cameraData = interpretCamera(sceneData.camera);
   const rawNodes = listToArray(sceneData.nodes).map(interpretSceneNode);
 
-  // Compile shaders (unlit + phong + pbr + textured + picking)
+  // Compile shaders (unlit + phong + pbr + textured + picking + instanced)
   let programs;
   let pickProg;
+  let instancedPhongProg;
+  let instancedPickProg;
   try {
     programs = {
       unlit: createProgram(gl),
@@ -3157,10 +4284,12 @@ function initGLCanvas(canvas) {
       pbr:   createPbrProgram(gl),
       tex:   createTexProgram(gl),
       text:  createTextRenderProgram(gl),
+      instancedPhong: createInstancedPhongProgram(gl),
       _projMat: null,
       _viewMat: null,
     };
     pickProg = createPickProgram(gl);
+    instancedPickProg = createInstancedPickProgram(gl);
   } catch(e) {
     console.error('[reactive-gl] Shader compilation failed:', e.message);
     return;
@@ -3238,7 +4367,7 @@ function initGLCanvas(canvas) {
     }
     if (pickFB && pickDirty && !(hasAnimations || activeTransitions > 0)) {
       // Only render pick buffer eagerly when settling (no active animations)
-      renderPickBuffer(gl, pickProg, pickFB, geoCache, renderList, projMat, viewMat);
+      renderPickBuffer(gl, pickProg, instancedPickProg, pickFB, geoCache, renderList, projMat, viewMat);
       pickDirty = false;
     }
 
@@ -3256,7 +4385,7 @@ function initGLCanvas(canvas) {
   // Initial render
   renderScene(gl, programs, geoCache, texCache, fontCache, renderList, projMat, viewMat, lights, cameraPos);
   if (pickFB) {
-    renderPickBuffer(gl, pickProg, pickFB, geoCache, renderList, projMat, viewMat);
+    renderPickBuffer(gl, pickProg, instancedPickProg, pickFB, geoCache, renderList, projMat, viewMat);
     pickDirty = false;
   }
 
@@ -3275,7 +4404,7 @@ function initGLCanvas(canvas) {
 
   function ensurePickBuffer() {
     if (pickDirty && pickFB) {
-      renderPickBuffer(gl, pickProg, pickFB, geoCache, renderList, projMat, viewMat);
+      renderPickBuffer(gl, pickProg, instancedPickProg, pickFB, geoCache, renderList, projMat, viewMat);
       pickDirty = false;
     }
   }

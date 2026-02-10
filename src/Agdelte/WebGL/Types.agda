@@ -246,6 +246,29 @@ data SceneNode (Model Msg : Set) : Set where
   animate : (Float → Transform) → SceneNode Model Msg → SceneNode Model Msg
   --        time (seconds)        wraps existing node
 
+  -- Interactive group: all children share the same pick ID
+  -- Click/hover on ANY child triggers the group's events
+  interactiveGroup : List (SceneAttr Msg) → Transform → List (SceneNode Model Msg)
+                   → SceneNode Model Msg
+
+  -- Named part: assigns a name for sub-ID picking within groups
+  -- Used for precise hit testing on composite objects
+  named : String → SceneNode Model Msg → SceneNode Model Msg
+
+  -- Instanced rendering: many copies with different transforms (single draw call)
+  -- Each instance can be clicked, returning the instance index
+  instanced : Geometry → Material → List Transform → (ℕ → Msg)
+            → SceneNode Model Msg
+
+  -- Reactive instanced: transforms from model
+  bindInstanced : Geometry → Material → (Model → List Transform) → (ℕ → Msg)
+                → SceneNode Model Msg
+
+  -- Batched group: children with same material merged into single draw call
+  -- No individual picking (all children share group's pick ID)
+  batched : Material → List (SceneNode Model Msg) → Transform
+          → SceneNode Model Msg
+
 ------------------------------------------------------------------------
 -- Scene = camera + nodes
 ------------------------------------------------------------------------
@@ -295,6 +318,16 @@ mutual
     bindMaterial (λ m → extract (get m)) g (mapSceneAttrs wrap attrs) t
   zoomSceneNode get wrap (animate timeFn child) =
     animate timeFn (zoomSceneNode get wrap child)
+  zoomSceneNode get wrap (interactiveGroup attrs t children) =
+    interactiveGroup (mapSceneAttrs wrap attrs) t (mapSceneNodes get wrap children)
+  zoomSceneNode get wrap (named name child) =
+    named name (zoomSceneNode get wrap child)
+  zoomSceneNode get wrap (instanced g m transforms handler) =
+    instanced g m transforms (λ i → wrap (handler i))
+  zoomSceneNode get wrap (bindInstanced g m extract handler) =
+    bindInstanced g m (λ m' → extract (get m')) (λ i → wrap (handler i))
+  zoomSceneNode get wrap (batched m children t) =
+    batched m (mapSceneNodes get wrap children) t
 
   mapSceneNodes : ∀ {M M' Msg Msg'} → (M → M') → (Msg' → Msg)
                 → List (SceneNode M' Msg') → List (SceneNode M Msg)

@@ -644,9 +644,99 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   let isUpdating = false;
   const afterUpdateCallbacks = [];  // registered by glCanvas nodes
 
-  // Batching: collect messages within a frame, apply once
-  let batchQueue = [];
-  let batchScheduled = false;
+  // ─── Web Worker for Update ───────────────────────────────────────────
+  // Optional: offload update function to worker thread
+  let updateWorker = null;
+  let workerReady = false;
+  let workerPendingCallbacks = new Map();  // msgId → callback
+  let workerMsgId = 0;
+
+  /**
+   * Initialize update worker (optional).
+   * Call this for CPU-intensive update functions.
+   * @param {string} modulePath - Path to the Agda module (e.g., '../_build/jAgda.Counter.mjs')
+   */
+  async function initUpdateWorker(modulePath) {
+    return new Promise((resolve, reject) => {
+      try {
+        updateWorker = new Worker(new URL('./update-worker.js', import.meta.url), {
+          type: 'module'
+        });
+
+        updateWorker.onmessage = (event) => {
+          const { type, model: resultModel, message } = event.data;
+
+          switch (type) {
+            case 'ready':
+              workerReady = true;
+              console.log('Update worker ready');
+              resolve();
+              break;
+
+            case 'result': {
+              // Find and invoke pending callback
+              const id = event.data.id;
+              const callback = workerPendingCallbacks.get(id);
+              if (callback) {
+                workerPendingCallbacks.delete(id);
+                callback(resultModel);
+              }
+              break;
+            }
+
+            case 'error':
+              console.error('Update worker error:', message);
+              // Reject if still initializing
+              if (!workerReady) reject(new Error(message));
+              break;
+          }
+        };
+
+        updateWorker.onerror = (error) => {
+          console.error('Update worker failed:', error);
+          updateWorker = null;
+          if (!workerReady) reject(error);
+        };
+
+        // Initialize worker with module path
+        updateWorker.postMessage({ type: 'init', modulePath });
+      } catch (error) {
+        console.warn('Web Worker not available, falling back to main thread:', error.message);
+        resolve();  // Don't fail, just use main thread
+      }
+    });
+  }
+
+  /**
+   * Run update in worker (if available) or main thread.
+   * @param {*} msg - Message to process
+   * @param {*} currentModel - Current model state
+   * @returns {Promise<*>} - New model
+   */
+  function runUpdateAsync(msg, currentModel) {
+    if (!updateWorker || !workerReady) {
+      // Fallback to main thread
+      return Promise.resolve(update(msg)(currentModel));
+    }
+
+    return new Promise((resolve) => {
+      const id = workerMsgId++;
+      workerPendingCallbacks.set(id, resolve);
+      updateWorker.postMessage({ type: 'update', id, msg, model: currentModel });
+    });
+  }
+
+  // ─── Priority Scheduling ──────────────────────────────────────────────
+  // P0 (Immediate): keyboard, focus - processed synchronously
+  // P1 (Normal): clicks, user input - batched per animation frame
+  // P2 (Background): data fetches, timers - processed in idle time
+  const PRIORITY = { IMMEDIATE: 0, NORMAL: 1, BACKGROUND: 2 };
+
+  // Priority queues
+  let p1Queue = [];  // Normal priority (rAF batching)
+  let p2Queue = [];  // Background priority (idle callback)
+  let p1Scheduled = false;
+  let p2Scheduled = false;
   const MAX_BATCH_SIZE = 1000;
 
   /**
@@ -661,14 +751,10 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   }
 
   /**
-   * Flush batched messages — apply all updates, then one updateScope
+   * Process a batch of messages and update DOM
    */
-  function flushBatch() {
-    batchScheduled = false;
-    if (batchQueue.length === 0) return;
-
-    const msgs = batchQueue;
-    batchQueue = [];
+  function processBatch(msgs) {
+    if (msgs.length === 0) return;
 
     isUpdating = true;
     try {
@@ -679,7 +765,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         // Execute command for each message
         if (cmdFunc) {
           const cmd = cmdFunc(msg)(model);
-          executeCmd(cmd, dispatchSync);  // commands dispatch immediately
+          executeCmd(cmd, dispatchImmediate);  // commands dispatch immediately
         }
         // Update model
         const newModel = update(msg)(model);
@@ -697,60 +783,130 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     } finally {
       isUpdating = false;
     }
+  }
+
+  /**
+   * Flush P1 (normal priority) queue — runs on requestAnimationFrame
+   */
+  function flushP1() {
+    p1Scheduled = false;
+    if (p1Queue.length === 0) return;
+
+    const msgs = p1Queue;
+    p1Queue = [];
+
+    processBatch(msgs);
 
     // If more messages arrived during flush, schedule another
-    if (batchQueue.length > 0) {
-      batchScheduled = true;
-      requestAnimationFrame(flushBatch);
+    if (p1Queue.length > 0) {
+      p1Scheduled = true;
+      requestAnimationFrame(flushP1);
     }
   }
 
   /**
-   * Dispatch message (batched — collects until next animation frame)
-   * Use dispatchSync for immediate dispatch (keyboard, focus events)
+   * Flush P2 (background priority) queue — runs on requestIdleCallback
    */
-  function dispatch(msg) {
-    if (batchQueue.length >= MAX_BATCH_SIZE) {
-      console.error(`Batch queue overflow (>${MAX_BATCH_SIZE} messages). Check for infinite dispatch loops.`);
-      return;
+  function flushP2(deadline) {
+    p2Scheduled = false;
+
+    // Process messages while we have idle time (at least 1ms)
+    while (p2Queue.length > 0 && deadline.timeRemaining() > 1) {
+      const msg = p2Queue.shift();
+      processBatch([msg]);
     }
-    batchQueue.push(msg);
-    if (!batchScheduled) {
-      batchScheduled = true;
-      requestAnimationFrame(flushBatch);
+
+    // If more messages remain, schedule another idle callback
+    if (p2Queue.length > 0) {
+      p2Scheduled = true;
+      if (typeof requestIdleCallback !== 'undefined') {
+        requestIdleCallback(flushP2, { timeout: 1000 });
+      } else {
+        // Fallback for Safari: use setTimeout with low priority
+        setTimeout(() => flushP2({ timeRemaining: () => 50 }), 100);
+      }
     }
   }
 
   /**
-   * Dispatch message immediately (synchronous, no batching)
+   * Dispatch with priority
+   * @param {number} priority - PRIORITY.IMMEDIATE (0), NORMAL (1), or BACKGROUND (2)
+   * @param {*} msg - Message to dispatch
+   */
+  function dispatchWithPriority(priority, msg) {
+    switch (priority) {
+      case PRIORITY.IMMEDIATE:
+        dispatchImmediate(msg);
+        break;
+      case PRIORITY.NORMAL:
+        dispatchNormal(msg);
+        break;
+      case PRIORITY.BACKGROUND:
+        dispatchBackground(msg);
+        break;
+      default:
+        dispatchNormal(msg);  // Default to normal
+    }
+  }
+
+  /**
+   * Dispatch message immediately (P0 - synchronous, no batching)
    * Use for keyboard input, focus events, or when immediate response is needed
    */
-  function dispatchSync(msg) {
-    // If we're in the middle of a flush, add to queue for next cycle
+  function dispatchImmediate(msg) {
+    // If we're in the middle of a flush, add to P1 queue for next cycle
     if (isUpdating) {
-      batchQueue.push(msg);
+      p1Queue.push(msg);
       return;
     }
+    processBatch([msg]);
+  }
 
-    isUpdating = true;
-    try {
-      const oldModel = model;
-
-      if (cmdFunc) {
-        const cmd = cmdFunc(msg)(model);
-        executeCmd(cmd, dispatchSync);
-      }
-
-      const newModel = update(msg)(oldModel);
-      model = reconcile(oldModel, newModel);
-
-      updateScope(rootScope, oldModel, model);
-      for (const cb of afterUpdateCallbacks) cb(oldModel, model);
-      updateSubscriptions();
-    } finally {
-      isUpdating = false;
+  /**
+   * Dispatch message with normal priority (P1 - batched per animation frame)
+   * Use for clicks, user actions that can wait for next frame
+   */
+  function dispatchNormal(msg) {
+    if (p1Queue.length >= MAX_BATCH_SIZE) {
+      console.error(`P1 queue overflow (>${MAX_BATCH_SIZE} messages). Check for infinite dispatch loops.`);
+      return;
+    }
+    p1Queue.push(msg);
+    if (!p1Scheduled) {
+      p1Scheduled = true;
+      requestAnimationFrame(flushP1);
     }
   }
+
+  /**
+   * Dispatch message with background priority (P2 - processed in idle time)
+   * Use for data fetches, timers, and non-urgent updates
+   */
+  function dispatchBackground(msg) {
+    if (p2Queue.length >= MAX_BATCH_SIZE) {
+      console.error(`P2 queue overflow (>${MAX_BATCH_SIZE} messages). Check for infinite dispatch loops.`);
+      return;
+    }
+    p2Queue.push(msg);
+    if (!p2Scheduled) {
+      p2Scheduled = true;
+      if (typeof requestIdleCallback !== 'undefined') {
+        requestIdleCallback(flushP2, { timeout: 1000 });
+      } else {
+        // Fallback for Safari
+        setTimeout(() => flushP2({ timeRemaining: () => 50 }), 100);
+      }
+    }
+  }
+
+  // Legacy aliases for backward compatibility
+  const dispatch = dispatchNormal;
+  const dispatchSync = dispatchImmediate;
+
+  // Alias for legacy code that uses batchQueue
+  // TODO: Remove after migration
+  let batchQueue = p1Queue;
+  let batchScheduled = p1Scheduled;
 
   /**
    * Render a Node to DOM
@@ -987,7 +1143,12 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           if (el.tagName === 'A' && event === 'click') {
             e.preventDefault();
           }
-          dispatch(msg);
+          // Keyboard/focus events: P0 (immediate), clicks: P1 (normal)
+          if (event === 'keydown' || event === 'keyup' || event === 'focus' || event === 'blur') {
+            dispatchImmediate(msg);
+          } else {
+            dispatchNormal(msg);
+          }
         });
       },
       onValue: (event, handler) => {
@@ -1021,7 +1182,12 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           } else {
             value = e.target.value || '';
           }
-          dispatch(handler(value));
+          // Keyboard events: P0 (immediate), others: P1 (normal)
+          if (event === 'keydown' || event === 'keyup') {
+            dispatchImmediate(handler(value));
+          } else {
+            dispatchNormal(handler(value));
+          }
         });
       },
       // Screen coordinates (no SVG conversion) - better for drag/pan
@@ -1091,11 +1257,79 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   }
 
   // ─────────────────────────────────────────────────────────────────
-  // Scoped update
+  // Scoped update with time-slicing
   // ─────────────────────────────────────────────────────────────────
 
   /**
-   * Recursively update all bindings in a scope tree.
+   * Time budget per frame (ms). If exceeded, yield to browser.
+   * 8ms leaves ~8ms for browser paint in a 60fps budget (16.67ms frame).
+   */
+  const TIME_SLICE_BUDGET = 8;
+
+  /**
+   * Pending update queue for time-sliced updates.
+   * Stores { scope, oldModel, newModel } objects.
+   */
+  let pendingUpdates = [];
+  let timeSliceScheduled = false;
+
+  /**
+   * Process pending updates with time-slicing.
+   * Yields to browser when budget exhausted.
+   */
+  function processTimeSlicedUpdates() {
+    timeSliceScheduled = false;
+    if (pendingUpdates.length === 0) return;
+
+    const startTime = performance.now();
+
+    while (pendingUpdates.length > 0) {
+      const elapsed = performance.now() - startTime;
+      if (elapsed > TIME_SLICE_BUDGET) {
+        // Budget exhausted, schedule continuation
+        if (!timeSliceScheduled) {
+          timeSliceScheduled = true;
+          requestAnimationFrame(processTimeSlicedUpdates);
+        }
+        return;
+      }
+
+      const { scope, oldModel, newModel } = pendingUpdates.shift();
+      updateScopeImmediate(scope, oldModel, newModel);
+    }
+  }
+
+  /**
+   * Schedule scope update with time-slicing.
+   * For small updates, executes immediately.
+   * For large scope trees, queues work to be split across frames.
+   */
+  function updateScope(scope, oldModel, newModel) {
+    // Estimate work: count bindings in this scope (not children)
+    const bindingCount = scope.bindings.length +
+                         scope.attrBindings.length +
+                         scope.styleBindings.length +
+                         scope.conditionals.length +
+                         scope.lists.length;
+
+    // Small updates: execute immediately (no overhead)
+    if (bindingCount < 50) {
+      updateScopeImmediate(scope, oldModel, newModel);
+      return;
+    }
+
+    // Large updates: queue for time-sliced processing
+    pendingUpdates.push({ scope, oldModel, newModel });
+
+    if (!timeSliceScheduled) {
+      timeSliceScheduled = true;
+      // Use microtask for first frame to start ASAP
+      queueMicrotask(processTimeSlicedUpdates);
+    }
+  }
+
+  /**
+   * Recursively update all bindings in a scope tree (immediate, no time-slicing).
    *
    * Optimization layers (checked in order):
    * 1. Fingerprint cutoff - skip if string fingerprint unchanged
@@ -1106,7 +1340,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
    * @param {*} oldModel - Previous model value
    * @param {*} newModel - New model value
    */
-  function updateScope(scope, oldModel, newModel) {
+  function updateScopeImmediate(scope, oldModel, newModel) {
     // Scope cutoff: string fingerprint only (scopeProj skipped if slot tracking active)
     if (scope.fingerprint) {
       const newFP = scope.fingerprint(newModel);
@@ -1251,7 +1485,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         }
       } else if (showBool && cond.scope) {
         // Condition unchanged, but update child scope bindings
-        updateScope(cond.scope, oldModel, newModel);
+        updateScopeImmediate(cond.scope, oldModel, newModel);
       }
     }
 
@@ -1277,7 +1511,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     }
     for (const child of scope.children) {
       if (!ownedScopes.has(child)) {
-        updateScope(child, oldModel, newModel);
+        updateScopeImmediate(child, oldModel, newModel);
       }
     }
   }
@@ -1296,7 +1530,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     // Update existing items (reuse scopes)
     for (let i = 0; i < minLen; i++) {
       if (oldItems[i].scope) {
-        updateScope(oldItems[i].scope, oldModel, newModel);
+        updateScopeImmediate(oldItems[i].scope, oldModel, newModel);
       }
     }
 
@@ -1358,7 +1592,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       // Same keys in same order: just update bindings
       for (const entry of oldItems) {
         if (entry.scope) {
-          updateScope(entry.scope, oldModel, newModel);
+          updateScopeImmediate(entry.scope, oldModel, newModel);
         }
       }
       return;
@@ -1402,7 +1636,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         parent.insertBefore(oldEntry.node, insertBefore);
         // Update bindings in existing scope
         if (oldEntry.scope) {
-          updateScope(oldEntry.scope, oldModel, newModel);
+          updateScopeImmediate(oldEntry.scope, oldModel, newModel);
         }
         newRendered.push(oldEntry);
       } else {
@@ -1476,7 +1710,11 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       unsubscribe(currentSubscription);
     }
 
-    currentSubscription = interpretEvent(eventSpec, dispatch);
+    currentSubscription = interpretEvent(eventSpec, dispatch, {
+      immediate: dispatchImmediate,
+      normal: dispatchNormal,
+      background: dispatchBackground
+    });
     currentEventFingerprint = newFingerprint;
   }
 
@@ -1670,12 +1908,18 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     dispatchWithHistory: timeTravelDispatch,
     // Hot reload
     hotReload,
+    // Worker-based update (optional)
+    initUpdateWorker,
     destroy: () => {
       if (currentSubscription) {
         unsubscribe(currentSubscription);
       }
       if (bigLensWs) {
         bigLensWs.close();
+      }
+      if (updateWorker) {
+        updateWorker.terminate();
+        updateWorker = null;
       }
       destroyScope(rootScope);
       container.innerHTML = '';

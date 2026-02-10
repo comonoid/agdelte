@@ -135,6 +135,26 @@ Same declarative style, but with dependent types and no compiler magic.
 
 **Key advantage over Virtual DOM**: No tree reconstruction, no diffing algorithm. When model changes, only the bound DOM nodes update — exactly like Svelte.
 
+## Runtime Performance
+
+Beyond Svelte-style bindings, Agdelte includes production-grade optimizations:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  P0 Immediate    │ keyboard, focus → sync dispatch          │
+├───────────────────────────────────────────────────────────── │
+│  P1 Normal       │ clicks, input → rAF batching             │
+├───────────────────────────────────────────────────────────── │
+│  P2 Background   │ data fetches → requestIdleCallback       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+- **Priority Scheduling**: Keyboard input processes instantly (P0), UI clicks batch per frame (P1), data loads run in idle time (P2)
+- **Time-Slicing**: Large DOM updates (1000+ bindings) split across frames with 8ms budget — maintains 60fps
+- **Web Worker**: Heavy `update` computations offloaded to worker thread
+- **Buffer Registry**: `SharedArrayBuffer` for large binary data (images, WebGL textures) — model stores only lightweight handles
+- **Slot Tracking**: Skip unchanged bindings via model slot detection (O(changed) not O(bindings))
+
 ## Architecture
 
 ```
@@ -299,8 +319,16 @@ src/
     │   ├── Tween.agda           -- Tween animations with easing
     │   └── Spring.agda          -- Spring physics animations
     │
+    ├── Buffer.agda              -- Buffer Registry API (SharedArrayBuffer)
+    │
     ├── WebGL/                   -- WebGL 3D scene graphs
-    │   └── Types.agda           -- Camera, Light, Material, SceneNode, Scene
+    │   ├── Types.agda           -- Camera, Light, Material, SceneNode, Scene
+    │   └── Builder/             -- Geometry composition & optimization
+    │       ├── Geometry/        -- Primitives, Procedural, CSG
+    │       ├── Layout/          -- Stack, Grid, Radial
+    │       ├── Optimize/        -- Batching, LOD, Culling
+    │       ├── Interaction/     -- NamedParts
+    │       └── Import/          -- GLTF
     │
     ├── Theory/                  -- Mathematical foundation (optional)
     │   ├── Poly.agda            -- Polynomial functors, Coalg, Lens
@@ -351,12 +379,14 @@ examples/
     WebGLFullDemo.agda           -- WebGL full demo (all features)
 
 runtime/
-    reactive.js                  -- Main: runReactiveApp, renderNode, updateBindings
+    reactive.js                  -- Main runtime: priority scheduling, time-slicing
     reactive-auto.js             -- Auto-loader (data-agdelte attribute)
     reactive-gl.js               -- WebGL runtime (3D scene graph rendering)
-    events.js                    -- Event interpretation, subscribe/unsubscribe
+    events.js                    -- Event interpretation with priority dispatchers
     primitives.js                -- Primitive event sources
     svg-events.js                -- SVG coordinate conversion helpers
+    buffer-registry.js           -- SharedArrayBuffer management
+    update-worker.js             -- Web Worker for heavy update computations
     workers/
         fibonacci.js             -- Fibonacci worker example
         fibonacci-progress.js    -- Fibonacci with progress reporting
@@ -447,21 +477,50 @@ See [examples/README.md](examples/README.md) for details.
 
 ## Features
 
+### Core
 - **Reactive templates** — ReactiveApp, Node, Binding (Svelte-style, no Virtual DOM)
 - **Incremental updates** — binding scopes, `foreachKeyed` (key-based list reconciliation), `whenT` (CSS enter/leave transitions)
 - **Widget lenses** — `Lens Outer Inner`, composition `_∘L_`, `zoomNode` for full component composition
 - **Combinators & testing** — `foldE`, `mapFilterE`, `switchE`, `accumE`, `gate`; pure testing via `SimEvent` with propositional equality proofs
 - **Optics** — `Prism`, `Traversal`, `Affine`, unified `Optic` with `_∘O_`; `routeMsg`, `ixList`, 16 equality proofs
-- **Concurrency & distribution** — agents as polynomial coalgebras, channels, structured concurrency; `ProcessOptic` / `RemoteOptic` — same `Optic` interface across processes and hosts; Big Optic spans local widgets, processes, and remote hosts uniformly
-- **Session types** — send/recv, dual, offer/choose; duality proofs; linear obligations; session formulas
-- **Developer tools** — DevTools via Big Optic (network inspection across processes/hosts), time-travel debugging, runtime inspector, hot reload
-- **Formal verification** — `Optic ≅ Poly.Lens` for monomial case, lens law proofs, `ReactiveApp ↔ Coalg` formal connection, session duality proof
-- **Effects** — Signal (coinductive streams), Event (subscriptions), Cmd (commands), Task (monadic chains)
-- **Primitives** — interval, animationFrame, keyboard, mouse, HTTP, WebSocket, workers
-- **CSS DSL** — typed CSS generation: Decl, Length, Color, Layout, Transitions, Animations, Stylesheet
-- **SVG DSL** — namespace-aware SVG: typed elements, Path commands, Transform, SMIL animations, pointer events
+
+### Performance (Runtime Optimizations)
+- **Priority Scheduling** — P0 (keyboard: immediate), P1 (clicks: rAF batching), P2 (data: idle callback)
+- **Time-Slicing** — large DOM updates split across frames (8ms budget), maintains 60fps
+- **Web Worker for update** — offload heavy `update` computations to worker thread
+- **Buffer Registry** — `SharedArrayBuffer` for large binary data (images, audio) outside Agda model
+- **Slot-based tracking** — skip unchanged bindings via model slot detection
+
+### Concurrency & Distribution
+- **Agents** — polynomial coalgebras, channels, structured concurrency
+- **Process/Remote Optics** — same `Optic` interface across processes and hosts
+- **Big Optic** — spans local widgets, processes, and remote hosts uniformly
+- **Session types** — send/recv, dual, offer/choose; duality proofs; linear obligations
+
+### Developer Tools
+- **DevTools via Big Optic** — network inspection across processes/hosts
+- **Time-travel debugging** — undo/redo with history
+- **Runtime inspector** — live model inspection
+- **Hot reload** — preserve model across code changes
+
+### Formal Verification
+- **Optic ≅ Poly.Lens** for monomial case
+- **Lens law proofs** — get-put, put-get, put-put
+- **ReactiveApp ↔ Coalg** formal connection
+- **Session duality proof**
+
+### Effects
+- **Signal** — coinductive streams (const, map, delay, fold)
+- **Event** — subscriptions (interval, keyboard, WebSocket, workers)
+- **Cmd** — commands (HTTP, DOM, clipboard, storage, routing)
+- **Task** — monadic chains with do-notation
+
+### DSLs
+- **CSS** — typed generation: Decl, Length, Color, Layout, Transitions, Animations, Stylesheet
+- **SVG** — namespace-aware: typed elements, Path commands, Transform, SMIL animations, pointer events
 - **Animations** — model-driven Tween/Spring with compile-time keyframe generation
-- **WebGL DSL** — declarative 3D scene graphs: cameras, lights, materials (unlit/flat/phong/pbr/textured), text3D, groups, interactive events, continuous animation
+- **WebGL** — declarative 3D scene graphs: cameras, lights, materials, text3D, groups, events
+- **WebGL Builder** — geometry (CSG, procedural), layout (stack, grid, radial), instancing, LOD, culling
 
 ## Philosophy
 

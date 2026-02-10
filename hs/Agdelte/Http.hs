@@ -115,6 +115,10 @@ formatResponse (Response status body) =
         [ BS8.pack $ "HTTP/1.1 " ++ show status ++ " " ++ statusText
         , BS8.pack "Content-Type: application/json"
         , BS8.pack $ "Content-Length: " ++ show (BS.length bodyBS)
+        -- COOP/COEP headers for SharedArrayBuffer support
+        , BS8.pack "Cross-Origin-Opener-Policy: same-origin"
+        , BS8.pack "Cross-Origin-Embedder-Policy: require-corp"
+        -- CORS headers
         , BS8.pack "Access-Control-Allow-Origin: *"
         , BS8.pack "Access-Control-Allow-Methods: GET, POST, OPTIONS"
         , BS8.pack "Access-Control-Allow-Headers: Content-Type"
