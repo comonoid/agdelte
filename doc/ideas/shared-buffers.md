@@ -240,13 +240,38 @@ canvasBind: (meta, drawFn) => {
 
 ## Relation to other ideas
 
-### mutation.md
+### mutation.md — IMPLEMENTED
 
-In-place mutation of the Agda model is about avoiding copies of the
-Scott-encoded structure. Shared buffers are about avoiding copies of raw
-binary data. They are complementary:
-- Model mutation: O(1) update of metadata fields
-- Shared buffers: O(0) transfer of blob data (zero-copy)
+**Status:** In-place mutation via `wrapMutable` + `reconcile` is now implemented
+in `runtime/reactive.js`. This makes shared buffers work naturally!
+
+**How mutation enables zero-copy shared buffers:**
+
+```agda
+record Model : Set where
+  field
+    brightness   : ℕ               -- metadata, changes often
+    audioBuffer  : SharedArrayBuffer  -- 100MB, rarely changes
+```
+
+```javascript
+// dispatch(ChangeBrightness 60):
+const newModel = update(msg)(oldModel);  // Agda creates new model
+reconcile(oldModel, newModel);            // but reconcile does:
+//   slots[0]: 50 !== 60 → copy value (4 bytes)
+//   slots[1]: ref === ref → SKIP ENTIRELY (100MB untouched!)
+```
+
+**The "handle + version" pattern is now automatic:**
+- Put SharedArrayBuffer in a model slot
+- Reconcile compares by reference
+- Same reference = zero work
+- Changed reference = just copy the pointer (8 bytes)
+
+**Complementary optimizations:**
+- Model mutation: O(1) update of metadata fields (reconcile)
+- Shared buffers: O(0) transfer of blob data (same reference)
+- Combined: metadata changes are fast, blobs are never copied
 
 ### concurrency.md
 

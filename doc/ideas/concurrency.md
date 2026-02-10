@@ -1,38 +1,44 @@
 # Browser-side concurrency for Agdelte runtime
 
-## Current state
+## Current state — UPDATED
 
-The runtime (`runtime/reactive.js`) is essentially single-threaded and
-synchronous. The dispatch cycle is:
+The runtime (`runtime/reactive.js`) now has **batching** and **in-place mutation**
+implemented. The dispatch cycle is:
 
 ```javascript
+// Batched dispatch (default) — collects messages, applies in rAF
 function dispatch(msg) {
-  if (isUpdating) {
-    pendingMessages.push(msg);  // queue if busy
-    return;
+  batchQueue.push(msg);
+  if (!batchScheduled) {
+    batchScheduled = true;
+    requestAnimationFrame(flushBatch);
   }
-  isUpdating = true;
-  const oldModel = model;
-  model = update(msg)(oldModel);          // synchronous, blocks main thread
-  updateScope(rootScope, oldModel, model); // synchronous DOM updates
-  // process queued messages one by one
-  while (pendingMessages.length > 0) { ... }
-  isUpdating = false;
+}
+
+// Immediate dispatch — for keyboard input, focus events
+function dispatchSync(msg) { ... }
+
+function flushBatch() {
+  for (const msg of msgs) {
+    model = reconcile(model, update(msg)(model));  // in-place mutation
+  }
+  updateScope(rootScope, oldModel, model);  // ONE pass for all messages
 }
 ```
 
-What exists:
-- `pendingMessages` queue -- messages arriving during update are deferred
-- `executeCmd` -- side-effects (HTTP, timers) run asynchronously
+What exists now:
+- **Batching** — multiple messages per frame → one `updateScope` pass
+- **rAF sync** — DOM updates aligned with browser paint cycle
+- **In-place mutation** — `reconcile` reuses model slots, reduces GC pressure
+- **Immediate dispatch** — `dispatchSync` for keyboard/focus (bypasses batching)
+- `executeCmd` — side-effects (HTTP, timers) run asynchronously
 - WebSocket exchange with server (BigLens peek/over protocol)
 
-What is missing:
-- No way to offload heavy `update` to a background thread -- UI blocks
-- No batching -- 10 messages in a row = 10 separate `updateScope` passes
-- No priorities -- scroll event and button click treated identically
-- No cancellation -- a started update cannot be preempted
-- No `requestAnimationFrame` sync -- DOM updated immediately in dispatch,
-  even if the browser is not ready to paint
+What is still missing:
+- No way to offload heavy `update` to a background thread — UI blocks
+- No priorities — scroll event and button click treated identically (both batched)
+- No cancellation — a started update cannot be preempted
+- No time-slicing — large `updateScope` still blocks until complete
 
 ## Problem
 
@@ -46,14 +52,13 @@ For simple apps (counters, forms, small lists) this is fine. For complex UIs
 
 ## Proposed improvements
 
-### 1. Batching
+### 1. Batching — IMPLEMENTED
 
-Collect all messages within a single microtask or rAF frame and apply them
-as one batch:
+**Status:** Implemented in `runtime/reactive.js`.
 
 ```javascript
-let batchQueue = [];
-let batchScheduled = false;
+// dispatch(msg) — batched, waits for rAF
+// dispatchSync(msg) — immediate, no batching
 
 function dispatch(msg) {
   batchQueue.push(msg);
@@ -64,25 +69,22 @@ function dispatch(msg) {
 }
 
 function flushBatch() {
-  batchScheduled = false;
-  const msgs = batchQueue;
-  batchQueue = [];
-  const oldModel = model;
+  // Apply all messages, then ONE updateScope
   for (const msg of msgs) {
-    model = update(msg)(model);
+    model = reconcile(model, update(msg)(model));
   }
-  updateScope(rootScope, oldModel, model);  // ONE scope update for all messages
+  updateScope(rootScope, oldModel, model);
 }
 ```
 
-Benefits:
-- 10 scroll events per frame -> 1 updateScope pass
+**Benefits:**
+- 10 scroll events per frame → 1 updateScope pass
 - Naturally synced with browser paint cycle via rAF
+- `dispatchSync` available for immediate response (keyboard, focus)
 
-Trade-off:
-- Adds up to 16ms latency to every message (one frame)
-- Some messages (keyboard input) may want synchronous dispatch
-- Need a way to mark messages as "immediate" vs "batchable"
+**API:**
+- `dispatch(msg)` — batched (default, use for most events)
+- `dispatchSync(msg)` — immediate (use for keyboard input)
 
 ### 2. Priority scheduling
 
@@ -186,12 +188,33 @@ For Worker-based `update`:
 
 ## Interaction with other ideas
 
-### Mutation (doc/ideas/mutation.md)
+### Mutation (doc/ideas/mutation.md) — IMPLEMENTED
 
-In-place mutation reduces allocation pressure, which helps all concurrency
-strategies (less GC pause, faster `update`). But mutation + Worker is tricky:
-can't share mutable model across threads. Worker strategy likely needs
-immutable model (or `SharedArrayBuffer` for flat data like images).
+**Status:** In-place mutation via `wrapMutable` + `reconcile` is now implemented
+in `runtime/reactive.js`.
+
+**How it helps concurrency:**
+
+1. **Less GC pressure** — reconcile reuses model reference, only changed slots
+   get new values. Fewer allocations = fewer GC pauses.
+
+2. **Faster dispatch cycle** — Agda `update` still creates temporary model, but
+   reconcile is O(k) reference comparisons (k = number of slots). Very fast.
+
+3. **SharedArrayBuffer works naturally** — if a slot contains SharedArrayBuffer,
+   reconcile sees "same reference" and skips it entirely:
+   ```javascript
+   // Model: { brightness: 50, audioBuffer: SharedArrayBuffer(100MB) }
+   // dispatch(ChangeBrightness 60):
+   //   reconcile: slots[0] changed (50 → 60), copy value
+   //   reconcile: slots[1] === slots[1] → SKIP (100MB untouched!)
+   ```
+
+4. **Worker-compatible** — mutable wrapper stays on main thread. Workers receive
+   SharedArrayBuffer reference (same memory). No conflict.
+
+**Conclusion:** Mutation implementation is the foundation for all concurrency
+optimizations. Batching (#1) and priority scheduling (#2) build on top of it.
 
 ### Virtual scroll (future)
 
@@ -200,9 +223,10 @@ scroll events trigger dozens of dispatch cycles per second.
 
 ## Recommendation
 
-Start with **batching** (#1) -- simplest, biggest impact. Then add **priority
-dispatch** (#2) for input responsiveness. Time-slicing (#3) and Worker (#4)
-are more complex and only needed for genuinely heavy workloads.
+~~Start with **batching** (#1) -- simplest, biggest impact.~~ **DONE.**
+
+Next: add **priority dispatch** (#2) for input responsiveness. Time-slicing (#3)
+and Worker (#4) are more complex and only needed for genuinely heavy workloads.
 
 ## Affected files
 
@@ -213,10 +237,15 @@ are more complex and only needed for genuinely heavy workloads.
 
 ## Open questions
 
-1. Should batching be opt-in (per app) or default behavior?
-2. How to mark message priority -- at the Agda level (`Msg` metadata) or
+1. ~~Should batching be opt-in (per app) or default behavior?~~
+   **RESOLVED:** Batching is default. `dispatchSync` available for immediate.
+
+2. How to mark message priority — at the Agda level (`Msg` metadata) or
    runtime level (event type heuristic)?
-3. Is `SharedArrayBuffer` viable for sharing large blobs (images, audio)
-   between main thread and worker without copying?
+
+3. ~~Is `SharedArrayBuffer` viable for sharing large blobs (images, audio)
+   between main thread and worker without copying?~~
+   **RESOLVED:** Yes. See `shared-buffers.md`. Reconcile skips unchanged refs.
+
 4. How does time-slicing interact with CSS transitions/animations triggered
    by binding updates?

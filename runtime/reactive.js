@@ -377,9 +377,174 @@ const _slotProbe = new Proxy({}, {
   get(_, name) { return (...args) => args; }
 });
 
+/**
+ * Probe slots from Scott-encoded model.
+ * Supports two Agda→JS formats:
+ * 1. Function: model(cases) => cases["ctor"](a, b)
+ * 2. Object: {ctor: (c) => c.ctor(a, b)}
+ */
 function probeSlots(model) {
-  if (typeof model !== 'function') return null;
-  try { return model(_slotProbe); } catch { return null; }
+  if (!model) return null;
+
+  // Format 1: function
+  if (typeof model === 'function') {
+    try { return model(_slotProbe); } catch { return null; }
+  }
+
+  // Format 2: object with single method
+  if (typeof model === 'object') {
+    const keys = Object.keys(model);
+    if (keys.length === 1 && typeof model[keys[0]] === 'function') {
+      try { return model[keys[0]](_slotProbe); } catch { return null; }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Probe constructor name of a Scott-encoded value.
+ * Supports both function and object formats.
+ */
+function probeCtor(model) {
+  if (!model) return null;
+
+  // Format 1: function
+  if (typeof model === 'function') {
+    let ctor = null;
+    try {
+      model(new Proxy({}, {
+        get(_, name) { return (...args) => { ctor = name; }; }
+      }));
+    } catch { return null; }
+    return ctor;
+  }
+
+  // Format 2: object with single method — key IS the ctor name
+  if (typeof model === 'object') {
+    const keys = Object.keys(model);
+    if (keys.length === 1 && typeof model[keys[0]] === 'function') {
+      return keys[0];
+    }
+  }
+
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Mutable model wrappers (in-place mutation via lenses)
+// Supports both Scott-encoded functions and future tagged arrays
+// ─────────────────────────────────────────────────────────────────────
+
+/** Check if model is a tagged array (future compiler format) */
+function isTaggedArray(model) {
+  return Array.isArray(model) && typeof model[0] === 'string';
+}
+
+/** Get slots from any model format */
+function getSlots(model) {
+  if (isTaggedArray(model)) return model.slice(1);
+  if (model && model._slots) return model._slots;
+  return probeSlots(model);
+}
+
+/** Get constructor name from any model format */
+function getCtor(model) {
+  if (isTaggedArray(model)) return model[0];
+  if (model && model._ctor) return model._ctor;
+  return probeCtor(model);
+}
+
+/** Set slot value (mutates in-place) */
+function setSlot(model, idx, value) {
+  if (isTaggedArray(model)) {
+    model[idx + 1] = value;  // +1 because arr[0] is tag
+  } else if (model && model._slots) {
+    model._slots[idx] = value;
+  } else {
+    throw new Error('Model not mutable — wrap first');
+  }
+}
+
+/**
+ * Wrap a Scott-encoded model for in-place mutation.
+ * Creates a wrapper with _slots array that can be mutated.
+ * Supports both function and object Agda→JS formats.
+ * Tagged arrays are already mutable, returned as-is.
+ */
+function wrapMutable(model) {
+  // Already mutable formats
+  if (isTaggedArray(model)) return model;
+  if (model && model._slots) return model;
+
+  // Primitive or null — return as-is
+  if (model === null || model === undefined) return model;
+  if (typeof model !== 'function' && typeof model !== 'object') return model;
+
+  const args = probeSlots(model);
+  const ctor = probeCtor(model);
+  if (!args || !ctor) return model;
+
+  // Recursively wrap nested structures
+  const slots = args.map(a =>
+    (typeof a === 'function' || (typeof a === 'object' && a !== null))
+      ? wrapMutable(a)
+      : a
+  );
+
+  // Create wrapper based on original format
+  let wrapper;
+  if (typeof model === 'function') {
+    // Function format: (cases) => cases[ctor](...slots)
+    wrapper = (cases) => cases[ctor](...slots);
+  } else {
+    // Object format: {ctor: (c) => c.ctor(...slots)}
+    wrapper = { [ctor]: (c) => c[ctor](...slots) };
+  }
+
+  wrapper._slots = slots;
+  wrapper._ctor = ctor;
+  return wrapper;
+}
+
+/** Ensure model is mutable (wrap if needed) */
+function ensureMutable(model) {
+  if (isTaggedArray(model)) return model;
+  if (model && model._slots) return model;
+  return wrapMutable(model);
+}
+
+/**
+ * Reconcile: copy changed slots from newModel into oldModel in-place.
+ * Returns oldModel (mutated) if possible, or newModel if can't reconcile.
+ */
+function reconcile(oldModel, newModel) {
+  // Can't reconcile if old model not mutable
+  if (!oldModel || !oldModel._slots) {
+    return isTaggedArray(newModel) ? newModel : wrapMutable(newModel);
+  }
+
+  const newSlots = getSlots(newModel);
+  if (!newSlots) return wrapMutable(newModel);
+
+  const oldSlots = oldModel._slots;
+
+  // Structure changed (different arity) — can't reconcile
+  if (oldSlots.length !== newSlots.length) {
+    return wrapMutable(newModel);
+  }
+
+  // Copy changed slots in-place
+  for (let i = 0; i < oldSlots.length; i++) {
+    if (oldSlots[i] !== newSlots[i]) {
+      // Recursively ensure nested structures are mutable
+      oldSlots[i] = typeof newSlots[i] === 'function'
+        ? wrapMutable(newSlots[i])
+        : newSlots[i];
+    }
+  }
+
+  return oldModel;  // same reference, mutated
 }
 
 /**
@@ -468,8 +633,8 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   let cmdFunc = NodeModule.ReactiveApp.cmd(appRecord);
   let subsFunc = NodeModule.ReactiveApp.subs(appRecord);
 
-  // State
-  let model = init;
+  // State — wrap model for in-place mutation
+  let model = wrapMutable(init);
   const rootScope = createScope(null);
   let currentScope = rootScope;
   let currentNs = null;  // null = HTML, SVG_NS, or MATHML_NS
@@ -477,8 +642,12 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   let currentSubscription = null;
   let currentEventFingerprint = null;
   let isUpdating = false;
-  let pendingMessages = [];
   const afterUpdateCallbacks = [];  // registered by glCanvas nodes
+
+  // Batching: collect messages within a frame, apply once
+  let batchQueue = [];
+  let batchScheduled = false;
+  const MAX_BATCH_SIZE = 1000;
 
   /**
    * Execute renderNode within a specific scope
@@ -492,17 +661,74 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   }
 
   /**
-   * Dispatch message
+   * Flush batched messages — apply all updates, then one updateScope
    */
-  const MAX_PENDING_MESSAGES = 1000;
+  function flushBatch() {
+    batchScheduled = false;
+    if (batchQueue.length === 0) return;
 
-  function dispatch(msg) {
-    if (isUpdating) {
-      if (pendingMessages.length >= MAX_PENDING_MESSAGES) {
-        console.error(`Dispatch queue overflow (>${MAX_PENDING_MESSAGES} messages). Check for infinite dispatch loops.`);
-        return;
+    const msgs = batchQueue;
+    batchQueue = [];
+
+    isUpdating = true;
+    try {
+      const oldModel = model;
+
+      // Apply all messages sequentially
+      for (const msg of msgs) {
+        // Execute command for each message
+        if (cmdFunc) {
+          const cmd = cmdFunc(msg)(model);
+          executeCmd(cmd, dispatchSync);  // commands dispatch immediately
+        }
+        // Update model
+        const newModel = update(msg)(model);
+        model = reconcile(model, newModel);
       }
-      pendingMessages.push(msg);
+
+      // ONE updateScope for all messages
+      updateScope(rootScope, oldModel, model);
+
+      // Update GL scopes
+      for (const cb of afterUpdateCallbacks) cb(oldModel, model);
+
+      // Update subscriptions
+      updateSubscriptions();
+    } finally {
+      isUpdating = false;
+    }
+
+    // If more messages arrived during flush, schedule another
+    if (batchQueue.length > 0) {
+      batchScheduled = true;
+      requestAnimationFrame(flushBatch);
+    }
+  }
+
+  /**
+   * Dispatch message (batched — collects until next animation frame)
+   * Use dispatchSync for immediate dispatch (keyboard, focus events)
+   */
+  function dispatch(msg) {
+    if (batchQueue.length >= MAX_BATCH_SIZE) {
+      console.error(`Batch queue overflow (>${MAX_BATCH_SIZE} messages). Check for infinite dispatch loops.`);
+      return;
+    }
+    batchQueue.push(msg);
+    if (!batchScheduled) {
+      batchScheduled = true;
+      requestAnimationFrame(flushBatch);
+    }
+  }
+
+  /**
+   * Dispatch message immediately (synchronous, no batching)
+   * Use for keyboard input, focus events, or when immediate response is needed
+   */
+  function dispatchSync(msg) {
+    // If we're in the middle of a flush, add to queue for next cycle
+    if (isUpdating) {
+      batchQueue.push(msg);
       return;
     }
 
@@ -510,37 +736,17 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     try {
       const oldModel = model;
 
-      // Execute command before updating
       if (cmdFunc) {
         const cmd = cmdFunc(msg)(model);
-        executeCmd(cmd, dispatch);
+        executeCmd(cmd, dispatchSync);
       }
 
-      // Update model
-      model = update(msg)(oldModel);
+      const newModel = update(msg)(oldModel);
+      model = reconcile(oldModel, newModel);
 
-      // Update bindings
       updateScope(rootScope, oldModel, model);
-
-      // Update GL scopes (registered by glCanvas nodes)
       for (const cb of afterUpdateCallbacks) cb(oldModel, model);
-
-      // Update subscriptions
       updateSubscriptions();
-
-      // Process pending
-      while (pendingMessages.length > 0) {
-        const nextMsg = pendingMessages.shift();
-        const nextOld = model;
-        if (cmdFunc) {
-          const nextCmd = cmdFunc(nextMsg)(model);
-          executeCmd(nextCmd, dispatch);
-        }
-        model = update(nextMsg)(nextOld);
-        updateScope(rootScope, nextOld, model);
-        for (const cb of afterUpdateCallbacks) cb(nextOld, model);
-        updateSubscriptions();
-      }
     } finally {
       isUpdating = false;
     }
@@ -1451,7 +1657,8 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   }
 
   return {
-    dispatch,
+    dispatch,           // batched (rAF)
+    dispatchSync,       // immediate (no batching)
     getModel: () => model,
     getContainer: () => container,
     getClientId: () => bigLensClientId,
