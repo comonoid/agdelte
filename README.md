@@ -223,6 +223,7 @@ The key difference from Virtual DOM: `template` is **data**, not a function. Bin
 | [doc/api/svg.md](doc/api/svg.md) | Typed SVG: Elements, Path, Transform, SMIL, Events |
 | [doc/api/anim.md](doc/api/anim.md) | Model-driven animations: Tween, Spring |
 | [doc/api/webgl.md](doc/api/webgl.md) | WebGL scene graphs: Camera, Light, Material, SceneNode, Scene |
+| [doc/api/webgl-controls.md](doc/api/webgl-controls.md) | WebGL 3D UI controls: buttons, sliders, charts, gizmos |
 | [doc/api/ffi.md](doc/api/ffi.md) | Browser/Server postulates, Serialize |
 
 ### Additional Documents
@@ -323,6 +324,29 @@ src/
     │
     ├── WebGL/                   -- WebGL 3D scene graphs
     │   ├── Types.agda           -- Camera, Light, Material, SceneNode, Scene
+    │   ├── Controls.agda        -- Re-exports all 3D UI controls
+    │   ├── Controls/            -- 3D UI controls library
+    │   │   ├── Theme.agda       -- ControlTheme, themes
+    │   │   ├── State.agda       -- ControlState
+    │   │   ├── Text.agda        -- label, dynamicLabel
+    │   │   ├── Buttons.agda     -- button, fabButton, iconButton
+    │   │   ├── Sliders.agda     -- hslider, vslider, dial
+    │   │   ├── Toggles.agda     -- toggle, checkbox, radio
+    │   │   ├── Menus.agda       -- dropdown, radialMenu
+    │   │   ├── Tabs.agda        -- tabBar, tabPanel
+    │   │   ├── Input.agda       -- textInput, numberInput, colorPicker
+    │   │   ├── Charts/          -- 3D data visualization
+    │   │   │   ├── Bar3D.agda
+    │   │   │   ├── Scatter3D.agda
+    │   │   │   ├── Surface.agda
+    │   │   │   └── Network3D.agda
+    │   │   ├── Audio/           -- Audio visualization
+    │   │   │   ├── Spectrum.agda
+    │   │   │   └── Waveform.agda
+    │   │   └── Gizmos/          -- 3D manipulation tools
+    │   │       ├── Transform.agda
+    │   │       ├── Selection.agda
+    │   │       └── Measure.agda
     │   └── Builder/             -- Geometry composition & optimization
     │       ├── Geometry/        -- Primitives, Procedural, CSG
     │       ├── Layout/          -- Stack, Grid, Radial
@@ -522,6 +546,46 @@ See [examples/README.md](examples/README.md) for details.
 - **Animations** — model-driven Tween/Spring with compile-time keyframe generation
 - **WebGL** — declarative 3D scene graphs: cameras, lights, materials, text3D, groups, events
 - **WebGL Builder** — geometry (CSG, procedural), layout (stack, grid, radial), instancing, LOD, culling
+- **WebGL Controls** — complete 3D UI library: buttons, sliders, toggles, menus, tabs, input fields, charts, audio visualization, gizmos
+
+## WebGL Controls
+
+Complete 3D UI library for building interactive WebGL applications:
+
+```agda
+open import Agdelte.WebGL.Controls
+
+-- 3D control panel
+controlPanel : Scene Model Msg
+controlPanel = mkScene camera
+  ( -- Themed 3D button
+    button darkTheme "Start" StartClicked t1
+  ∷ -- Horizontal slider with value display
+    labeledSlider darkTheme "Volume" getVolume SetVolume showPercent t2
+  ∷ -- Toggle switch
+    labeledToggle darkTheme "Mute" getMuted ToggleMute t3
+  ∷ -- Real-time spectrum analyzer
+    frequencyBars3D darkTheme spectrumConfig getFrequencies t4
+  ∷ -- Transform gizmo for 3D manipulation
+    translateGizmo defaultGizmoStyle UpdatePosition t5
+  ∷ [] )
+```
+
+**18 control modules:**
+
+| Category | Controls |
+|----------|----------|
+| Basic | `button`, `iconButton`, `fabButton`, `labeledButton` |
+| Sliders | `hslider`, `vslider`, `dial`, `labeledSlider`, `intSlider` |
+| Toggles | `toggle`, `checkbox`, `radio`, `rockerSwitch` |
+| Menus | `dropdown`, `radialMenu`, `contextMenu`, `selectionDropdown` |
+| Tabs | `tabBar`, `tabPanel`, `segmentedControl`, `paginationDots` |
+| Input | `textInput`, `numberInput`, `colorPicker` |
+| Charts | `barChart3D`, `scatterPlot3D`, `surfacePlot3D`, `networkGraph3D` |
+| Audio | `frequencyBars3D`, `circularSpectrum3D`, `oscilloscope3D`, `vuMeter3D`, `lissajous3D` |
+| Gizmos | `translateGizmo`, `rotateGizmo`, `scaleGizmo`, `boundingBox3D`, `selectionBox3D`, `distanceGizmo`, `angleGizmo`, `ruler3D`, `gridPlane` |
+
+See [doc/api/webgl-controls.md](doc/api/webgl-controls.md) for full API.
 
 ## Philosophy
 

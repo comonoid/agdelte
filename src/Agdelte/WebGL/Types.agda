@@ -241,6 +241,8 @@ data SceneNode (Model Msg : Set) : Set where
                → SceneNode Model Msg
   bindMaterial  : (Model → Material) → Geometry → List (SceneAttr Msg)
                → Transform → SceneNode Model Msg
+  bindChildren  : (Model → List (SceneNode Model Msg)) → Transform
+               → SceneNode Model Msg
 
   -- Continuous animation
   animate : (Float → Transform) → SceneNode Model Msg → SceneNode Model Msg
@@ -316,6 +318,8 @@ mutual
     bindTransform (λ m → extract (get m)) (zoomSceneNode get wrap child)
   zoomSceneNode get wrap (bindMaterial extract g attrs t) =
     bindMaterial (λ m → extract (get m)) g (mapSceneAttrs wrap attrs) t
+  zoomSceneNode get wrap (bindChildren extract t) =
+    bindChildren (λ m → mapSceneNodes get wrap (extract (get m))) t
   zoomSceneNode get wrap (animate timeFn child) =
     animate timeFn (zoomSceneNode get wrap child)
   zoomSceneNode get wrap (interactiveGroup attrs t children) =
