@@ -291,6 +291,98 @@ test('listToArray returns incomplete flag for malformed lists', () => {
 });
 
 // ========================================
+// Agda Values Abstraction Tests
+// ========================================
+
+console.log('\n=== Agda Values Abstraction Tests ===\n');
+
+import * as AgdaValues from '../runtime/agda-values.js';
+
+test('match works with Scott-encoded values', () => {
+  const just = (x) => (c) => c.just(x);
+  const nothing = (c) => c.nothing();
+
+  const result1 = AgdaValues.match(just(42), {
+    just: (x) => x * 2,
+    nothing: () => 0
+  });
+  assertEqual(result1, 84, 'just(42) should return 84');
+
+  const result2 = AgdaValues.match(nothing, {
+    just: (x) => x * 2,
+    nothing: () => 0
+  });
+  assertEqual(result2, 0, 'nothing should return 0');
+});
+
+test('match works with tagged arrays', () => {
+  const justTagged = ['just', 42];
+  const nothingTagged = ['nothing'];
+
+  const result1 = AgdaValues.match(justTagged, {
+    just: (x) => x * 2,
+    nothing: () => 0
+  });
+  assertEqual(result1, 84, 'tagged just(42) should return 84');
+
+  const result2 = AgdaValues.match(nothingTagged, {
+    just: (x) => x * 2,
+    nothing: () => 0
+  });
+  assertEqual(result2, 0, 'tagged nothing should return 0');
+});
+
+test('getCtor works with both formats', () => {
+  const scottValue = (c) => c.myConstructor(1, 2, 3);
+  const taggedValue = ['myConstructor', 1, 2, 3];
+
+  assertEqual(AgdaValues.getCtor(scottValue), 'myConstructor', 'Scott getCtor');
+  assertEqual(AgdaValues.getCtor(taggedValue), 'myConstructor', 'Tagged getCtor');
+});
+
+test('getSlots works with both formats', () => {
+  const scottValue = (c) => c.mk(1, 2, 3);
+  const taggedValue = ['mk', 1, 2, 3];
+
+  assertDeepEqual(AgdaValues.getSlots(scottValue), [1, 2, 3], 'Scott getSlots');
+  assertDeepEqual(AgdaValues.getSlots(taggedValue), [1, 2, 3], 'Tagged getSlots');
+});
+
+test('listToArray works with tagged array lists', () => {
+  // Tagged array list: [1, 2, 3]
+  const taggedList = ['_∷_', 1, ['_∷_', 2, ['_∷_', 3, ['[]']]]];
+
+  const result = AgdaValues.listToArray(taggedList);
+  assertDeepEqual(result.items, [1, 2, 3], 'tagged list items');
+  assertEqual(result.incomplete, false, 'tagged list complete');
+});
+
+test('construct creates correct format', () => {
+  // Default is Scott-encoded
+  const value = AgdaValues.construct('pair', 'a', 'b');
+  assertEqual(typeof value, 'function', 'default is Scott-encoded');
+
+  const slots = AgdaValues.getSlots(value);
+  assertDeepEqual(slots, ['a', 'b'], 'constructed value has correct slots');
+});
+
+test('deepEqual works with both formats', () => {
+  const scott1 = (c) => c.pair(1, 2);
+  const scott2 = (c) => c.pair(1, 2);
+  const scott3 = (c) => c.pair(1, 3);
+
+  assert(AgdaValues.deepEqual(scott1, scott2), 'equal Scott values');
+  assert(!AgdaValues.deepEqual(scott1, scott3), 'different Scott values');
+
+  const tagged1 = ['pair', 1, 2];
+  const tagged2 = ['pair', 1, 2];
+  const tagged3 = ['pair', 1, 3];
+
+  assert(AgdaValues.deepEqual(tagged1, tagged2), 'equal tagged values');
+  assert(!AgdaValues.deepEqual(tagged1, tagged3), 'different tagged values');
+});
+
+// ========================================
 // Results
 // ========================================
 
