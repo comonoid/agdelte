@@ -31,17 +31,17 @@ record ButtonConfig : Set where
     depth      : Float      -- Button thickness (Z depth)
     radius     : Float      -- Corner radius
 
--- Default button size
+-- Default button size (2.5x larger for better visibility)
 defaultButtonConfig : ButtonConfig
-defaultButtonConfig = mkButtonConfig 0.4 0.12 0.04 0.02
+defaultButtonConfig = mkButtonConfig 1.0 0.3 0.1 0.05
 
 -- Small button
 smallButtonConfig : ButtonConfig
-smallButtonConfig = mkButtonConfig 0.25 0.08 0.03 0.015
+smallButtonConfig = mkButtonConfig 0.6 0.2 0.08 0.04
 
 -- Large button
 largeButtonConfig : ButtonConfig
-largeButtonConfig = mkButtonConfig 0.6 0.16 0.05 0.025
+largeButtonConfig = mkButtonConfig 1.5 0.4 0.12 0.06
 
 ------------------------------------------------------------------------
 -- Simple buttons (stateless - hover handled by runtime animation)

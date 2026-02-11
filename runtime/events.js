@@ -455,7 +455,13 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         state = step(inputVal)(state);
         dispatchNormal(state);
       };
-      const sub = interpretEvent(innerEvent, wrappedDispatch, dispatchers);
+      // All priorities route through wrappedDispatch to maintain the fold chain
+      const wrappedDispatchers = {
+        immediate: wrappedDispatch,
+        normal: wrappedDispatch,
+        background: wrappedDispatch
+      };
+      const sub = interpretEvent(innerEvent, wrappedDispatch, wrappedDispatchers);
       return {
         unsubscribe: () => sub.unsubscribe()
       };
@@ -475,7 +481,13 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
           if (result !== null) dispatchNormal(result);
         }
       };
-      const sub = interpretEvent(innerEvent, wrappedDispatch, dispatchers);
+      // All priorities route through wrappedDispatch to maintain the filter chain
+      const wrappedDispatchers = {
+        immediate: wrappedDispatch,
+        normal: wrappedDispatch,
+        background: wrappedDispatch
+      };
+      const sub = interpretEvent(innerEvent, wrappedDispatch, wrappedDispatchers);
       return {
         unsubscribe: () => sub.unsubscribe()
       };
@@ -589,7 +601,8 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       const subs = [];
 
       events.forEach((evt, i) => {
-        const sub = interpretEvent(evt, (val) => {
+        // Create wrapped dispatch that collects results
+        const wrappedDispatch = (val) => {
           if (finished || done[i]) return;
           results[i] = val;
           done[i] = true;
@@ -600,7 +613,14 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
             // Unsubscribe all after completion
             subs.forEach(s => s.unsubscribe());
           }
-        }, dispatchers);
+        };
+        // All priorities route through wrappedDispatch
+        const wrappedDispatchers = {
+          immediate: wrappedDispatch,
+          normal: wrappedDispatch,
+          background: wrappedDispatch
+        };
+        const sub = interpretEvent(evt, wrappedDispatch, wrappedDispatchers);
         subs.push(sub);
       });
 
@@ -623,13 +643,21 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       const subs = [];
 
       events.forEach((evt) => {
-        const sub = interpretEvent(evt, (val) => {
+        // Create wrapped dispatch that handles race semantics
+        const wrappedDispatch = (val) => {
           if (finished) return;
           finished = true;
           dispatchNormal(val);
           // Unsubscribe all (including self)
           subs.forEach(s => s.unsubscribe());
-        }, dispatchers);
+        };
+        // All priorities route through wrappedDispatch
+        const wrappedDispatchers = {
+          immediate: wrappedDispatch,
+          normal: wrappedDispatch,
+          background: wrappedDispatch
+        };
+        const sub = interpretEvent(evt, wrappedDispatch, wrappedDispatchers);
         subs.push(sub);
       });
 

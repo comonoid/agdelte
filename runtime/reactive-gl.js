@@ -347,6 +347,11 @@ function interpretLight(light) {
 }
 
 function interpretGeometry(geom) {
+  // Handle plain JS objects (from Geometry.Primitives like roundedBox)
+  if (typeof geom === 'object' && geom !== null && geom.type) {
+    return geom;
+  }
+  // Handle Scott-encoded geometry
   return geom({
     box:      (dims) => ({ type: 'box', dims }),
     sphere:   (radius) => ({ type: 'sphere', radius }),
@@ -4087,10 +4092,11 @@ function renderPickEntry(gl, pickProg, geoCache, entry, parentMat) {
       ? mat4Multiply(parentMat, mat4FromTRS(tfm.pos, tfm.rot, tfm.scale))
       : mat4FromTRS(tfm.pos, tfm.rot, tfm.scale);
 
-    // Only render objects that have a pickId
-    if (entry.pickId != null) {
+    // Use own pickId or inherited from parent group
+    const effectivePickId = entry.pickId ?? entry._groupPickId;
+    if (effectivePickId != null) {
       const geo = getOrCreateGeometry(gl, geoCache, entry.geometry);
-      const idColor = pickIdToRGB(entry.pickId);
+      const idColor = pickIdToRGB(effectivePickId);
 
       gl.uniformMatrix4fv(pickProg.uniforms.model, false, modelMat);
       gl.uniform3f(pickProg.uniforms.objectId, idColor.r, idColor.g, idColor.b);
@@ -4105,12 +4111,19 @@ function renderPickEntry(gl, pickProg, geoCache, entry, parentMat) {
       ? mat4Multiply(parentMat, mat4FromTRS(tfm.pos, tfm.rot, tfm.scale))
       : mat4FromTRS(tfm.pos, tfm.rot, tfm.scale);
 
+    // If the group itself has a pickId (interactiveGroup), render children with that ID
+    const groupPickId = entry.pickId;
     for (const child of entry.children) {
+      // Pass group's pickId to children for picking
+      if (groupPickId != null && child.pickId == null) {
+        child._groupPickId = groupPickId;
+      }
       renderPickEntry(gl, pickProg, geoCache, child, groupMat);
     }
-  } else if (entry.type === 'text' && entry.pickId != null) {
+  } else if (entry.type === 'text') {
     // Text picking: render text quads with pick color
-    if (entry.textVAO && entry.textVAO.vao && entry.textVAO.count > 0) {
+    const effectivePickId = entry.pickId ?? entry._groupPickId;
+    if (effectivePickId != null && entry.textVAO && entry.textVAO.vao && entry.textVAO.count > 0) {
       const tfm = entry.transform;
       const modelMat = parentMat
         ? mat4Multiply(parentMat, mat4FromTRS(tfm.pos, tfm.rot, tfm.scale))
@@ -4124,7 +4137,7 @@ function renderPickEntry(gl, pickProg, geoCache, entry, parentMat) {
       );
       const finalMat = mat4Multiply(modelMat, sizeMat);
 
-      const idColor = pickIdToRGB(entry.pickId);
+      const idColor = pickIdToRGB(effectivePickId);
       gl.uniformMatrix4fv(pickProg.uniforms.model, false, finalMat);
       gl.uniform3f(pickProg.uniforms.objectId, idColor.r, idColor.g, idColor.b);
 
@@ -4309,6 +4322,7 @@ function initGLCanvas(canvas) {
 
   // Pick framebuffer (only if there are interactive objects)
   const hasPickables = pickRegistry.map.size > 0;
+  console.log('[GL] pickRegistry size:', pickRegistry.map.size, 'hasPickables:', hasPickables);
   let pickFB = null;
   if (hasPickables) {
     pickFB = createPickFramebuffer(gl, canvas.width, canvas.height);
@@ -4404,6 +4418,7 @@ function initGLCanvas(canvas) {
 
   function ensurePickBuffer() {
     if (pickDirty && pickFB) {
+      console.log('[GL] rendering pick buffer, renderList length:', renderList.length);
       renderPickBuffer(gl, pickProg, instancedPickProg, pickFB, geoCache, renderList, projMat, viewMat);
       pickDirty = false;
     }
@@ -4464,11 +4479,14 @@ function initGLCanvas(canvas) {
       if (didDrag) { didDrag = false; return; }
       ensurePickBuffer();
       const id = getPickIdAt(e);
+      console.log('[GL] click at', e.offsetX, e.offsetY, 'pickId:', id, 'registry size:', pickRegistry.map.size);
       if (!dispatch || id === 0) return;
       const entry = pickRegistry.map.get(id);
+      console.log('[GL] entry:', entry);
       if (!entry) return;
 
       for (const attr of entry.attrs) {
+        console.log('[GL] attr:', attr);
         if (attr.type === 'onClick') {
           dispatch(attr.msg);
         } else if (attr.type === 'onClickAt') {

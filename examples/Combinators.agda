@@ -57,7 +57,7 @@ updateModel (BatchTick n) m = record m
   ; batchCount  = suc (batchCount m)
   ; lastBatchAt = n
   }
-updateModel Reset m = record m { tickCount = 0 ; batchCount = 0 ; lastBatchAt = 0 }
+updateModel Reset m = record m { running = false ; tickCount = 0 ; batchCount = 0 ; lastBatchAt = 0 }
 
 ------------------------------------------------------------------------
 -- Subscriptions: foldE + mapFilterE pipeline
