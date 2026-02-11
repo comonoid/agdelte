@@ -228,12 +228,17 @@ record ContourConfig : Set where
     contourLevels : List Float    -- Height values for contour lines
     contourColor  : GlColor
 
+-- Build levels list via postulate to avoid JS Array(Float) issue
+postulate
+  defaultLevels : List Float
+{-# COMPILE JS defaultLevels = [0.2, 0.4, 0.6, 0.8] #-}
+
 defaultContourConfig : ContourConfig
 defaultContourConfig = mkContourConfig
   30                              -- resolutionX
   30                              -- resolutionZ
   (vec3 1.0 0.3 1.0)             -- bounds
-  (0.2 ∷ 0.4 ∷ 0.6 ∷ 0.8 ∷ [])  -- levels
+  defaultLevels                   -- levels
   (rgba 0.1 0.1 0.1 1.0)         -- contourColor
 
 -- Contour plot (shows height levels as rings)

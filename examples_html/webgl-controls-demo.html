@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebGL Controls Demo - Agdelte</title>
+  <link rel="stylesheet" href="common.css">
+  <style>
+    .webgl-demo {
+      text-align: center;
+      padding: 2rem;
+    }
+    .webgl-demo canvas {
+      border: 1px solid #444;
+      border-radius: 8px;
+      margin: 1rem 0;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+    }
+  </style>
+</head>
+<body>
+  <a href="../index.html" class="back">&larr; Back to examples</a>
+
+  <div class="instructions">
+    <strong>WebGL Controls Demo:</strong> Demonstrates the WebGL Controls library with 3D UI elements.
+    Features themed 3D buttons with different sizes, toggle buttons that change color when active,
+    and text labels. Click buttons to interact — the counter updates, toggles change state.
+    Uses <code>Agdelte.WebGL.Controls</code> for all UI elements.
+  </div>
+
+  <div id="app" data-agdelte="WebGLControlsDemo">
+    <p class="loading">Loading compiled Agda...</p>
+  </div>
+
+  <div class="info">
+    <p>Source: <code>examples/WebGLControlsDemo.agda</code></p>
+    <p>Compiled: <code>_build/jAgda.WebGLControlsDemo.mjs</code></p>
+  </div>
+
+  <!-- Load reactive runtime (mounts the app and creates DOM including <canvas>) -->
+  <script type="module" src="../runtime/reactive-auto.js"></script>
+  <!-- Load WebGL runtime (observes DOM, initializes GL on canvas elements) -->
+  <script type="module" src="../runtime/reactive-gl.js"></script>
+</body>
+</html>

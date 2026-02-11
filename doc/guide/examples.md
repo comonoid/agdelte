@@ -38,6 +38,7 @@ All examples use **Reactive Bindings** (like Svelte) — no Virtual DOM.
 | [Line Drawing](#line-drawing) | Stroke-dasharray trick, SMIL animate | SVG |
 | [WebGL Test](#webgl-test) | Perspective camera, phong, animate, bindTransform, onClick | WebGL |
 | [WebGL Full Demo](#webgl-full-demo) | All WebGL features: cameras, materials, lights, text3D, groups, events | WebGL |
+| [WebGL Controls Demo](#webgl-controls-demo) | 3D UI controls: buttons, toggles, text3D from Controls library | WebGL |
 
 ---
 
@@ -1012,6 +1013,51 @@ Source: `examples/WebGLFullDemo.agda`
 
 ---
 
+## WebGL Controls Demo
+
+**Demonstrates:** 3D UI controls from the `Agdelte.WebGL.Controls` library: themed buttons, toggle buttons, text labels.
+
+```agda
+open import Agdelte.WebGL.Controls
+
+scene : Scene Model Msg
+scene = mkScene
+  (fixed (perspective 1.0 0.1 100.0) (vec3 0.0 1.0 5.0) (vec3 0.0 0.0 0.0))
+  ( light (ambient white 0.4)
+  ∷ light (directional white 0.7 (vec3 -0.5 -1.0 -0.3))
+  -- Title
+  ∷ text3D "WebGL Controls Demo"
+      (mkTextStyle (builtin sans) 0.15 (rgb 0.2 0.5 0.9) center singleLine)
+      []
+      (mkTransform (vec3 0.0 1.5 0.0) identityQuat (vec3 1.0 1.0 1.0))
+  -- Counter buttons
+  ∷ button3D defaultTheme defaultButtonConfig "−"  Decrement
+      (mkTransform (vec3 -1.0 0.7 0.0) identityQuat (vec3 1.0 1.0 1.0))
+  ∷ button3D defaultTheme defaultButtonConfig "+"  Increment
+      (mkTransform (vec3 1.0 0.7 0.0) identityQuat (vec3 1.0 1.0 1.0))
+  -- Toggle buttons
+  ∷ toggleButton defaultTheme defaultButtonConfig "Dark" darkMode ToggleDark
+      (mkTransform (vec3 -1.5 0.0 0.0) identityQuat (vec3 1.0 1.0 1.0))
+  -- Size variants
+  ∷ smallButton3D defaultTheme "Small" Reset
+      (mkTransform (vec3 -1.5 -0.7 0.0) identityQuat (vec3 1.0 1.0 1.0))
+  ∷ defaultButton3D defaultTheme "Normal" Reset
+      (mkTransform (vec3 0.0 -0.7 0.0) identityQuat (vec3 1.0 1.0 1.0))
+  ∷ largeButton3D defaultTheme "Large" Reset
+      (mkTransform (vec3 1.5 -0.7 0.0) identityQuat (vec3 1.0 1.0 1.0))
+  ∷ [] )
+```
+
+**Key point:** `Agdelte.WebGL.Controls` provides a complete library of 3D UI components. `button3D`, `toggleButton`, `smallButton3D`, `largeButton3D`, `disabledButton` — all themed and interactive. Toggle buttons change color based on model state. The library includes buttons, sliders, toggles, menus, tabs, input fields, charts, audio visualizers, and gizmos.
+
+```bash
+npm run build:webgl-controls-demo
+```
+
+Source: `examples/WebGLControlsDemo.agda`
+
+---
+
 ## Running Examples
 
 ```bash
@@ -1050,6 +1096,7 @@ http://localhost:8080/examples_html/svg-chart.html
 http://localhost:8080/examples_html/svg-linedraw.html
 http://localhost:8080/examples_html/webgl-test.html
 http://localhost:8080/examples_html/webgl-full-demo.html
+http://localhost:8080/examples_html/webgl-controls-demo.html
 
 # Server examples (Haskell-compiled, run in terminal)
 npm run build:shared-demo && npm run run:shared-demo
