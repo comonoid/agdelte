@@ -76,7 +76,7 @@ defaultTheme = mkTheme
   defaultHover
   defaultActive
   defaultDisabled
-  (phong defaultBackground 32.0)  -- surfaceMaterial
+  (phong defaultBackground 64.0)  -- surfaceMaterial (increased shininess)
   (phong defaultForeground 16.0)  -- frameMaterial
   0.05                            -- cornerRadius
   0.01                            -- borderWidth
@@ -95,7 +95,7 @@ darkSecondary : GlColor
 darkSecondary = rgb 0.5 0.9 0.4       -- Bright green
 
 darkBackground : GlColor
-darkBackground = rgb 0.15 0.15 0.18   -- Dark gray
+darkBackground = rgb 0.3 0.3 0.35   -- Lighter gray for better visibility
 
 darkForeground : GlColor
 darkForeground = rgb 0.9 0.9 0.9      -- Light (text)
@@ -118,7 +118,7 @@ darkTheme = mkTheme
   darkHover
   darkActive
   darkDisabled
-  (phong darkBackground 32.0)   -- surfaceMaterial
+  (phong darkBackground 64.0)   -- surfaceMaterial (increased shininess)
   (phong darkPrimary 16.0)      -- frameMaterial
   0.05                          -- cornerRadius
   0.01                          -- borderWidth

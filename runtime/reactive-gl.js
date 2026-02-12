@@ -166,6 +166,11 @@ function interpretSceneNode(node) {
       type: 'bindLight',
       extract,           // Model → Light (Scott-encoded)
     }),
+    bindChildren: (extract, transform) => ({
+      type: 'bindChildren',
+      extract,           // Model → List (SceneNode Model Msg)
+      transform: interpretTransform(transform)
+    }),
     animate: (timeFn, child) => ({
       type: 'animate',
       timeFn,            // Float → Transform (Scott-encoded)
@@ -2013,91 +2018,103 @@ function createDodecahedronGeometry(gl, radius) {
  * Simplified: uses bevel by offsetting corner vertices.
  */
 function createRoundedBoxGeometry(gl, dims, radius, segments) {
-  // For simplicity, create a box with chamfered corners
-  // A proper implementation would use smooth curves
-  const hw = dims.x * 0.5 - radius;
-  const hh = dims.y * 0.5 - radius;
-  const hd = dims.z * 0.5 - radius;
-  const r = radius;
+  // Rounded box as a single continuous mesh using ray-SDF intersection.
+  // Each face of a subdivided cube is projected onto the rounded box surface.
+  const hw = Math.max(dims.x * 0.5 - radius, 0);
+  const hh = Math.max(dims.y * 0.5 - radius, 0);
+  const hd = Math.max(dims.z * 0.5 - radius, 0);
+  const r = Math.max(radius, 0.001);
+  const segs = Math.max(segments * 4, 12);
 
   const positions = [], normals = [], indices = [];
 
-  // Generate rounded corners using spherical patches
-  const corners = [
-    { x:  hw, y:  hh, z:  hd },
-    { x:  hw, y:  hh, z: -hd },
-    { x:  hw, y: -hh, z:  hd },
-    { x:  hw, y: -hh, z: -hd },
-    { x: -hw, y:  hh, z:  hd },
-    { x: -hw, y:  hh, z: -hd },
-    { x: -hw, y: -hh, z:  hd },
-    { x: -hw, y: -hh, z: -hd },
-  ];
+  // Find t>0 where ray t*d hits the rounded box surface: SDF(t*d) = 0
+  // SDF(p) = length(max(|p| - half, 0)) - r
+  function solveT(dx, dy, dz) {
+    const ax = Math.abs(dx), ay = Math.abs(dy), az = Math.abs(dz);
 
-  // For each corner, add a spherical cap
-  for (const corner of corners) {
-    const sx = corner.x > 0 ? 1 : -1;
-    const sy = corner.y > 0 ? 1 : -1;
-    const sz = corner.z > 0 ? 1 : -1;
+    // Case 1: only one axis exceeds the box (flat face region)
+    // Z dominant
+    if (az > 0.0001) { const t = (hd + r) / az; if (t * ax <= hw + 1e-6 && t * ay <= hh + 1e-6) return t; }
+    // Y dominant
+    if (ay > 0.0001) { const t = (hh + r) / ay; if (t * ax <= hw + 1e-6 && t * az <= hd + 1e-6) return t; }
+    // X dominant
+    if (ax > 0.0001) { const t = (hw + r) / ax; if (t * ay <= hh + 1e-6 && t * az <= hd + 1e-6) return t; }
 
+    // Case 2: two axes exceed (edge region) — solve quadratic
+    function solveEdge(a1, h1, a2, h2, aOther, hOther) {
+      const A = a1 * a1 + a2 * a2;
+      if (A < 1e-12) return null;
+      const B = -2 * (a1 * h1 + a2 * h2);
+      const C = h1 * h1 + h2 * h2 - r * r;
+      const disc = B * B - 4 * A * C;
+      if (disc < 0) return null;
+      const t = (-B + Math.sqrt(disc)) / (2 * A);
+      if (t > 0 && t * aOther <= hOther + 1e-6) return t;
+      return null;
+    }
+    let t;
+    t = solveEdge(ax, hw, az, hd, ay, hh); if (t) return t;  // XZ edge
+    t = solveEdge(ax, hw, ay, hh, az, hd); if (t) return t;  // XY edge
+    t = solveEdge(ay, hh, az, hd, ax, hw); if (t) return t;  // YZ edge
+
+    // Case 3: all three axes exceed (corner region) — solve quadratic
+    const A3 = ax * ax + ay * ay + az * az; // = 1 for normalized d
+    const B3 = -2 * (ax * hw + ay * hh + az * hd);
+    const C3 = hw * hw + hh * hh + hd * hd - r * r;
+    const disc3 = B3 * B3 - 4 * A3 * C3;
+    if (disc3 >= 0) return (-B3 + Math.sqrt(disc3)) / (2 * A3);
+
+    return 1; // fallback
+  }
+
+  // Generate one face of the subdivided cube, projected onto the rounded box
+  function addFace(mapUV, flip) {
     const base = positions.length / 3;
-    for (let i = 0; i <= segments; i++) {
-      for (let j = 0; j <= segments; j++) {
-        const u = (i / segments) * Math.PI / 2;
-        const v = (j / segments) * Math.PI / 2;
-        const nx = sx * Math.cos(v) * Math.cos(u);
-        const ny = sy * Math.sin(u);
-        const nz = sz * Math.cos(v) * Math.sin(u);
-        positions.push(corner.x + r * nx, corner.y + r * ny, corner.z + r * nz);
+    for (let i = 0; i <= segs; i++) {
+      for (let j = 0; j <= segs; j++) {
+        const u = (2 * i / segs) - 1, v = (2 * j / segs) - 1;
+        const cp = mapUV(u, v);  // point on cube face
+        const len = Math.sqrt(cp[0] * cp[0] + cp[1] * cp[1] + cp[2] * cp[2]);
+        const dx = cp[0] / len, dy = cp[1] / len, dz = cp[2] / len;
+
+        const t = solveT(dx, dy, dz);
+        const px = dx * t, py = dy * t, pz = dz * t;
+
+        // SDF gradient = outward normal
+        const qx = Math.max(Math.abs(px) - hw, 0) * (px >= 0 ? 1 : -1);
+        const qy = Math.max(Math.abs(py) - hh, 0) * (py >= 0 ? 1 : -1);
+        const qz = Math.max(Math.abs(pz) - hd, 0) * (pz >= 0 ? 1 : -1);
+        const qLen = Math.sqrt(qx * qx + qy * qy + qz * qz);
+        const nx = qLen > 1e-6 ? qx / qLen : dx;
+        const ny = qLen > 1e-6 ? qy / qLen : dy;
+        const nz = qLen > 1e-6 ? qz / qLen : dz;
+
+        positions.push(px, py, pz);
         normals.push(nx, ny, nz);
       }
     }
-
-    for (let i = 0; i < segments; i++) {
-      for (let j = 0; j < segments; j++) {
-        const a = base + i * (segments + 1) + j;
-        const b = a + segments + 1;
-        indices.push(a, b, a + 1, b, b + 1, a + 1);
+    for (let i = 0; i < segs; i++) {
+      for (let j = 0; j < segs; j++) {
+        const a = base + i * (segs + 1) + j;
+        const b = a + segs + 1;
+        if (!flip) {
+          indices.push(a, b, a + 1, b, b + 1, a + 1);
+        } else {
+          indices.push(a, a + 1, b, b, a + 1, b + 1);
+        }
       }
     }
   }
 
-  // Add the 6 main faces (flat quads between corners)
-  // Front face (+Z)
-  let idx = positions.length / 3;
-  positions.push(-hw, -hh, hd + r, hw, -hh, hd + r, hw, hh, hd + r, -hw, hh, hd + r);
-  normals.push(0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1);
-  indices.push(idx, idx + 1, idx + 2, idx, idx + 2, idx + 3);
+  const sx = hw + r, sy = hh + r, sz = hd + r;
 
-  // Back face (-Z)
-  idx = positions.length / 3;
-  positions.push(hw, -hh, -hd - r, -hw, -hh, -hd - r, -hw, hh, -hd - r, hw, hh, -hd - r);
-  normals.push(0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1);
-  indices.push(idx, idx + 1, idx + 2, idx, idx + 2, idx + 3);
-
-  // Top face (+Y)
-  idx = positions.length / 3;
-  positions.push(-hw, hh + r, -hd, hw, hh + r, -hd, hw, hh + r, hd, -hw, hh + r, hd);
-  normals.push(0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0);
-  indices.push(idx, idx + 1, idx + 2, idx, idx + 2, idx + 3);
-
-  // Bottom face (-Y)
-  idx = positions.length / 3;
-  positions.push(-hw, -hh - r, hd, hw, -hh - r, hd, hw, -hh - r, -hd, -hw, -hh - r, -hd);
-  normals.push(0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0);
-  indices.push(idx, idx + 1, idx + 2, idx, idx + 2, idx + 3);
-
-  // Right face (+X)
-  idx = positions.length / 3;
-  positions.push(hw + r, -hh, hd, hw + r, -hh, -hd, hw + r, hh, -hd, hw + r, hh, hd);
-  normals.push(1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0);
-  indices.push(idx, idx + 1, idx + 2, idx, idx + 2, idx + 3);
-
-  // Left face (-X)
-  idx = positions.length / 3;
-  positions.push(-hw - r, -hh, -hd, -hw - r, -hh, hd, -hw - r, hh, hd, -hw - r, hh, -hd);
-  normals.push(-1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0);
-  indices.push(idx, idx + 1, idx + 2, idx, idx + 2, idx + 3);
+  addFace((u, v) => [u * sx, v * sy,  sz], false);  // +Z front
+  addFace((u, v) => [u * sx, v * sy, -sz], true);   // -Z back
+  addFace((u, v) => [u * sx,  sy, v * sz], true);   // +Y top
+  addFace((u, v) => [u * sx, -sy, v * sz], false);  // -Y bottom
+  addFace((u, v) => [ sx, v * sy, u * sz], true);   // +X right
+  addFace((u, v) => [-sx, v * sy, u * sz], false);  // -X left
 
   return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), new Uint16Array(indices));
 }
@@ -3265,6 +3282,42 @@ function collectNode(node, overrideTransform, renderList, bindings, model, pickR
       break;
     }
 
+    case 'bindChildren': {
+      // Extract children list from model and interpret each child
+      const scottChildren = node.extract(model);
+      const childrenArray = listToArray(scottChildren);
+
+      // Track starting positions so we can replace children on update
+      const renderStartIdx = renderList.length;
+      const pickStartSize = pickRegistry.map.size;
+      const lightsStartIdx = lights.length;
+
+      // Interpret and collect each child - pass null to let each child use its own transform
+      for (const scottChild of childrenArray) {
+        const interpretedChild = interpretSceneNode(scottChild);
+        collectNode(interpretedChild, null, renderList, bindings, model, pickRegistry, lights, animateNodes);
+      }
+
+      // Register binding for dynamic updates
+      bindings.push({
+        type: 'children',
+        extract: node.extract,
+        transform: node.transform,
+        renderListRef: renderList,
+        pickRegistryRef: pickRegistry,
+        lightsRef: lights,
+        animateNodesRef: animateNodes,
+        bindings: bindings,
+        // Track what we added
+        renderStartIdx: renderStartIdx,
+        renderCount: renderList.length - renderStartIdx,
+        lightsStartIdx: lightsStartIdx,
+        lightsCount: lights.length - lightsStartIdx,
+        pickStartSize: pickStartSize,
+      });
+      break;
+    }
+
     case 'animate': {
       // Evaluate the time function at t=0 for initial transform
       const scottTransform = node.timeFn(0.0);
@@ -3682,6 +3735,57 @@ function updateGLBindings(bindings, newModel, now) {
         }
         b.lastCount = newTransforms.length;
       }
+      dirty = true;
+    } else if (b.type === 'children') {
+      // bindChildren: rebuild children when model changes
+      const scottChildren = b.extract(newModel);
+      const childrenArray = listToArray(scottChildren);
+
+      // Remove old entries from renderList, pickRegistry, lights
+      const renderList = b.renderListRef;
+      const pickRegistry = b.pickRegistryRef;
+      const lights = b.lightsRef;
+
+      // Remove old render entries
+      renderList.splice(b.renderStartIdx, b.renderCount);
+
+      // Remove old lights
+      lights.splice(b.lightsStartIdx, b.lightsCount);
+
+      // Remove old pick entries - collect pick IDs to delete
+      const pickIdsToDelete = [];
+      for (const [pickId, entry] of pickRegistry.map.entries()) {
+        // Check if this pick entry belongs to our old children (rough heuristic)
+        if (pickId >= b.pickStartSize) {
+          pickIdsToDelete.push(pickId);
+        }
+      }
+      for (const pickId of pickIdsToDelete) {
+        pickRegistry.map.delete(pickId);
+      }
+
+      // Rebuild children at the same position
+      const newRenderStartIdx = b.renderStartIdx;
+      const newLightsStartIdx = b.lightsStartIdx;
+      const newPickStartSize = pickRegistry.map.size;
+
+      // Collect new children
+      const tempRenderList = [];
+      const tempLights = [];
+      for (const scottChild of childrenArray) {
+        const interpretedChild = interpretSceneNode(scottChild);
+        collectNode(interpretedChild, null, tempRenderList, b.bindings, newModel, pickRegistry, tempLights, []);
+      }
+
+      // Insert new entries into renderList and lights
+      renderList.splice(newRenderStartIdx, 0, ...tempRenderList);
+      lights.splice(newLightsStartIdx, 0, ...tempLights);
+
+      // Update binding with new counts
+      b.renderCount = tempRenderList.length;
+      b.lightsCount = tempLights.length;
+      b.pickStartSize = newPickStartSize;
+
       dirty = true;
     }
   }
