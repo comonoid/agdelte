@@ -11,10 +11,12 @@
  * @returns {{ x: number, y: number }} - SVG coordinates
  */
 export function screenToSvg(svg, clientX, clientY) {
+  const ctm = svg.getScreenCTM();
+  if (!ctm) return null;
   const pt = svg.createSVGPoint();
   pt.x = clientX;
   pt.y = clientY;
-  const svgPt = pt.matrixTransform(svg.getScreenCTM().inverse());
+  const svgPt = pt.matrixTransform(ctm.inverse());
   return { x: svgPt.x, y: svgPt.y };
 }
 
@@ -26,10 +28,12 @@ export function screenToSvg(svg, clientX, clientY) {
  * @returns {{ x: number, y: number }} - Screen coordinates
  */
 export function svgToScreen(svg, svgX, svgY) {
+  const ctm = svg.getScreenCTM();
+  if (!ctm) return null;
   const pt = svg.createSVGPoint();
   pt.x = svgX;
   pt.y = svgY;
-  const screenPt = pt.matrixTransform(svg.getScreenCTM());
+  const screenPt = pt.matrixTransform(ctm);
   return { x: screenPt.x, y: screenPt.y };
 }
 
@@ -73,8 +77,10 @@ export function createSvgDrag(target, callbacks) {
   let startPoint = null;
 
   const onPointerDown = (e) => {
+    const pt = screenToSvg(svg, e.clientX, e.clientY);
+    if (!pt) return;
     isDragging = true;
-    startPoint = screenToSvg(svg, e.clientX, e.clientY);
+    startPoint = pt;
     target.setPointerCapture(e.pointerId);
     if (callbacks.onStart) {
       callbacks.onStart(startPoint, e);
@@ -84,6 +90,7 @@ export function createSvgDrag(target, callbacks) {
   const onPointerMove = (e) => {
     if (!isDragging) return;
     const current = screenToSvg(svg, e.clientX, e.clientY);
+    if (!current || !startPoint) return;
     const delta = {
       x: current.x - startPoint.x,
       y: current.y - startPoint.y
@@ -146,6 +153,7 @@ export function createSvgPinch(svg, callbacks) {
 
   const onPointerDown = (e) => {
     const pt = screenToSvg(svg, e.clientX, e.clientY);
+    if (!pt) return;
     activePointers.set(e.pointerId, pt);
     if (activePointers.size === 2) {
       initialDistance = getDistance();
@@ -156,10 +164,12 @@ export function createSvgPinch(svg, callbacks) {
   const onPointerMove = (e) => {
     if (!activePointers.has(e.pointerId)) return;
     const pt = screenToSvg(svg, e.clientX, e.clientY);
+    if (!pt) return;
     activePointers.set(e.pointerId, pt);
 
-    if (activePointers.size === 2 && initialDistance) {
+    if (activePointers.size === 2 && initialDistance > 1e-6) {
       const currentDistance = getDistance();
+      if (currentDistance === null) return;
       const scale = currentDistance / initialDistance;
       const center = getCenter();
       if (callbacks.onPinch) {

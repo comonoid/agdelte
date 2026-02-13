@@ -16,7 +16,7 @@ let updateFn = null;
 let NodeModule = null;
 
 self.onmessage = async (event) => {
-  const { type, modulePath, msg, model } = event.data;
+  const { type, modulePath, nodeModulePath, msg, model } = event.data;
 
   try {
     switch (type) {
@@ -25,8 +25,9 @@ self.onmessage = async (event) => {
         const module = await import(modulePath);
         const appRecord = module.default.app;
 
-        // Load Node module for extraction
-        const nodeModuleImport = await import('../_build/jAgda.Agdelte.Reactive.Node.mjs');
+        // Bug #34 fix: use parameterized path instead of hardcoded
+        const nodePath = nodeModulePath || '../_build/jAgda.Agdelte.Reactive.Node.mjs';
+        const nodeModuleImport = await import(nodePath);
         NodeModule = nodeModuleImport.default;
 
         updateFn = NodeModule.ReactiveApp.update(appRecord);

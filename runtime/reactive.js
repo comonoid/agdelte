@@ -93,7 +93,13 @@ const ATTR_NS = {
  * @param {Function} onSuccess - Called with result when task completes successfully
  * @param {Function} onError - Called with error message when task fails
  */
-function executeTask(task, onSuccess, onError) {
+const MAX_TASK_DEPTH = 1000;
+
+function executeTask(task, onSuccess, onError, _depth = 0) {
+  if (_depth > MAX_TASK_DEPTH) {
+    onError('Task recursion depth exceeded (possible infinite pure/fail chain)');
+    return;
+  }
   task({
     'pure': (value) => onSuccess(value),
     'fail': (error) => onError(error),
@@ -103,8 +109,8 @@ function executeTask(task, onSuccess, onError) {
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           return response.text();
         })
-        .then((text) => executeTask(onOk(text), onSuccess, onError))
-        .catch((error) => executeTask(onErr(error.message), onSuccess, onError));
+        .then((text) => executeTask(onOk(text), onSuccess, onError, _depth + 1))
+        .catch((error) => executeTask(onErr(error.message), onSuccess, onError, _depth + 1));
     },
     'httpPost': (url, body, onOk, onErr) => {
       fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body })
@@ -112,8 +118,8 @@ function executeTask(task, onSuccess, onError) {
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           return response.text();
         })
-        .then((text) => executeTask(onOk(text), onSuccess, onError))
-        .catch((error) => executeTask(onErr(error.message), onSuccess, onError));
+        .then((text) => executeTask(onOk(text), onSuccess, onError, _depth + 1))
+        .catch((error) => executeTask(onErr(error.message), onSuccess, onError, _depth + 1));
     }
   });
 }
@@ -159,20 +165,32 @@ function executeCmd(cmd, dispatch) {
       );
     },
     'focus': (sel) => {
-      const el = document.querySelector(sel);
-      if (el) el.focus();
-      else console.warn(`Cmd.focus: element not found: "${sel}"`);
+      try {
+        const el = document.querySelector(sel);
+        if (el) el.focus();
+        else console.warn(`Cmd.focus: element not found: "${sel}"`);
+      } catch (e) {
+        console.warn(`Cmd.focus: invalid selector: "${sel}"`, e.message);
+      }
     },
     'blur': (sel) => {
-      const el = document.querySelector(sel);
-      if (el) el.blur();
-      else console.warn(`Cmd.blur: element not found: "${sel}"`);
+      try {
+        const el = document.querySelector(sel);
+        if (el) el.blur();
+        else console.warn(`Cmd.blur: element not found: "${sel}"`);
+      } catch (e) {
+        console.warn(`Cmd.blur: invalid selector: "${sel}"`, e.message);
+      }
     },
     'scrollTo': (x, y) => window.scrollTo(Number(x), Number(y)),
     'scrollIntoView': (sel) => {
-      const el = document.querySelector(sel);
-      if (el) el.scrollIntoView({ behavior: 'smooth' });
-      else console.warn(`Cmd.scrollIntoView: element not found: "${sel}"`);
+      try {
+        const el = document.querySelector(sel);
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+        else console.warn(`Cmd.scrollIntoView: element not found: "${sel}"`);
+      } catch (e) {
+        console.warn(`Cmd.scrollIntoView: invalid selector: "${sel}"`, e.message);
+      }
     },
     'writeClipboard': (text) => navigator.clipboard.writeText(text).catch((e) => {
       console.warn('Cmd.writeClipboard failed:', e.message);
@@ -253,11 +271,13 @@ async function loadNodeModule() {
  * If you need deeper nesting, flatten your model or use nested records.
  */
 const MAX_DEEP_EQUAL_DEPTH = 20;
+let _deepEqualWarned = false;  // Bug #3 fix: warn only once
 
 function deepEqual(a, b, depth) {
   if (a === b) return true;
   if (depth > MAX_DEEP_EQUAL_DEPTH) {
-    if (depth === MAX_DEEP_EQUAL_DEPTH + 1) {
+    if (!_deepEqualWarned) {
+      _deepEqualWarned = true;
       console.warn(`deepEqual: max depth (${MAX_DEEP_EQUAL_DEPTH}) exceeded, using reference equality. Consider flattening your model.`);
     }
     return false;
@@ -388,7 +408,10 @@ function probeSlots(model) {
 
   // Format 1: function
   if (typeof model === 'function') {
-    try { return model(_slotProbe); } catch { return null; }
+    try {
+      const result = model(_slotProbe);
+      return Array.isArray(result) ? result : null;  // Bug #10 fix: reject non-array results
+    } catch { return null; }
   }
 
   // Format 2: object with single method
@@ -527,6 +550,12 @@ function reconcile(oldModel, newModel) {
   const newSlots = getSlots(newModel);
   if (!newSlots) return wrapMutable(newModel);
 
+  // Bug #11 fix: check constructor match before reconciling
+  const newCtor = getCtor(newModel);
+  if (!newCtor || oldModel._ctor !== newCtor) {
+    return wrapMutable(newModel);
+  }
+
   const oldSlots = oldModel._slots;
 
   // Structure changed (different arity) — can't reconcile
@@ -578,15 +607,17 @@ function createScope(parent) {
     lists: [],          // { marker, getList, render, renderedItems, keyed, keyFn }
     children: [],       // child scopes
     parent: parent || null,
-    numSlots: -1        // cached slot count (-1 = not yet detected)
+    numSlots: -1,       // cached slot count (-1 = not yet detected)
+    abortCtrl: new AbortController()  // for cleaning up event listeners
   };
   if (parent) parent.children.push(scope);
   return scope;
 }
 
 function destroyScope(scope) {
-  // Recursively destroy children
-  for (const child of scope.children) {
+  // Bug #36 fix: copy children array since destroyScope mutates parent.children via splice
+  const children = [...scope.children];
+  for (const child of children) {
     destroyScope(child);
   }
   // Remove from parent
@@ -608,6 +639,8 @@ function destroyScope(scope) {
       b.node._pendingAnimationRaf = null;
     }
   }
+  // Abort all event listeners registered via this scope's signal
+  scope.abortCtrl.abort();
   // Clear all arrays
   scope.bindings.length = 0;
   scope.attrBindings.length = 0;
@@ -669,7 +702,6 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           switch (type) {
             case 'ready':
               workerReady = true;
-              console.log('Update worker ready');
               resolve();
               break;
 
@@ -684,16 +716,31 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
               break;
             }
 
-            case 'error':
+            case 'error': {
               console.error('Update worker error:', message);
+              // Bug #33 fix: resolve pending callback on error
+              const errId = event.data.id;
+              if (errId !== undefined) {
+                const cb = workerPendingCallbacks.get(errId);
+                if (cb) {
+                  workerPendingCallbacks.delete(errId);
+                  cb(update(event.data.msg)(model));  // fallback to main thread
+                }
+              }
               // Reject if still initializing
               if (!workerReady) reject(new Error(message));
               break;
+            }
           }
         };
 
         updateWorker.onerror = (error) => {
           console.error('Update worker failed:', error);
+          // Bug #33 fix: resolve all pending callbacks to prevent hanging promises
+          for (const [, cb] of workerPendingCallbacks) {
+            cb(null);
+          }
+          workerPendingCallbacks.clear();
           updateWorker = null;
           if (!workerReady) reject(error);
         };
@@ -758,30 +805,54 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
     isUpdating = true;
     try {
+      // Snapshot old slots before batch so reconcile's in-place mutation
+      // doesn't alias oldModel with model (Bug #1 fix)
       const oldModel = model;
+      const oldSlots = model && model._slots ? [...model._slots] : null;
 
       // Apply all messages sequentially
       for (const msg of msgs) {
-        // Execute command for each message
+        // Update model first, then execute command (Elm architecture order)
+        const newModel = update(msg)(model);
+        model = reconcile(model, newModel);
+        // Execute command after update so cmd sees updated model
         if (cmdFunc) {
           const cmd = cmdFunc(msg)(model);
           executeCmd(cmd, dispatchImmediate);  // commands dispatch immediately
         }
-        // Update model
-        const newModel = update(msg)(model);
-        model = reconcile(model, newModel);
+      }
+
+      // Use snapshotted slots for comparison so in-place mutation
+      // doesn't cause oldModel === model (Bug #1 fix)
+      let effectiveOldModel = oldModel;
+      if (oldSlots && oldModel._slots === model._slots) {
+        // reconcile mutated in-place — build a comparison proxy
+        effectiveOldModel = Object.create(oldModel);
+        effectiveOldModel._slots = oldSlots;
       }
 
       // ONE updateScope for all messages
-      updateScope(rootScope, oldModel, model);
+      updateScope(rootScope, effectiveOldModel, model);
 
-      // Update GL scopes
-      for (const cb of afterUpdateCallbacks) cb(oldModel, model);
+      // Update GL scopes (use effectiveOldModel so GL bindings see snapshotted slots)
+      for (const cb of afterUpdateCallbacks) cb(effectiveOldModel, model);
+      // Bug #41 fix: prune callbacks for disconnected canvases
+      for (let i = afterUpdateCallbacks.length - 1; i >= 0; i--) {
+        if (afterUpdateCallbacks[i]._dead) afterUpdateCallbacks.splice(i, 1);
+      }
 
       // Update subscriptions
       updateSubscriptions();
     } finally {
       isUpdating = false;
+    }
+
+    // Bug #47 fix: process deferred immediate messages in same frame
+    // (messages pushed to p1Queue by dispatchImmediate during isUpdating)
+    if (p1Queue.length > 0) {
+      const deferred = p1Queue;
+      p1Queue = [];
+      processBatch(deferred);
     }
   }
 
@@ -810,10 +881,13 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   function flushP2(deadline) {
     p2Scheduled = false;
 
-    // Process messages while we have idle time (at least 1ms)
+    // Bug #35 fix: batch P2 messages like P1 to avoid N×updateScope overhead
+    const batch = [];
     while (p2Queue.length > 0 && deadline.timeRemaining() > 1) {
-      const msg = p2Queue.shift();
-      processBatch([msg]);
+      batch.push(p2Queue.shift());
+    }
+    if (batch.length > 0) {
+      processBatch(batch);
     }
 
     // If more messages remain, schedule another idle callback
@@ -903,11 +977,6 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   const dispatch = dispatchNormal;
   const dispatchSync = dispatchImmediate;
 
-  // Alias for legacy code that uses batchQueue
-  // TODO: Remove after migration
-  let batchQueue = p1Queue;
-  let batchScheduled = p1Scheduled;
-
   /**
    * Render a Node to DOM
    */
@@ -939,18 +1008,20 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         // Exiting namespace (children go back to HTML)
         if (tag === 'foreignObject' || tag === 'annotation-xml') currentNs = null;
 
-        const { items: attrArray } = listToArray(attrs);
-        for (const attr of attrArray) {
-          applyAttr(el, attr);
-        }
+        try {
+          const { items: attrArray } = listToArray(attrs);
+          for (const attr of attrArray) {
+            applyAttr(el, attr);
+          }
 
-        const { items: childArray } = listToArray(children);
-        for (const child of childArray) {
-          const childNode = renderNode(child);
-          if (childNode) el.appendChild(childNode);
+          const { items: childArray } = listToArray(children);
+          for (const child of childArray) {
+            const childNode = renderNode(child);
+            if (childNode) el.appendChild(childNode);
+          }
+        } finally {
+          currentNs = prevNs;  // restore after subtree
         }
-
-        currentNs = prevNs;  // restore after subtree
         return el;
       },
 
@@ -961,7 +1032,8 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
         if (shouldShow) {
           const childScope = createScope(currentScope);
-          const rendered = withScope(childScope, () => renderNode(innerNode));
+          const rawRendered = withScope(childScope, () => renderNode(innerNode));
+          const rendered = rawRendered || document.createComment('when-empty');
           currentScope.conditionals.push({
             cond, innerNode, node: rendered, rendered: true, scope: childScope
           });
@@ -1096,9 +1168,11 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         // Register afterUpdate callback for this canvas.
         // reactive-gl.js will replace this with the real GL scope updater.
         canvas.__glUpdate = null;
-        afterUpdateCallbacks.push((oldModel, newModel) => {
+        const glCallback = (oldModel, newModel) => {
+          if (!canvas.isConnected) { glCallback._dead = true; return; }
           if (canvas.__glUpdate) canvas.__glUpdate(oldModel, newModel);
-        });
+        };
+        afterUpdateCallbacks.push(glCallback);
 
         return canvas;
       }
@@ -1128,6 +1202,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       attr: (name, value) => {
         if (name === 'disabled' || name === 'checked') {
           if (value === 'true') el.setAttribute(name, '');
+          else el.removeAttribute(name);
         } else {
           setAttr(el, name, value);
         }
@@ -1149,7 +1224,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           } else {
             dispatchNormal(msg);
           }
-        });
+        }, { signal: currentScope.abortCtrl.signal });
       },
       onValue: (event, handler) => {
         el.addEventListener(event, (e) => {
@@ -1188,7 +1263,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           } else {
             dispatchNormal(handler(value));
           }
-        });
+        }, { signal: currentScope.abortCtrl.signal });
       },
       // Screen coordinates (no SVG conversion) - better for drag/pan
       onValueScreen: (event, handler) => {
@@ -1199,8 +1274,13 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           } else {
             value = '0,0';
           }
-          dispatch(handler(value));
-        });
+          // Bug #14 fix: use priority dispatch like onValue
+          if (event === 'keydown' || event === 'keyup') {
+            dispatchImmediate(handler(value));
+          } else {
+            dispatchNormal(handler(value));
+          }
+        }, { signal: currentScope.abortCtrl.signal });
       },
       style: (name, value) => {
         el.style.setProperty(name, value);
@@ -1257,75 +1337,11 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   }
 
   // ─────────────────────────────────────────────────────────────────
-  // Scoped update with time-slicing
+  // Scoped update
   // ─────────────────────────────────────────────────────────────────
 
-  /**
-   * Time budget per frame (ms). If exceeded, yield to browser.
-   * 8ms leaves ~8ms for browser paint in a 60fps budget (16.67ms frame).
-   */
-  const TIME_SLICE_BUDGET = 8;
-
-  /**
-   * Pending update queue for time-sliced updates.
-   * Stores { scope, oldModel, newModel } objects.
-   */
-  let pendingUpdates = [];
-  let timeSliceScheduled = false;
-
-  /**
-   * Process pending updates with time-slicing.
-   * Yields to browser when budget exhausted.
-   */
-  function processTimeSlicedUpdates() {
-    timeSliceScheduled = false;
-    if (pendingUpdates.length === 0) return;
-
-    const startTime = performance.now();
-
-    while (pendingUpdates.length > 0) {
-      const elapsed = performance.now() - startTime;
-      if (elapsed > TIME_SLICE_BUDGET) {
-        // Budget exhausted, schedule continuation
-        if (!timeSliceScheduled) {
-          timeSliceScheduled = true;
-          requestAnimationFrame(processTimeSlicedUpdates);
-        }
-        return;
-      }
-
-      const { scope, oldModel, newModel } = pendingUpdates.shift();
-      updateScopeImmediate(scope, oldModel, newModel);
-    }
-  }
-
-  /**
-   * Schedule scope update with time-slicing.
-   * For small updates, executes immediately.
-   * For large scope trees, queues work to be split across frames.
-   */
   function updateScope(scope, oldModel, newModel) {
-    // Estimate work: count bindings in this scope (not children)
-    const bindingCount = scope.bindings.length +
-                         scope.attrBindings.length +
-                         scope.styleBindings.length +
-                         scope.conditionals.length +
-                         scope.lists.length;
-
-    // Small updates: execute immediately (no overhead)
-    if (bindingCount < 50) {
-      updateScopeImmediate(scope, oldModel, newModel);
-      return;
-    }
-
-    // Large updates: queue for time-sliced processing
-    pendingUpdates.push({ scope, oldModel, newModel });
-
-    if (!timeSliceScheduled) {
-      timeSliceScheduled = true;
-      // Use microtask for first frame to start ASAP
-      queueMicrotask(processTimeSlicedUpdates);
-    }
+    updateScopeImmediate(scope, oldModel, newModel);
   }
 
   /**
@@ -1428,6 +1444,11 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
       if (showBool !== cond.rendered) {
         if (showBool) {
+          // Cancel any pending leave transition timeout
+          if (cond.leaveTimeoutId) {
+            clearTimeout(cond.leaveTimeoutId);
+            cond.leaveTimeoutId = null;
+          }
           // Show: render into new child scope
           const childScope = createScope(scope);
           const newNode = withScope(childScope, () => renderNode(cond.innerNode));
@@ -1449,8 +1470,9 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
             }
           }
 
-          cond.node.replaceWith(newNode);
-          cond.node = newNode;
+          const replacement = newNode || document.createComment('when-empty');
+          cond.node.replaceWith(replacement);
+          cond.node = replacement;
           cond.rendered = true;
           cond.scope = childScope;
         } else {
@@ -1523,6 +1545,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     const { items: newItems } = listToArray(list.getList(newModel));
     const oldItems = list.renderedItems;
     const parent = list.marker.parentNode;
+    if (!parent) return;
 
     // Greedy matching: reuse first min(old, new) items, remove extras, add new ones
     const minLen = Math.min(oldItems.length, newItems.length);
@@ -1540,8 +1563,9 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       if (oldItems[i].scope) destroyScope(oldItems[i].scope);
     }
 
-    // Add new items
-    const insertBefore = list.marker.nextSibling;
+    // Add new items — insert after last existing item (Bug #7 fix)
+    const lastExisting = minLen > 0 ? oldItems[minLen - 1].node : list.marker;
+    let insertBefore = lastExisting.nextSibling;
     for (let i = minLen; i < newItems.length; i++) {
       const itemScope = createScope(parentScope);
       const itemNode = withScope(itemScope, () =>
@@ -1550,6 +1574,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       if (itemNode) {
         parent.insertBefore(itemNode, insertBefore);
         oldItems.push({ item: newItems[i], node: itemNode, scope: itemScope });
+        insertBefore = itemNode.nextSibling;  // advance insertion point
       }
     }
 
@@ -1648,6 +1673,12 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         if (itemNode) {
           parent.insertBefore(itemNode, insertBefore);
           newRendered.push({ key, item: newItems[i], node: itemNode, scope: itemScope });
+        } else {
+          // Bug #43 fix: null render — use comment placeholder to track key, destroy unused scope
+          destroyScope(itemScope);
+          const placeholder = document.createComment('empty');
+          parent.insertBefore(placeholder, insertBefore);
+          newRendered.push({ key, item: newItems[i], node: placeholder, scope: null });
         }
       }
     }
@@ -1704,8 +1735,6 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
     if (newFingerprint === currentEventFingerprint) return;
 
-    console.log(`[subs] fingerprint changed: "${currentEventFingerprint}" → "${newFingerprint}"`);
-
     if (currentSubscription) {
       unsubscribe(currentSubscription);
     }
@@ -1745,7 +1774,6 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   updateSubscriptions();
 
   const counts = countBindings(rootScope);
-  console.log(`Reactive app mounted: ${counts.text} text bindings, ${counts.attr} attr bindings, ${counts.style} style bindings`);
 
   // ─────────────────────────────────────────────────────────────────
   // Big Lens — handle incoming peek/over WS messages
@@ -1772,13 +1800,26 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
       if (data.startsWith('connected:')) {
         bigLensClientId = data.slice('connected:'.length);
-        console.log(`Big Lens: connected as ${bigLensClientId}`);
         return;
       }
 
       if (data.startsWith('peek:')) {
         // Server wants to read our model — respond with serialized model
-        const serialized = JSON.stringify(model);
+        // Bug #31 fix: use recursive serialization for Scott-encoded models
+        const serializeModelValue = (m) => {
+          if (m === null || m === undefined) return null;
+          if (typeof m !== 'function' && typeof m !== 'object') return m;
+          if (m._ctor && m._slots) {
+            return { _ctor: m._ctor, _slots: m._slots.map(serializeModelValue) };
+          }
+          const ctor = probeCtor(m);
+          const slots = probeSlots(m);
+          if (ctor && slots) {
+            return { _ctor: ctor, _slots: slots.map(serializeModelValue) };
+          }
+          return String(m);
+        };
+        const serialized = JSON.stringify(serializeModelValue(model));
         ws.send('peek-response:' + serialized);
         return;
       }
@@ -1821,9 +1862,23 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   let historyFuture = [];    // undone models (oldest first)
   const maxHistory = options.maxHistory || 100;
 
+  // Bug #4 fix: recursive clone for Scott-encoded models (functions can't be structuredClone'd)
+  function cloneModel(m) {
+    if (!m || typeof m !== 'function') return m;
+    if (!m._slots || !m._ctor) return m;
+    const clonedSlots = m._slots.map(s =>
+      (typeof s === 'function' && s._slots && s._ctor) ? cloneModel(s) : s
+    );
+    const ctor = m._ctor;
+    const w = (cases) => cases[ctor](...clonedSlots);
+    w._slots = clonedSlots;
+    w._ctor = ctor;
+    return w;
+  }
+
   function timeTravelDispatch(msg) {
     // Record current state before update
-    historyPast.unshift(structuredClone ? structuredClone(model) : JSON.parse(JSON.stringify(model)));
+    historyPast.unshift(cloneModel(model));
     if (historyPast.length > maxHistory) historyPast.length = maxHistory;
     historyFuture = []; // new action clears redo
     dispatch(msg);
@@ -1832,7 +1887,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   function timeTravel_undo() {
     if (historyPast.length === 0) return;
     const oldModel = model;
-    historyFuture.unshift(structuredClone ? structuredClone(model) : JSON.parse(JSON.stringify(model)));
+    historyFuture.unshift(cloneModel(model));
     model = historyPast.shift();
     updateScope(rootScope, oldModel, model);
     for (const cb of afterUpdateCallbacks) cb(oldModel, model);
@@ -1842,7 +1897,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   function timeTravel_redo() {
     if (historyFuture.length === 0) return;
     const oldModel = model;
-    historyPast.unshift(structuredClone ? structuredClone(model) : JSON.parse(JSON.stringify(model)));
+    historyPast.unshift(cloneModel(model));
     model = historyFuture.shift();
     updateScope(rootScope, oldModel, model);
     for (const cb of afterUpdateCallbacks) cb(oldModel, model);
@@ -1879,8 +1934,10 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     }
     destroyScope(rootScope);
     container.innerHTML = '';
+    afterUpdateCallbacks.length = 0;  // Bug #2 fix: clear GL callbacks
 
-    // Reset root scope
+    // Reset root scope — clear all old properties first (Bug #28 fix)
+    for (const key of Object.keys(rootScope)) delete rootScope[key];
     Object.assign(rootScope, createScope(null));
 
     // Re-render with new template, preserving model
@@ -1891,7 +1948,6 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     // Re-subscribe
     updateSubscriptions();
 
-    console.log('Hot reload complete — model preserved');
   }
 
   return {
@@ -1923,6 +1979,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       }
       destroyScope(rootScope);
       container.innerHTML = '';
+      afterUpdateCallbacks.length = 0;  // Bug #2 fix
     }
   };
 }
@@ -1947,12 +2004,18 @@ export async function mountReactive(moduleName, container, options = {}) {
     return await runReactiveApp(module.default, containerEl, options);
   } catch (e) {
     console.error(`Failed to load ${moduleName}:`, e);
-    containerEl.innerHTML = `
-      <div class="error">
-        <strong>Failed to load ${moduleName}:</strong> ${e.message}
-        <pre>${e.stack}</pre>
-      </div>
-    `;
+    // Bug #13 fix: use textContent instead of innerHTML to prevent XSS
+    containerEl.textContent = '';
+    const div = document.createElement('div');
+    div.className = 'error';
+    const strong = document.createElement('strong');
+    strong.textContent = `Failed to load ${moduleName}: `;
+    div.appendChild(strong);
+    div.appendChild(document.createTextNode(e.message));
+    const pre = document.createElement('pre');
+    pre.textContent = e.stack;
+    div.appendChild(pre);
+    containerEl.appendChild(div);
     throw e;
   }
 }

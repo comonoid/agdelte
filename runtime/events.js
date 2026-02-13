@@ -91,17 +91,21 @@ class WorkerPool {
       this.active++;
       activeWorker.onmessage = (e) => {
         if (task.cancelled) return;
+        const w = activeWorker;
+        activeWorker = null;  // Bug #19 fix: prevent double-decrement from cancel()
         onMessage(e);
         this.active--;
-        this._returnWorker(activeWorker);
+        this._returnWorker(w);
         this._processQueue();
       };
       activeWorker.onerror = (e) => {
         if (task.cancelled) return;
+        const w = activeWorker;  // Bug #19 fix: save ref before nulling
+        activeWorker = null;
         onError(formatWorkerError(e));
         this.active--;
-        // Don't reuse errored worker — create fresh
-        try { activeWorker.terminate(); } catch(_) {}
+        // Don't reuse errored worker — terminate it
+        try { w.terminate(); } catch(_) {}
         this._processQueue();
       };
       activeWorker.postMessage(input);
@@ -111,12 +115,14 @@ class WorkerPool {
 
     return {
       cancel: () => {
+        if (task.cancelled) return;  // Bug #19 fix: idempotent cancel
         task.cancelled = true;
         cancelled = true;
         if (activeWorker) {
           this.active--;
           // Terminate and don't return to pool (task was mid-flight)
           try { activeWorker.terminate(); } catch(_) {}
+          activeWorker = null;  // Bug #19 fix
           this._processQueue();
         }
         // Remove from queue if still there
@@ -138,7 +144,7 @@ class WorkerPool {
       const next = this.queue.shift();
       if (!next.task.cancelled) {
         next.tryRun();
-        break;
+        // Bug #9 fix: don't break — continue processing while idle workers available
       }
     }
   }
@@ -164,17 +170,27 @@ class WorkerPool {
 // Global pool registry: key = "poolSize:scriptUrl"
 const workerPools = new Map();
 
-// Periodic cleanup of empty pools from registry
-setInterval(() => {
-  for (const [key, pool] of workerPools) {
-    if (pool._isEmpty) {
-      pool.destroy();
-      workerPools.delete(key);
+// Bug #20 fix: lazy global cleanup timer — only active when pools exist
+let globalCleanupTimer = null;
+
+function ensureGlobalCleanup() {
+  if (globalCleanupTimer !== null) return;
+  globalCleanupTimer = setInterval(() => {
+    for (const [key, pool] of workerPools) {
+      if (pool._isEmpty) {
+        pool.destroy();
+        workerPools.delete(key);
+      }
     }
-  }
-}, POOL_CHECK_INTERVAL * 2);
+    if (workerPools.size === 0) {
+      clearInterval(globalCleanupTimer);
+      globalCleanupTimer = null;
+    }
+  }, POOL_CHECK_INTERVAL * 2);
+}
 
 function getPool(poolSize, scriptUrl) {
+  ensureGlobalCleanup();
   const poolSizeNum = typeof poolSize === 'bigint' ? Number(poolSize) : poolSize;
   const key = `${poolSizeNum}:${scriptUrl}`;
   if (!workerPools.has(key)) {
@@ -261,6 +277,31 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       return { unsubscribe: () => document.removeEventListener('keyup', listener) };
     },
 
+    // Bug #8 fix: implement onKeys (key-to-message mapping) - P0 (immediate)
+    onKeys: (pairs) => {
+      const pairArray = agdaListToArray(pairs);
+      const keyMap = new Map();
+      for (const pair of pairArray) {
+        // Scott-encoded pair: (cb) => cb["_,_"](key, msg) or (cb) => cb.pair(key, msg)
+        let k, m;
+        try {
+          pair((a, b) => { k = a; m = b; });
+        } catch {
+          try {
+            const result = pair({ '_,_': (a, b) => ({ k: a, m: b }), 'pair': (a, b) => ({ k: a, m: b }) });
+            k = result.k; m = result.m;
+          } catch { continue; }
+        }
+        if (k !== undefined) keyMap.set(k, m);
+      }
+      const listener = (e) => {
+        const msg = keyMap.get(e.key);
+        if (msg !== undefined) dispatchImmediate(msg);
+      };
+      document.addEventListener('keydown', listener);
+      return { unsubscribe: () => document.removeEventListener('keydown', listener) };
+    },
+
     // httpGet: HTTP GET request - P2 (background)
     httpGet: (url, onSuccess, onError) => {
       const controller = new AbortController();
@@ -273,6 +314,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
           }
           const text = await response.text();
+          if (completed) return;
           completed = true;
           dispatchBackground(onSuccess(text));
         })
@@ -284,7 +326,8 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
 
       return {
         unsubscribe: () => {
-          if (!completed) controller.abort();
+          completed = true;
+          controller.abort();
         }
       };
     },
@@ -306,6 +349,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
           }
           const text = await response.text();
+          if (completed) return;
           completed = true;
           dispatchBackground(onSuccess(text));
         })
@@ -317,7 +361,8 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
 
       return {
         unsubscribe: () => {
-          if (!completed) controller.abort();
+          completed = true;
+          controller.abort();
         }
       };
     },
@@ -349,7 +394,13 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         }, msNum);
       };
 
-      const sub = interpretEvent(innerEvent, debouncedDispatch, dispatchers);
+      // Bug #5 fix: wrap all dispatcher channels through debouncedDispatch
+      const wrappedDispatchers = {
+        immediate: debouncedDispatch,
+        normal: debouncedDispatch,
+        background: debouncedDispatch
+      };
+      const sub = interpretEvent(innerEvent, debouncedDispatch, wrappedDispatchers);
       return {
         unsubscribe: () => {
           if (timeoutId) clearTimeout(timeoutId);
@@ -391,7 +442,13 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         }
       };
 
-      const sub = interpretEvent(innerEvent, throttledDispatch, dispatchers);
+      // Bug #6 fix: wrap all dispatcher channels through throttledDispatch
+      const wrappedDispatchers = {
+        immediate: throttledDispatch,
+        normal: throttledDispatch,
+        background: throttledDispatch
+      };
+      const sub = interpretEvent(innerEvent, throttledDispatch, wrappedDispatchers);
       return {
         unsubscribe: () => {
           if (timeoutId) clearTimeout(timeoutId);
@@ -430,6 +487,17 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         }
       };
 
+      // Bug #42 fix: close old WS and nullify handlers to prevent stale events
+      const oldWs = wsConnections.get(url);
+      if (oldWs) {
+        oldWs.onopen = null;
+        oldWs.onmessage = null;
+        oldWs.onclose = null;
+        oldWs.onerror = null;
+        if (oldWs.readyState === WebSocket.OPEN || oldWs.readyState === WebSocket.CONNECTING) {
+          oldWs.close();
+        }
+      }
       // Register for wsSend (overwrites previous - last connection wins)
       wsConnections.set(url, ws);
 
@@ -439,7 +507,10 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
           if (wsConnections.get(url) === ws) {
             wsConnections.delete(url);
           }
-          ws.onerror = null;  // Prevent stale error handler
+          ws.onopen = null;
+          ws.onmessage = null;
+          ws.onclose = null;
+          ws.onerror = null;
           if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
             ws.close();
           }
@@ -451,17 +522,16 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
     // Scott: foldE(_typeB, init, step, innerEvent)
     foldE: (_typeB, init, step, innerEvent) => {
       let state = init;
-      const wrappedDispatch = (inputVal) => {
+      const makeFoldDispatch = (priorityDispatch) => (inputVal) => {
         state = step(inputVal)(state);
-        dispatchNormal(state);
+        priorityDispatch(state);
       };
-      // All priorities route through wrappedDispatch to maintain the fold chain
       const wrappedDispatchers = {
-        immediate: wrappedDispatch,
-        normal: wrappedDispatch,
-        background: wrappedDispatch
+        immediate: makeFoldDispatch(dispatchImmediate),
+        normal: makeFoldDispatch(dispatchNormal),
+        background: makeFoldDispatch(dispatchBackground)
       };
-      const sub = interpretEvent(innerEvent, wrappedDispatch, wrappedDispatchers);
+      const sub = interpretEvent(innerEvent, makeFoldDispatch(dispatchNormal), wrappedDispatchers);
       return {
         unsubscribe: () => sub.unsubscribe()
       };
@@ -470,24 +540,26 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
     // mapFilterE: map + filter via Maybe (uses inner event's priority)
     // Scott: mapFilterE(_typeB, f, innerEvent)
     mapFilterE: (_typeB, f, innerEvent) => {
-      const wrappedDispatch = (inputVal) => {
+      const makeFilterDispatch = (priorityDispatch) => (inputVal) => {
         const maybeResult = f(inputVal);
         // Extract Maybe: just(x) → dispatch(x), nothing → skip
-        if (maybeResult) {
-          const result = maybeResult({
-            just: (x) => x,
-            nothing: () => null
+        // Bug #39 fix: use explicit null/undefined check instead of truthy
+        if (maybeResult !== null && maybeResult !== undefined) {
+          let isJust = false;
+          let result;
+          maybeResult({
+            just: (x) => { isJust = true; result = x; },
+            nothing: () => {}
           });
-          if (result !== null) dispatchNormal(result);
+          if (isJust) priorityDispatch(result);
         }
       };
-      // All priorities route through wrappedDispatch to maintain the filter chain
       const wrappedDispatchers = {
-        immediate: wrappedDispatch,
-        normal: wrappedDispatch,
-        background: wrappedDispatch
+        immediate: makeFilterDispatch(dispatchImmediate),
+        normal: makeFilterDispatch(dispatchNormal),
+        background: makeFilterDispatch(dispatchBackground)
       };
-      const sub = interpretEvent(innerEvent, wrappedDispatch, wrappedDispatchers);
+      const sub = interpretEvent(innerEvent, makeFilterDispatch(dispatchNormal), wrappedDispatchers);
       return {
         unsubscribe: () => sub.unsubscribe()
       };
@@ -504,7 +576,13 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         currentSub = interpretEvent(newEvent, dispatch, dispatchers);
       };
 
-      const metaSub = interpretEvent(metaEvent, metaDispatch, dispatchers);
+      // Bug #24 fix: route all meta-event channels through metaDispatch
+      const metaDispatchers = {
+        immediate: metaDispatch,
+        normal: metaDispatch,
+        background: metaDispatch
+      };
+      const metaSub = interpretEvent(metaEvent, metaDispatch, metaDispatchers);
 
       return {
         unsubscribe: () => {
@@ -524,11 +602,16 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         return { unsubscribe: () => {} };
       }
 
+      // Bug #44 fix: guard against dispatch after terminate
+      let terminated = false;
+
       w.onmessage = (e) => {
+        if (terminated) return;
         dispatchBackground(onResult(typeof e.data === 'string' ? e.data : JSON.stringify(e.data)));
       };
 
       w.onerror = (e) => {
+        if (terminated) return;
         dispatchBackground(onError(formatWorkerError(e)));
       };
 
@@ -537,6 +620,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
 
       return {
         unsubscribe: () => {
+          terminated = true;
           w.terminate();
         }
       };
@@ -552,7 +636,11 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         return { unsubscribe: () => {} };
       }
 
+      // Bug #44 fix: guard against dispatch after terminate
+      let terminated = false;
+
       w.onmessage = (e) => {
+        if (terminated) return;
         const data = e.data;
         if (data && typeof data === 'object') {
           if (data.type === 'progress') {
@@ -571,6 +659,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       };
 
       w.onerror = (e) => {
+        if (terminated) return;
         dispatchBackground(onError(formatWorkerError(e)));
       };
 
@@ -578,6 +667,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
 
       return {
         unsubscribe: () => {
+          terminated = true;
           w.terminate();
         }
       };
@@ -643,21 +733,19 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       const subs = [];
 
       events.forEach((evt) => {
-        // Create wrapped dispatch that handles race semantics
-        const wrappedDispatch = (val) => {
+        // Bug #29 fix: preserve inner event's priority
+        const makePriorityDispatch = (priorityDispatch) => (val) => {
           if (finished) return;
           finished = true;
-          dispatchNormal(val);
-          // Unsubscribe all (including self)
+          priorityDispatch(val);
           subs.forEach(s => s.unsubscribe());
         };
-        // All priorities route through wrappedDispatch
         const wrappedDispatchers = {
-          immediate: wrappedDispatch,
-          normal: wrappedDispatch,
-          background: wrappedDispatch
+          immediate: makePriorityDispatch(dispatchImmediate),
+          normal: makePriorityDispatch(dispatchNormal),
+          background: makePriorityDispatch(dispatchBackground)
         };
-        const sub = interpretEvent(evt, wrappedDispatch, wrappedDispatchers);
+        const sub = interpretEvent(evt, makePriorityDispatch(dispatchNormal), wrappedDispatchers);
         subs.push(sub);
       });
 
@@ -716,7 +804,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
 
     // allocShared: allocate SharedArrayBuffer (P1 - normal, synchronous operation)
     // Scott: allocShared(numBytes, handler)
-    // NOTE: Requires COOP/COEP headers. See doc/KNOWN_ISSUES.md
+    // NOTE: Requires Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy headers
     allocShared: (numBytes, handler) => {
       const n = typeof numBytes === 'bigint' ? Number(numBytes) : numBytes;
       try {
@@ -795,6 +883,9 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
 
       window.addEventListener('popstate', listener);
 
+      // Bug #37 fix: dispatch initial URL on subscribe
+      dispatchNormal(handler(window.location.pathname + window.location.search));
+
       return {
         unsubscribe: () => window.removeEventListener('popstate', listener)
       };
@@ -841,6 +932,14 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       const stiff = Number(stiffness);
       const damp = Number(damping);
 
+      // Bug #23 fix: guard against NaN parameters causing infinite loop
+      if (!isFinite(pos) || !isFinite(vel) || !isFinite(tgt) ||
+          !isFinite(stiff) || !isFinite(damp)) {
+        console.warn('springLoop: invalid parameters (NaN/Infinity), settling immediately');
+        queueMicrotask(() => dispatchNormal(onSettled));
+        return { unsubscribe: () => {} };
+      }
+
       const tick = (dt) => {
         const dtSec = dt / 1000;
         const force = stiff * (tgt - pos) - damp * vel;
@@ -856,9 +955,14 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         if (!running) return;
         if (lastTime === null) {
           lastTime = timestamp;
+          requestAnimationFrame(loop);  // Bug #40 fix: skip first frame (dt=0)
+          return;
         }
         const dt = Math.min(timestamp - lastTime, 64); // cap to avoid spiral of death
         lastTime = timestamp;
+
+        // Bug #49 fix: skip frame if dt is 0 (identical timestamps)
+        if (dt <= 0) { requestAnimationFrame(loop); return; }
 
         // Tick in 4ms steps for stability
         let remaining = dt;
@@ -894,9 +998,15 @@ function agdaListToArray(list) {
   // Agda JS backend compiles List to native JS Array
   if (Array.isArray(list)) return list;
   // Fallback: Scott-encoded list
+  const MAX_LIST_ITERATIONS = 10000;
   const arr = [];
   let current = list;
+  let iterations = 0;
   while (current) {
+    if (++iterations > MAX_LIST_ITERATIONS) {
+      console.warn('agdaListToArray: exceeded max iterations, possible infinite list');
+      break;
+    }
     const result = current({
       '[]': () => null,
       '_∷_': (head, tail) => ({ head, tail })
@@ -920,19 +1030,18 @@ function mkAgdaList(arr) {
  * Creates KeyboardEvent record for Agda (Scott-encoded)
  * Agda record = { constructorName: cb => cb.constructorName(fields...) }
  */
+// Bug #32 fix: return function format (Format 1) for Scott encoding compatibility
 function mkKeyboardEvent(e) {
-  return {
-    mkKeyboardEvent: (cb) => cb.mkKeyboardEvent(
-      e.key,
-      e.code,
-      e.ctrlKey,
-      e.altKey,
-      e.shiftKey,
-      e.metaKey,
-      e.repeat,
-      e.location
-    )
-  };
+  return (cb) => cb.mkKeyboardEvent(
+    e.key,
+    e.code,
+    e.ctrlKey,
+    e.altKey,
+    e.shiftKey,
+    e.metaKey,
+    e.repeat,
+    e.location
+  );
 }
 
 /**
@@ -972,7 +1081,9 @@ function subscribeLegacy(eventSpec, dispatch) {
 
     case 'interval': {
       const msNum = typeof config.ms === 'bigint' ? Number(config.ms) : config.ms;
-      const id = setInterval(() => dispatch(config.msg), msNum);
+      // Bug #12 fix: use handler(Date.now()) if available, fallback to static msg
+      const fn = config.handler || (() => config.msg);
+      const id = setInterval(() => dispatch(fn(Date.now())), msNum);
       return { unsubscribe: () => clearInterval(id) };
     }
 

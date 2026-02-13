@@ -259,7 +259,7 @@ export function every(ms) {
     type: 'interval',
     config: {
       ms,
-      msg: handler(Date.now())
+      handler  // Bug #12 fix: pass handler instead of pre-computed msg
     }
   });
 }

@@ -388,6 +388,7 @@ function listToArray(list) {
   if (Array.isArray(list)) return list;
   const items = [];
   let current = list;
+  let terminated = false;
   for (let i = 0; i < CONFIG.MAX_LIST_ITEMS; i++) {
     let done = false;
     current({
@@ -397,7 +398,10 @@ function listToArray(list) {
         current = tail;
       }
     });
-    if (done) break;
+    if (done) { terminated = true; break; }
+  }
+  if (!terminated) {
+    console.warn(`listToArray: list exceeded ${CONFIG.MAX_LIST_ITEMS} items limit, output truncated`);
   }
   return items;
 }
@@ -2065,7 +2069,17 @@ function createRoundedBoxGeometry(gl, dims, radius, segments) {
     const disc3 = B3 * B3 - 4 * A3 * C3;
     if (disc3 >= 0) return (-B3 + Math.sqrt(disc3)) / (2 * A3);
 
-    return 1; // fallback
+    // Fallback: binary search on the SDF to find t where SDF(t*d) ≈ 0
+    // This handles degenerate cases where analytical solutions fail
+    let lo = 0, hi = (hw + hh + hd + r) * 2;
+    for (let iter = 0; iter < 32; iter++) {
+      const mid = (lo + hi) * 0.5;
+      const px = mid * ax, py = mid * ay, pz = mid * az;
+      const qx = Math.max(px - hw, 0), qy = Math.max(py - hh, 0), qz = Math.max(pz - hd, 0);
+      const sdf = Math.sqrt(qx * qx + qy * qy + qz * qz) - r;
+      if (sdf < 0) lo = mid; else hi = mid;
+    }
+    return Math.max((lo + hi) * 0.5, 0.001);
   }
 
   // Generate one face of the subdivided cube, projected onto the rounded box
@@ -2076,6 +2090,11 @@ function createRoundedBoxGeometry(gl, dims, radius, segments) {
         const u = (2 * i / segs) - 1, v = (2 * j / segs) - 1;
         const cp = mapUV(u, v);  // point on cube face
         const len = Math.sqrt(cp[0] * cp[0] + cp[1] * cp[1] + cp[2] * cp[2]);
+        if (len < 1e-10) { // degenerate point at origin — skip with safe defaults
+          positions.push(0, 0, 0);
+          normals.push(0, 0, 1);
+          continue;
+        }
         const dx = cp[0] / len, dy = cp[1] / len, dz = cp[2] / len;
 
         const t = solveT(dx, dy, dz);
@@ -2386,7 +2405,7 @@ function buildTextGeometry(text, style, fontAtlas) {
     uvs: new Float32Array(uvs),
     indices: new Uint16Array(indices),
     count: indices.length,
-    width: Math.max(...lines.map(l => l.width)),
+    width: Math.max(0, ...lines.map(l => l.width)),
     height: totalHeight,
   };
 }
@@ -2497,7 +2516,7 @@ uniform sampler2D u_atlas;
 uniform vec4 u_color;
 out vec4 fragColor;
 void main() {
-  float alpha = texture(u_atlas, v_uv).r;
+  float alpha = texture(u_atlas, v_uv).a;
   if (alpha < 0.1) discard;
   fragColor = vec4(u_color.rgb, u_color.a * alpha);
 }
@@ -3289,13 +3308,19 @@ function collectNode(node, overrideTransform, renderList, bindings, model, pickR
 
       // Track starting positions so we can replace children on update
       const renderStartIdx = renderList.length;
-      const pickStartSize = pickRegistry.map.size;
+      const pickIdsBefore = new Set(pickRegistry.map.keys());
       const lightsStartIdx = lights.length;
 
       // Interpret and collect each child - pass null to let each child use its own transform
       for (const scottChild of childrenArray) {
         const interpretedChild = interpretSceneNode(scottChild);
         collectNode(interpretedChild, null, renderList, bindings, model, pickRegistry, lights, animateNodes);
+      }
+
+      // Collect pick IDs added by these children
+      const ownedPickIds = [];
+      for (const pickId of pickRegistry.map.keys()) {
+        if (!pickIdsBefore.has(pickId)) ownedPickIds.push(pickId);
       }
 
       // Register binding for dynamic updates
@@ -3313,7 +3338,7 @@ function collectNode(node, overrideTransform, renderList, bindings, model, pickR
         renderCount: renderList.length - renderStartIdx,
         lightsStartIdx: lightsStartIdx,
         lightsCount: lights.length - lightsStartIdx,
-        pickStartSize: pickStartSize,
+        ownedPickIds: ownedPickIds,
       });
       break;
     }
@@ -3503,6 +3528,7 @@ function collectNode(node, overrideTransform, renderList, bindings, model, pickR
       for (const child of node.children) {
         collectNode(child, null, children, bindings, model, tempRegistry, lights, animateNodes);
       }
+      pickRegistry.nextId = tempRegistry.nextId;  // Bug #18 fix: sync nextId to avoid collisions
       // Children get collected but don't have their own pickIds
       const entry = {
         type: 'group',
@@ -3591,6 +3617,7 @@ function collectNode(node, overrideTransform, renderList, bindings, model, pickR
       for (const child of node.children) {
         collectNode(child, null, children, bindings, model, tempRegistry, lights, animateNodes);
       }
+      pickRegistry.nextId = tempRegistry.nextId;  // Bug #26 fix: sync nextId
       const entry = {
         type: 'batched',
         material: node.material,
@@ -3720,13 +3747,14 @@ function updateGLBindings(bindings, newModel, now) {
       // Handle instance count changes: update pick registry
       if (newTransforms.length !== b.lastCount) {
         const registry = b.pickRegistry;
-        // Remove old pick IDs
+        // Remove ALL old pick IDs
         for (let i = 0; i < b.lastCount; i++) {
           registry.map.delete(b.target.basePickId + i);
         }
-        // Add new pick IDs
+        // Bug #27 fix: allocate fresh block of IDs to avoid collisions
+        b.target.basePickId = registry.nextId;
         for (let i = 0; i < newTransforms.length; i++) {
-          const instancePickId = b.target.basePickId + i;
+          const instancePickId = registry.nextId++;
           registry.map.set(instancePickId, {
             entry: b.target,
             instanceIndex: i,
@@ -3752,22 +3780,17 @@ function updateGLBindings(bindings, newModel, now) {
       // Remove old lights
       lights.splice(b.lightsStartIdx, b.lightsCount);
 
-      // Remove old pick entries - collect pick IDs to delete
-      const pickIdsToDelete = [];
-      for (const [pickId, entry] of pickRegistry.map.entries()) {
-        // Check if this pick entry belongs to our old children (rough heuristic)
-        if (pickId >= b.pickStartSize) {
-          pickIdsToDelete.push(pickId);
+      // Remove old pick entries that belong to this binding
+      if (b.ownedPickIds) {
+        for (const pickId of b.ownedPickIds) {
+          pickRegistry.map.delete(pickId);
         }
-      }
-      for (const pickId of pickIdsToDelete) {
-        pickRegistry.map.delete(pickId);
       }
 
       // Rebuild children at the same position
       const newRenderStartIdx = b.renderStartIdx;
       const newLightsStartIdx = b.lightsStartIdx;
-      const newPickStartSize = pickRegistry.map.size;
+      const pickIdsBefore = new Set(pickRegistry.map.keys());
 
       // Collect new children
       const tempRenderList = [];
@@ -3781,10 +3804,27 @@ function updateGLBindings(bindings, newModel, now) {
       renderList.splice(newRenderStartIdx, 0, ...tempRenderList);
       lights.splice(newLightsStartIdx, 0, ...tempLights);
 
+      // Track new pick IDs owned by this binding
+      const newOwnedPickIds = [];
+      for (const pickId of pickRegistry.map.keys()) {
+        if (!pickIdsBefore.has(pickId)) newOwnedPickIds.push(pickId);
+      }
+
+      // Adjust indices of subsequent children bindings if count changed
+      const renderDelta = tempRenderList.length - b.renderCount;
+      const lightsDelta = tempLights.length - b.lightsCount;
+      if (renderDelta !== 0 || lightsDelta !== 0) {
+        for (const other of bindings) {
+          if (other === b || other.type !== 'children') continue;
+          if (other.renderStartIdx > b.renderStartIdx) other.renderStartIdx += renderDelta;
+          if (other.lightsStartIdx > b.lightsStartIdx) other.lightsStartIdx += lightsDelta;
+        }
+      }
+
       // Update binding with new counts
       b.renderCount = tempRenderList.length;
       b.lightsCount = tempLights.length;
-      b.pickStartSize = newPickStartSize;
+      b.ownedPickIds = newOwnedPickIds;
 
       dirty = true;
     }
@@ -4426,7 +4466,6 @@ function initGLCanvas(canvas) {
 
   // Pick framebuffer (only if there are interactive objects)
   const hasPickables = pickRegistry.map.size > 0;
-  console.log('[GL] pickRegistry size:', pickRegistry.map.size, 'hasPickables:', hasPickables);
   let pickFB = null;
   if (hasPickables) {
     pickFB = createPickFramebuffer(gl, canvas.width, canvas.height);
@@ -4522,7 +4561,6 @@ function initGLCanvas(canvas) {
 
   function ensurePickBuffer() {
     if (pickDirty && pickFB) {
-      console.log('[GL] rendering pick buffer, renderList length:', renderList.length);
       renderPickBuffer(gl, pickProg, instancedPickProg, pickFB, geoCache, renderList, projMat, viewMat);
       pickDirty = false;
     }
@@ -4583,14 +4621,11 @@ function initGLCanvas(canvas) {
       if (didDrag) { didDrag = false; return; }
       ensurePickBuffer();
       const id = getPickIdAt(e);
-      console.log('[GL] click at', e.offsetX, e.offsetY, 'pickId:', id, 'registry size:', pickRegistry.map.size);
       if (!dispatch || id === 0) return;
       const entry = pickRegistry.map.get(id);
-      console.log('[GL] entry:', entry);
       if (!entry) return;
 
       for (const attr of entry.attrs) {
-        console.log('[GL] attr:', attr);
         if (attr.type === 'onClick') {
           dispatch(attr.msg);
         } else if (attr.type === 'onClickAt') {
@@ -4918,7 +4953,6 @@ function initGLCanvas(canvas) {
   const pickCount = pickRegistry.map.size;
   const lightCount = lights.length;
   const animCount = animateNodes.length;
-  console.log(`[reactive-gl] Initialized WebGL2 canvas (${canvas.width}x${canvas.height}), ${renderList.length} render entries, ${bindingCount} bindings, ${pickCount} pickable, ${lightCount} lights, ${animCount} animate`);
 }
 
 // ---------------------------------------------------------------------------

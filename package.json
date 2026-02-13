@@ -3,10 +3,9 @@
   "version": "0.1.0",
   "description": "Reactive UI Framework with Dependent Types in Agda",
   "type": "module",
-  "main": "runtime/index.js",
+  "main": "runtime/reactive.js",
   "exports": {
-    ".": "./runtime/index.js",
-    "./dom": "./runtime/dom.js",
+    ".": "./runtime/reactive.js",
     "./events": "./runtime/events.js",
     "./primitives": "./runtime/primitives.js"
   },
@@ -77,10 +76,7 @@
   ],
   "author": "",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": ""
-  },
+  "repository": {},
   "engines": {
     "node": ">=18.0.0"
   },

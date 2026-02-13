@@ -18,7 +18,6 @@ EXAMPLES=(
   "task"
   "router"
   "composition"
-  "widgetcounter"
   "parallel"
   "session-form"
   "stress-test"
