@@ -29,17 +29,19 @@ record MenuItem (Msg : Set) : Set where
   constructor menuItem
   field
     itemLabel   : String
-    itemAction  : Msg
+    itemAction  : Maybe Msg
     itemEnabled : Bool
 
 enabledItem : ∀ {Msg} → String → Msg → MenuItem Msg
-enabledItem lbl action = menuItem lbl action true
+enabledItem lbl action = menuItem lbl (just action) true
 
 disabledItem : ∀ {Msg} → String → MenuItem Msg
-disabledItem lbl = menuItem lbl undefined false
-  where
-    postulate undefined : ∀ {A : Set} → A
-    {-# COMPILE JS undefined = undefined #-}
+disabledItem lbl = menuItem lbl nothing false
+
+private
+  maybeClickAttr : ∀ {M Msg} → Maybe Msg → Bool → List (SceneAttr Msg)
+  maybeClickAttr (just action) true = onClick action ∷ []
+  maybeClickAttr _ _ = []
 
 ------------------------------------------------------------------------
 -- Dropdown menu
@@ -104,7 +106,7 @@ dropdown3D {M} {Msg} theme config btnLabel isOpen toggleOpen items t =
 
     buildMenuItems : ControlTheme → Float → Float → ℕ → List (MenuItem Msg) → List (SceneNode M Msg)
     buildMenuItems _ _ _ _ [] = []
-    buildMenuItems th ih iw idx (menuItem lbl action enabled ∷ rest) =
+    buildMenuItems th ih iw idx (menuItem lbl mAction enabled ∷ rest) =
       let y = - (natToFloat idx * ih)
           itemT = mkTransform (vec3 0.0 y 0.01) identityQuat (vec3 1.0 1.0 1.0)
           itemGeom = roundedBox (vec3 (iw * 0.95) (ih * 0.85) 0.015) 0.01 4
@@ -112,7 +114,7 @@ dropdown3D {M} {Msg} theme config btnLabel isOpen toggleOpen items t =
             then ControlTheme.surfaceMaterial th
             else disabledMaterial th
           textT = mkTransform (vec3 0.0 0.0 0.01) identityQuat (vec3 1.0 1.0 1.0)
-          attrs = if enabled then onClick action ∷ [] else []
+          attrs = maybeClickAttr mAction enabled
       in interactiveGroup attrs itemT
            ( mesh itemGeom itemMat [] identityTransform
            ∷ label th lbl textT
@@ -215,7 +217,7 @@ radialMenu3D {M} {Msg} theme config isOpen items t =
     buildSlices : ControlTheme → Float → Float → Float → Float → ℕ
                 → List (MenuItem Msg) → List (SceneNode M Msg)
     buildSlices _ _ _ _ _ _ [] = []
-    buildSlices th ir or startA sliceA idx (menuItem lbl action enabled ∷ rest) =
+    buildSlices th ir or startA sliceA idx (menuItem lbl mAction enabled ∷ rest) =
       let angle = startA + natToFloat idx * sliceA + sliceA * 0.5
           midR = (ir + or) * 0.5
           x = midR * cosF angle
@@ -227,7 +229,7 @@ radialMenu3D {M} {Msg} theme config isOpen items t =
             then ControlTheme.surfaceMaterial th
             else disabledMaterial th
           textT = mkTransform (vec3 0.0 0.0 0.015) identityQuat (vec3 1.0 1.0 1.0)
-          attrs = if enabled then onClick action ∷ [] else []
+          attrs = maybeClickAttr mAction enabled
       in interactiveGroup attrs itemT
            ( mesh sliceGeom sliceMat [] identityTransform
            ∷ sizedLabel th 0.03 lbl textT
@@ -279,7 +281,7 @@ contextMenu3D {M} {Msg} theme getPosition items =
 
     buildMenuItems : ℕ → List (MenuItem Msg) → List (SceneNode M Msg)
     buildMenuItems _ [] = []
-    buildMenuItems idx (menuItem lbl action enabled ∷ rest) =
+    buildMenuItems idx (menuItem lbl mAction enabled ∷ rest) =
       let y = - (natToFloat idx * ih)
           itemT = mkTransform (vec3 0.0 y 0.01) identityQuat (vec3 1.0 1.0 1.0)
           itemGeom = roundedBox (vec3 (iw * 0.95) (ih * 0.85) 0.01) 0.008 4
@@ -287,7 +289,7 @@ contextMenu3D {M} {Msg} theme getPosition items =
             then ControlTheme.surfaceMaterial theme
             else disabledMaterial theme
           textT = mkTransform (vec3 0.0 0.0 0.008) identityQuat (vec3 1.0 1.0 1.0)
-          attrs = if enabled then onClick action ∷ [] else []
+          attrs = maybeClickAttr mAction enabled
       in interactiveGroup attrs itemT
            ( mesh itemGeom itemMat [] identityTransform
            ∷ sizedLabel theme 0.04 lbl textT

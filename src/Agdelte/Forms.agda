@@ -314,18 +314,16 @@ postulate
 -- Cross-field validation
 ------------------------------------------------------------------------
 
+private
+  postulate eqStr : String → String → Bool
+  {-# COMPILE JS eqStr = function(a) { return function(b) { return a === b; }; } #-}
+
 -- Password confirmation
 passwordsMatch : String → String → List ValidationError
 passwordsMatch pw1 pw2 =
   if eqStr pw1 pw2 then [] else mkError "confirmPassword" "Passwords do not match" ∷ []
-  where
-    postulate eqStr : String → String → Bool
-    {-# COMPILE JS eqStr = function(a) { return function(b) { return a === b; }; } #-}
 
 -- Generic equality check between two fields
 mustMatch : String → String → String → List ValidationError
 mustMatch fieldName v1 v2 =
   if eqStr v1 v2 then [] else mkError fieldName "Fields must match" ∷ []
-  where
-    postulate eqStr : String → String → Bool
-    {-# COMPILE JS eqStr = function(a) { return function(b) { return a === b; }; } #-}

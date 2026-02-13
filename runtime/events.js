@@ -119,7 +119,7 @@ class WorkerPool {
         task.cancelled = true;
         cancelled = true;
         if (activeWorker) {
-          this.active--;
+          this.active = Math.max(0, this.active - 1);
           // Terminate and don't return to pool (task was mid-flight)
           try { activeWorker.terminate(); } catch(e) { console.debug('worker terminate:', e.message); }
           activeWorker = null;
@@ -1002,7 +1002,7 @@ function agdaListToArray(list) {
   // Agda JS backend compiles List to native JS Array
   if (Array.isArray(list)) return list;
   // Fallback: Scott-encoded list
-  const MAX_LIST_ITERATIONS = 10000;
+  const MAX_LIST_ITERATIONS = 100000;
   const arr = [];
   let current = list;
   let iterations = 0;

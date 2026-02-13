@@ -208,6 +208,10 @@ export function extractBufferHandle(handle) {
  */
 export function allocateImageBuffer(width, height) {
   const id = bufferRegistry.allocateImage(width, height);
+  if (id === -1) {
+    console.error('allocateImageBuffer: allocation failed, returning null handle');
+    return mkBufferHandle(-1, 0, width, height);
+  }
   const version = bufferRegistry.version(id);
   return mkBufferHandle(id, version, width, height);
 }

@@ -266,19 +266,19 @@ async function loadNodeModule() {
 
 /**
  * Maximum nesting depth for deep equality comparison.
- * Models with deeper nesting will use reference equality for deep parts.
- * 20 levels is sufficient for any practical UI model structure.
- * If you need deeper nesting, flatten your model or use nested records.
+ * Models with deeper nesting will use reference equality for deep parts,
+ * which causes unnecessary re-renders.
  */
-const MAX_DEEP_EQUAL_DEPTH = 20;
-let _deepEqualWarned = false;
+const MAX_DEEP_EQUAL_DEPTH = 50;
+let _deepEqualWarnCount = 0;
+const _DEEP_EQUAL_WARN_INTERVAL = 100;
 
 function deepEqual(a, b, depth) {
   if (a === b) return true;
   if (depth > MAX_DEEP_EQUAL_DEPTH) {
-    if (!_deepEqualWarned) {
-      _deepEqualWarned = true;
-      console.warn(`deepEqual: max depth (${MAX_DEEP_EQUAL_DEPTH}) exceeded, using reference equality. Consider flattening your model.`);
+    _deepEqualWarnCount++;
+    if (_deepEqualWarnCount === 1 || _deepEqualWarnCount % _DEEP_EQUAL_WARN_INTERVAL === 0) {
+      console.warn(`deepEqual: max depth (${MAX_DEEP_EQUAL_DEPTH}) exceeded ${_deepEqualWarnCount} time(s), using reference equality. Consider flattening your model.`);
     }
     return false;
   }
@@ -784,7 +784,8 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   let p2Queue = [];  // Background priority (idle callback)
   let p1Scheduled = false;
   let p2Scheduled = false;
-  const MAX_BATCH_SIZE = 1000;
+  const MAX_BATCH_SIZE = 10000;
+  let _droppedP1 = 0, _droppedP2 = 0;
 
   /**
    * Execute renderNode within a specific scope
@@ -942,7 +943,8 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
    */
   function dispatchNormal(msg) {
     if (p1Queue.length >= MAX_BATCH_SIZE) {
-      console.error(`P1 queue overflow (>${MAX_BATCH_SIZE} messages). Check for infinite dispatch loops.`);
+      _droppedP1++;
+      console.error(`P1 queue overflow (>${MAX_BATCH_SIZE} messages, ${_droppedP1} dropped total). Check for infinite dispatch loops.`);
       return;
     }
     p1Queue.push(msg);
@@ -958,7 +960,8 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
    */
   function dispatchBackground(msg) {
     if (p2Queue.length >= MAX_BATCH_SIZE) {
-      console.error(`P2 queue overflow (>${MAX_BATCH_SIZE} messages). Check for infinite dispatch loops.`);
+      _droppedP2++;
+      console.error(`P2 queue overflow (>${MAX_BATCH_SIZE} messages, ${_droppedP2} dropped total). Check for infinite dispatch loops.`);
       return;
     }
     p2Queue.push(msg);
@@ -1624,15 +1627,37 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       oldKeyMap.set(oldItems[i].key, oldItems[i]);
     }
 
-    // Build new key set and check for duplicates
-    const newKeys = newItems.map(item => list.keyFn(item));
+    // Build new key set and deduplicate (keep last occurrence of each key)
+    let newKeys = newItems.map(item => list.keyFn(item));
     {
       const seen = new Set();
+      const duplicates = new Set();
       for (const key of newKeys) {
-        if (seen.has(key)) {
-          console.warn(`foreachKeyed: duplicate key "${key}" detected. This may cause rendering issues.`);
-        }
+        if (seen.has(key)) duplicates.add(key);
         seen.add(key);
+      }
+      if (duplicates.size > 0) {
+        console.warn(`foreachKeyed: duplicate keys detected: ${[...duplicates].join(', ')}. Keeping last occurrence of each.`);
+        // Deduplicate: keep last occurrence by scanning from end
+        const lastSeen = new Set();
+        const keep = new Array(newItems.length).fill(false);
+        for (let i = newItems.length - 1; i >= 0; i--) {
+          if (!lastSeen.has(newKeys[i])) {
+            lastSeen.add(newKeys[i]);
+            keep[i] = true;
+          }
+        }
+        const filteredItems = [];
+        const filteredKeys = [];
+        for (let i = 0; i < newItems.length; i++) {
+          if (keep[i]) {
+            filteredItems.push(newItems[i]);
+            filteredKeys.push(newKeys[i]);
+          }
+        }
+        newItems.length = 0;
+        newItems.push(...filteredItems);
+        newKeys = filteredKeys;
       }
     }
 

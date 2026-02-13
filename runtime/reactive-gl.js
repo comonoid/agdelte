@@ -11,7 +11,7 @@
 
 const CONFIG = {
   MAX_LIGHTS: 8,               // Maximum lights per scene (matches shader arrays)
-  MAX_LIST_ITEMS: 10000,       // Maximum items in Scott-encoded lists
+  MAX_LIST_ITEMS: 100000,      // Maximum items in Scott-encoded lists
   MAX_NAT_VALUE: 100000,       // Maximum for Scott-encoded natural numbers
   SPHERE_SLICES: 24,           // Sphere geometry horizontal segments
   SPHERE_STACKS: 16,           // Sphere geometry vertical segments
@@ -1555,7 +1555,10 @@ function mat4NormalMatrix(m) {
   const det = a00 * (a11 * a22 - a12 * a21)
             - a01 * (a10 * a22 - a12 * a20)
             + a02 * (a10 * a21 - a11 * a20);
-  if (Math.abs(det) < 1e-10) return [1, 0, 0, 0, 1, 0, 0, 0, 1];
+  if (Math.abs(det) < 1e-6) {
+    console.warn('mat4NormalMatrix: near-singular matrix (det=' + det.toExponential(2) + '), using identity normal matrix. Check for extreme non-uniform scale.');
+    return [1, 0, 0, 0, 1, 0, 0, 0, 1];
+  }
   const invDet = 1.0 / det;
   // Cofactor matrix (= adjugate transposed), then transpose again for inverse-transpose
   // inverse-transpose = cofactor / det
@@ -1643,11 +1646,7 @@ function mergeBatchGeometry(gl, geoCache, children) {
   const merged = uploadGeometry(gl, new Float32Array(allPos), new Float32Array(allNorm), idxArray, hasUvs ? new Float32Array(allUv) : undefined);
   merged._isBatchMerged = true;
   merged._indexType = vertexOffset > 65535 ? 'uint32' : 'uint16';
-  // Free CPU-side data — merged VAOs are not re-merged
-  merged._positions = null;
-  merged._normals = null;
-  merged._indices = null;
-  merged._uvs = null;
+  // Keep CPU-side data so batch can be re-merged when children change dynamically
   return merged;
 }
 
