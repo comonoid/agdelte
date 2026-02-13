@@ -14,13 +14,21 @@ PASSED=0
 EXAMPLES=(
   "counter"
   "timer"
+  "todo"
   "keyboard"
+  "http"
   "task"
+  "websocket"
   "router"
   "composition"
+  "transitions"
+  "combinators"
+  "optic-dynamic"
+  "worker"
   "parallel"
   "session-form"
   "stress-test"
+  "controls-demo"
   "css-demo"
   "css-full-demo"
   "anim-demo"
@@ -29,6 +37,10 @@ EXAMPLES=(
   "svg-panzoom"
   "svg-chart"
   "svg-linedraw"
+  "webgl-test"
+  "webgl-full-demo"
+  "webgl-controls-demo"
+  "remote-agent"
 )
 
 for example in "${EXAMPLES[@]}"; do

@@ -25,7 +25,7 @@ self.onmessage = async (event) => {
         const module = await import(modulePath);
         const appRecord = module.default.app;
 
-        // Bug #34 fix: use parameterized path instead of hardcoded
+        // Use parameterized path
         const nodePath = nodeModulePath || '../_build/jAgda.Agdelte.Reactive.Node.mjs';
         const nodeModuleImport = await import(nodePath);
         NodeModule = nodeModuleImport.default;

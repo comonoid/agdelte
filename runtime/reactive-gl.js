@@ -2072,7 +2072,7 @@ function createRoundedBoxGeometry(gl, dims, radius, segments) {
     // Fallback: binary search on the SDF to find t where SDF(t*d) ≈ 0
     // This handles degenerate cases where analytical solutions fail
     let lo = 0, hi = (hw + hh + hd + r) * 2;
-    for (let iter = 0; iter < 32; iter++) {
+    for (let iter = 0; iter < 50; iter++) {
       const mid = (lo + hi) * 0.5;
       const px = mid * ax, py = mid * ay, pz = mid * az;
       const qx = Math.max(px - hw, 0), qy = Math.max(py - hh, 0), qz = Math.max(pz - hd, 0);
@@ -2083,16 +2083,16 @@ function createRoundedBoxGeometry(gl, dims, radius, segments) {
   }
 
   // Generate one face of the subdivided cube, projected onto the rounded box
-  function addFace(mapUV, flip) {
+  function addFace(mapUV, flip, fnx, fny, fnz) {
     const base = positions.length / 3;
     for (let i = 0; i <= segs; i++) {
       for (let j = 0; j <= segs; j++) {
         const u = (2 * i / segs) - 1, v = (2 * j / segs) - 1;
         const cp = mapUV(u, v);  // point on cube face
         const len = Math.sqrt(cp[0] * cp[0] + cp[1] * cp[1] + cp[2] * cp[2]);
-        if (len < 1e-10) { // degenerate point at origin — skip with safe defaults
+        if (len < 1e-10) { // degenerate point at origin — use face normal
           positions.push(0, 0, 0);
-          normals.push(0, 0, 1);
+          normals.push(fnx, fny, fnz);
           continue;
         }
         const dx = cp[0] / len, dy = cp[1] / len, dz = cp[2] / len;
@@ -2128,12 +2128,12 @@ function createRoundedBoxGeometry(gl, dims, radius, segments) {
 
   const sx = hw + r, sy = hh + r, sz = hd + r;
 
-  addFace((u, v) => [u * sx, v * sy,  sz], false);  // +Z front
-  addFace((u, v) => [u * sx, v * sy, -sz], true);   // -Z back
-  addFace((u, v) => [u * sx,  sy, v * sz], true);   // +Y top
-  addFace((u, v) => [u * sx, -sy, v * sz], false);  // -Y bottom
-  addFace((u, v) => [ sx, v * sy, u * sz], true);   // +X right
-  addFace((u, v) => [-sx, v * sy, u * sz], false);  // -X left
+  addFace((u, v) => [u * sx, v * sy,  sz], false,  0,  0,  1);  // +Z front
+  addFace((u, v) => [u * sx, v * sy, -sz], true,   0,  0, -1);  // -Z back
+  addFace((u, v) => [u * sx,  sy, v * sz], true,   0,  1,  0);  // +Y top
+  addFace((u, v) => [u * sx, -sy, v * sz], false,  0, -1,  0);  // -Y bottom
+  addFace((u, v) => [ sx, v * sy, u * sz], true,   1,  0,  0);  // +X right
+  addFace((u, v) => [-sx, v * sy, u * sz], false, -1,  0,  0);  // -X left
 
   return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), new Uint16Array(indices));
 }
@@ -2148,6 +2148,18 @@ function createTextureCache(gl, scheduleFrame) {
   const fallbackTex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, fallbackTex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
+
+  // 2x2 magenta/black checkerboard for failed textures
+  const errorTex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, errorTex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([
+    255, 0, 255, 255,   0, 0, 0, 255,
+    0, 0, 0, 255,       255, 0, 255, 255,
+  ]));
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
 
   function getTexture(url) {
     if (cache.has(url)) return cache.get(url);
@@ -2169,7 +2181,11 @@ function createTextureCache(gl, scheduleFrame) {
       entry.loaded = true;
       scheduleFrame();  // re-render with loaded texture
     };
-    img.onerror = () => console.warn('[reactive-gl] Failed to load texture:', url);
+    img.onerror = () => {
+      console.warn('[reactive-gl] Failed to load texture:', url);
+      entry.tex = errorTex;
+      scheduleFrame();
+    };
     img.src = url;
     return entry;
   }
@@ -3528,7 +3544,7 @@ function collectNode(node, overrideTransform, renderList, bindings, model, pickR
       for (const child of node.children) {
         collectNode(child, null, children, bindings, model, tempRegistry, lights, animateNodes);
       }
-      pickRegistry.nextId = tempRegistry.nextId;  // Bug #18 fix: sync nextId to avoid collisions
+      pickRegistry.nextId = tempRegistry.nextId;
       // Children get collected but don't have their own pickIds
       const entry = {
         type: 'group',
@@ -3617,7 +3633,7 @@ function collectNode(node, overrideTransform, renderList, bindings, model, pickR
       for (const child of node.children) {
         collectNode(child, null, children, bindings, model, tempRegistry, lights, animateNodes);
       }
-      pickRegistry.nextId = tempRegistry.nextId;  // Bug #26 fix: sync nextId
+      pickRegistry.nextId = tempRegistry.nextId;
       const entry = {
         type: 'batched',
         material: node.material,
@@ -3751,7 +3767,7 @@ function updateGLBindings(bindings, newModel, now) {
         for (let i = 0; i < b.lastCount; i++) {
           registry.map.delete(b.target.basePickId + i);
         }
-        // Bug #27 fix: allocate fresh block of IDs to avoid collisions
+        // Allocate fresh block of IDs to avoid collisions
         b.target.basePickId = registry.nextId;
         for (let i = 0; i < newTransforms.length; i++) {
           const instancePickId = registry.nextId++;

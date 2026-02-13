@@ -271,7 +271,7 @@ async function loadNodeModule() {
  * If you need deeper nesting, flatten your model or use nested records.
  */
 const MAX_DEEP_EQUAL_DEPTH = 20;
-let _deepEqualWarned = false;  // Bug #3 fix: warn only once
+let _deepEqualWarned = false;
 
 function deepEqual(a, b, depth) {
   if (a === b) return true;
@@ -410,7 +410,7 @@ function probeSlots(model) {
   if (typeof model === 'function') {
     try {
       const result = model(_slotProbe);
-      return Array.isArray(result) ? result : null;  // Bug #10 fix: reject non-array results
+      return Array.isArray(result) ? result : null;
     } catch { return null; }
   }
 
@@ -550,7 +550,7 @@ function reconcile(oldModel, newModel) {
   const newSlots = getSlots(newModel);
   if (!newSlots) return wrapMutable(newModel);
 
-  // Bug #11 fix: check constructor match before reconciling
+  // Check constructor match before reconciling
   const newCtor = getCtor(newModel);
   if (!newCtor || oldModel._ctor !== newCtor) {
     return wrapMutable(newModel);
@@ -615,7 +615,7 @@ function createScope(parent) {
 }
 
 function destroyScope(scope) {
-  // Bug #36 fix: copy children array since destroyScope mutates parent.children via splice
+  // Copy children array since destroyScope mutates parent.children via splice
   const children = [...scope.children];
   for (const child of children) {
     destroyScope(child);
@@ -718,7 +718,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
             case 'error': {
               console.error('Update worker error:', message);
-              // Bug #33 fix: resolve pending callback on error
+              // Resolve pending callback on error to prevent hanging promises
               const errId = event.data.id;
               if (errId !== undefined) {
                 const cb = workerPendingCallbacks.get(errId);
@@ -736,7 +736,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
         updateWorker.onerror = (error) => {
           console.error('Update worker failed:', error);
-          // Bug #33 fix: resolve all pending callbacks to prevent hanging promises
+          // Resolve all pending callbacks to prevent hanging promises
           for (const [, cb] of workerPendingCallbacks) {
             cb(null);
           }
@@ -806,7 +806,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     isUpdating = true;
     try {
       // Snapshot old slots before batch so reconcile's in-place mutation
-      // doesn't alias oldModel with model (Bug #1 fix)
+      // doesn't alias oldModel with model
       const oldModel = model;
       const oldSlots = model && model._slots ? [...model._slots] : null;
 
@@ -823,7 +823,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       }
 
       // Use snapshotted slots for comparison so in-place mutation
-      // doesn't cause oldModel === model (Bug #1 fix)
+      // doesn't cause oldModel === model
       let effectiveOldModel = oldModel;
       if (oldSlots && oldModel._slots === model._slots) {
         // reconcile mutated in-place — build a comparison proxy
@@ -836,7 +836,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
       // Update GL scopes (use effectiveOldModel so GL bindings see snapshotted slots)
       for (const cb of afterUpdateCallbacks) cb(effectiveOldModel, model);
-      // Bug #41 fix: prune callbacks for disconnected canvases
+      // Prune callbacks for disconnected canvases
       for (let i = afterUpdateCallbacks.length - 1; i >= 0; i--) {
         if (afterUpdateCallbacks[i]._dead) afterUpdateCallbacks.splice(i, 1);
       }
@@ -847,7 +847,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       isUpdating = false;
     }
 
-    // Bug #47 fix: process deferred immediate messages in same frame
+    // Process deferred immediate messages in same frame
     // (messages pushed to p1Queue by dispatchImmediate during isUpdating)
     if (p1Queue.length > 0) {
       const deferred = p1Queue;
@@ -881,7 +881,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   function flushP2(deadline) {
     p2Scheduled = false;
 
-    // Bug #35 fix: batch P2 messages like P1 to avoid N×updateScope overhead
+    // Batch P2 messages like P1 to avoid N×updateScope overhead
     const batch = [];
     while (p2Queue.length > 0 && deadline.timeRemaining() > 1) {
       batch.push(p2Queue.shift());
@@ -1088,7 +1088,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
         const items = getList(model);
         const renderedItems = [];
-        const { items: itemArray } = listToArray(items);
+        const { items: itemArray, incomplete } = listToArray(items);
 
         itemArray.forEach((item, idx) => {
           const itemScope = createScope(currentScope);
@@ -1100,6 +1100,8 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
             container.appendChild(itemNode);
           }
         });
+
+        if (incomplete) container.appendChild(makeTruncatedMarker());
 
         currentScope.lists.push({
           marker, getList, render, renderedItems,
@@ -1130,7 +1132,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
         const items = getList(model);
         const renderedItems = [];
-        const { items: itemArray } = listToArray(items);
+        const { items: itemArray, incomplete } = listToArray(items);
 
         itemArray.forEach((item, idx) => {
           const key = keyFn(item);
@@ -1143,6 +1145,8 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
             container.appendChild(itemNode);
           }
         });
+
+        if (incomplete) container.appendChild(makeTruncatedMarker());
 
         currentScope.lists.push({
           marker, getList, render, renderedItems,
@@ -1274,7 +1278,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           } else {
             value = '0,0';
           }
-          // Bug #14 fix: use priority dispatch like onValue
+          // Use priority dispatch for keyboard events
           if (event === 'keydown' || event === 'keyup') {
             dispatchImmediate(handler(value));
           } else {
@@ -1292,6 +1296,26 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         currentScope.styleBindings.push({ node: el, binding, styleName: name, lastValue: value, slots: null });
       }
     });
+  }
+
+  /** Create a visible truncation marker for lists that exceed the iteration limit */
+  function makeTruncatedMarker() {
+    const el = document.createElement('li');
+    el.className = 'agdelte-truncated';
+    el.style.cssText = 'color:#f44;font-style:italic;list-style:none;padding:4px 0;';
+    el.textContent = '[List truncated — exceeded iteration limit]';
+    return el;
+  }
+
+  /** Add or remove the truncation marker on a list */
+  function updateTruncatedMarker(list, parent, incomplete) {
+    if (incomplete && !list._truncMarker) {
+      list._truncMarker = makeTruncatedMarker();
+      parent.appendChild(list._truncMarker);
+    } else if (!incomplete && list._truncMarker) {
+      list._truncMarker.remove();
+      list._truncMarker = null;
+    }
   }
 
   /**
@@ -1542,7 +1566,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
    * Update unkeyed foreach list
    */
   function updateUnkeyedList(parentScope, list, oldModel, newModel) {
-    const { items: newItems } = listToArray(list.getList(newModel));
+    const { items: newItems, incomplete } = listToArray(list.getList(newModel));
     const oldItems = list.renderedItems;
     const parent = list.marker.parentNode;
     if (!parent) return;
@@ -1563,7 +1587,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       if (oldItems[i].scope) destroyScope(oldItems[i].scope);
     }
 
-    // Add new items — insert after last existing item (Bug #7 fix)
+    // Add new items — insert after last existing item
     const lastExisting = minLen > 0 ? oldItems[minLen - 1].node : list.marker;
     let insertBefore = lastExisting.nextSibling;
     for (let i = minLen; i < newItems.length; i++) {
@@ -1582,13 +1606,16 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     if (oldItems.length > newItems.length) {
       oldItems.length = newItems.length;
     }
+
+    // Update truncation marker
+    updateTruncatedMarker(list, parent, incomplete);
   }
 
   /**
    * Update keyed foreach list — key-based reconciliation
    */
   function updateKeyedList(parentScope, list, oldModel, newModel) {
-    const { items: newItems } = listToArray(list.getList(newModel));
+    const { items: newItems, incomplete } = listToArray(list.getList(newModel));
     const oldItems = list.renderedItems;
 
     // Build old key map
@@ -1674,7 +1701,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           parent.insertBefore(itemNode, insertBefore);
           newRendered.push({ key, item: newItems[i], node: itemNode, scope: itemScope });
         } else {
-          // Bug #43 fix: null render — use comment placeholder to track key, destroy unused scope
+          // Null render — use comment placeholder to track key, destroy unused scope
           destroyScope(itemScope);
           const placeholder = document.createComment('empty');
           parent.insertBefore(placeholder, insertBefore);
@@ -1684,6 +1711,10 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     }
 
     list.renderedItems = newRendered;
+
+    // Update truncation marker
+    const parent = list.marker.parentNode;
+    if (parent) updateTruncatedMarker(list, parent, incomplete);
   }
 
   /**
@@ -1805,7 +1836,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
       if (data.startsWith('peek:')) {
         // Server wants to read our model — respond with serialized model
-        // Bug #31 fix: use recursive serialization for Scott-encoded models
+        // Recursive serialization for Scott-encoded models
         const serializeModelValue = (m) => {
           if (m === null || m === undefined) return null;
           if (typeof m !== 'function' && typeof m !== 'object') return m;
@@ -1862,7 +1893,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   let historyFuture = [];    // undone models (oldest first)
   const maxHistory = options.maxHistory || 100;
 
-  // Bug #4 fix: recursive clone for Scott-encoded models (functions can't be structuredClone'd)
+  // Recursive clone for Scott-encoded models (functions can't be structuredClone'd)
   function cloneModel(m) {
     if (!m || typeof m !== 'function') return m;
     if (!m._slots || !m._ctor) return m;
@@ -1934,9 +1965,9 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     }
     destroyScope(rootScope);
     container.innerHTML = '';
-    afterUpdateCallbacks.length = 0;  // Bug #2 fix: clear GL callbacks
+    afterUpdateCallbacks.length = 0;
 
-    // Reset root scope — clear all old properties first (Bug #28 fix)
+    // Reset root scope — clear all old properties first
     for (const key of Object.keys(rootScope)) delete rootScope[key];
     Object.assign(rootScope, createScope(null));
 
@@ -1979,7 +2010,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       }
       destroyScope(rootScope);
       container.innerHTML = '';
-      afterUpdateCallbacks.length = 0;  // Bug #2 fix
+      afterUpdateCallbacks.length = 0;
     }
   };
 }
@@ -2004,7 +2035,7 @@ export async function mountReactive(moduleName, container, options = {}) {
     return await runReactiveApp(module.default, containerEl, options);
   } catch (e) {
     console.error(`Failed to load ${moduleName}:`, e);
-    // Bug #13 fix: use textContent instead of innerHTML to prevent XSS
+    // Use textContent instead of innerHTML to prevent XSS
     containerEl.textContent = '';
     const div = document.createElement('div');
     div.className = 'error';

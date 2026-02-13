@@ -92,7 +92,7 @@ class WorkerPool {
       activeWorker.onmessage = (e) => {
         if (task.cancelled) return;
         const w = activeWorker;
-        activeWorker = null;  // Bug #19 fix: prevent double-decrement from cancel()
+        activeWorker = null;
         onMessage(e);
         this.active--;
         this._returnWorker(w);
@@ -100,12 +100,12 @@ class WorkerPool {
       };
       activeWorker.onerror = (e) => {
         if (task.cancelled) return;
-        const w = activeWorker;  // Bug #19 fix: save ref before nulling
+        const w = activeWorker;
         activeWorker = null;
         onError(formatWorkerError(e));
         this.active--;
         // Don't reuse errored worker — terminate it
-        try { w.terminate(); } catch(_) {}
+        try { w.terminate(); } catch(e) { console.debug('worker terminate:', e.message); }
         this._processQueue();
       };
       activeWorker.postMessage(input);
@@ -115,14 +115,14 @@ class WorkerPool {
 
     return {
       cancel: () => {
-        if (task.cancelled) return;  // Bug #19 fix: idempotent cancel
+        if (task.cancelled) return;
         task.cancelled = true;
         cancelled = true;
         if (activeWorker) {
           this.active--;
           // Terminate and don't return to pool (task was mid-flight)
-          try { activeWorker.terminate(); } catch(_) {}
-          activeWorker = null;  // Bug #19 fix
+          try { activeWorker.terminate(); } catch(e) { console.debug('worker terminate:', e.message); }
+          activeWorker = null;
           this._processQueue();
         }
         // Remove from queue if still there
@@ -144,7 +144,7 @@ class WorkerPool {
       const next = this.queue.shift();
       if (!next.task.cancelled) {
         next.tryRun();
-        // Bug #9 fix: don't break — continue processing while idle workers available
+
       }
     }
   }
@@ -170,7 +170,7 @@ class WorkerPool {
 // Global pool registry: key = "poolSize:scriptUrl"
 const workerPools = new Map();
 
-// Bug #20 fix: lazy global cleanup timer — only active when pools exist
+// Lazy global cleanup timer — only active when pools exist
 let globalCleanupTimer = null;
 
 function ensureGlobalCleanup() {
@@ -277,7 +277,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       return { unsubscribe: () => document.removeEventListener('keyup', listener) };
     },
 
-    // Bug #8 fix: implement onKeys (key-to-message mapping) - P0 (immediate)
+    // onKeys: key-to-message mapping with P0 (immediate) dispatch
     onKeys: (pairs) => {
       const pairArray = agdaListToArray(pairs);
       const keyMap = new Map();
@@ -394,7 +394,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         }, msNum);
       };
 
-      // Bug #5 fix: wrap all dispatcher channels through debouncedDispatch
+      // Wrap all dispatcher channels through debouncedDispatch
       const wrappedDispatchers = {
         immediate: debouncedDispatch,
         normal: debouncedDispatch,
@@ -442,7 +442,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         }
       };
 
-      // Bug #6 fix: wrap all dispatcher channels through throttledDispatch
+      // Wrap all dispatcher channels through throttledDispatch
       const wrappedDispatchers = {
         immediate: throttledDispatch,
         normal: throttledDispatch,
@@ -487,7 +487,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         }
       };
 
-      // Bug #42 fix: close old WS and nullify handlers to prevent stale events
+      // Close old WS and nullify handlers to prevent stale events
       const oldWs = wsConnections.get(url);
       if (oldWs) {
         oldWs.onopen = null;
@@ -543,7 +543,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       const makeFilterDispatch = (priorityDispatch) => (inputVal) => {
         const maybeResult = f(inputVal);
         // Extract Maybe: just(x) → dispatch(x), nothing → skip
-        // Bug #39 fix: use explicit null/undefined check instead of truthy
+        // Use explicit null/undefined check instead of truthy
         if (maybeResult !== null && maybeResult !== undefined) {
           let isJust = false;
           let result;
@@ -576,7 +576,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         currentSub = interpretEvent(newEvent, dispatch, dispatchers);
       };
 
-      // Bug #24 fix: route all meta-event channels through metaDispatch
+      // Route all meta-event channels through metaDispatch
       const metaDispatchers = {
         immediate: metaDispatch,
         normal: metaDispatch,
@@ -602,7 +602,6 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         return { unsubscribe: () => {} };
       }
 
-      // Bug #44 fix: guard against dispatch after terminate
       let terminated = false;
 
       w.onmessage = (e) => {
@@ -636,7 +635,6 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         return { unsubscribe: () => {} };
       }
 
-      // Bug #44 fix: guard against dispatch after terminate
       let terminated = false;
 
       w.onmessage = (e) => {
@@ -733,7 +731,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       const subs = [];
 
       events.forEach((evt) => {
-        // Bug #29 fix: preserve inner event's priority
+        // Preserve inner event's priority
         const makePriorityDispatch = (priorityDispatch) => (val) => {
           if (finished) return;
           finished = true;
@@ -883,7 +881,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
 
       window.addEventListener('popstate', listener);
 
-      // Bug #37 fix: dispatch initial URL on subscribe
+      // Dispatch initial URL on subscribe
       dispatchNormal(handler(window.location.pathname + window.location.search));
 
       return {
@@ -932,17 +930,23 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       const stiff = Number(stiffness);
       const damp = Number(damping);
 
-      // Bug #23 fix: guard against NaN parameters causing infinite loop
+      // Guard against NaN/Infinity parameters
       if (!isFinite(pos) || !isFinite(vel) || !isFinite(tgt) ||
           !isFinite(stiff) || !isFinite(damp)) {
         console.warn('springLoop: invalid parameters (NaN/Infinity), settling immediately');
         queueMicrotask(() => dispatchNormal(onSettled));
         return { unsubscribe: () => {} };
       }
+      // Clamp stiffness/damping to non-negative values
+      if (stiff < 0 || damp < 0) {
+        console.warn('springLoop: negative stiffness/damping clamped to 0');
+      }
+      const stiffClamped = Math.max(0, stiff);
+      const dampClamped = Math.max(0, damp);
 
       const tick = (dt) => {
         const dtSec = dt / 1000;
-        const force = stiff * (tgt - pos) - damp * vel;
+        const force = stiffClamped * (tgt - pos) - dampClamped * vel;
         vel = vel + force * dtSec;
         pos = pos + vel * dtSec;
       };
@@ -955,13 +959,13 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         if (!running) return;
         if (lastTime === null) {
           lastTime = timestamp;
-          requestAnimationFrame(loop);  // Bug #40 fix: skip first frame (dt=0)
+          requestAnimationFrame(loop);  // skip first frame (dt=0)
           return;
         }
         const dt = Math.min(timestamp - lastTime, 64); // cap to avoid spiral of death
         lastTime = timestamp;
 
-        // Bug #49 fix: skip frame if dt is 0 (identical timestamps)
+        // Skip frame if dt is 0 (identical timestamps)
         if (dt <= 0) { requestAnimationFrame(loop); return; }
 
         // Tick in 4ms steps for stability
@@ -1030,7 +1034,7 @@ function mkAgdaList(arr) {
  * Creates KeyboardEvent record for Agda (Scott-encoded)
  * Agda record = { constructorName: cb => cb.constructorName(fields...) }
  */
-// Bug #32 fix: return function format (Format 1) for Scott encoding compatibility
+// Return function format (Format 1) for Scott encoding compatibility
 function mkKeyboardEvent(e) {
   return (cb) => cb.mkKeyboardEvent(
     e.key,
@@ -1081,7 +1085,7 @@ function subscribeLegacy(eventSpec, dispatch) {
 
     case 'interval': {
       const msNum = typeof config.ms === 'bigint' ? Number(config.ms) : config.ms;
-      // Bug #12 fix: use handler(Date.now()) if available, fallback to static msg
+      // Use handler(Date.now()) if available, fallback to static msg
       const fn = config.handler || (() => config.msg);
       const id = setInterval(() => dispatch(fn(Date.now())), msNum);
       return { unsubscribe: () => clearInterval(id) };

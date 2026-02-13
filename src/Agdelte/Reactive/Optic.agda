@@ -8,7 +8,7 @@
 -- Unified Optic for composition and Big Optic:
 --   _∘O_ : Optic B C → Optic A B → Optic A C
 --
--- TODO: prove Optic ≅ Poly.Lens for monomial case
+-- TotalOptic ≅ Poly.Lens for monomial case: see Theory.OpticPolyOptic
 
 module Agdelte.Reactive.Optic where
 

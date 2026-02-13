@@ -303,6 +303,8 @@ if (scope.project) {
 
 `deepEqual` handles Scott-encoded records via Proxy introspection: probes both values to extract constructor name + args, compares recursively.
 
+**Depth limit:** `deepEqual` recurses to a maximum of 20 levels (`MAX_DEEP_EQUAL_DEPTH`). Models nested deeper than that fall back to reference equality — bindings may silently stop updating. In practice UI models rarely exceed 4–5 levels, but if you use deeply nested records, flatten them or provide a manual `fingerprint` function.
+
 #### Level 2: Slot-Based Dependency Tracking
 
 Like Vue 3's dependency tracking, but for Scott-encoded records:

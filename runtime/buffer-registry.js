@@ -8,6 +8,16 @@
  * Actual buffer data lives in this registry.
  */
 
+// Check for SharedArrayBuffer support at load time
+if (typeof SharedArrayBuffer === 'undefined') {
+  console.warn(
+    '[agdelte] SharedArrayBuffer is not available. ' +
+    'Worker/Parallel features require COOP/COEP headers:\n' +
+    '  Cross-Origin-Opener-Policy: same-origin\n' +
+    '  Cross-Origin-Embedder-Policy: require-corp'
+  );
+}
+
 /**
  * Buffer Registry singleton
  */
