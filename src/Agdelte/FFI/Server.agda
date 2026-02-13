@@ -99,7 +99,7 @@ postulate
   listenImpl :: Integer -> (Http.Request -> IO T.Text) -> IO ()
   listenImpl port handler = Http.serve (fromIntegral port) $ \req -> do
     body <- handler req
-    return (Http.Response 200 body)
+    return (Http.Response 200 body [])
   #-}
 
 {-# COMPILE GHC listen = listenImpl #-}
@@ -197,10 +197,10 @@ postulate
 
 {-# FOREIGN GHC
   runAgentServer1Impl :: Integer -> AS.AgentDef -> IO ()
-  runAgentServer1Impl port a1 = AS.runAgentServer (fromIntegral port) [a1]
+  runAgentServer1Impl port a1 = AS.runAgentServer (fromIntegral port) (Just "*") [a1]
 
   runAgentServer2Impl :: Integer -> AS.AgentDef -> AS.AgentDef -> IO ()
-  runAgentServer2Impl port a1 a2 = AS.runAgentServer (fromIntegral port) [a1, a2]
+  runAgentServer2Impl port a1 a2 = AS.runAgentServer (fromIntegral port) (Just "*") [a1, a2]
   #-}
 
 {-# COMPILE GHC runAgentServer1 = runAgentServer1Impl #-}

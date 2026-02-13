@@ -17,6 +17,8 @@ open import Data.Product using (Σ; _×_; _,_; proj₁; proj₂)
 open import Data.Sum using (_⊎_; inj₁; inj₂)
 open import Data.Unit using (⊤; tt)
 open import Function using (id; const; _∘_)
+open import Relation.Nullary using (Dec; yes; no)
+open import Relation.Binary.PropositionalEquality using (_≡_; refl)
 
 open import Agdelte.Concurrent.Agent as Fixed using (Agent; mkAgent)
 
@@ -51,19 +53,18 @@ embed a = record
 ------------------------------------------------------------------------
 
 -- Forget the dependency: input becomes Σ O I (tagged input).
--- Safe because caller must provide matching tag.
-forget : ∀ {S O I} → DepAgent S O I → Agent S (Σ O I) O
-forget da = mkAgent
+-- Requires decidable equality on O to check that the provided tag
+-- matches the current observation before stepping.
+forget : ∀ {S O I} → ((x y : O) → Dec (x ≡ y)) → DepAgent S O I → Agent S (Σ O I) O
+forget dec da = mkAgent
   (state da)
   (observe da)
-  (λ s oi → stepIfMatch da s oi)
+  (λ s oi → stepChecked dec da s oi)
   where
-    -- Only step if the observation tag matches current state
-    stepIfMatch : ∀ {S O I} → DepAgent S O I → S → Σ O I → S
-    stepIfMatch da s (o , i) = s  -- cannot safely step without dependent match
-    -- NOTE: This is the fundamental limitation — without dependent pattern
-    -- matching at runtime, we can't safely dispatch. The full version
-    -- requires a decidable equality on O to check o ≡ observe da s.
+    stepChecked : ∀ {S O I} → ((x y : O) → Dec (x ≡ y)) → DepAgent S O I → S → Σ O I → S
+    stepChecked dec da s (o , i) with dec o (observe da s)
+    ... | yes refl = step da s i
+    ... | no _     = s
 
 ------------------------------------------------------------------------
 -- DepAgent step (returns new agent + output)

@@ -486,5 +486,4 @@ await runReactiveApp(Counter, document.getElementById('app'));
 
 ## See Also
 
-- `doc/todo.md` — future improvements (priority scheduling, time-slicing, workers)
 - `doc/ideas/webgl-builder.md` — WebGL builder library design

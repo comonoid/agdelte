@@ -58,12 +58,12 @@ mkRouteHandler :: IO T.Text              -- ^ observe function
 mkRouteHandler observe step method path body
   | path == "/state" && method == "GET" = do
       output <- observe
-      return (Http.Response 200 output)
+      return (Http.Response 200 output [])
   | path == "/step" && method == "POST" = do
       output <- step body
-      return (Http.Response 200 output)
+      return (Http.Response 200 output [])
   | otherwise =
-      return (Http.Response 404 "Not found")
+      return (Http.Response 404 "Not found" [])
 
 ------------------------------------------------------------------------
 -- Serve a single agent over HTTP
@@ -81,10 +81,12 @@ serveAgent config observe step =
   Http.serve (scPort config) handler
   where
     handler :: Http.Request -> IO Http.Response
-    handler req = do
-      let rh = mkRouteHandler observe step
-      resp <- rh (Http.reqMethod req) (Http.reqPath req) (Http.reqBody req)
-      return $ addCors config resp
+    handler req
+      | Http.reqMethod req == "OPTIONS" = return $ addCors config (Http.Response 200 T.empty [])
+      | otherwise = do
+          let rh = mkRouteHandler observe step
+          resp <- rh (Http.reqMethod req) (Http.reqPath req) (Http.reqBody req)
+          return $ addCors config resp
 
 ------------------------------------------------------------------------
 -- Serve agent with WebSocket broadcast
@@ -103,10 +105,12 @@ serveAgentWithWs config wsPath observe step wsHandler =
   Http.serveWithWs (scPort config) httpHandler (Just (wsPath, wsHandler))
   where
     httpHandler :: Http.Request -> IO Http.Response
-    httpHandler req = do
-      let rh = mkRouteHandler observe step
-      resp <- rh (Http.reqMethod req) (Http.reqPath req) (Http.reqBody req)
-      return $ addCors config resp
+    httpHandler req
+      | Http.reqMethod req == "OPTIONS" = return $ addCors config (Http.Response 200 T.empty [])
+      | otherwise = do
+          let rh = mkRouteHandler observe step
+          resp <- rh (Http.reqMethod req) (Http.reqPath req) (Http.reqBody req)
+          return $ addCors config resp
 
 ------------------------------------------------------------------------
 -- Internal helpers
@@ -115,6 +119,8 @@ serveAgentWithWs config wsPath observe step wsHandler =
 addCors :: ServeConfig -> Http.Response -> Http.Response
 addCors config resp = case scCorsOrigin config of
   Nothing     -> resp
-  Just origin -> resp { Http.resBody = Http.resBody resp }
-  -- Note: CORS headers are added at the Http.hs level via formatResponse.
-  -- This is a placeholder for when Http.hs supports custom headers.
+  Just origin -> resp { Http.resHeaders = Http.resHeaders resp ++
+    [ ("Access-Control-Allow-Origin", origin)
+    , ("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+    , ("Access-Control-Allow-Headers", "Content-Type")
+    ] }

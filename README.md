@@ -205,7 +205,6 @@ The key difference from Virtual DOM: `template` is **data**, not a function. Bin
 | [doc/guide/architecture.md](doc/guide/architecture.md) | Core architecture and design |
 | [doc/guide/examples.md](doc/guide/examples.md) | Guide to all examples |
 | [doc/guide/getting-started.md](doc/guide/getting-started.md) | Prerequisites, build, run |
-| [doc/KNOWN_ISSUES.md](doc/KNOWN_ISSUES.md) | Known issues and limitations |
 
 ### API Reference
 

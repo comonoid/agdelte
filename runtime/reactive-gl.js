@@ -1491,28 +1491,164 @@ function createCylinderGeometry(gl, radius, height) {
 function uploadGeometry(gl, positions, normals, indices, uvs) {
   const vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
+  const buffers = [];
   const posBuf = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
   gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
   gl.enableVertexAttribArray(0);
   gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+  buffers.push(posBuf);
   const normBuf = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, normBuf);
   gl.bufferData(gl.ARRAY_BUFFER, normals, gl.STATIC_DRAW);
   gl.enableVertexAttribArray(1);
   gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
+  buffers.push(normBuf);
   if (uvs) {
     const uvBuf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, uvBuf);
     gl.bufferData(gl.ARRAY_BUFFER, uvs, gl.STATIC_DRAW);
     gl.enableVertexAttribArray(2);
     gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0);
+    buffers.push(uvBuf);
   }
   const idxBuf = gl.createBuffer();
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuf);
   gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+  buffers.push(idxBuf);
   gl.bindVertexArray(null);
-  return { vao, count: indices.length };
+  // Store raw CPU-side data for batched geometry merging
+  return { vao, count: indices.length, _buffers: buffers, _positions: positions, _normals: normals, _indices: indices, _uvs: uvs || null };
+}
+
+/**
+ * Delete GPU resources (VAO + buffers) for a geometry object returned by uploadGeometry.
+ */
+function deleteGeometry(gl, geo) {
+  if (!geo) return;
+  if (geo.vao) gl.deleteVertexArray(geo.vao);
+  if (geo._buffers) {
+    for (const buf of geo._buffers) gl.deleteBuffer(buf);
+  }
+}
+
+/**
+ * Transform a position vector (x, y, z) by a 4x4 matrix (column-major Float32Array).
+ */
+function mat4TransformPos(m, x, y, z) {
+  return [
+    m[0] * x + m[4] * y + m[8]  * z + m[12],
+    m[1] * x + m[5] * y + m[9]  * z + m[13],
+    m[2] * x + m[6] * y + m[10] * z + m[14],
+  ];
+}
+
+/**
+ * Compute the inverse transpose of the upper-left 3x3 of a 4x4 column-major matrix.
+ * Returns a 9-element array (row-major 3x3) for use with mat4TransformNormal.
+ * This is the correct matrix for transforming normals under non-uniform scale.
+ */
+function mat4NormalMatrix(m) {
+  const a00 = m[0], a01 = m[4], a02 = m[8];
+  const a10 = m[1], a11 = m[5], a12 = m[9];
+  const a20 = m[2], a21 = m[6], a22 = m[10];
+  const det = a00 * (a11 * a22 - a12 * a21)
+            - a01 * (a10 * a22 - a12 * a20)
+            + a02 * (a10 * a21 - a11 * a20);
+  if (Math.abs(det) < 1e-10) return [1, 0, 0, 0, 1, 0, 0, 0, 1];
+  const invDet = 1.0 / det;
+  // Cofactor matrix (= adjugate transposed), then transpose again for inverse-transpose
+  // inverse-transpose = cofactor / det
+  return [
+    (a11 * a22 - a12 * a21) * invDet,
+    (a12 * a20 - a10 * a22) * invDet,
+    (a10 * a21 - a11 * a20) * invDet,
+    (a02 * a21 - a01 * a22) * invDet,
+    (a00 * a22 - a02 * a20) * invDet,
+    (a20 * a01 - a00 * a21) * invDet,
+    (a01 * a12 - a02 * a11) * invDet,
+    (a02 * a10 - a00 * a12) * invDet,
+    (a00 * a11 - a01 * a10) * invDet,
+  ];
+}
+
+/**
+ * Transform a normal vector by a 3x3 normal matrix (from mat4NormalMatrix), then normalize.
+ */
+function mat4TransformNormal(nm, x, y, z) {
+  const rx = nm[0] * x + nm[3] * y + nm[6] * z;
+  const ry = nm[1] * x + nm[4] * y + nm[7] * z;
+  const rz = nm[2] * x + nm[5] * y + nm[8] * z;
+  const len = Math.sqrt(rx * rx + ry * ry + rz * rz);
+  return len > 1e-8 ? [rx / len, ry / len, rz / len] : [0, 0, 1];
+}
+
+/**
+ * Merge children mesh geometries into a single VAO for batched rendering.
+ * Positions and normals are in the batch's local space; the batch's own
+ * transform is applied via the model uniform at render time.
+ * Returns merged geometry object or null if no meshes to merge.
+ */
+function mergeBatchGeometry(gl, geoCache, children) {
+  const allPos = [], allNorm = [], allIdx = [], allUv = [];
+  let vertexOffset = 0;
+  let hasUvs = false;
+
+  function collectMesh(entry, parentMat) {
+    if (entry.type === 'mesh') {
+      const geo = getOrCreateGeometry(gl, geoCache, entry.geometry);
+      if (!geo._positions || !geo._normals || !geo._indices) return;
+      const tfm = entry.transform;
+      const modelMat = parentMat
+        ? mat4Multiply(parentMat, mat4FromTRS(tfm.pos, tfm.rot, tfm.scale))
+        : mat4FromTRS(tfm.pos, tfm.rot, tfm.scale);
+
+      const pos = geo._positions, norm = geo._normals, idx = geo._indices;
+      const numVerts = pos.length / 3;
+      const normalMat = mat4NormalMatrix(modelMat);
+
+      for (let i = 0; i < numVerts; i++) {
+        const tp = mat4TransformPos(modelMat, pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]);
+        allPos.push(tp[0], tp[1], tp[2]);
+        const tn = mat4TransformNormal(normalMat, norm[i * 3], norm[i * 3 + 1], norm[i * 3 + 2]);
+        allNorm.push(tn[0], tn[1], tn[2]);
+      }
+      if (geo._uvs) {
+        hasUvs = true;
+        for (let i = 0; i < geo._uvs.length; i++) allUv.push(geo._uvs[i]);
+      } else {
+        for (let i = 0; i < numVerts; i++) allUv.push(0, 0);
+      }
+      for (let i = 0; i < idx.length; i++) {
+        allIdx.push(idx[i] + vertexOffset);
+      }
+      vertexOffset += numVerts;
+    } else if (entry.type === 'group' || entry.type === 'batched') {
+      const tfm = entry.transform;
+      const groupMat = parentMat
+        ? mat4Multiply(parentMat, mat4FromTRS(tfm.pos, tfm.rot, tfm.scale))
+        : mat4FromTRS(tfm.pos, tfm.rot, tfm.scale);
+      for (const child of entry.children) collectMesh(child, groupMat);
+    }
+  }
+
+  for (const child of children) collectMesh(child, null);
+
+  if (allIdx.length === 0) return null;
+
+  // Use Uint32Array if vertex count exceeds Uint16 range
+  const idxArray = vertexOffset > 65535
+    ? new Uint32Array(allIdx)
+    : new Uint16Array(allIdx);
+  const merged = uploadGeometry(gl, new Float32Array(allPos), new Float32Array(allNorm), idxArray, hasUvs ? new Float32Array(allUv) : undefined);
+  merged._isBatchMerged = true;
+  merged._indexType = vertexOffset > 65535 ? 'uint32' : 'uint16';
+  // Free CPU-side data — merged VAOs are not re-merged
+  merged._positions = null;
+  merged._normals = null;
+  merged._indices = null;
+  merged._uvs = null;
+  return merged;
 }
 
 /**
@@ -3790,6 +3926,13 @@ function updateGLBindings(bindings, newModel, now) {
       const pickRegistry = b.pickRegistryRef;
       const lights = b.lightsRef;
 
+      // Clean up GPU resources for old batched entries
+      for (let ri = b.renderStartIdx; ri < b.renderStartIdx + b.renderCount; ri++) {
+        if (renderList[ri] && renderList[ri]._mergedGeo) {
+          deleteGeometry(gl, renderList[ri]._mergedGeo);
+        }
+      }
+
       // Remove old render entries
       renderList.splice(b.renderStartIdx, b.renderCount);
 
@@ -4152,22 +4295,62 @@ function renderEntry(gl, programs, geoCache, texCache, fontCache, entry, parentM
 
   } else if (entry.type === 'batched') {
     // Batched rendering: merge children's geometry into single draw call
-    // For now, just render children individually (full batching is future work)
     const tfm = entry.transform;
     const groupMat = parentMat
       ? mat4Multiply(parentMat, mat4FromTRS(tfm.pos, tfm.rot, tfm.scale))
       : mat4FromTRS(tfm.pos, tfm.rot, tfm.scale);
 
-    for (const child of entry.children) {
-      // Override child's material with batch material
-      if (child.type === 'mesh') {
-        const savedMat = child.material;
-        child.material = entry.material;
-        renderEntry(gl, programs, geoCache, texCache, fontCache, child, groupMat, lights, cameraPos);
-        child.material = savedMat;
-      } else {
-        renderEntry(gl, programs, geoCache, texCache, fontCache, child, groupMat, lights, cameraPos);
+    // Lazily build merged VAO on first render
+    if (!entry.mergedVAO) {
+      const merged = mergeBatchGeometry(gl, geoCache, entry.children);
+      if (merged) {
+        entry.mergedVAO = merged.vao;
+        entry.mergedCount = merged.count;
+        entry._mergedGeo = merged;
       }
+    }
+
+    if (entry.mergedVAO && entry.mergedCount > 0) {
+      // Render merged geometry as a single draw call with batch material
+      const mat = entry.material;
+      if ((mat.type === 'phong' || mat.type === 'flat') && lights.length > 0) {
+        const prog = programs.phong;
+        const c = mat.color;
+        gl.useProgram(prog.program);
+        gl.uniformMatrix4fv(prog.uniforms.proj, false, programs._projMat);
+        gl.uniformMatrix4fv(prog.uniforms.view, false, programs._viewMat);
+        gl.uniformMatrix4fv(prog.uniforms.model, false, groupMat);
+        gl.uniform4f(prog.uniforms.color, c.r, c.g, c.b, c.a);
+        gl.uniform1f(prog.uniforms.shininess, mat.type === 'flat' ? 1.0 : mat.shininess);
+        gl.uniform3f(prog.uniforms.cameraPos, cameraPos.x, cameraPos.y, cameraPos.z);
+        gl.uniform1i(prog.uniforms.flatMode, mat.type === 'flat' ? 1 : 0);
+        uploadLights(gl, prog, lights);
+      } else if (mat.type === 'pbr' && lights.length > 0) {
+        const prog = programs.pbr;
+        const c = mat.color;
+        gl.useProgram(prog.program);
+        gl.uniformMatrix4fv(prog.uniforms.proj, false, programs._projMat);
+        gl.uniformMatrix4fv(prog.uniforms.view, false, programs._viewMat);
+        gl.uniformMatrix4fv(prog.uniforms.model, false, groupMat);
+        gl.uniform4f(prog.uniforms.color, c.r, c.g, c.b, c.a);
+        gl.uniform1f(prog.uniforms.metallic, mat.metallic);
+        gl.uniform1f(prog.uniforms.roughness, mat.roughness);
+        gl.uniform3f(prog.uniforms.cameraPos, cameraPos.x, cameraPos.y, cameraPos.z);
+        uploadLights(gl, prog, lights);
+      } else {
+        const prog = programs.unlit;
+        const c = mat.color || mat.tint || { r: 1, g: 1, b: 1, a: 1 };
+        gl.useProgram(prog.program);
+        gl.uniformMatrix4fv(prog.uniforms.proj, false, programs._projMat);
+        gl.uniformMatrix4fv(prog.uniforms.view, false, programs._viewMat);
+        gl.uniformMatrix4fv(prog.uniforms.model, false, groupMat);
+        gl.uniform4f(prog.uniforms.color, c.r, c.g, c.b, c.a);
+      }
+
+      gl.bindVertexArray(entry.mergedVAO);
+      const idxType = entry._mergedGeo && entry._mergedGeo._indexType === 'uint32' ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT;
+      gl.drawElements(gl.TRIANGLES, entry.mergedCount, idxType, 0);
+      gl.bindVertexArray(null);
     }
   }
 }

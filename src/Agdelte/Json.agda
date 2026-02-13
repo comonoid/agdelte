@@ -10,6 +10,7 @@ open import Data.Nat using (ℕ)
 open import Data.Int using (ℤ)
 open import Data.Bool using (Bool; true; false)
 open import Data.Maybe using (Maybe; just; nothing)
+open import Data.Unit using (⊤; tt)
 open import Data.List using (List; []; _∷_)
 open import Data.Product using (_×_; _,_)
 open import Function using (_∘_)
@@ -60,7 +61,7 @@ postulate
   bool : Decoder Bool
 
   -- Decode null (returns unit)
-  jnull : Decoder (Maybe ℕ)  -- hack: returns nothing on null
+  jnull : Decoder ⊤
 
 {-# COMPILE JS string = {
   decode: (json) => {
@@ -105,7 +106,7 @@ postulate
 
 {-# COMPILE JS jnull = {
   decode: (json) => {
-    if (json === null) return { tag: 'ok', value: { nothing: null } };
+    if (json === null) return { tag: 'ok', value: null };
     return { tag: 'err', error: 'Expected null' };
   }
 } #-}

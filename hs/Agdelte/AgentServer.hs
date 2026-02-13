@@ -44,8 +44,8 @@ data WsClient = WsClient
 type ClientRegistry = TVar (Map.Map Text WsClient)
 
 -- | Run multi-agent server
-runAgentServer :: Int -> [AgentDef] -> IO ()
-runAgentServer port agents = do
+runAgentServer :: Int -> Maybe Text -> [AgentDef] -> IO ()
+runAgentServer port corsOrigin agents = do
   broadcast <- newBroadcastTChanIO
   registry  <- newTVarIO Map.empty
   clientCounter <- IORef.newIORef (0 :: Int)
@@ -58,13 +58,20 @@ runAgentServer port agents = do
   putStrLn "  WebSocket: /ws (broadcasts + peek/over protocol)"
 
   Http.serveWithWs port
-    (httpHandler routeMap registry broadcast)
+    (httpHandler corsOrigin routeMap registry broadcast)
     (Just ("/ws", wsHandler broadcast registry clientCounter))
 
-httpHandler :: Map.Map Text AgentDef -> ClientRegistry -> BroadcastChan -> Http.Request -> IO Http.Response
-httpHandler routes registry broadcast req = do
-  let path = Http.reqPath req
-      body = Http.reqBody req
+httpHandler :: Maybe Text -> Map.Map Text AgentDef -> ClientRegistry -> BroadcastChan -> Http.Request -> IO Http.Response
+httpHandler corsOrigin routes registry broadcast req
+  | Http.reqMethod req == "OPTIONS" = return $ addCorsHeaders corsOrigin (Http.Response 200 T.empty [])
+  | otherwise = do
+      let path = Http.reqPath req
+          body = Http.reqBody req
+      resp <- routeRequest routes registry broadcast path body
+      return $ addCorsHeaders corsOrigin resp
+
+routeRequest :: Map.Map Text AgentDef -> ClientRegistry -> BroadcastChan -> Text -> Text -> IO Http.Response
+routeRequest routes registry broadcast path body = do
   -- Parse path: /agent-path/action or /client/clientId/action
   let (agentPath', action) = splitPath path
 
@@ -73,18 +80,26 @@ httpHandler routes registry broadcast req = do
     Just rest -> handleClientRequest registry rest body
     Nothing ->
       case Map.lookup agentPath' routes of
-        Nothing -> return $ Http.Response 404 "Agent not found"
+        Nothing -> return $ Http.Response 404 "Agent not found" []
         Just agent -> case action of
           "state" -> do
             output <- agentObserve agent
-            return $ Http.Response 200 output
+            return $ Http.Response 200 output []
           "step" -> do
             output <- agentStep agent body
             -- Broadcast to WebSocket clients
             let msg = agentName agent <> ":" <> output
             atomically $ writeTChan broadcast msg
-            return $ Http.Response 200 output
-          _ -> return $ Http.Response 404 "Unknown action (use /state or /step)"
+            return $ Http.Response 200 output []
+          _ -> return $ Http.Response 404 "Unknown action (use /state or /step)" []
+
+addCorsHeaders :: Maybe Text -> Http.Response -> Http.Response
+addCorsHeaders Nothing resp = resp
+addCorsHeaders (Just origin) resp = resp { Http.resHeaders = Http.resHeaders resp ++
+  [ ("Access-Control-Allow-Origin", origin)
+  , ("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+  , ("Access-Control-Allow-Headers", "Content-Type")
+  ] }
 
 -- | Handle /client/{clientId}/{action} requests
 -- GET /client/{clientId}/peek → peek client model via WS
@@ -96,19 +111,19 @@ handleClientRequest registry rest body = do
         (cid, _) -> (cid, "peek")
   clients <- atomically $ readTVar registry
   case Map.lookup clientId' clients of
-    Nothing -> return $ Http.Response 404 ("Client not found: " <> clientId')
+    Nothing -> return $ Http.Response 404 ("Client not found: " <> clientId') []
     Just client -> case action of
       "peek" -> do
         -- Send peek request to client via WS, wait for response
         WS.wsSend (clientConn client) ("peek:" <> clientId')
         -- Wait for response (client will put it in the MVar)
         response <- takeMVar (clientPendingPeek client)
-        return $ Http.Response 200 response
+        return $ Http.Response 200 response []
       "over" -> do
         -- Send over (dispatch msg) to client via WS
         WS.wsSend (clientConn client) ("over:" <> body)
-        return $ Http.Response 200 "ok"
-      _ -> return $ Http.Response 404 "Unknown client action (use /peek or /over)"
+        return $ Http.Response 200 "ok" []
+      _ -> return $ Http.Response 404 "Unknown client action (use /peek or /over)" []
 
 -- | Split "/counter/step" into ("/counter", "step")
 splitPath :: Text -> (Text, Text)

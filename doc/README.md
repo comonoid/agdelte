@@ -49,12 +49,6 @@
 | [vs Svelte](comparison/vs-svelte.md) | Detailed comparison with Svelte 5 |
 | [vs Vue 3](comparison/vs-vue3.md) | Feature comparison with Vue 3 |
 
-## Project Status
-
-| Document | Description |
-|----------|-------------|
-| [TODO](TODO.md) | Future improvements and nice-to-haves |
-
 ## Quick Links
 
 - [Main README](../README.md) — project overview

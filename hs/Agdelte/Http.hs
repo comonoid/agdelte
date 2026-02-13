@@ -26,8 +26,9 @@ data Request = Request
   } deriving (Show)
 
 data Response = Response
-  { resStatus :: Int
-  , resBody   :: Text
+  { resStatus  :: Int
+  , resBody    :: Text
+  , resHeaders :: [(Text, Text)]
   }
 
 -- | Start HTTP server on given port, call handler for each request
@@ -71,7 +72,7 @@ handleConnection conn httpHandler wsHandler = do
             case mConn of
               Just wsConn -> handler wsConn  -- This blocks until WS handler exits
               Nothing -> do
-                let resp = Response 400 (T.pack "Bad WebSocket handshake")
+                let resp = Response 400 (T.pack "Bad WebSocket handshake") []
                 sendAll conn (formatResponse resp)
           _ -> do
             resp <- httpHandler req
@@ -103,7 +104,7 @@ parseRequest raw =
   in Request method rest body
 
 formatResponse :: Response -> BS.ByteString
-formatResponse (Response status body) =
+formatResponse (Response status body hdrs) =
   let bodyBS = TE.encodeUtf8 body
       statusText = case status of
         200 -> "OK"
@@ -111,19 +112,18 @@ formatResponse (Response status body) =
         404 -> "Not Found"
         405 -> "Method Not Allowed"
         _   -> "Unknown"
-      header = BS8.intercalate (BS8.pack "\r\n")
-        [ BS8.pack $ "HTTP/1.1 " ++ show status ++ " " ++ statusText
-        , BS8.pack "Content-Type: application/json"
+      defaultHeaders =
+        [ BS8.pack "Content-Type: application/json"
         , BS8.pack $ "Content-Length: " ++ show (BS.length bodyBS)
         -- COOP/COEP headers for SharedArrayBuffer support
         , BS8.pack "Cross-Origin-Opener-Policy: same-origin"
         , BS8.pack "Cross-Origin-Embedder-Policy: require-corp"
-        -- CORS headers
-        , BS8.pack "Access-Control-Allow-Origin: *"
-        , BS8.pack "Access-Control-Allow-Methods: GET, POST, OPTIONS"
-        , BS8.pack "Access-Control-Allow-Headers: Content-Type"
         , BS8.pack "Connection: close"
-        , BS8.pack ""
-        , BS8.pack ""
         ]
+      customHeaders = map (\(k, v) -> TE.encodeUtf8 (k <> ": " <> v)) hdrs
+      header = BS8.intercalate (BS8.pack "\r\n") $
+        [ BS8.pack $ "HTTP/1.1 " ++ show status ++ " " ++ statusText ]
+        ++ defaultHeaders
+        ++ customHeaders
+        ++ [ BS8.pack "", BS8.pack "" ]
   in header <> bodyBS
