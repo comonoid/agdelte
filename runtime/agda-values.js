@@ -439,7 +439,7 @@ export function toBool(value) {
 // Deep Equality
 // ─────────────────────────────────────────────────────────────────────
 
-const MAX_DEEP_EQUAL_DEPTH = 20;
+const MAX_DEEP_EQUAL_DEPTH = 50;
 
 /**
  * Deep structural equality for Agda values

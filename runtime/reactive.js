@@ -538,6 +538,30 @@ function ensureMutable(model) {
 }
 
 /**
+ * Deep-clone a slot value for snapshotting (used to protect against in-place mutation).
+ */
+function cloneSlot(s) {
+  if (!s || typeof s !== 'function' || !s._slots || !s._ctor) {
+    if (typeof s === 'object' && s !== null) {
+      try { return structuredClone(s); } catch { return s; }
+    }
+    return s;
+  }
+  const clonedSlots = s._slots.map(c => {
+    if (typeof c === 'function' && c._slots && c._ctor) return cloneSlot(c);
+    if (typeof c === 'object' && c !== null) {
+      try { return structuredClone(c); } catch { return c; }
+    }
+    return c;
+  });
+  const ctor = s._ctor;
+  const w = (cases) => cases[ctor](...clonedSlots);
+  w._slots = clonedSlots;
+  w._ctor = ctor;
+  return w;
+}
+
+/**
  * Reconcile: copy changed slots from newModel into oldModel in-place.
  * Returns oldModel (mutated) if possible, or newModel if can't reconcile.
  */
@@ -708,10 +732,10 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
             case 'result': {
               // Find and invoke pending callback
               const id = event.data.id;
-              const callback = workerPendingCallbacks.get(id);
-              if (callback) {
+              const pending = workerPendingCallbacks.get(id);
+              if (pending) {
                 workerPendingCallbacks.delete(id);
-                callback(resultModel);
+                pending.resolve(resultModel);
               }
               break;
             }
@@ -721,10 +745,10 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
               // Resolve pending callback on error to prevent hanging promises
               const errId = event.data.id;
               if (errId !== undefined) {
-                const cb = workerPendingCallbacks.get(errId);
-                if (cb) {
+                const pending = workerPendingCallbacks.get(errId);
+                if (pending) {
                   workerPendingCallbacks.delete(errId);
-                  cb(update(event.data.msg)(model));  // fallback to main thread
+                  pending.resolve(update(pending.msg)(pending.snapshotModel));  // fallback to main thread
                 }
               }
               // Reject if still initializing
@@ -737,8 +761,8 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         updateWorker.onerror = (error) => {
           console.error('Update worker failed:', error);
           // Resolve all pending callbacks to prevent hanging promises
-          for (const [, cb] of workerPendingCallbacks) {
-            cb(null);
+          for (const [, pending] of workerPendingCallbacks) {
+            pending.resolve(null);
           }
           workerPendingCallbacks.clear();
           updateWorker = null;
@@ -768,7 +792,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
     return new Promise((resolve) => {
       const id = workerMsgId++;
-      workerPendingCallbacks.set(id, resolve);
+      workerPendingCallbacks.set(id, { resolve, msg, snapshotModel: currentModel });
       updateWorker.postMessage({ type: 'update', id, msg, model: currentModel });
     });
   }
@@ -809,7 +833,9 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       // Snapshot old slots before batch so reconcile's in-place mutation
       // doesn't alias oldModel with model
       const oldModel = model;
-      const oldSlots = model && model._slots ? [...model._slots] : null;
+      const oldSlots = model && model._slots ? model._slots.map(s =>
+        (typeof s === 'function' && s._slots && s._ctor) ? cloneSlot(s) : s
+      ) : null;
 
       // Apply all messages sequentially
       for (const msg of msgs) {
@@ -847,7 +873,6 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     } finally {
       isUpdating = false;
     }
-
     // Process deferred immediate messages in same frame
     // (messages pushed to p1Queue by dispatchImmediate during isUpdating)
     if (p1Queue.length > 0) {
@@ -861,8 +886,10 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
    * Flush P1 (normal priority) queue — runs on requestAnimationFrame
    */
   function flushP1() {
-    p1Scheduled = false;
-    if (p1Queue.length === 0) return;
+    if (p1Queue.length === 0) {
+      p1Scheduled = false;
+      return;
+    }
 
     const msgs = p1Queue;
     p1Queue = [];
@@ -871,8 +898,9 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
     // If more messages arrived during flush, schedule another
     if (p1Queue.length > 0) {
-      p1Scheduled = true;
       requestAnimationFrame(flushP1);
+    } else {
+      p1Scheduled = false;
     }
   }
 
@@ -1194,7 +1222,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     if (ns) {
       el.setAttributeNS(ns, name, value);
     } else if (name === 'disabled' || name === 'checked') {
-      if (value === 'true') el.setAttribute(name, '');
+      if (value === 'true' || value === true) el.setAttribute(name, '');
       else el.removeAttribute(name);
     } else {
       el.setAttribute(name, value);
@@ -1207,12 +1235,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   function applyAttr(el, attr) {
     attr({
       attr: (name, value) => {
-        if (name === 'disabled' || name === 'checked') {
-          if (value === 'true') el.setAttribute(name, '');
-          else el.removeAttribute(name);
-        } else {
-          setAttr(el, name, value);
-        }
+        setAttr(el, name, value);
       },
       attrBind: (name, binding) => {
         const extract = NodeModule.Binding.extract(binding);
@@ -1738,7 +1761,6 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     list.renderedItems = newRendered;
 
     // Update truncation marker
-    const parent = list.marker.parentNode;
     if (parent) updateTruncatedMarker(list, parent, incomplete);
   }
 
@@ -1747,7 +1769,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
    */
   function serializeEvent(event) {
     if (!event) return 'null';
-    return event({
+    const cases = {
       never: () => 'never',
       interval: (ms, msg) => `interval(${ms})`,
       timeout: (ms, msg) => `timeout(${ms})`,
@@ -1777,7 +1799,11 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       foldE: (_typeB, init, step, inner) => `foldE(${serializeEvent(inner)})`,
       mapFilterE: (_typeB, f, inner) => `mapFilterE(${serializeEvent(inner)})`,
       switchE: (initial, meta) => `switchE(${serializeEvent(initial)},${serializeEvent(meta)})`
+    };
+    const proxy = new Proxy(cases, {
+      get: (target, prop) => target[prop] || ((...args) => `unknown(${prop})`)
     });
+    return event(proxy);
   }
 
   /**
@@ -1922,9 +1948,13 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   function cloneModel(m) {
     if (!m || typeof m !== 'function') return m;
     if (!m._slots || !m._ctor) return m;
-    const clonedSlots = m._slots.map(s =>
-      (typeof s === 'function' && s._slots && s._ctor) ? cloneModel(s) : s
-    );
+    const clonedSlots = m._slots.map(s => {
+      if (typeof s === 'function' && s._slots && s._ctor) return cloneModel(s);
+      if (typeof s === 'object' && s !== null) {
+        try { return structuredClone(s); } catch { return s; }
+      }
+      return s;
+    });
     const ctor = m._ctor;
     const w = (cases) => cases[ctor](...clonedSlots);
     w._slots = clonedSlots;

@@ -162,6 +162,12 @@ class WorkerPool {
     clearInterval(this._cleanupTimer);
     this.idle.forEach(w => w.terminate());
     this.idle = [];
+    for (const entry of this.queue) {
+      if (!entry.task.cancelled) {
+        entry.task.cancelled = true;
+        try { entry.task.onError('Pool destroyed'); } catch {}
+      }
+    }
     this.queue = [];
     this._isEmpty = true;
   }
@@ -825,11 +831,15 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         return { unsubscribe: () => {} };
       }
 
+      let terminated = false;
+
       w.onmessage = (e) => {
+        if (terminated) return;
         dispatchBackground(onResult(typeof e.data === 'string' ? e.data : JSON.stringify(e.data)));
       };
 
       w.onerror = (e) => {
+        if (terminated) return;
         dispatchBackground(onError(formatWorkerError(e)));
       };
 
@@ -838,6 +848,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
 
       return {
         unsubscribe: () => {
+          terminated = true;
           w.terminate();
         }
       };
@@ -854,11 +865,15 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         return { unsubscribe: () => {} };
       }
 
+      let terminated = false;
+
       w.onmessage = (e) => {
+        if (terminated) return;
         dispatchBackground(onMessage(typeof e.data === 'string' ? e.data : JSON.stringify(e.data)));
       };
 
       w.onerror = (e) => {
+        if (terminated) return;
         dispatchBackground(onError(formatWorkerError(e)));
       };
 
@@ -867,6 +882,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
 
       return {
         unsubscribe: () => {
+          terminated = true;
           channelConnections.delete(scriptUrl);
           w.terminate();
         }
@@ -881,8 +897,11 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
 
       window.addEventListener('popstate', listener);
 
-      // Dispatch initial URL on subscribe
-      dispatchNormal(handler(window.location.pathname + window.location.search));
+      // Dispatch initial URL only on first subscribe (not re-subscribes)
+      if (!interpretEvent._urlInitialized) {
+        interpretEvent._urlInitialized = true;
+        dispatchNormal(handler(window.location.pathname + window.location.search));
+      }
 
       return {
         unsubscribe: () => window.removeEventListener('popstate', listener)
@@ -908,7 +927,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       let running = true;
       const loop = (timestamp) => {
         if (!running) return;
-        dispatchNormal(handler(timestamp));
+        dispatchNormal(handler(String(timestamp)));
         requestAnimationFrame(loop);
       };
       requestAnimationFrame(loop);
@@ -943,6 +962,12 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       }
       const stiffClamped = Math.max(0, stiff);
       const dampClamped = Math.max(0, damp);
+
+      // Zero stiffness and zero damping means no restoring force — settle immediately
+      if (stiffClamped === 0 && dampClamped === 0) {
+        queueMicrotask(() => dispatchNormal(onSettled));
+        return { unsubscribe: () => {} };
+      }
 
       const tick = (dt) => {
         const dtSec = dt / 1000;
@@ -1044,7 +1069,7 @@ function mkKeyboardEvent(e) {
     e.shiftKey,
     e.metaKey,
     e.repeat,
-    e.location
+    BigInt(e.location)
   );
 }
 
@@ -1132,6 +1157,102 @@ function subscribeLegacy(eventSpec, dispatch) {
       return {
         unsubscribe: () => document.removeEventListener(config.event, listener)
       };
+    }
+
+    case 'mouse': {
+      const listener = (e) => {
+        const msg = config.handler({ x: e.clientX, y: e.clientY, button: e.button });
+        if (msg !== null && msg !== undefined) dispatch(msg);
+      };
+      document.addEventListener(config.eventType, listener);
+      return { unsubscribe: () => document.removeEventListener(config.eventType, listener) };
+    }
+
+    case 'resize': {
+      const listener = () => {
+        const msg = config.handler({ width: window.innerWidth, height: window.innerHeight });
+        if (msg !== null && msg !== undefined) dispatch(msg);
+      };
+      window.addEventListener('resize', listener);
+      return { unsubscribe: () => window.removeEventListener('resize', listener) };
+    }
+
+    case 'scroll': {
+      const listener = () => {
+        const msg = config.handler({ x: window.scrollX, y: window.scrollY });
+        if (msg !== null && msg !== undefined) dispatch(msg);
+      };
+      window.addEventListener('scroll', listener);
+      return { unsubscribe: () => window.removeEventListener('scroll', listener) };
+    }
+
+    case 'visibility': {
+      const listener = () => {
+        const msg = config.handler(document.visibilityState);
+        if (msg !== null && msg !== undefined) dispatch(msg);
+      };
+      document.addEventListener('visibilitychange', listener);
+      return { unsubscribe: () => document.removeEventListener('visibilitychange', listener) };
+    }
+
+    case 'online': {
+      const onlineListener = () => dispatch(config.onOnline);
+      const offlineListener = () => dispatch(config.onOffline);
+      window.addEventListener('online', onlineListener);
+      window.addEventListener('offline', offlineListener);
+      return {
+        unsubscribe: () => {
+          window.removeEventListener('online', onlineListener);
+          window.removeEventListener('offline', offlineListener);
+        }
+      };
+    }
+
+    case 'storage': {
+      const listener = (e) => {
+        if (config.key && e.key !== config.key) return;
+        const msg = config.handler(e.newValue);
+        if (msg !== null && msg !== undefined) dispatch(msg);
+      };
+      window.addEventListener('storage', listener);
+      return { unsubscribe: () => window.removeEventListener('storage', listener) };
+    }
+
+    case 'request': {
+      const ctrl = new AbortController();
+      (async () => {
+        try {
+          const { method = 'GET', url, headers = {}, body, onSuccess, onError } = config;
+          const response = await fetch(url, { method, headers, body, signal: ctrl.signal });
+          if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          const data = await response.json();
+          dispatch(onSuccess(data));
+        } catch (e) {
+          if (e.name !== 'AbortError') dispatch(config.onError(e.message));
+        }
+      })();
+      return { unsubscribe: () => ctrl.abort() };
+    }
+
+    case 'animationFrame': {
+      let running = true;
+      const handler = config.msg;
+      if (typeof handler === 'function') {
+        const loop = (timestamp) => {
+          if (!running) return;
+          dispatch(handler(String(timestamp)));
+          requestAnimationFrame(loop);
+        };
+        requestAnimationFrame(loop);
+      } else {
+        const loop = () => {
+          if (!running) return;
+          dispatch(handler);
+          requestAnimationFrame(loop);
+        };
+        requestAnimationFrame(loop);
+      }
+      return { unsubscribe: () => { running = false; } };
     }
 
     default:
