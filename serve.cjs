@@ -21,8 +21,20 @@ const MIME = {
 };
 
 const server = http.createServer((req, res) => {
-  const parsed = url.parse(req.url);
+  const parsed = url.parse(req.url, true);
   const pathname = decodeURIComponent(parsed.pathname);
+
+  // /api/random-delay?name=X — respond after random 500-2500ms delay
+  if (pathname === '/api/random-delay') {
+    const name = parsed.query.name || 'unknown';
+    const delay = 500 + Math.floor(Math.random() * 2000);
+    setTimeout(() => {
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end(`${name} (${delay}ms)`);
+    }, delay);
+    return;
+  }
+
   const filePath = path.join(ROOT, pathname === '/' ? 'index.html' : pathname);
 
   // Security check

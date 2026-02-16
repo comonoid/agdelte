@@ -102,16 +102,17 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       const pairArray = agdaListToArray(pairs);
       const keyMap = new Map();
       for (const pair of pairArray) {
-        // Scott-encoded pair: (cb) => cb["_,_"](key, msg) or (cb) => cb.pair(key, msg)
+        // Agda pair (_,_) can be:
+        //   Function format: (cb) => cb["_,_"](key, msg)
+        //   Object format:   {"_,_": cb => cb["_,_"](key, msg)}
         let k, m;
         try {
-          pair((a, b) => { k = a; m = b; });
-        } catch {
-          try {
-            const result = pair({ '_,_': (a, b) => ({ k: a, m: b }), 'pair': (a, b) => ({ k: a, m: b }) });
-            k = result.k; m = result.m;
-          } catch { continue; }
-        }
+          if (typeof pair === 'function') {
+            pair({ '_,_': (a, b) => { k = a; m = b; } });
+          } else if (pair && typeof pair['_,_'] === 'function') {
+            pair['_,_']({ '_,_': (a, b) => { k = a; m = b; } });
+          }
+        } catch { /* ignore extraction failure */ }
         if (k !== undefined) keyMap.set(k, m);
       }
       const listener = (e) => {
@@ -542,7 +543,10 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       };
     },
 
-    // race: subscribe to all events in list, first to fire wins (uses inner event's priority)
+    // race: subscribe to all events in list, first to fire wins
+    // All participants dispatch at normal priority so the race is fair —
+    // otherwise P1 events (timeout) always beat P2 events (httpGet)
+    // regardless of which actually fires first.
     race: (eventList) => {
       const events = agdaListToArray(eventList);
       if (events.length === 0) {
@@ -552,20 +556,20 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       let finished = false;
       const subs = [];
 
+      const raceDispatch = (val) => {
+        if (finished) return;
+        finished = true;
+        dispatchNormal(val);
+        subs.forEach(s => s.unsubscribe());
+      };
+
       events.forEach((evt) => {
-        // Preserve inner event's priority
-        const makePriorityDispatch = (priorityDispatch) => (val) => {
-          if (finished) return;
-          finished = true;
-          priorityDispatch(val);
-          subs.forEach(s => s.unsubscribe());
-        };
         const wrappedDispatchers = {
-          immediate: makePriorityDispatch(dispatchImmediate),
-          normal: makePriorityDispatch(dispatchNormal),
-          background: makePriorityDispatch(dispatchBackground)
+          immediate: raceDispatch,
+          normal: raceDispatch,
+          background: raceDispatch
         };
-        const sub = interpretEvent(evt, makePriorityDispatch(dispatchNormal), wrappedDispatchers);
+        const sub = interpretEvent(evt, raceDispatch, wrappedDispatchers);
         subs.push(sub);
       });
 
@@ -708,22 +712,32 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       };
     },
 
-    // onUrlChange: URL change (popstate) (P1 - normal, user navigation)
+    // onUrlChange: URL change (popstate/hashchange) (P1 - normal, user navigation)
+    // Uses hash-based routing (#/path) so apps work when served from any URL
     onUrlChange: (handler) => {
+      const getRoutePath = () => {
+        const hash = window.location.hash;
+        return hash ? hash.slice(1) : '/';
+      };
+
       const listener = () => {
-        dispatchNormal(handler(window.location.pathname + window.location.search));
+        dispatchNormal(handler(getRoutePath()));
       };
 
       window.addEventListener('popstate', listener);
+      window.addEventListener('hashchange', listener);
 
       // Dispatch initial URL only on first subscribe (not re-subscribes)
       if (!interpretEvent._urlInitialized) {
         interpretEvent._urlInitialized = true;
-        dispatchNormal(handler(window.location.pathname + window.location.search));
+        dispatchNormal(handler(getRoutePath()));
       }
 
       return {
-        unsubscribe: () => window.removeEventListener('popstate', listener)
+        unsubscribe: () => {
+          window.removeEventListener('popstate', listener);
+          window.removeEventListener('hashchange', listener);
+        }
       };
     },
 
@@ -875,12 +889,12 @@ function mkAgdaList(arr) {
 }
 
 /**
- * Creates KeyboardEvent record for Agda (Scott-encoded)
- * Agda record = { constructorName: cb => cb.constructorName(fields...) }
+ * Creates KeyboardEvent record for Agda (Scott-encoded, object format)
+ * Compiled Agda accesses fields via: a["mkKeyboardEvent"]({"mkKeyboardEvent": (k,c,...) => k})
+ * So the record must be: {"mkKeyboardEvent": cb => cb["mkKeyboardEvent"](fields...)}
  */
-// Return function format (Format 1) for Scott encoding compatibility
 function mkKeyboardEvent(e) {
-  return (cb) => cb.mkKeyboardEvent(
+  return {"mkKeyboardEvent": (cb) => cb["mkKeyboardEvent"](
     e.key,
     e.code,
     e.ctrlKey,
@@ -889,7 +903,7 @@ function mkKeyboardEvent(e) {
     e.metaKey,
     e.repeat,
     BigInt(e.location)
-  );
+  )};
 }
 
 /**

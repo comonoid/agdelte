@@ -237,8 +237,8 @@ function executeCmd(cmd, dispatch) {
       }
       worker.postMessage(message);
     },
-    'pushUrl': (url) => history.pushState(null, '', url),
-    'replaceUrl': (url) => history.replaceState(null, '', url),
+    'pushUrl': (url) => history.pushState(null, '', '#' + url),
+    'replaceUrl': (url) => history.replaceState(null, '', '#' + url),
     'back': () => history.back(),
     'forward': () => history.forward()
   });
@@ -629,14 +629,15 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
       // Apply all messages sequentially
       for (const msg of msgs) {
-        // Update model first, then execute command (Elm architecture order)
-        const newModel = update(msg)(model);
-        model = reconcile(model, newModel);
-        // Execute command after update so cmd sees updated model
+        // Cmd receives the pre-update model so it can read fields that
+        // update will clear (e.g. inputText read by wsSend, then cleared).
+        // Run cmd BEFORE reconcile, which mutates model in-place.
         if (cmdFunc) {
           const cmd = cmdFunc(msg)(model);
-          executeCmd(cmd, dispatchImmediate);  // commands dispatch immediately
+          executeCmd(cmd, dispatchImmediate);
         }
+        const newModel = update(msg)(model);
+        model = reconcile(model, newModel);
       }
 
       // Use snapshotted slots for comparison so in-place mutation

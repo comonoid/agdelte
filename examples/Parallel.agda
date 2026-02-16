@@ -70,7 +70,6 @@ data Msg : Set where
   -- Race demo
   StartRace     : Msg
   RaceWon       : String → Msg
-  RaceTimeout   : Msg
 
 ------------------------------------------------------------------------
 -- Update
@@ -94,7 +93,6 @@ updateModel (GotAll xs)   m = record m { fetching = false ; results = show (leng
 updateModel (FetchError e) m = record m { fetching = false ; results = "Error: " ++ e }
 updateModel StartRace     m = record m { racing = true ; raceResult = "" }
 updateModel (RaceWon s)   m = record m { racing = false ; raceResult = "Winner: " ++ s }
-updateModel RaceTimeout   m = record m { racing = false ; raceResult = "Timed out!" }
 
 ------------------------------------------------------------------------
 -- Helpers
@@ -167,10 +165,12 @@ subs' m =
                ∷ [] )
                GotAll
         else never
+      -- Race: three requests with server-side random delay (500–2500ms)
       raceSub = if racing m
         then race
-               ( mapE RaceWon (httpGet "https://jsonplaceholder.typicode.com/posts/3" id (const "error"))
-               ∷ timeout 3000 RaceTimeout
+               ( mapE RaceWon (httpGet "/api/random-delay?name=Runner A" id (const "error"))
+               ∷ mapE RaceWon (httpGet "/api/random-delay?name=Runner B" id (const "error"))
+               ∷ mapE RaceWon (httpGet "/api/random-delay?name=Runner C" id (const "error"))
                ∷ [] )
         else never
   in merge progSub (merge parSub raceSub)
