@@ -10,200 +10,14 @@
  *   Event.merge     = e1 => e2 => cb => cb.merge(e1, e2)
  */
 
+import { formatWorkerError, getPool } from './worker-pool.js';
+import { subscribeLegacy } from './legacy-events.js';
+
 // WebSocket connections pool (shared with commands)
 export const wsConnections = new Map();
 
-// Helper: format worker error with details (filename, line, stack)
-function formatWorkerError(e) {
-  const parts = [e.message || 'Worker error'];
-  if (e.filename) parts.push(`at ${e.filename}:${e.lineno || '?'}:${e.colno || '?'}`);
-  if (e.error?.stack) parts.push(`\nStack: ${e.error.stack}`);
-  return parts.join(' ');
-}
-
 // Worker channel connections (shared with commands for channelSend)
 export const channelConnections = new Map();
-
-// ─── Worker Pool ────────────────────────────────────────────────────
-const POOL_IDLE_TIMEOUT = 30000; // 30s without tasks → cleanup
-const POOL_CHECK_INTERVAL = 5000;
-
-/**
- * Manages a pool of Web Workers for parallel task execution.
- *
- * Features:
- * - Reuses workers to avoid creation overhead
- * - Queues tasks when all workers busy
- * - Auto-cleanup after idle timeout (30s)
- * - Cancellable tasks
- *
- * @example
- * const pool = new WorkerPool(4, '/workers/compute.js');
- * const handle = pool.submit(inputData, onResult, onError);
- * handle.cancel(); // Cancel if needed
- */
-class WorkerPool {
-  /**
-   * @param {number} maxSize - Maximum concurrent workers
-   * @param {string} scriptUrl - Worker script URL
-   */
-  constructor(maxSize, scriptUrl) {
-    this.maxSize = maxSize;
-    this.scriptUrl = scriptUrl;
-    this.idle = [];      // idle Worker instances
-    this.active = 0;     // count of active tasks
-    this.queue = [];     // pending tasks: { input, onMessage, onError, resolve }
-    this.lastUsed = Date.now();
-    this._cleanupTimer = setInterval(() => this._cleanup(), POOL_CHECK_INTERVAL);
-  }
-
-  /**
-   * Submit a task to the pool.
-   * @param {*} input - Data to send to worker via postMessage
-   * @param {Function} onMessage - Called with MessageEvent on worker response
-   * @param {Function} onError - Called with error string on failure
-   * @returns {{ cancel: Function }} Handle with cancel() method
-   */
-  submit(input, onMessage, onError) {
-    this.lastUsed = Date.now();
-    let cancelled = false;
-    let activeWorker = null;
-
-    const task = { input, onMessage, onError, cancelled: false };
-
-    const tryRun = () => {
-      if (task.cancelled) return;
-      if (this.idle.length > 0) {
-        activeWorker = this.idle.pop();
-      } else if (this.active + this.idle.length < this.maxSize) {
-        try {
-          activeWorker = new Worker(this.scriptUrl, { type: 'module' });
-        } catch (e) {
-          onError(e.message || 'Failed to create worker');
-          return;
-        }
-      } else {
-        // All busy — enqueue
-        this.queue.push({ task, tryRun });
-        return;
-      }
-
-      this.active++;
-      activeWorker.onmessage = (e) => {
-        if (task.cancelled) return;
-        const w = activeWorker;
-        activeWorker = null;
-        onMessage(e);
-        this.active--;
-        this._returnWorker(w);
-        this._processQueue();
-      };
-      activeWorker.onerror = (e) => {
-        if (task.cancelled) return;
-        const w = activeWorker;
-        activeWorker = null;
-        onError(formatWorkerError(e));
-        this.active--;
-        // Don't reuse errored worker — terminate it
-        try { w.terminate(); } catch(e) { console.debug('worker terminate:', e.message); }
-        this._processQueue();
-      };
-      activeWorker.postMessage(input);
-    };
-
-    tryRun();
-
-    return {
-      cancel: () => {
-        if (task.cancelled) return;
-        task.cancelled = true;
-        cancelled = true;
-        if (activeWorker) {
-          this.active = Math.max(0, this.active - 1);
-          // Terminate and don't return to pool (task was mid-flight)
-          try { activeWorker.terminate(); } catch(e) { console.debug('worker terminate:', e.message); }
-          activeWorker = null;
-          this._processQueue();
-        }
-        // Remove from queue if still there
-        this.queue = this.queue.filter(q => q.task !== task);
-      }
-    };
-  }
-
-  _returnWorker(w) {
-    // Reset handlers before returning to pool
-    w.onmessage = null;
-    w.onerror = null;
-    this.idle.push(w);
-    this.lastUsed = Date.now();
-  }
-
-  _processQueue() {
-    while (this.queue.length > 0 && (this.idle.length > 0 || this.active + this.idle.length < this.maxSize)) {
-      const next = this.queue.shift();
-      if (!next.task.cancelled) {
-        next.tryRun();
-
-      }
-    }
-  }
-
-  _cleanup() {
-    if (this.active === 0 && this.queue.length === 0 &&
-        Date.now() - this.lastUsed > POOL_IDLE_TIMEOUT) {
-      this.idle.forEach(w => w.terminate());
-      this.idle = [];
-      this._isEmpty = true;  // Mark for removal from registry
-    }
-  }
-
-  destroy() {
-    clearInterval(this._cleanupTimer);
-    this.idle.forEach(w => w.terminate());
-    this.idle = [];
-    for (const entry of this.queue) {
-      if (!entry.task.cancelled) {
-        entry.task.cancelled = true;
-        try { entry.task.onError('Pool destroyed'); } catch {}
-      }
-    }
-    this.queue = [];
-    this._isEmpty = true;
-  }
-}
-
-// Global pool registry: key = "poolSize:scriptUrl"
-const workerPools = new Map();
-
-// Lazy global cleanup timer — only active when pools exist
-let globalCleanupTimer = null;
-
-function ensureGlobalCleanup() {
-  if (globalCleanupTimer !== null) return;
-  globalCleanupTimer = setInterval(() => {
-    for (const [key, pool] of workerPools) {
-      if (pool._isEmpty) {
-        pool.destroy();
-        workerPools.delete(key);
-      }
-    }
-    if (workerPools.size === 0) {
-      clearInterval(globalCleanupTimer);
-      globalCleanupTimer = null;
-    }
-  }, POOL_CHECK_INTERVAL * 2);
-}
-
-function getPool(poolSize, scriptUrl) {
-  ensureGlobalCleanup();
-  const poolSizeNum = typeof poolSize === 'bigint' ? Number(poolSize) : poolSize;
-  const key = `${poolSizeNum}:${scriptUrl}`;
-  if (!workerPools.has(key)) {
-    workerPools.set(key, new WorkerPool(poolSizeNum, scriptUrl));
-  }
-  return workerPools.get(key);
-}
 
 /**
  * Creates WsMsg (Scott-encoded)
@@ -493,16 +307,18 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         }
       };
 
-      // Close old WS and nullify handlers to prevent stale events
+      // Close old WS: close first, then replace handlers with no-ops
+      // to avoid message loss window between nulling handlers and closing
       const oldWs = wsConnections.get(url);
       if (oldWs) {
-        oldWs.onopen = null;
-        oldWs.onmessage = null;
-        oldWs.onclose = null;
-        oldWs.onerror = null;
         if (oldWs.readyState === WebSocket.OPEN || oldWs.readyState === WebSocket.CONNECTING) {
           oldWs.close();
         }
+        const noop = () => {};
+        oldWs.onopen = noop;
+        oldWs.onmessage = noop;
+        oldWs.onclose = noop;
+        oldWs.onerror = noop;
       }
       // Register for wsSend (overwrites previous - last connection wins)
       wsConnections.set(url, ws);
@@ -807,15 +623,18 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
     },
 
     // allocShared: allocate SharedArrayBuffer (P1 - normal, synchronous operation)
-    // Scott: allocShared(numBytes, handler)
+    // Scott: allocShared(numBytes, handler) or allocShared(numBytes, handler, onError)
     // NOTE: Requires Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy headers
-    allocShared: (numBytes, handler) => {
+    allocShared: (numBytes, handler, onError) => {
       const n = typeof numBytes === 'bigint' ? Number(numBytes) : numBytes;
       try {
         const buffer = new SharedArrayBuffer(n);
         dispatchNormal(handler(buffer));
       } catch (e) {
         console.error('allocShared failed (COOP/COEP headers required):', e.message);
+        if (onError) {
+          dispatchNormal(onError(e.message));
+        }
       }
       return { unsubscribe: () => {} };
     },
@@ -1096,169 +915,6 @@ export function subscribe(eventSpec, dispatch) {
   }
   // Otherwise interpret as Event AST
   return interpretEvent(eventSpec, dispatch);
-}
-
-/**
- * Legacy subscription for old format {type, config}
- */
-function subscribeLegacy(eventSpec, dispatch) {
-  const { type, config } = eventSpec;
-
-  switch (type) {
-    case 'never':
-      return { unsubscribe: () => {} };
-
-    case 'interval': {
-      const msNum = typeof config.ms === 'bigint' ? Number(config.ms) : config.ms;
-      // Use handler(Date.now()) if available, fallback to static msg
-      const fn = config.handler || (() => config.msg);
-      const id = setInterval(() => dispatch(fn(Date.now())), msNum);
-      return { unsubscribe: () => clearInterval(id) };
-    }
-
-    case 'timeout': {
-      const msNum = typeof config.ms === 'bigint' ? Number(config.ms) : config.ms;
-      const id = setTimeout(() => dispatch(config.msg), msNum);
-      return { unsubscribe: () => clearTimeout(id) };
-    }
-
-    case 'keyboard': {
-      const listener = (e) => {
-        const msg = config.handler({
-          key: e.key,
-          code: e.code,
-          ctrl: e.ctrlKey,
-          alt: e.altKey,
-          shift: e.shiftKey,
-          meta: e.metaKey
-        });
-        if (msg !== null && msg !== undefined) {
-          dispatch(msg);
-        }
-      };
-      document.addEventListener(config.eventType || 'keydown', listener);
-      return {
-        unsubscribe: () => document.removeEventListener(config.eventType || 'keydown', listener)
-      };
-    }
-
-    case 'clipboardEvent': {
-      const listener = (e) => {
-        let data = '';
-        if (config.event === 'paste') {
-          data = (e.clipboardData || window.clipboardData)?.getData('text') || '';
-        }
-        const msg = config.handler(data);
-        if (msg !== null && msg !== undefined) {
-          dispatch(msg);
-        }
-      };
-      document.addEventListener(config.event, listener);
-      return {
-        unsubscribe: () => document.removeEventListener(config.event, listener)
-      };
-    }
-
-    case 'mouse': {
-      const listener = (e) => {
-        const msg = config.handler({ x: e.clientX, y: e.clientY, button: e.button });
-        if (msg !== null && msg !== undefined) dispatch(msg);
-      };
-      document.addEventListener(config.eventType, listener);
-      return { unsubscribe: () => document.removeEventListener(config.eventType, listener) };
-    }
-
-    case 'resize': {
-      const listener = () => {
-        const msg = config.handler({ width: window.innerWidth, height: window.innerHeight });
-        if (msg !== null && msg !== undefined) dispatch(msg);
-      };
-      window.addEventListener('resize', listener);
-      return { unsubscribe: () => window.removeEventListener('resize', listener) };
-    }
-
-    case 'scroll': {
-      const listener = () => {
-        const msg = config.handler({ x: window.scrollX, y: window.scrollY });
-        if (msg !== null && msg !== undefined) dispatch(msg);
-      };
-      window.addEventListener('scroll', listener);
-      return { unsubscribe: () => window.removeEventListener('scroll', listener) };
-    }
-
-    case 'visibility': {
-      const listener = () => {
-        const msg = config.handler(document.visibilityState);
-        if (msg !== null && msg !== undefined) dispatch(msg);
-      };
-      document.addEventListener('visibilitychange', listener);
-      return { unsubscribe: () => document.removeEventListener('visibilitychange', listener) };
-    }
-
-    case 'online': {
-      const onlineListener = () => dispatch(config.onOnline);
-      const offlineListener = () => dispatch(config.onOffline);
-      window.addEventListener('online', onlineListener);
-      window.addEventListener('offline', offlineListener);
-      return {
-        unsubscribe: () => {
-          window.removeEventListener('online', onlineListener);
-          window.removeEventListener('offline', offlineListener);
-        }
-      };
-    }
-
-    case 'storage': {
-      const listener = (e) => {
-        if (config.key && e.key !== config.key) return;
-        const msg = config.handler(e.newValue);
-        if (msg !== null && msg !== undefined) dispatch(msg);
-      };
-      window.addEventListener('storage', listener);
-      return { unsubscribe: () => window.removeEventListener('storage', listener) };
-    }
-
-    case 'request': {
-      const ctrl = new AbortController();
-      (async () => {
-        try {
-          const { method = 'GET', url, headers = {}, body, onSuccess, onError } = config;
-          const response = await fetch(url, { method, headers, body, signal: ctrl.signal });
-          if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-          const data = await response.json();
-          dispatch(onSuccess(data));
-        } catch (e) {
-          if (e.name !== 'AbortError') dispatch(config.onError(e.message));
-        }
-      })();
-      return { unsubscribe: () => ctrl.abort() };
-    }
-
-    case 'animationFrame': {
-      let running = true;
-      const handler = config.msg;
-      if (typeof handler === 'function') {
-        const loop = (timestamp) => {
-          if (!running) return;
-          dispatch(handler(String(timestamp)));
-          requestAnimationFrame(loop);
-        };
-        requestAnimationFrame(loop);
-      } else {
-        const loop = () => {
-          if (!running) return;
-          dispatch(handler);
-          requestAnimationFrame(loop);
-        };
-        requestAnimationFrame(loop);
-      }
-      return { unsubscribe: () => { running = false; } };
-    }
-
-    default:
-      console.warn(`Unknown event type: ${type}`);
-      return { unsubscribe: () => {} };
-  }
 }
 
 /**
