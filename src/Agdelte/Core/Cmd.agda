@@ -9,6 +9,7 @@ open import Data.String using (String)
 open import Data.List using (List; []; _∷_)
 open import Data.Nat using (ℕ)
 open import Data.Maybe using (Maybe)
+open import Data.Bool using (Bool; true; false)
 open import Function using (_∘_)
 
 open import Agdelte.Core.Task as Task using (Task; Result; ok; err)
@@ -109,12 +110,17 @@ batch : List (Cmd A) → Cmd A
 batch [] = ε
 batch (c ∷ cs) = c <> batch cs
 
--- Check for emptiness (for runtime optimization)
-isEmpty : Cmd A → Set
-isEmpty ε = ⊤
+-- Propositional emptiness predicate
+IsEmpty : Cmd A → Set
+IsEmpty ε = ⊤
   where open import Data.Unit using (⊤)
-isEmpty _ = ⊥
+IsEmpty _ = ⊥
   where open import Data.Empty using (⊥)
+
+-- Boolean emptiness check (for runtime optimization)
+isEmpty : Cmd A → Bool
+isEmpty ε = true
+isEmpty _ = false
 
 ------------------------------------------------------------------------
 -- Agent interaction combinators

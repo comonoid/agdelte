@@ -50,13 +50,15 @@ record Envelope : Set where
 open Envelope public
 
 ------------------------------------------------------------------------
--- Result type for cross-process operations
+-- SharedArrayBuffer (opaque handle)
 ------------------------------------------------------------------------
 
-data TransportResult (A : Set) : Set where
-  success : A → TransportResult A
-  failure : String → TransportResult A
+-- At JS level: SharedArrayBuffer object passed to/from workers
+-- At Agda level: opaque type, used by Event constructors (allocShared, workerShared)
+postulate SharedBuffer : Set
 
-mapTransport : ∀ {A B : Set} → (A → B) → TransportResult A → TransportResult B
-mapTransport f (success a) = success (f a)
-mapTransport f (failure e) = failure e
+------------------------------------------------------------------------
+-- Re-export Result for cross-process operations
+------------------------------------------------------------------------
+
+open import Agdelte.Core.Result using (Result; ok; err) public

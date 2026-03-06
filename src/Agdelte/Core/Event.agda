@@ -63,9 +63,22 @@ open KeyboardEvent public
 -- SharedArrayBuffer (opaque handle)
 ------------------------------------------------------------------------
 
--- At JS level: SharedArrayBuffer object passed to/from workers
--- At Agda level: opaque type, only used by Event constructors
-postulate SharedBuffer : Set
+open import Agdelte.FFI.Shared using (SharedBuffer) public
+
+------------------------------------------------------------------------
+-- Spring configuration
+------------------------------------------------------------------------
+
+record SpringConfig : Set where
+  constructor mkSpringConfig
+  field
+    position  : Float
+    velocity  : Float
+    target    : Float
+    stiffness : Float
+    damping   : Float
+
+open SpringConfig public
 
 ------------------------------------------------------------------------
 -- Event as data type (AST) - stays in Set
@@ -104,8 +117,8 @@ data Event (A : Set) : Set where
   -- Fire on every frame with timestamp (ms since navigation start)
   animationFrameWithTime : (Float → A) → Event A
   -- Spring animation: fires each frame with current position until settled
-  -- springLoop spring onTick onSettled
-  springLoop : Float → Float → Float → Float → Float → (Float → A) → A → Event A
+  -- springLoop config onTick onSettled
+  springLoop : SpringConfig → (Float → A) → A → Event A
 
   -- === Keyboard ===
   -- Handler returns Maybe A (nothing = ignore)
@@ -181,15 +194,14 @@ data Event (A : Set) : Set where
 -- mapE - function, not constructor (to keep Event ∈ Set)
 ------------------------------------------------------------------------
 
-{-# TERMINATING #-}
 mapE : (A → B) → Event A → Event B
 mapE f never = never
 mapE f (interval n a) = interval n (f a)
 mapE f (timeout n a) = timeout n (f a)
 mapE f (animationFrame a) = animationFrame (f a)
 mapE f (animationFrameWithTime h) = animationFrameWithTime (f ∘ h)
-mapE f (springLoop pos vel tgt stiff damp onTick onSettled) =
-  springLoop pos vel tgt stiff damp (f ∘ onTick) (f onSettled)
+mapE f (springLoop cfg onTick onSettled) =
+  springLoop cfg (f ∘ onTick) (f onSettled)
 mapE f (onKeyDown h) = onKeyDown (λ e → Data.Maybe.map f (h e))
   where import Data.Maybe
 mapE f (onKeyUp h) = onKeyUp (λ e → Data.Maybe.map f (h e))
@@ -221,7 +233,6 @@ mapE f (switchE initial meta) = switchE (mapE f initial) (mapE (mapE f) meta)
 -- filterE - through mapE with Maybe
 ------------------------------------------------------------------------
 
-{-# TERMINATING #-}
 filterE : (A → Bool) → Event A → Event A
 filterE p never = never
 filterE p (interval n a) = if p a then interval n a else never
@@ -229,16 +240,21 @@ filterE p (timeout n a) = if p a then timeout n a else never
 filterE p (animationFrame a) = if p a then animationFrame a else never
 filterE p (animationFrameWithTime h) =
   mapFilterE (λ t → let a = h t in if p a then just a else nothing) (animationFrameWithTime id)
-filterE p (springLoop pos vel tgt stiff damp onTick onSettled) =
+filterE p (springLoop cfg onTick onSettled) =
   mapFilterE (λ a → if p a then just a else nothing)
-             (springLoop pos vel tgt stiff damp onTick onSettled)
+             (springLoop cfg onTick onSettled)
 filterE p (onKeyDown h) = onKeyDown (λ e → filterMaybe p (h e))
 filterE p (onKeyUp h) = onKeyUp (λ e → filterMaybe p (h e))
-filterE p (httpGet url onOk onErr) = httpGet url onOk onErr  -- filter applied in runtime
-filterE p (httpPost url body onOk onErr) = httpPost url body onOk onErr
-filterE p (wsConnect url h) = wsConnect url h  -- filter on WsMsg makes no sense
-filterE p (onUrlChange h) = onUrlChange h      -- filter on URL makes no sense
-filterE p (worker url input onOk onErr) = worker url input onOk onErr  -- filter applied in runtime
+filterE p (httpGet url onOk onErr) =
+  mapFilterE (λ a → if p a then just a else nothing) (httpGet url onOk onErr)
+filterE p (httpPost url body onOk onErr) =
+  mapFilterE (λ a → if p a then just a else nothing) (httpPost url body onOk onErr)
+filterE p (wsConnect url h) =
+  mapFilterE (λ a → if p a then just a else nothing) (wsConnect url h)
+filterE p (onUrlChange h) =
+  mapFilterE (λ a → if p a then just a else nothing) (onUrlChange h)
+filterE p (worker url input onOk onErr) =
+  mapFilterE (λ a → if p a then just a else nothing) (worker url input onOk onErr)
 filterE p (workerWithProgress url input onProg onRes onErr) =
   mapFilterE (λ a → if p a then just a else nothing)
              (workerWithProgress url input onProg onRes onErr)
@@ -440,7 +456,6 @@ e >>=E f = switchE never (mapE f e)
 
 -- Sequential execution of one-shot events, collecting results in order
 -- sequence [e₁, e₂, e₃] fires e₁, then e₂, then e₃, dispatches [r₁, r₂, r₃]
-{-# TERMINATING #-}
 sequenceE : List (Event A) → Event (List A)
 sequenceE []       = occur []
 sequenceE (e ∷ es) = e >>=E λ a → mapE (a ∷_) (sequenceE es)

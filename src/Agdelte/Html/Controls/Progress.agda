@@ -144,7 +144,6 @@ skeletonParagraph {M} {A} lines =
   where
     open import Data.Nat using (suc)
 
-    {-# TERMINATING #-}
     renderLines : ℕ → List (Node M A)
     renderLines 0 = []
     renderLines (suc n) = skeletonText ∷ renderLines n

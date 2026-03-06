@@ -145,22 +145,25 @@ export function subscribeLegacy(eventSpec, dispatch) {
 
     case 'animationFrame': {
       let running = true;
-      const handler = config.msg;
-      if (typeof handler === 'function') {
-        const loop = (timestamp) => {
-          if (!running) return;
-          dispatch(handler(String(timestamp)));
-          requestAnimationFrame(loop);
-        };
+      const msg = config.msg;
+      const loop = () => {
+        if (!running) return;
+        dispatch(msg);
         requestAnimationFrame(loop);
-      } else {
-        const loop = () => {
-          if (!running) return;
-          dispatch(handler);
-          requestAnimationFrame(loop);
-        };
+      };
+      requestAnimationFrame(loop);
+      return { unsubscribe: () => { running = false; } };
+    }
+
+    case 'animationFrameWithTime': {
+      let running = true;
+      const handler = config.handler;
+      const loop = (timestamp) => {
+        if (!running) return;
+        dispatch(handler(String(timestamp)));
         requestAnimationFrame(loop);
-      }
+      };
+      requestAnimationFrame(loop);
       return { unsubscribe: () => { running = false; } };
     }
 

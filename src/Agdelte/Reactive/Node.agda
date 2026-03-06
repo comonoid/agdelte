@@ -216,6 +216,18 @@ onMouseLeave = on "mouseleave"
 onMouseMove : ∀ {Model Msg} → (String → Msg) → Attr Model Msg
 onMouseMove = onValue "mousemove"
 
+onMouseDown : ∀ {Model Msg} → Msg → Attr Model Msg
+onMouseDown = on "mousedown"
+
+onMouseUp : ∀ {Model Msg} → Msg → Attr Model Msg
+onMouseUp = on "mouseup"
+
+onTouchStart : ∀ {Model Msg} → Msg → Attr Model Msg
+onTouchStart = on "touchstart"
+
+onTouchEnd : ∀ {Model Msg} → Msg → Attr Model Msg
+onTouchEnd = on "touchend"
+
 -- Attribute helpers
 class : ∀ {Model Msg} → String → Attr Model Msg
 class = attr "class"
@@ -306,7 +318,6 @@ zoomAttr get wrap (style name val) = style name val
 zoomAttr get wrap (styleBind name b) = styleBind name (focusBinding get b)
 
 -- Internal: remap node without adding scope wrapper (used by zoomNode)
-{-# TERMINATING #-}
 zoomNode' : ∀ {M M' Msg Msg'} → (M → M') → (Msg' → Msg) → Node M' Msg' → Node M Msg
 zoomNode' get wrap (text s) = text s
 zoomNode' get wrap (bind b) = bind (focusBinding get b)

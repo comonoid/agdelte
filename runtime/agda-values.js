@@ -123,7 +123,7 @@ export function probe(value) {
     return { ctor: value[0], slots: value.slice(1) };
   }
 
-  // Scott-encoded
+  // Scott-encoded function
   if (typeof value === 'function') {
     let ctor = null;
     let slots = null;
@@ -135,6 +135,21 @@ export function probe(value) {
       }));
     } catch { return null; }
     return ctor ? { ctor, slots: slots || [] } : null;
+  }
+
+  // Scott-encoded object (single-key)
+  if (typeof value === 'object') {
+    const keys = Object.keys(value);
+    if (keys.length === 1 && typeof value[keys[0]] === 'function') {
+      const ctor = keys[0];
+      let slots = null;
+      try {
+        slots = value[ctor](new Proxy({}, {
+          get(_, name) { return (...args) => args; }
+        }));
+      } catch { return null; }
+      return { ctor, slots: slots || [] };
+    }
   }
 
   return null;
@@ -436,54 +451,11 @@ export function toBool(value) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Deep Equality
-// ─────────────────────────────────────────────────────────────────────
-
-const MAX_DEEP_EQUAL_DEPTH = 50;
-
-/**
- * Deep structural equality for Agda values
- * Works with both tagged arrays and Scott-encoded values
- */
-export function deepEqual(a, b, depth = 0) {
-  if (a === b) return true;
-  if (depth > MAX_DEEP_EQUAL_DEPTH) return false;
-
-  const ta = typeof a, tb = typeof b;
-  if (ta !== tb) return false;
-
-  // Primitives
-  if (ta !== 'function' && ta !== 'object') return a === b;
-  if (a === null || b === null) return a === b;
-
-  // Tagged arrays
-  if (isTaggedArray(a) && isTaggedArray(b)) {
-    if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) {
-      if (!deepEqual(a[i], b[i], depth + 1)) return false;
-    }
-    return true;
-  }
-
-  // Scott-encoded
-  if (typeof a === 'function' && typeof b === 'function') {
-    const probeA = probe(a);
-    const probeB = probe(b);
-    if (!probeA || !probeB) return false;
-    if (probeA.ctor !== probeB.ctor) return false;
-    if (probeA.slots.length !== probeB.slots.length) return false;
-    for (let i = 0; i < probeA.slots.length; i++) {
-      if (!deepEqual(probeA.slots[i], probeB.slots[i], depth + 1)) return false;
-    }
-    return true;
-  }
-
-  return false;
-}
-
 // ─────────────────────────────────────────────────────────────────────
 // Exports for backward compatibility
 // ─────────────────────────────────────────────────────────────────────
+
+// Note: deepEqual lives in scott-utils.js — import it directly from there.
 
 export default {
   // Detection
@@ -512,7 +484,5 @@ export default {
   toMaybe,
   // Bool
   fromBool,
-  toBool,
-  // Equality
-  deepEqual
+  toBool
 };

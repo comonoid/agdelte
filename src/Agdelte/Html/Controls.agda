@@ -34,10 +34,15 @@ open import Agdelte.Html.Controls.TreeView public
 
 -- Feedback
 open import Agdelte.Html.Controls.Tooltip public
+  renaming (popover to tooltipPopover)
 open import Agdelte.Html.Controls.Progress public
--- open import Agdelte.Html.Controls.Popover public  -- conflicts with Tooltip.popover
--- open import Agdelte.Html.Controls.Spinner public  -- conflicts with Progress.spinner
--- open import Agdelte.Html.Controls.Skeleton public  -- conflicts with Progress.skeleton*
+  renaming ( spinner to progressSpinner
+           ; spinnerWithText to progressSpinnerWithText
+           ; skeletonText to progressSkeletonText
+           ; skeletonCircle to progressSkeletonCircle )
+open import Agdelte.Html.Controls.Popover public
+open import Agdelte.Html.Controls.Spinner public
+open import Agdelte.Html.Controls.Skeleton public
 
 -- Wizard
 open import Agdelte.Html.Controls.Stepper public

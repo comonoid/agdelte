@@ -29,7 +29,7 @@ open import Agdelte.FFI.Server using
   ; serveAgentProcess; connectProcess
   ; queryProcess; stepProcess; closeProcess
   )
-open import Agdelte.FFI.Shared using (Serialize; encode; decode; TransportResult; success; failure)
+open import Agdelte.FFI.Shared using (Serialize; encode; decode; Result; ok; err)
 
 private
   variable
@@ -77,21 +77,21 @@ connectProcessOptic : ProcessOptic A → IO IpcHandle
 connectProcessOptic po = connectProcess (socketPath po)
 
 -- | Peek: read remote agent state (decode from String)
-peekProcess : {{_ : Serialize A}} → IpcHandle → IO (TransportResult A)
+peekProcess : {{_ : Serialize A}} → IpcHandle → IO (Result String A)
 peekProcess handle =
   queryProcess handle >>= λ raw →
   pure (decodeResult raw)
   where
-    decodeResult : String → TransportResult _
+    decodeResult : String → Result String _
     decodeResult raw with decode raw
-    ... | just a  = success a
-    ... | nothing = failure "decode failed"
+    ... | just a  = ok a
+    ... | nothing = err "decode failed"
 
 -- | Step: modify remote agent state
-stepProcessOptic : IpcHandle → String → IO (TransportResult String)
+stepProcessOptic : IpcHandle → String → IO (Result String String)
 stepProcessOptic handle input =
   stepProcess handle input >>= λ raw →
-  pure (success raw)
+  pure (ok raw)
 
 -- | Close the connection
 disconnectProcess : IpcHandle → IO ⊤
@@ -102,7 +102,7 @@ disconnectProcess = closeProcess
 ------------------------------------------------------------------------
 
 -- | One-shot peek: connect, read state, close
-peekOnce : ProcessOptic A → IO (TransportResult A)
+peekOnce : ProcessOptic A → IO (Result String A)
 peekOnce po =
   connectProcessOptic po >>= λ handle →
   peekProcess handle     >>= λ result →
@@ -110,7 +110,7 @@ peekOnce po =
   pure result
 
 -- | One-shot step: connect, step, close
-stepOnce : ProcessOptic A → String → IO (TransportResult String)
+stepOnce : ProcessOptic A → String → IO (Result String String)
 stepOnce po input =
   connectProcessOptic po >>= λ handle →
   stepProcessOptic handle input >>= λ result →

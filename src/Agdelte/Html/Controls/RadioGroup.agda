@@ -105,7 +105,6 @@ radioGroupIdx {M} {A} name getSelected selectMsg labels =
             ( text lbl ∷ [] )
         ∷ [] )
 
-    {-# TERMINATING #-}
     renderOptions : ℕ → List String → List (Node M A)
     renderOptions _ [] = []
     renderOptions idx (lbl ∷ rest) =

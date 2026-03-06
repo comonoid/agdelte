@@ -81,7 +81,6 @@ stepper {M} {A} currentStep steps =
            then div ( class "agdelte-stepper__line" ∷ [] ) [] ∷ []
            else []) )
 
-    {-# TERMINATING #-}
     renderSteps : ℕ → ℕ → List Step → List (Node M A)
     renderSteps _ _ [] = []
     renderSteps idx total (s ∷ ss) =
@@ -131,7 +130,6 @@ clickableStepper {M} {A} currentStep goToStep steps =
            then div ( class "agdelte-stepper__line" ∷ [] ) [] ∷ []
            else []) )
 
-    {-# TERMINATING #-}
     renderSteps : ℕ → ℕ → List Step → List (Node M A)
     renderSteps _ _ [] = []
     renderSteps idx total (s ∷ ss) =
@@ -178,7 +176,6 @@ verticalStepper {M} {A} currentStep steps =
             ∷ [] )
         ∷ [] )
 
-    {-# TERMINATING #-}
     renderSteps : ℕ → ℕ → List Step → List (Node M A)
     renderSteps _ _ [] = []
     renderSteps idx total (s ∷ ss) =

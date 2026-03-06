@@ -12,6 +12,15 @@ open import Data.List using (List; []; _∷_)
 open import Data.String using (String)
 
 ------------------------------------------------------------------------
+-- Ordering type for comparisons
+------------------------------------------------------------------------
+
+data Ordering : Set where
+  lt : Ordering
+  eq : Ordering
+  gt : Ordering
+
+------------------------------------------------------------------------
 -- Array type (opaque, backed by JS Array)
 ------------------------------------------------------------------------
 
@@ -44,9 +53,12 @@ postulate
 {-# COMPILE JS fromList = function(list) {
   const arr = [];
   let current = list;
-  while (current["_∷_"]) {
-    arr.push(current["_∷_"][0]);
-    current = current["_∷_"][1];
+  let done = false;
+  while (!done) {
+    current({
+      '[]': () => { done = true; },
+      '_∷_': (head, tail) => { arr.push(head); current = tail; }
+    });
   }
   return arr;
 } #-}
@@ -79,9 +91,9 @@ postulate
 {-# COMPILE JS index = function(i) { return function(arr) {
   const idx = Number(i);
   if (idx < arr.length) {
-    return { "just": arr[idx] };
+    return (cases) => cases.just(arr[idx]);
   } else {
-    return { "nothing": null };
+    return (cases) => cases.nothing();
   }
 }; } #-}
 
@@ -161,8 +173,8 @@ postulate
   -- Reverse array
   reverse : ∀ {A : Set} → Array A → Array A
 
-  -- Sort with comparator (returns -1, 0, or 1)
-  sortBy : ∀ {A : Set} → (A → A → ℕ) → Array A → Array A
+  -- Sort with comparator
+  sortBy : ∀ {A : Set} → (A → A → Ordering) → Array A → Array A
 
 {-# COMPILE JS map = function(f) { return function(arr) {
   return arr.map(f);
@@ -177,7 +189,9 @@ postulate
 } #-}
 
 {-# COMPILE JS sortBy = function(cmp) { return function(arr) {
-  return [...arr].sort((a, b) => Number(cmp(a)(b)) - 1);
+  return [...arr].sort((a, b) =>
+    cmp(a)(b)({ lt: () => -1, eq: () => 0, gt: () => 1 })
+  );
 }; } #-}
 
 ------------------------------------------------------------------------
@@ -236,12 +250,16 @@ postulate
 
 {-# COMPILE JS find = function(p) { return function(arr) {
   const result = arr.find(p);
-  return result !== undefined ? { "just": result } : { "nothing": null };
+  return result !== undefined
+    ? (cases) => cases.just(result)
+    : (cases) => cases.nothing();
 }; } #-}
 
 {-# COMPILE JS findIndex = function(p) { return function(arr) {
   const idx = arr.findIndex(p);
-  return idx >= 0 ? { "just": BigInt(idx) } : { "nothing": null };
+  return idx >= 0
+    ? (cases) => cases.just(BigInt(idx))
+    : (cases) => cases.nothing();
 }; } #-}
 
 {-# COMPILE JS elem = function(eq) { return function(x) { return function(arr) {
@@ -257,9 +275,11 @@ postulate
   toList : ∀ {A : Set} → Array A → List A
 
 {-# COMPILE JS toList = function(arr) {
-  let result = { "[]": null };
+  let result = (cases) => cases['[]']();
   for (let i = arr.length - 1; i >= 0; i--) {
-    result = { "_∷_": [arr[i], result] };
+    const elem = arr[i];
+    const tail = result;
+    result = (cases) => cases['_∷_'](elem, tail);
   }
   return result;
 } #-}

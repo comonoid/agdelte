@@ -13,6 +13,7 @@ open import Data.String using (String; _++_)
 open import Data.Product using (_×_; _,_; proj₁; proj₂)
 open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.Unit using (⊤; tt)
+open import Data.Maybe using (Maybe; just; nothing; is-just)
 
 open import Agdelte.Reactive.Node hiding (label; value)
 open import Agdelte.Css.Color using (hex; Color; showColor)
@@ -38,8 +39,8 @@ record Model : Set where
   constructor mkModel
   field
     bars : List BarData
-    selectedIdx : ℕ
-    hoveredIdx : ℕ  -- 999 means none
+    selectedIdx : Maybe ℕ
+    hoveredIdx : Maybe ℕ
 
 initBars : List BarData
 initBars =
@@ -52,7 +53,7 @@ initBars =
   ∷ []
 
 initModel : Model
-initModel = mkModel initBars 999 999  -- 999 means no selection
+initModel = mkModel initBars nothing nothing
 
 ------------------------------------------------------------------------
 -- Messages
@@ -68,6 +69,23 @@ data Msg : Set where
   AddSelected : Msg      -- Add to selected bar
   SubSelected : Msg      -- Subtract from selected bar
   WheelSelected : Float → Msg  -- Wheel on selected bar
+
+------------------------------------------------------------------------
+-- Helpers
+------------------------------------------------------------------------
+
+-- Check if Maybe ℕ matches a given index
+isIdx : ℕ → Maybe ℕ → Bool
+isIdx _ nothing  = false
+isIdx n (just m) = n ≡ᵇ m
+
+-- Extract index from Maybe ℕ with a default
+fromIdx : Maybe ℕ → ℕ → ℕ
+fromIdx nothing  d = d
+fromIdx (just n) _ = n
+
+hasIdx : Maybe ℕ → Bool
+hasIdx = is-just
 
 ------------------------------------------------------------------------
 -- Update
@@ -93,30 +111,27 @@ addToBar n b = record b { barValue = clamp 0 100 (BarData.barValue b + n) }
 subFromBar : ℕ → BarData → BarData
 subFromBar n b = record b { barValue = clamp 0 100 (BarData.barValue b ∸ n) }
 
+updateAtIdx : Maybe ℕ → (BarData → BarData) → Model → Model
+updateAtIdx nothing  _ m = m
+updateAtIdx (just i) f m = record m { bars = updateBarAt i f (Model.bars m) }
+
 updateModel : Msg → Model → Model
-updateModel (SelectBar idx) m = record m { selectedIdx = idx }
-updateModel Deselect m = record m { selectedIdx = 999 }
-updateModel (HoverBar idx) m = record m { hoveredIdx = idx }
-updateModel LeaveBar m = record m { hoveredIdx = 999 }
+updateModel (SelectBar idx) m = record m { selectedIdx = just idx }
+updateModel Deselect m = record m { selectedIdx = nothing }
+updateModel (HoverBar idx) m = record m { hoveredIdx = just idx }
+updateModel LeaveBar m = record m { hoveredIdx = nothing }
 updateModel (AddValue idx) m = record m
   { bars = updateBarAt idx (addToBar 10) (Model.bars m) }
 updateModel (SubValue idx) m = record m
   { bars = updateBarAt idx (subFromBar 10) (Model.bars m) }
-updateModel AddSelected m =
-  if Model.selectedIdx m <ᵇ 900
-  then record m { bars = updateBarAt (Model.selectedIdx m) (addToBar 10) (Model.bars m) }
-  else m
-updateModel SubSelected m =
-  if Model.selectedIdx m <ᵇ 900
-  then record m { bars = updateBarAt (Model.selectedIdx m) (subFromBar 10) (Model.bars m) }
-  else m
+updateModel AddSelected m = updateAtIdx (Model.selectedIdx m) (addToBar 10) m
+updateModel SubSelected m = updateAtIdx (Model.selectedIdx m) (subFromBar 10) m
 updateModel (WheelSelected delta) m =
   let -- Use hovered bar if hovering, otherwise selected bar
-      idx = if Model.hoveredIdx m <ᵇ 900 then Model.hoveredIdx m else Model.selectedIdx m
+      target : Maybe ℕ
+      target = if hasIdx (Model.hoveredIdx m) then Model.hoveredIdx m else Model.selectedIdx m
       f = if primFloatLess 0.0 delta then subFromBar 5 else addToBar 5
-  in if idx <ᵇ 900  -- Only update if there's a valid target
-     then record m { bars = updateBarAt idx f (Model.bars m) }
-     else m
+  in updateAtIdx target f m
   where
     open import Agda.Builtin.Float using (primFloatLess)
 
@@ -167,7 +182,7 @@ getColorAt (suc n) (_ ∷ bs) = getColorAt n bs
 
 -- Check if bar is highlighted (selected or hovered)
 isHighlighted : ℕ → Model → Bool
-isHighlighted idx m = (idx ≡ᵇ Model.selectedIdx m) ∨ (idx ≡ᵇ Model.hoveredIdx m)
+isHighlighted idx m = isIdx idx (Model.selectedIdx m) ∨ isIdx idx (Model.hoveredIdx m)
   where
     _∨_ : Bool → Bool → Bool
     true ∨ _ = true
@@ -199,8 +214,8 @@ renderBar (bar , idx) _ =
                    in showFloat (toFloat v *F (chartHeight ÷F maxValue)))
                ∷ fill_ (showColor (BarData.barColor bar))
                ∷ attrBind "stroke" (stringBinding λ m →
-                   if idx ≡ᵇ Model.selectedIdx m then "#1e40af"
-                   else if idx ≡ᵇ Model.hoveredIdx m then "#666"
+                   if isIdx idx (Model.selectedIdx m) then "#1e40af"
+                   else if isIdx idx (Model.hoveredIdx m) then "#666"
                    else "none")
                ∷ attrBind "stroke-width" (stringBinding λ m →
                    if isHighlighted idx m then "2" else "0")
@@ -251,14 +266,15 @@ yAxis =
         (0 ∷ 25 ∷ 50 ∷ 75 ∷ 100 ∷ []) )
 
 -- Controls
+showSelected : Maybe ℕ → String
+showSelected nothing  = "Click a bar to select"
+showSelected (just n) = "Selected: Bar " ++ show n
+
 chartControls : Node Model Msg
 chartControls =
   div (style "margin-top" "15px" ∷ style "display" "flex" ∷ style "gap" "10px" ∷ style "align-items" "center" ∷ style "justify-content" "center" ∷ [])
     ( span (style "color" "#666" ∷ [])
-        [ bind (stringBinding λ m →
-            if Model.selectedIdx m <ᵇ 900
-            then "Selected: Bar " ++ show (Model.selectedIdx m)
-            else "Click a bar to select") ]
+        [ bind (stringBinding λ m → showSelected (Model.selectedIdx m)) ]
     ∷ button (onClick SubSelected ∷ style "padding" "8px 16px" ∷ [])
         [ text "-10" ]
     ∷ button (onClick AddSelected ∷ style "padding" "8px 16px" ∷ [])

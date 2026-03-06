@@ -64,10 +64,11 @@ open import Agdelte.Html.Controls.Dropdown using (SelectOption; mkOption; optVal
 
 private
   -- Check if value is in list
-  {-# TERMINATING #-}
   elemBy : {V : Set} → (V → V → Bool) → V → List V → Bool
   elemBy _ _ [] = false
-  elemBy eq v (x ∷ xs) = if eq v x then true else elemBy eq v xs
+  elemBy eq v (x ∷ xs) with eq v x
+  ... | true  = true
+  ... | false = elemBy eq v xs
 
 -- | Checkbox group for multiple selection.
 -- | eqV: equality function for values
@@ -120,10 +121,11 @@ checkboxGroupIdx {M} {A} getSelected toggleMsg labels =
   where
     open import Data.Nat using (_≡ᵇ_)
 
-    {-# TERMINATING #-}
     elemℕ : ℕ → List ℕ → Bool
     elemℕ _ [] = false
-    elemℕ n (x ∷ xs) = if n ≡ᵇ x then true else elemℕ n xs
+    elemℕ n (x ∷ xs) with n ≡ᵇ x
+    ... | true  = true
+    ... | false = elemℕ n xs
 
     eqStr : String → String → Bool
     eqStr a b with a ≟ b
@@ -144,7 +146,6 @@ checkboxGroupIdx {M} {A} getSelected toggleMsg labels =
             ( text lbl ∷ [] )
         ∷ [] )
 
-    {-# TERMINATING #-}
     renderOptions : ℕ → List String → List (Node M A)
     renderOptions _ [] = []
     renderOptions idx (lbl ∷ rest) =

@@ -5,6 +5,8 @@
  * and dependency tracking for reactive bindings.
  */
 
+import { isTaggedArray, getCtor as _getCtor } from './agda-values.js';
+
 // ─────────────────────────────────────────────────────────────────────
 // Deep structural equality for Scott-encoded Agda values
 // ─────────────────────────────────────────────────────────────────────
@@ -23,33 +25,48 @@ export function deepEqual(a, b, depth) {
   if (depth > MAX_DEEP_EQUAL_DEPTH) {
     _deepEqualWarnCount++;
     if (_deepEqualWarnCount === 1 || _deepEqualWarnCount % _DEEP_EQUAL_WARN_INTERVAL === 0) {
-      console.warn(`deepEqual: max depth (${MAX_DEEP_EQUAL_DEPTH}) exceeded ${_deepEqualWarnCount} time(s), assuming equal. Consider flattening your model.`);
+      console.warn(`deepEqual: max depth (${MAX_DEEP_EQUAL_DEPTH}) exceeded ${_deepEqualWarnCount} time(s), assuming not equal. Consider flattening your model.`);
     }
-    return true;
+    return false;
   }
   const ta = typeof a, tb = typeof b;
   if (ta !== tb) return false;
-  if (ta !== 'function') return a === b;
-  // Both are functions — probe as Scott-encoded values via Proxy
-  let aCtor, aArgs, bCtor, bArgs;
-  const probeA = new Proxy({}, {
-    get(_, name) { return (...args) => { aCtor = name; aArgs = args; }; }
-  });
-  const probeB = new Proxy({}, {
-    get(_, name) { return (...args) => { bCtor = name; bArgs = args; }; }
-  });
-  try {
-    a(probeA);
-    b(probeB);
-  } catch {
-    return false;  // not a Scott-encoded value
+  if (ta !== 'function' && ta !== 'object') return a === b;
+  if (a === null || b === null) return a === b;
+
+  // Tagged arrays: ["ctor", arg1, arg2, ...]
+  if (isTaggedArray(a) && isTaggedArray(b)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!deepEqual(a[i], b[i], depth + 1)) return false;
+    }
+    return true;
   }
-  if (aCtor !== bCtor) return false;
-  if (!aArgs || !bArgs || aArgs.length !== bArgs.length) return false;
-  for (let i = 0; i < aArgs.length; i++) {
-    if (!deepEqual(aArgs[i], bArgs[i], depth + 1)) return false;
+
+  // Scott-encoded functions — probe via Proxy
+  if (ta === 'function') {
+    let aCtor, aArgs, bCtor, bArgs;
+    const probeA = new Proxy({}, {
+      get(_, name) { return (...args) => { aCtor = name; aArgs = args; }; }
+    });
+    const probeB = new Proxy({}, {
+      get(_, name) { return (...args) => { bCtor = name; bArgs = args; }; }
+    });
+    try {
+      a(probeA);
+      b(probeB);
+    } catch {
+      return false;  // not a Scott-encoded value
+    }
+    if (aCtor !== bCtor) return false;
+    if (!aArgs || !bArgs || aArgs.length !== bArgs.length) return false;
+    for (let i = 0; i < aArgs.length; i++) {
+      if (!deepEqual(aArgs[i], bArgs[i], depth + 1)) return false;
+    }
+    return true;
   }
-  return true;
+
+  return false;
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -172,31 +189,10 @@ export function probeSlots(model) {
 
 /**
  * Probe constructor name of a Scott-encoded value.
- * Supports both function and object formats.
+ * Delegates to getCtor from agda-values.js (canonical implementation).
  */
 export function probeCtor(model) {
-  if (!model) return null;
-
-  // Format 1: function
-  if (typeof model === 'function') {
-    let ctor = null;
-    try {
-      model(new Proxy({}, {
-        get(_, name) { return (...args) => { ctor = name; }; }
-      }));
-    } catch { return null; }
-    return ctor;
-  }
-
-  // Format 2: object with single method — key IS the ctor name
-  if (typeof model === 'object') {
-    const keys = Object.keys(model);
-    if (keys.length === 1 && typeof model[keys[0]] === 'function') {
-      return keys[0];
-    }
-  }
-
-  return null;
+  return _getCtor(model);
 }
 
 /**

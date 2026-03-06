@@ -11,6 +11,10 @@ open import Data.Unit using (⊤)
 open import Agdelte.Core.Cmd using (Cmd)
 open import Agdelte.Core.Task using (Task)
 
+private
+  variable
+    A : Set
+
 ------------------------------------------------------------------------
 -- Clipboard commands
 ------------------------------------------------------------------------
@@ -21,7 +25,6 @@ postulate
 
   -- Copy and notify with message
   copyNotify : String → (String → A) → Cmd A
-    where postulate A : Set
 
 {-# COMPILE JS copy = function(text) {
   return {
@@ -46,10 +49,10 @@ postulate
 
 postulate
   -- Read text from clipboard (requires permission)
-  readText : Task String String
+  readText : Task String
 
   -- Write text to clipboard
-  writeText : String → Task String ⊤
+  writeText : String → Task ⊤
 
 {-# COMPILE JS readText = {
   run: (onOk, onErr) => {
@@ -80,15 +83,12 @@ open import Agdelte.Core.Event using (Event)
 postulate
   -- Listen for paste events on document
   onPaste : (String → A) → Event A
-    where postulate A : Set
 
   -- Listen for copy events
   onCopy : A → Event A
-    where postulate A : Set
 
   -- Listen for cut events
   onCut : A → Event A
-    where postulate A : Set
 
 {-# COMPILE JS onPaste = function(toMsg) {
   return {

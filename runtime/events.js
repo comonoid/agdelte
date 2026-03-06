@@ -12,6 +12,7 @@
 
 import { formatWorkerError, getPool } from './worker-pool.js';
 import { subscribeLegacy } from './legacy-events.js';
+import { listToArray as _listToArrayFull } from './agda-values.js';
 
 // WebSocket connections pool (shared with commands)
 export const wsConnections = new Map();
@@ -308,18 +309,18 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         }
       };
 
-      // Close old WS: close first, then replace handlers with no-ops
-      // to avoid message loss window between nulling handlers and closing
+      // Close old WS: null handlers BEFORE close() to prevent
+      // old onclose from dispatching into the new subscription
       const oldWs = wsConnections.get(url);
       if (oldWs) {
-        if (oldWs.readyState === WebSocket.OPEN || oldWs.readyState === WebSocket.CONNECTING) {
-          oldWs.close();
-        }
         const noop = () => {};
         oldWs.onopen = noop;
         oldWs.onmessage = noop;
         oldWs.onclose = noop;
         oldWs.onerror = noop;
+        if (oldWs.readyState === WebSocket.OPEN || oldWs.readyState === WebSocket.CONNECTING) {
+          oldWs.close();
+        }
       }
       // Register for wsSend (overwrites previous - last connection wins)
       wsConnections.set(url, ws);
@@ -345,16 +346,20 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
     // Scott: foldE(_typeB, init, step, innerEvent)
     foldE: (_typeB, init, step, innerEvent) => {
       let state = init;
-      const makeFoldDispatch = (priorityDispatch) => (inputVal) => {
+      // All priority channels funnel through a single state update to prevent
+      // interleaving when a synchronous (P0) dispatch re-enters while a
+      // background (P2) callback is pending.
+      const updateAndDispatch = (priorityDispatch) => (inputVal) => {
         state = step(inputVal)(state);
-        priorityDispatch(state);
+        const snapshot = state;
+        priorityDispatch(snapshot);
       };
       const wrappedDispatchers = {
-        immediate: makeFoldDispatch(dispatchImmediate),
-        normal: makeFoldDispatch(dispatchNormal),
-        background: makeFoldDispatch(dispatchBackground)
+        immediate: updateAndDispatch(dispatchImmediate),
+        normal: updateAndDispatch(dispatchNormal),
+        background: updateAndDispatch(dispatchBackground)
       };
-      const sub = interpretEvent(innerEvent, makeFoldDispatch(dispatchNormal), wrappedDispatchers);
+      const sub = interpretEvent(innerEvent, updateAndDispatch(dispatchNormal), wrappedDispatchers);
       return {
         unsubscribe: () => sub.unsubscribe()
       };
@@ -727,11 +732,8 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       window.addEventListener('popstate', listener);
       window.addEventListener('hashchange', listener);
 
-      // Dispatch initial URL only on first subscribe (not re-subscribes)
-      if (!interpretEvent._urlInitialized) {
-        interpretEvent._urlInitialized = true;
-        dispatchNormal(handler(getRoutePath()));
-      }
+      // Dispatch initial URL for this subscription
+      dispatchNormal(handler(getRoutePath()));
 
       return {
         unsubscribe: () => {
@@ -770,10 +772,13 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
     },
 
     // springLoop: animated spring that ticks until settled (P1 - normal for ticks)
-    // Scott: springLoop(position, velocity, target, stiffness, damping, onTick, onSettled)
+    // Scott: springLoop(cfg, onTick, onSettled) where cfg is SpringConfig record
     // onTick receives current position each frame
     // onSettled is dispatched when spring settles
-    springLoop: (position, velocity, target, stiffness, damping, onTick, onSettled) => {
+    springLoop: (cfg, onTick, onSettled) => {
+      // Destructure SpringConfig record (Scott-encoded)
+      let position, velocity, target, stiffness, damping;
+      cfg({ mkSpringConfig: (p, v, t, s, d) => { position = p; velocity = v; target = t; stiffness = s; damping = d; } });
       let running = true;
       let lastTime = null;
       let pos = Number(position);
@@ -852,32 +857,11 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
 }
 
 /**
- * Convert Agda List (Scott-encoded) to JS Array
- * [] = cb => cb['[]']()
- * x ∷ xs = cb => cb['_∷_'](x, xs)
+ * Convert Agda List (Scott-encoded) to JS Array.
+ * Delegates to the canonical implementation in agda-values.js.
  */
 function agdaListToArray(list) {
-  // Agda JS backend compiles List to native JS Array
-  if (Array.isArray(list)) return list;
-  // Fallback: Scott-encoded list
-  const MAX_LIST_ITERATIONS = 100000;
-  const arr = [];
-  let current = list;
-  let iterations = 0;
-  while (current) {
-    if (++iterations > MAX_LIST_ITERATIONS) {
-      console.warn('agdaListToArray: exceeded max iterations, possible infinite list');
-      break;
-    }
-    const result = current({
-      '[]': () => null,
-      '_∷_': (head, tail) => ({ head, tail })
-    });
-    if (result === null) break;
-    arr.push(result.head);
-    current = result.tail;
-  }
-  return arr;
+  return _listToArrayFull(list).items;
 }
 
 /**

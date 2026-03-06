@@ -40,7 +40,7 @@
     "build:webgl-full-demo": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/WebGLFullDemo.agda",
     "build:webgl-controls-demo": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/WebGLControlsDemo.agda",
     "build:controls-demo": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/ControlsDemo.agda",
-    "build:all": "npm run build:counter && npm run build:timer && npm run build:todo && npm run build:keyboard && npm run build:http && npm run build:task && npm run build:websocket && npm run build:router && npm run build:composition && npm run build:transitions && npm run build:combinators && npm run build:optic-dynamic && npm run build:worker && npm run build:parallel && npm run build:session-form && npm run build:stress-test && npm run build:remote-agent && npm run build:server && npm run build:multi-agent && npm run build:shared-demo && npm run build:inspector-demo",
+    "build:all": "npm run build:counter && npm run build:timer && npm run build:todo && npm run build:keyboard && npm run build:http && npm run build:task && npm run build:websocket && npm run build:router && npm run build:composition && npm run build:transitions && npm run build:combinators && npm run build:optic-dynamic && npm run build:worker && npm run build:parallel && npm run build:session-form && npm run build:stress-test && npm run build:css-demo && npm run build:css-full-demo && npm run build:anim-demo && npm run build:svg-test && npm run build:svg-smil && npm run build:svg-panzoom && npm run build:svg-chart && npm run build:svg-linedraw && npm run build:webgl-test && npm run build:webgl-full-demo && npm run build:webgl-controls-demo && npm run build:controls-demo && npm run build:styles && npm run build:remote-agent && npm run build:server && npm run build:multi-agent && npm run build:shared-demo && npm run build:inspector-demo && npm run build:main",
     "build:styles": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/Styles.agda",
     "css:examples": "node scripts/generate-css.js jAgda.Styles examplesCSS examples_html/generated/examples.css",
     "css:demo": "node scripts/generate-css.js jAgda.CssDemo appCSS examples_html/generated/css-demo.css",
@@ -50,7 +50,7 @@
     "css:all": "npm run css:examples && npm run css:demo && npm run css:full-demo && npm run css:anim-data && npm run css:controls-demo",
     "typecheck": "agda -i src src/Agdelte/Reactive/Node.agda",
     "typecheck:theory": "agda -i src src/Agdelte/Theory/Poly.agda",
-    "typecheck:all": "agda -i src src/Agdelte/Reactive/Node.agda && agda -i src src/Agdelte/Theory/Poly.agda && agda -i src -i examples examples/Counter.agda && agda -i src -i examples examples/Timer.agda && agda -i src -i examples examples/Todo.agda",
+    "typecheck:all": "agda -i src src/Agdelte/Reactive/Node.agda && agda -i src src/Agdelte/Theory/Poly.agda && agda -i src src/Agdelte/Theory/DepPoly.agda && agda -i src src/Agdelte/Theory/PolySignal.agda && agda -i src src/Agdelte/Theory/LensLaws.agda && agda -i src src/Agdelte/Theory/OpticPolyLens.agda && agda -i src src/Agdelte/Theory/BigLensPolyLens.agda && agda -i src src/Agdelte/Theory/SessionDualProof.agda && agda -i src src/Agdelte/Theory/AgentCoalg.agda && agda -i src src/Agdelte/Test/OpticTest.agda && agda -i src src/Agdelte/Test/Interpret.agda && agda -i src -i examples examples/Counter.agda && agda -i src -i examples examples/Timer.agda && agda -i src -i examples examples/Todo.agda && agda -i src -i examples examples/Keyboard.agda && agda -i src -i examples examples/Http.agda && agda -i src -i examples examples/Task.agda && agda -i src -i examples examples/WebSocket.agda && agda -i src -i examples examples/Router.agda && agda -i src -i examples examples/Composition.agda && agda -i src -i examples examples/Transitions.agda && agda -i src -i examples examples/Combinators.agda && agda -i src -i examples examples/OpticDynamic.agda && agda -i src -i examples examples/Worker.agda && agda -i src -i examples examples/Parallel.agda && agda -i src -i examples examples/SessionFormDemo.agda && agda -i src -i examples examples/StressTest.agda && agda -i src -i examples examples/CssDemo.agda && agda -i src -i examples examples/CssFullDemo.agda && agda -i src -i examples examples/AnimDemo.agda && agda -i src -i examples examples/SvgTest.agda && agda -i src -i examples examples/SvgSmil.agda && agda -i src -i examples examples/SvgPanZoom.agda && agda -i src -i examples examples/SvgChart.agda && agda -i src -i examples examples/SvgLineDraw.agda && agda -i src -i examples examples/WebGLTest.agda && agda -i src -i examples examples/WebGLFullDemo.agda && agda -i src -i examples examples/WebGLControlsDemo.agda && agda -i src -i examples examples/ControlsDemo.agda && agda -i src -i examples examples/Styles.agda && agda -i src -i examples examples/RemoteAgent.agda && agda -i src -i examples examples/AgentWiring.agda && agda -i src -i examples examples/DepAgentDemo.agda && agda -i src -i examples examples/SessionDual.agda",
     "dev": "node serve.cjs",
     "build:main": "agda --compile --compile-dir=_build --ghc-flag=-ihs --ghc-flag=\"-odir _build\" --ghc-flag=\"-hidir _build\" -i src -i server server/Main.agda",
     "build:remote-agent": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/RemoteAgent.agda",
@@ -74,9 +74,12 @@
     "svelte-style",
     "no-virtual-dom"
   ],
-  "author": "",
+  "author": "Nick Ivanych <Nick@Ivanych.net>",
   "license": "MIT",
-  "repository": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/comonoid/agdelte.git"
+  },
   "engines": {
     "node": ">=18.0.0"
   },

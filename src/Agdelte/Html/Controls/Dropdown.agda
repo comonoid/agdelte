@@ -39,19 +39,16 @@ private
   ... | yes _ = true
   ... | no _  = false
 
-  {-# TERMINATING #-}
   getOptionLabelByIdx : ℕ → List String → String
   getOptionLabelByIdx _ [] = "Select..."
   getOptionLabelByIdx zero (lbl ∷ _) = lbl
   getOptionLabelByIdx (suc n) (_ ∷ rest) = getOptionLabelByIdx n rest
 
-  {-# TERMINATING #-}
   findOptionLabel : ∀ {V} → (V → V → Bool) → V → List (SelectOption V) → String
   findOptionLabel _ _ [] = "Select..."
-  findOptionLabel eq v (opt ∷ rest) =
-    if eq v (optValue opt)
-    then optLabel opt
-    else findOptionLabel eq v rest
+  findOptionLabel eq v (opt ∷ rest) with eq v (optValue opt)
+  ... | true  = optLabel opt
+  ... | false = findOptionLabel eq v rest
 
 ------------------------------------------------------------------------
 -- Basic dropdown (index-based selection)
@@ -74,7 +71,6 @@ private
       case_of_ : ∀ {a b} {A : Set a} {B : Set b} → A → (A → B) → B
       case x of f = f x
 
-  {-# TERMINATING #-}
   renderOptionsIdx : ∀ {M A} → (M → Maybe ℕ) → (ℕ → A) → ℕ → List String → List (Node M A)
   renderOptionsIdx getSelected selectMsg idx [] = []
   renderOptionsIdx getSelected selectMsg idx (lbl ∷ rest) =

@@ -5,13 +5,14 @@
  * and renders them using WebGL2. Supports:
  */
 
+import { listToArray as _listToArrayFull } from './agda-values.js';
+
 // ---------------------------------------------------------------------------
 // Configuration constants (centralized for maintainability)
 // ---------------------------------------------------------------------------
 
 const CONFIG = {
   MAX_LIGHTS: 8,               // Maximum lights per scene (matches shader arrays)
-  MAX_LIST_ITEMS: 100000,      // Maximum items in Scott-encoded lists
   MAX_NAT_VALUE: 100000,       // Maximum for Scott-encoded natural numbers
   SPHERE_SLICES: 24,           // Sphere geometry horizontal segments
   SPHERE_STACKS: 16,           // Sphere geometry vertical segments
@@ -382,73 +383,14 @@ function interpretTransform(tfm) {
   });
 }
 
-/** Convert Agda List to JS Array */
+/** Convert Agda List to JS Array (delegates to agda-values.js) */
 function listToArray(list) {
-  if (!list) return [];
-  if (Array.isArray(list)) return list;
-  const items = [];
-  let current = list;
-  let terminated = false;
-  for (let i = 0; i < CONFIG.MAX_LIST_ITEMS; i++) {
-    let done = false;
-    current({
-      '[]': () => { done = true; },
-      '_∷_': (head, tail) => {
-        items.push(head);
-        current = tail;
-      }
-    });
-    if (done) { terminated = true; break; }
-  }
-  if (!terminated) {
-    console.warn(`listToArray: list exceeded ${CONFIG.MAX_LIST_ITEMS} items limit, output truncated`);
-  }
-  return items;
+  return _listToArrayFull(list).items;
 }
 
 // ---------------------------------------------------------------------------
 // Shader sources
 // ---------------------------------------------------------------------------
-
-// Shared GLSL snippets (DRY principle)
-const GLSL_LIGHT_UNIFORMS = `
-// Lights: up to 8
-uniform int u_numLights;
-uniform int u_lightType[8];         // 0=ambient, 1=directional, 2=point, 3=spot
-uniform vec3 u_lightColor[8];
-uniform float u_lightIntensity[8];
-uniform vec3 u_lightDir[8];         // direction (directional/spot)
-uniform vec3 u_lightPos[8];         // position (point/spot)
-uniform float u_lightRange[8];      // range (point/spot)
-uniform float u_lightAngle[8];      // cone angle in radians (spot)
-uniform float u_lightFalloff[8];    // edge falloff (spot)
-`;
-
-// Attenuation calculation helper
-const GLSL_ATTENUATION = `
-float calcAttenuation(int lightIdx, vec3 worldPos) {
-  if (u_lightType[lightIdx] == 0 || u_lightType[lightIdx] == 1) return 1.0;
-  vec3 toLight = u_lightPos[lightIdx] - worldPos;
-  float dist = length(toLight);
-  float atten = clamp(1.0 - dist / max(u_lightRange[lightIdx], 0.001), 0.0, 1.0);
-  atten *= atten;  // quadratic falloff
-  if (u_lightType[lightIdx] == 3) {
-    // Spot light cone
-    vec3 L = toLight / max(dist, 0.001);
-    vec3 spotDir = normalize(u_lightDir[lightIdx]);
-    float cosAngle = dot(-L, spotDir);
-    float cosOuter = cos(u_lightAngle[lightIdx]);
-    float cosInner = cos(u_lightAngle[lightIdx] * (1.0 - u_lightFalloff[lightIdx]));
-    atten *= clamp((cosAngle - cosOuter) / max(cosInner - cosOuter, 0.001), 0.0, 1.0);
-  }
-  return atten;
-}
-
-vec3 getLightDir(int lightIdx, vec3 worldPos) {
-  if (u_lightType[lightIdx] == 1) return normalize(-u_lightDir[lightIdx]);
-  return normalize(u_lightPos[lightIdx] - worldPos);
-}
-`;
 
 const VERT_SRC = `#version 300 es
 precision highp float;
@@ -1429,7 +1371,8 @@ function createSphereGeometry(gl, radius) {
       indices.push(a, b, a + 1, b, b + 1, a + 1);
     }
   }
-  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), new Uint16Array(indices));
+  const vertexCount = positions.length / 3;
+  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), makeIndexArray(indices, vertexCount));
 }
 
 function createPlaneGeometry(gl, size) {
@@ -1488,6 +1431,10 @@ function createCylinderGeometry(gl, radius, height) {
   return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), new Uint16Array(indices));
 }
 
+function makeIndexArray(indices, vertexCount) {
+  return vertexCount > 65535 ? new Uint32Array(indices) : new Uint16Array(indices);
+}
+
 function uploadGeometry(gl, positions, normals, indices, uvs) {
   const vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
@@ -1518,7 +1465,8 @@ function uploadGeometry(gl, positions, normals, indices, uvs) {
   buffers.push(idxBuf);
   gl.bindVertexArray(null);
   // Store raw CPU-side data for batched geometry merging
-  return { vao, count: indices.length, _buffers: buffers, _positions: positions, _normals: normals, _indices: indices, _uvs: uvs || null };
+  const _indexType = indices instanceof Uint32Array ? 'uint32' : 'uint16';
+  return { vao, count: indices.length, _buffers: buffers, _positions: positions, _normals: normals, _indices: indices, _uvs: uvs || null, _indexType };
 }
 
 /**
@@ -2277,8 +2225,8 @@ function createRoundedBoxGeometry(gl, dims, radius, segments) {
 // Texture cache — loads images asynchronously, creates GL textures
 // ---------------------------------------------------------------------------
 
-function createTextureCache(gl, scheduleFrame) {
-  const cache = new Map();
+function createTextureCache(gl, scheduleFrame, maxSize = 128) {
+  const cache = new Map();  // Map preserves insertion order for LRU
   // 1x1 white fallback while loading
   const fallbackTex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, fallbackTex);
@@ -2296,11 +2244,30 @@ function createTextureCache(gl, scheduleFrame) {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
 
+  function evictLRU() {
+    // Evict oldest entries (first in Map iteration order) until under limit
+    while (cache.size > maxSize) {
+      const oldest = cache.keys().next().value;
+      const entry = cache.get(oldest);
+      if (entry && entry.loaded && entry.tex !== fallbackTex && entry.tex !== errorTex) {
+        gl.deleteTexture(entry.tex);
+      }
+      cache.delete(oldest);
+    }
+  }
+
   function getTexture(url) {
-    if (cache.has(url)) return cache.get(url);
+    if (cache.has(url)) {
+      // Move to end for LRU freshness
+      const entry = cache.get(url);
+      cache.delete(url);
+      cache.set(url, entry);
+      return entry;
+    }
     // Start loading
     const entry = { tex: fallbackTex, loaded: false };
     cache.set(url, entry);
+    evictLRU();
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
@@ -3005,9 +2972,17 @@ function geometryKey(geom) {
   }
 }
 
+const GEO_CACHE_MAX = 256;
+
 function getOrCreateGeometry(gl, cache, geom) {
   const key = geometryKey(geom);
-  if (key && cache.has(key)) return cache.get(key);
+  if (key && cache.has(key)) {
+    // Move to end for LRU freshness
+    const existing = cache.get(key);
+    cache.delete(key);
+    cache.set(key, existing);
+    return existing;
+  }
   let result;
   switch (geom.type) {
     case 'box':         result = createBoxGeometry(gl, geom.dims); break;
@@ -3030,7 +3005,16 @@ function getOrCreateGeometry(gl, cache, geom) {
     case 'dodecahedron': result = createDodecahedronGeometry(gl, geom.radius); break;
     default: throw new Error('Unknown geometry type: ' + geom.type);
   }
-  if (key) cache.set(key, result);
+  if (key) {
+    cache.set(key, result);
+    // LRU eviction: remove oldest entries when cache exceeds limit
+    while (cache.size > GEO_CACHE_MAX) {
+      const oldest = cache.keys().next().value;
+      const oldGeo = cache.get(oldest);
+      deleteGeometry(gl, oldGeo);
+      cache.delete(oldest);
+    }
+  }
   return result;
 }
 
@@ -4184,7 +4168,7 @@ function renderEntry(gl, programs, geoCache, texCache, fontCache, entry, parentM
     }
 
     gl.bindVertexArray(geo.vao);
-    gl.drawElements(gl.TRIANGLES, geo.count, gl.UNSIGNED_SHORT, 0);
+    gl.drawElements(gl.TRIANGLES, geo.count, geo._indexType === 'uint32' ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
     gl.bindVertexArray(null);
 
   } else if (entry.type === 'group') {
@@ -4444,7 +4428,7 @@ function renderPickEntry(gl, pickProg, geoCache, entry, parentMat) {
       gl.uniform3f(pickProg.uniforms.objectId, idColor.r, idColor.g, idColor.b);
 
       gl.bindVertexArray(geo.vao);
-      gl.drawElements(gl.TRIANGLES, geo.count, gl.UNSIGNED_SHORT, 0);
+      gl.drawElements(gl.TRIANGLES, geo.count, geo._indexType === 'uint32' ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
       gl.bindVertexArray(null);
     }
   } else if (entry.type === 'group') {

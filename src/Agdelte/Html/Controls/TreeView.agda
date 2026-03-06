@@ -69,7 +69,6 @@ simpleTree {M} {A} onNodeClick roots =
     ... | [] = false
     ... | _ = true
 
-    {-# TERMINATING #-}
     mutual
       renderNode : ℕ → TreeNode A → Node M A
       renderNode depth node =
@@ -122,7 +121,6 @@ collapsibleTree {M} {A} isExpanded toggleNode onNodeClick roots =
     ... | [] = false
     ... | _ = true
 
-    {-# TERMINATING #-}
     mutual
       renderNode : ℕ → TreeNode A → Node M A
       renderNode depth node =

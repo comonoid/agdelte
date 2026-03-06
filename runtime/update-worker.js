@@ -6,17 +6,17 @@
  *
  * Protocol:
  *   Main → Worker: { type: 'init', modulePath, model }
- *   Main → Worker: { type: 'update', msg, model }
+ *   Main → Worker: { type: 'update', id, msg, model }
  *   Worker → Main: { type: 'ready' }
- *   Worker → Main: { type: 'result', model }
- *   Worker → Main: { type: 'error', message }
+ *   Worker → Main: { type: 'result', id, model }
+ *   Worker → Main: { type: 'error', id, message }
  */
 
 let updateFn = null;
 let NodeModule = null;
 
 self.onmessage = async (event) => {
-  const { type, modulePath, nodeModulePath, msg, model } = event.data;
+  const { type, id, modulePath, nodeModulePath, msg, model } = event.data;
 
   try {
     switch (type) {
@@ -42,7 +42,7 @@ self.onmessage = async (event) => {
 
         // Run the update function
         const newModel = updateFn(msg)(model);
-        self.postMessage({ type: 'result', model: newModel });
+        self.postMessage({ type: 'result', id, model: newModel });
         break;
       }
 
@@ -50,6 +50,6 @@ self.onmessage = async (event) => {
         throw new Error(`Unknown message type: ${type}`);
     }
   } catch (error) {
-    self.postMessage({ type: 'error', message: error.message });
+    self.postMessage({ type: 'error', id, message: error.message });
   }
 };

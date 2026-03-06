@@ -122,5 +122,9 @@ recover (httpPost url body onOk onErr) f = httpPost url body onOk (λ e → pure
 
 -- Get Result instead of fail
 toResult : Task A → Task (Result String A)
-toResult t = (ok <$> t) <|> (recover (fail "") (λ e → err e))
-  -- Simplified version
+toResult (pure a) = pure (ok a)
+toResult (fail e) = pure (err e)
+toResult (httpGet url onOk onErr) =
+  httpGet url (λ s → toResult (onOk s)) (λ e → pure (err e))
+toResult (httpPost url body onOk onErr) =
+  httpPost url body (λ s → toResult (onOk s)) (λ e → pure (err e))

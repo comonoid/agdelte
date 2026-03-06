@@ -22,7 +22,7 @@ open import Data.String using (String; _++_)
 open import Data.Maybe using (Maybe; just; nothing)
 
 open import Agdelte.Core.Cmd as Cmd using (Cmd; httpGet; httpPost)
-open import Agdelte.FFI.Shared using (Serialize; encode; decode; TransportResult; success; failure)
+open import Agdelte.FFI.Shared using (Serialize; encode; decode; Result; ok; err)
 
 private
   variable
@@ -48,35 +48,35 @@ open RemoteOptic public
 ------------------------------------------------------------------------
 
 -- | Peek: read remote agent state via HTTP GET
--- GET {baseUrl}/state → decode response → TransportResult A
+-- GET {baseUrl}/state → decode response → Result String A
 queryRemote : RemoteOptic A
-            → (TransportResult A → Msg) → (String → Msg)
+            → (Result String A → Msg) → (String → Msg)
             → Cmd Msg
 queryRemote ro onResult onError =
   httpGet (baseUrl ro ++ "/state")
     (λ raw → onResult (decodeResult raw))
     onError
   where
-    decodeResult : String → TransportResult _
+    decodeResult : String → Result String _
     decodeResult raw with decode raw
-    ... | just a  = success a
-    ... | nothing = failure "decode failed"
+    ... | just a  = ok a
+    ... | nothing = err "decode failed"
 
 -- | Step: modify remote agent state via HTTP POST
--- POST {baseUrl}/step with input → decode response → TransportResult A
+-- POST {baseUrl}/step with input → decode response → Result String A
 stepRemote : RemoteOptic A
            → String
-           → (TransportResult A → Msg) → (String → Msg)
+           → (Result String A → Msg) → (String → Msg)
            → Cmd Msg
 stepRemote ro input onResult onError =
   httpPost (baseUrl ro ++ "/step") input
     (λ raw → onResult (decodeResult raw))
     onError
   where
-    decodeResult : String → TransportResult _
+    decodeResult : String → Result String _
     decodeResult raw with decode raw
-    ... | just a  = success a
-    ... | nothing = failure "decode failed"
+    ... | just a  = ok a
+    ... | nothing = err "decode failed"
 
 ------------------------------------------------------------------------
 -- Simplified API (String-level, no Serialize required)

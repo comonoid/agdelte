@@ -101,7 +101,6 @@ simpleSidebar {M} {A} title activeIndex items =
         case x of f = f x
         open import Data.List using (_++_)
 
-    {-# TERMINATING #-}
     renderItems : ℕ → List (SidebarItem A) → List (Node M A)
     renderItems _ [] = []
     renderItems idx (item ∷ rest) = renderItem idx item ∷ renderItems (suc idx) rest
@@ -173,7 +172,6 @@ collapsibleSidebar {M} {A} title isCollapsed toggleMsg activeIndex items =
         case x of f = f x
         open import Data.List using (_++_)
 
-    {-# TERMINATING #-}
     renderItems : ℕ → List (SidebarItem A) → List (Node M A)
     renderItems _ [] = []
     renderItems idx (item ∷ rest) = renderItem idx item ∷ renderItems (suc idx) rest

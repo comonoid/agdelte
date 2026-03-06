@@ -47,7 +47,6 @@ digitToℕ c = let n = toℕ c in
     open import Data.Bool using (_∧_)
 
 -- Parse string to ℕ (simple, no error handling)
-{-# TERMINATING #-}
 parseℕ : String → ℕ
 parseℕ s = go (primStringToList s) 0
   where
@@ -293,10 +292,11 @@ data Msg : Set where
 -- Update
 ------------------------------------------------------------------------
 
-{-# TERMINATING #-}
 filterBool : ∀ {A : Set} → (A → Bool) → List A → List A
 filterBool _ [] = []
-filterBool p (x ∷ xs) = if p x then x ∷ filterBool p xs else filterBool p xs
+filterBool p (x ∷ xs) with p x
+... | true  = x ∷ filterBool p xs
+... | false = filterBool p xs
 
 removeToast : ℕ → List ToastData → List ToastData
 removeToast tid = filterBool (λ t → not (toastId t ≡ᵇ tid))
@@ -571,7 +571,6 @@ roles : List String
 roles = "Engineer" ∷ "Designer" ∷ "Manager" ∷ "Analyst" ∷ "Developer" ∷ []
 
 -- Lookup by index
-{-# TERMINATING #-}
 lookupAt : ∀ {A : Set} → ℕ → List A → A → A
 lookupAt _ [] def = def
 lookupAt 0 (x ∷ _) _ = x
@@ -584,7 +583,6 @@ getRole : ℕ → String
 getRole n = lookupAt (n % 5) roles "Developer"
 
 -- Generate employee data
-{-# TERMINATING #-}
 genEmployees : ℕ → List Employee
 genEmployees 0 = []
 genEmployees (suc n) = mkEmployee (getName idx) (22 + (idx * 7) % 30) (getRole idx) ∷ genEmployees n
@@ -602,13 +600,11 @@ gridTotalPages : ℕ
 gridTotalPages = 5
 
 -- Get slice of list
-{-# TERMINATING #-}
 drop : ∀ {A : Set} → ℕ → List A → List A
 drop 0 xs = xs
 drop _ [] = []
 drop (suc n) (_ ∷ xs) = drop n xs
 
-{-# TERMINATING #-}
 take : ∀ {A : Set} → ℕ → List A → List A
 take 0 _ = []
 take _ [] = []
@@ -637,7 +633,6 @@ renderRow idx emp =
     ∷ [] )
 
 -- Render rows with indices
-{-# TERMINATING #-}
 renderRows : ℕ → List Employee → List (Node Model Msg)
 renderRows _ [] = []
 renderRows idx (e ∷ es) = renderRow idx e ∷ renderRows (suc idx) es

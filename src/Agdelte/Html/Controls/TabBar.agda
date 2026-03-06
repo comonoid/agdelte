@@ -48,7 +48,6 @@ private
       ( text (Tab.tabLabel tab) ∷ [] )
 
   -- Render all tab headers with indices
-  {-# TERMINATING #-}
   renderTabHeaders : ∀ {M A} → (M → ℕ) → (ℕ → A) → ℕ → List (Tab M A) → List (Node M A)
   renderTabHeaders getActive selectMsg idx [] = []
   renderTabHeaders getActive selectMsg idx (tab ∷ tabs) =
@@ -66,7 +65,6 @@ private
           ( Tab.tabContent tab ∷ [] ) )
 
   -- Render all tab panels with indices
-  {-# TERMINATING #-}
   renderTabPanels : ∀ {M A} → (M → ℕ) → ℕ → List (Tab M A) → List (Node M A)
   renderTabPanels getActive idx [] = []
   renderTabPanels getActive idx (tab ∷ tabs) =
@@ -101,7 +99,6 @@ private
       ( div ( class "agdelte-tabs__panel" ∷ attr "role" "tabpanel" ∷ [] )
           ( Tab.tabContent tab ∷ [] ) )
 
-  {-# TERMINATING #-}
   renderPanelsT : ∀ {M A} → (M → ℕ) → Transition → ℕ → List (Tab M A) → List (Node M A)
   renderPanelsT getActive trans idx [] = []
   renderPanelsT getActive trans idx (tab ∷ rest) =

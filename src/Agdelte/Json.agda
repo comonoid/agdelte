@@ -9,6 +9,7 @@ open import Data.String using (String)
 open import Data.Nat using (ℕ)
 open import Data.Int using (ℤ)
 open import Data.Bool using (Bool; true; false)
+open import Data.Float using (Float)
 open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Unit using (⊤; tt)
 open import Data.List using (List; []; _∷_)
@@ -54,8 +55,8 @@ postulate
   -- Decode an integer (as JS number)
   int : Decoder ℤ
 
-  -- Decode a float (as String for now, Agda lacks native floats)
-  float : Decoder String
+  -- Decode a float
+  float : Decoder Float
 
   -- Decode a boolean
   bool : Decoder Bool
@@ -91,7 +92,7 @@ postulate
 {-# COMPILE JS float = {
   decode: (json) => {
     if (typeof json === 'number') {
-      return { tag: 'ok', value: String(json) };
+      return { tag: 'ok', value: json };
     }
     return { tag: 'err', error: 'Expected number, got ' + typeof json };
   }
@@ -155,14 +156,14 @@ postulate
   return {
     decode: (json) => {
       if (typeof json !== 'object' || json === null) {
-        return { tag: 'ok', value: { nothing: null } };
+        return { tag: 'ok', value: a => a["nothing"]() };
       }
       if (!(name in json) || json[name] === null || json[name] === undefined) {
-        return { tag: 'ok', value: { nothing: null } };
+        return { tag: 'ok', value: a => a["nothing"]() };
       }
       const result = decoder.decode(json[name]);
       if (result.tag === 'ok') {
-        return { tag: 'ok', value: { just: result.value } };
+        return { tag: 'ok', value: a => a["just"](result.value) };
       }
       return result;
     }
@@ -207,15 +208,15 @@ postulate
       if (!Array.isArray(json)) {
         return { tag: 'err', error: 'Expected array, got ' + typeof json };
       }
-      let result = { "[]": null };
-      for (let i = json.length - 1; i >= 0; i--) {
+      const results = [];
+      for (let i = 0; i < json.length; i++) {
         const r = decoder.decode(json[i]);
         if (r.tag === 'err') {
           return { tag: 'err', error: 'At index ' + i + ': ' + r.error };
         }
-        result = { "_∷_": [r.value, result] };
+        results.push(r.value);
       }
-      return { tag: 'ok', value: result };
+      return { tag: 'ok', value: results };
     }
   };
 } #-}
@@ -224,11 +225,11 @@ postulate
   return {
     decode: (json) => {
       if (json === null || json === undefined) {
-        return { tag: 'ok', value: { nothing: null } };
+        return { tag: 'ok', value: a => a["nothing"]() };
       }
       const result = decoder.decode(json);
       if (result.tag === 'ok') {
-        return { tag: 'ok', value: { just: result.value } };
+        return { tag: 'ok', value: a => a["just"](result.value) };
       }
       return result;
     }
@@ -319,13 +320,10 @@ postulate
   return {
     decode: (json) => {
       const errors = [];
-      let current = decoders;
-      while (current["_∷_"]) {
-        const decoder = current["_∷_"][0];
-        const result = decoder.decode(json);
+      for (let i = 0; i < decoders.length; i++) {
+        const result = decoders[i].decode(json);
         if (result.tag === 'ok') return result;
         errors.push(result.error);
-        current = current["_∷_"][1];
       }
       return { tag: 'err', error: 'None of ' + errors.length + ' decoders matched: ' + errors.join('; ') };
     }
@@ -348,11 +346,11 @@ postulate
     const json = JSON.parse(jsonStr);
     const result = decoder.decode(json);
     if (result.tag === 'ok') {
-      return { "ok": result.value };
+      return b => b["ok"](result.value);
     }
-    return { "err": result.error };
+    return b => b["err"](result.error);
   } catch (e) {
-    return { "err": 'JSON parse error: ' + e.message };
+    return b => b["err"]('JSON parse error: ' + e.message);
   }
 }; } #-}
 
@@ -360,9 +358,9 @@ postulate
   // JsonValue is already a JS value
   const result = decoder.decode(json);
   if (result.tag === 'ok') {
-    return { "ok": result.value };
+    return b => b["ok"](result.value);
   }
-  return { "err": result.error };
+  return b => b["err"](result.error);
 }; } #-}
 
 ------------------------------------------------------------------------
@@ -383,7 +381,7 @@ postulate
   encodeNat : Encoder ℕ
   encodeInt : Encoder ℤ
   encodeBool : Encoder Bool
-  encodeNull : ∀ {A : Set} → Encoder A
+  encodeNull : Encoder ⊤
 
   -- Encode array
   encodeArray : ∀ {A : Set} → Encoder A → Encoder (Array A)
@@ -406,23 +404,17 @@ postulate
 
 {-# COMPILE JS encodeList = function(encoder) {
   return {
-    encode: (list) => {
-      const result = [];
-      let current = list;
-      while (current["_∷_"]) {
-        result.push(encoder.encode(current["_∷_"][0]));
-        current = current["_∷_"][1];
-      }
-      return result;
-    }
+    encode: (list) => list.map(x => encoder.encode(x))
   };
 } #-}
 
 {-# COMPILE JS encodeMaybe = function(encoder) {
   return {
     encode: (maybe) => {
-      if (maybe.just !== undefined) return encoder.encode(maybe.just);
-      return null;
+      return maybe({
+        just: (x) => encoder.encode(x),
+        nothing: () => null
+      });
     }
   };
 } #-}
@@ -443,11 +435,9 @@ postulate
 
 {-# COMPILE JS object = function(pairs) {
   const obj = {};
-  let current = pairs;
-  while (current["_∷_"]) {
-    const pair = current["_∷_"][0];
-    obj[pair["_,_"][0]] = pair["_,_"][1];
-    current = current["_∷_"][1];
+  for (let i = 0; i < pairs.length; i++) {
+    const pair = pairs[i];
+    pair["_,_"]({"_,_": (k, v) => { obj[k] = v; }});
   }
   return obj;
 } #-}
@@ -503,10 +493,10 @@ postulate
       for (const field of obj.fields) {
         const fieldValue = field.getter(value);
         if (field.optional) {
-          if (fieldValue.just !== undefined) {
-            result[field.name] = field.encoder.encode(fieldValue.just);
-          }
-          // omit if nothing
+          fieldValue({
+            just: (x) => { result[field.name] = field.encoder.encode(x); },
+            nothing: () => {}
+          });
         } else {
           result[field.name] = field.encoder.encode(fieldValue);
         }

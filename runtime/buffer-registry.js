@@ -254,7 +254,7 @@ export function copyImageData(id, imageData) {
 export function getImageData(id) {
   const entry = bufferRegistry.getEntry(id);
   if (entry && entry.type === 'image') {
-    const view = new Uint8ClampedArray(entry.buffer);
+    const view = new Uint8ClampedArray(entry.buffer.slice(0));
     return new ImageData(view, entry.width, entry.height);
   }
   return null;

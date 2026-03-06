@@ -32,7 +32,6 @@ private
   digitChar n = fromℕ (48 + n)
 
   -- Natural number to string (simple, for page numbers)
-  {-# TERMINATING #-}
   showℕ : ℕ → String
   showℕ 0 = "0"
   showℕ n = primStringFromList (go n [])
@@ -131,7 +130,6 @@ numberedPagination {M} {A} currentPage goToPage prevMsg nextMsg pages =
              ∷ [] )
         ( text (showℕ page) ∷ [] )
 
-    {-# TERMINATING #-}
     renderPages : List ℕ → List (Node M A)
     renderPages [] = []
     renderPages (p ∷ ps) = pageBtn p ∷ renderPages ps

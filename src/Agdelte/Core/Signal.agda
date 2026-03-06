@@ -11,12 +11,11 @@
 
 module Agdelte.Core.Signal where
 
-open import Data.Product using (_×_; _,_; proj₁; proj₂)
-open import Data.List using (List; []; _∷_; map; concat; filter; foldr)
+open import Data.Product using (_×_; _,_)
+open import Data.List using (List; []; _∷_)
 open import Data.Bool using (Bool; true; false; if_then_else_)
-open import Data.Nat using (ℕ; zero; suc; _+_)
+open import Data.Nat using (ℕ; zero; suc)
 open import Data.Maybe using (Maybe; just; nothing)
-open import Function using (_∘_; id; const)
 
 private
   variable

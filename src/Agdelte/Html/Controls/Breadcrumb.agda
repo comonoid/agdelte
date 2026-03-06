@@ -67,7 +67,6 @@ breadcrumb {M} {A} items =
                    ( text "/" ∷ [] )
                ∷ [] )
 
-    {-# TERMINATING #-}
     renderItems : ℕ → ℕ → List (BreadcrumbItem A) → List (Node M A)
     renderItems _ _ [] = []
     renderItems idx total (item ∷ rest) =
@@ -112,7 +111,6 @@ breadcrumbWith {M} {A} sep items =
                    ( text sep ∷ [] )
                ∷ [] )
 
-    {-# TERMINATING #-}
     renderItems : ℕ → ℕ → List (BreadcrumbItem A) → List (Node M A)
     renderItems _ _ [] = []
     renderItems idx total (item ∷ rest) =
@@ -158,7 +156,6 @@ simpleBreadcrumb {M} {A} handler labels =
                    ( text "/" ∷ [] )
                ∷ [] )
 
-    {-# TERMINATING #-}
     renderItems : ℕ → ℕ → List String → List (Node M A)
     renderItems _ _ [] = []
     renderItems idx total (lbl ∷ rest) =

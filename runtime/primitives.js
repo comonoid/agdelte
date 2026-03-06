@@ -49,8 +49,8 @@ export function animationFrame(msg) {
  */
 export function animationFrameWithTime(handler) {
   return {
-    type: 'animationFrame',
-    config: { msg: handler }
+    type: 'animationFrameWithTime',
+    config: { handler }
   };
 }
 
@@ -295,8 +295,7 @@ export function randomElement(arr) {
 
 export function getItem(key) {
   try {
-    const value = localStorage.getItem(key);
-    return value !== null ? JSON.parse(value) : null;
+    return localStorage.getItem(key);
   } catch {
     return null;
   }
@@ -304,7 +303,7 @@ export function getItem(key) {
 
 export function setItem(key, value) {
   try {
-    localStorage.setItem(key, JSON.stringify(value));
+    localStorage.setItem(key, value);
     return true;
   } catch {
     return false;
@@ -312,7 +311,11 @@ export function setItem(key, value) {
 }
 
 export function removeItem(key) {
-  localStorage.removeItem(key);
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Silently fail (consistent with getItem/setItem)
+  }
 }
 
 export function onStorageChange(key, handler) {

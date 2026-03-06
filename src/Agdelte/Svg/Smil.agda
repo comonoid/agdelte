@@ -19,8 +19,9 @@ open import Agdelte.Reactive.Node using (Node; Attr; attr; elem)
 ------------------------------------------------------------------------
 
 private
-  postulate strEq : String → String → Bool
-  {-# COMPILE JS strEq = (a) => (b) => a === b #-}
+  strEq : String → String → Bool
+  strEq = primStringEquality
+    where open import Agda.Builtin.String using (primStringEquality)
 
 ------------------------------------------------------------------------
 -- Duration
@@ -54,7 +55,6 @@ private
   concat : List String → String
   concat = foldr _++_ ""
 
-{-# TERMINATING #-}
 showTiming : Timing → String
 showTiming (offset d) = showDuration d
 showTiming (onEvent e) = e

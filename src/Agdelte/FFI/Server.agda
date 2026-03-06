@@ -86,10 +86,6 @@ postulate
 {-# COMPILE GHC reqPath   = Http.reqPath   #-}
 {-# COMPILE GHC reqBody   = Http.reqBody   #-}
 
--- HTTP response
-postulate
-  mkResponse : Nat → String → IO ⊤
-
 -- Listen on port with request handler
 -- Handler receives request, returns response body
 postulate
@@ -191,7 +187,6 @@ postulate
 
 -- Run multi-agent server
 postulate
-  runAgentServer : Nat → IORef AgentDef → IO ⊤
   runAgentServer1 : Nat → AgentDef → IO ⊤
   runAgentServer2 : Nat → AgentDef → AgentDef → IO ⊤
 

@@ -11,6 +11,7 @@
 
 import { interpretEvent, unsubscribe, wsConnections, channelConnections } from './events.js';
 import { deepEqual, countSlots, detectSlots, probeSlots, probeCtor, changedSlotsFromCache } from './scott-utils.js';
+import { listToArray, isTaggedArray } from './agda-values.js';
 
 // ─────────────────────────────────────────────────────────────────────
 // SVG/MathML namespace support
@@ -78,6 +79,14 @@ function startSmilAnimations(container) {
   });
 }
 
+// HTML boolean attributes — presence means true, absence means false
+const BOOL_ATTRS = new Set([
+  'disabled', 'checked', 'readonly', 'required', 'selected',
+  'hidden', 'autofocus', 'multiple', 'open', 'novalidate',
+  'formnovalidate', 'autoplay', 'controls', 'loop', 'muted',
+  'default', 'reversed', 'allowfullscreen', 'async', 'defer',
+]);
+
 // Namespaced attributes (xlink:href, xml:lang, etc.)
 const ATTR_NS = {
   'xlink:href': 'http://www.w3.org/1999/xlink',
@@ -139,11 +148,11 @@ function executeCmd(cmd, dispatch) {
   cmd({
     'ε': () => {},
     '_<>_': (cmd1, cmd2) => {
-      executeCmd(cmd1, dispatch);
-      executeCmd(cmd2, dispatch);
+      try { executeCmd(cmd1, dispatch); } catch (e) { console.error('Cmd error:', e); }
+      try { executeCmd(cmd2, dispatch); } catch (e) { console.error('Cmd error:', e); }
     },
     'delay': (ms, msg) => {
-      const msNum = typeof ms === 'bigint' ? Number(ms) : Number(ms);
+      const msNum = Number(ms);
       setTimeout(() => dispatch(msg), msNum);
     },
     'httpGet': (url, onSuccess, onError) => {
@@ -266,11 +275,6 @@ async function loadNodeModule() {
 // Supports both Scott-encoded functions and future tagged arrays
 // ─────────────────────────────────────────────────────────────────────
 
-/** Check if model is a tagged array (future compiler format) */
-function isTaggedArray(model) {
-  return Array.isArray(model) && typeof model[0] === 'string';
-}
-
 /** Get slots from any model format */
 function getSlots(model) {
   if (isTaggedArray(model)) return model.slice(1);
@@ -302,7 +306,7 @@ function setSlot(model, idx, value) {
  * Supports both function and object Agda→JS formats.
  * Tagged arrays are already mutable, returned as-is.
  */
-function wrapMutable(model) {
+function wrapMutable(model, _visited) {
   // Already mutable formats
   if (isTaggedArray(model)) return model;
   if (model && model._slots) return model;
@@ -311,6 +315,12 @@ function wrapMutable(model) {
   if (model === null || model === undefined) return model;
   if (typeof model !== 'function' && typeof model !== 'object') return model;
 
+  // Cycle / shared-reference detection: use WeakMap so that if two model
+  // slots reference the same sub-object, the second reference gets the
+  // already-wrapped version instead of the unwrapped original.
+  if (!_visited) _visited = new WeakMap();
+  if (_visited.has(model)) return _visited.get(model);
+
   const args = probeSlots(model);
   const ctor = probeCtor(model);
   if (!args || !ctor) return model;
@@ -318,7 +328,7 @@ function wrapMutable(model) {
   // Recursively wrap nested structures
   const slots = args.map(a =>
     (typeof a === 'function' || (typeof a === 'object' && a !== null))
-      ? wrapMutable(a)
+      ? wrapMutable(a, _visited)
       : a
   );
 
@@ -334,6 +344,7 @@ function wrapMutable(model) {
 
   wrapper._slots = slots;
   wrapper._ctor = ctor;
+  _visited.set(model, wrapper);
   return wrapper;
 }
 
@@ -598,6 +609,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   let p2Queue = [];  // Background priority (idle callback)
   let p1Scheduled = false;
   let p2Scheduled = false;
+  let destroyed = false;
   const MAX_BATCH_SIZE = 10000;
   let _droppedP1 = 0, _droppedP2 = 0;
 
@@ -615,9 +627,17 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   /**
    * Process a batch of messages and update DOM
    */
+  let _batchDepth = 0;
+  const MAX_BATCH_DEPTH = 100;
+
   function processBatch(msgs) {
     if (msgs.length === 0) return;
+    if (_batchDepth >= MAX_BATCH_DEPTH) {
+      console.warn('processBatch: max recursion depth (' + MAX_BATCH_DEPTH + ') exceeded, dropping ' + msgs.length + ' messages');
+      return;
+    }
 
+    _batchDepth++;
     isUpdating = true;
     try {
       // Snapshot old slots before batch so reconcile's in-place mutation
@@ -627,13 +647,17 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         (typeof s === 'function' && s._slots && s._ctor) ? cloneSlot(s) : s
       ) : null;
 
+      // Snapshot model before the batch so all cmdFunc calls see the
+      // pre-batch state, not the post-update state from a prior message.
+      const preBatchModel = model;
+
       // Apply all messages sequentially
       for (const msg of msgs) {
-        // Cmd receives the pre-update model so it can read fields that
+        // Cmd receives the pre-batch model so it can read fields that
         // update will clear (e.g. inputText read by wsSend, then cleared).
         // Run cmd BEFORE reconcile, which mutates model in-place.
         if (cmdFunc) {
-          const cmd = cmdFunc(msg)(model);
+          const cmd = cmdFunc(msg)(preBatchModel);
           executeCmd(cmd, dispatchImmediate);
         }
         const newModel = update(msg)(model);
@@ -671,13 +695,14 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       p1Queue = [];
       processBatch(deferred);
     }
+    _batchDepth--;
   }
 
   /**
    * Flush P1 (normal priority) queue — runs on requestAnimationFrame
    */
   function flushP1() {
-    if (p1Queue.length === 0) {
+    if (destroyed || p1Queue.length === 0) {
       p1Scheduled = false;
       return;
     }
@@ -700,14 +725,20 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
    */
   function flushP2(deadline) {
     p2Scheduled = false;
+    if (destroyed) return;
 
-    // Batch P2 messages like P1 to avoid N×updateScope overhead
-    const batch = [];
-    while (p2Queue.length > 0 && deadline.timeRemaining() > 1) {
-      batch.push(p2Queue.shift());
+    // Process P2 messages one at a time, checking the deadline between each
+    // to avoid exceeding the idle budget with DOM work from processBatch.
+    const all = p2Queue;
+    p2Queue = [];
+    let i = 0;
+    while (i < all.length && deadline.timeRemaining() > 1) {
+      processBatch([all[i]]);
+      i++;
     }
-    if (batch.length > 0) {
-      processBatch(batch);
+    // Put back unprocessed messages
+    if (i < all.length) {
+      p2Queue = all.slice(i).concat(p2Queue);
     }
 
     // If more messages remain, schedule another idle callback
@@ -1012,7 +1043,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     const ns = ATTR_NS[name];
     if (ns) {
       el.setAttributeNS(ns, name, value);
-    } else if (name === 'disabled' || name === 'checked') {
+    } else if (BOOL_ATTRS.has(name)) {
       if (value === 'true' || value === true) el.setAttribute(name, '');
       else el.removeAttribute(name);
     } else {
@@ -1084,7 +1115,9 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           } else {
             dispatchNormal(handler(value));
           }
-        }, { signal: currentScope.abortCtrl.signal });
+        }, event === 'wheel'
+          ? { signal: currentScope.abortCtrl.signal, passive: false }
+          : { signal: currentScope.abortCtrl.signal });
       },
       // Screen coordinates (no SVG conversion) - better for drag/pan
       onValueScreen: (event, handler) => {
@@ -1133,48 +1166,6 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       list._truncMarker.remove();
       list._truncMarker = null;
     }
-  }
-
-  /**
-   * Convert Agda list to JS array
-   * @param {*} list - Agda List (native Array or Scott-encoded)
-   * @returns {{ items: Array, incomplete: boolean }} - items and error flag
-   */
-  function listToArray(list) {
-    if (!list) return { items: [], incomplete: false };
-    if (Array.isArray(list)) return { items: list, incomplete: false };
-    if (typeof list !== 'function') {
-      console.warn('listToArray: expected function, got', typeof list, list);
-      return { items: [], incomplete: true };
-    }
-
-    const result = [];
-    let current = list;
-    let incomplete = false;
-    const MAX_LIST_ITERATIONS = 100000;
-    let iterations = 0;
-    while (true) {
-      if (iterations++ > MAX_LIST_ITERATIONS) {
-        console.error('listToArray: possible infinite loop (>100000 items or cyclic list)');
-        incomplete = true;
-        break;
-      }
-      if (typeof current !== 'function') {
-        console.warn('listToArray: tail is not a function', current);
-        incomplete = true;
-        break;
-      }
-      const done = current({
-        '[]': () => true,
-        '_∷_': (head, tail) => {
-          result.push(head);
-          current = tail;
-          return false;
-        }
-      });
-      if (done) break;
-    }
-    return { items: result, incomplete };
   }
 
   // ─────────────────────────────────────────────────────────────────
@@ -1571,8 +1562,11 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       timeout: (ms, msg) => `timeout(${ms})`,
       animationFrame: (msg) => 'animationFrame',
       animationFrameWithTime: (handler) => 'animationFrameWithTime',
-      springLoop: (pos, vel, tgt, stiff, damp, onTick, onSettled) =>
-        `springLoop(${pos},${vel},${tgt},${stiff},${damp})`,
+      springLoop: (cfg, onTick, onSettled) => {
+        let pos, vel, tgt, stiff, damp;
+        cfg({ mkSpringConfig: (p, v, t, s, d) => { pos = p; vel = v; tgt = t; stiff = s; damp = d; } });
+        return `springLoop(${pos},${vel},${tgt},${stiff},${damp})`;
+      },
       onKeyDown: (handler) => 'onKeyDown',
       onKeyUp: (handler) => 'onKeyUp',
       onKeys: (pairs) => 'onKeys',
@@ -1856,6 +1850,11 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     // Worker-based update (optional)
     initUpdateWorker,
     destroy: () => {
+      destroyed = true;
+      p1Queue = [];
+      p2Queue = [];
+      p1Scheduled = false;
+      p2Scheduled = false;
       if (currentSubscription) {
         unsubscribe(currentSubscription);
       }
@@ -1863,6 +1862,12 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         bigLensWs.close();
       }
       if (updateWorker) {
+        // Resolve pending callbacks before terminating to prevent promise leaks
+        // and release references to snapshotModel
+        for (const [, pending] of workerPendingCallbacks) {
+          pending.resolve(null);
+        }
+        workerPendingCallbacks.clear();
         updateWorker.terminate();
         updateWorker = null;
       }

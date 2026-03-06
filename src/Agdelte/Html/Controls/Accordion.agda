@@ -123,7 +123,6 @@ accordion {M} {A} getOpenIndex toggleMsg items =
               ( itemContent item ∷ [] ))
         ∷ [] )
 
-    {-# TERMINATING #-}
     renderItems : ℕ → List (AccordionItem M A) → List (Node M A)
     renderItems _ [] = []
     renderItems idx (item ∷ rest) = renderItem idx item ∷ renderItems (suc idx) rest
@@ -169,7 +168,6 @@ accordionMulti {M} {A} isItemOpen toggleMsg items =
               ( itemContent item ∷ [] ))
         ∷ [] )
 
-    {-# TERMINATING #-}
     renderItems : ℕ → List (AccordionItem M A) → List (Node M A)
     renderItems _ [] = []
     renderItems idx (item ∷ rest) = renderItem idx item ∷ renderItems (suc idx) rest

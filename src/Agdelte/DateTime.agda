@@ -56,12 +56,10 @@ days n = mkDuration (n * 86400000)
 
 postulate
   -- Current date/time (impure)
-  now : Task ⊥ Date
-    where postulate ⊥ : Set
+  now : Task Date
 
   -- Current timestamp in milliseconds since epoch
-  nowMillis : Task ⊥ ℕ
-    where postulate ⊥ : Set
+  nowMillis : Task ℕ
 
 {-# COMPILE JS now = {
   run: (onOk, onErr) => { onOk(new Date()); return () => {}; }
@@ -94,8 +92,8 @@ postulate
 
 {-# COMPILE JS fromISOString = function(s) {
   const d = new Date(s);
-  if (isNaN(d.getTime())) return { nothing: null };
-  return { just: d };
+  if (isNaN(d.getTime())) return (cases) => cases.nothing();
+  return (cases) => cases.just(d);
 } #-}
 
 {-# COMPILE JS fromComponents = function(year) { return function(month) { return function(day) {
@@ -108,8 +106,8 @@ postulate
   // Simple parser for common formats
   // Full implementation would use a library like date-fns
   const d = new Date(s);
-  if (isNaN(d.getTime())) return { nothing: null };
-  return { just: d };
+  if (isNaN(d.getTime())) return (cases) => cases.nothing();
+  return (cases) => cases.just(d);
 }; } #-}
 
 ------------------------------------------------------------------------

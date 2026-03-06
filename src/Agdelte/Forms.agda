@@ -315,8 +315,9 @@ postulate
 ------------------------------------------------------------------------
 
 private
-  postulate eqStr : String → String → Bool
-  {-# COMPILE JS eqStr = function(a) { return function(b) { return a === b; }; } #-}
+  eqStr : String → String → Bool
+  eqStr = primStringEquality
+    where open import Agda.Builtin.String using (primStringEquality)
 
 -- Password confirmation
 passwordsMatch : String → String → List ValidationError

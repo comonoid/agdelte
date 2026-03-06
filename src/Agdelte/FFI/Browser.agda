@@ -17,6 +17,7 @@ open import Data.String using (String)
 open import Data.Nat using (ℕ)
 open import Data.Maybe using (Maybe)
 open import Data.Bool using (Bool)
+open import Agda.Builtin.Unit using (⊤)
 
 ------------------------------------------------------------------------
 -- DOM primitives (for direct FFI use, not normally needed)
@@ -26,19 +27,29 @@ open import Data.Bool using (Bool)
 postulate
   Element : Set
 
+{-# COMPILE JS Element = function(x) { return x; } #-}
+
 -- Query selector
 postulate
-  querySelector : String → Element
-  -- {-# COMPILE JS querySelector = function(sel) { return document.querySelector(sel); } #-}
+  querySelector : String → Maybe Element
+
+{-# COMPILE JS querySelector = function(sel) {
+  const el = document.querySelector(sel);
+  return el ? (cases) => cases.just(el) : (cases) => cases.nothing();
+} #-}
 
 ------------------------------------------------------------------------
 -- Console
 ------------------------------------------------------------------------
 
 postulate
-  consoleLog   : String → Element  -- returns dummy, used for side effect
-  consoleWarn  : String → Element
-  consoleError : String → Element
+  consoleLog   : String → ⊤
+  consoleWarn  : String → ⊤
+  consoleError : String → ⊤
+
+{-# COMPILE JS consoleLog = function(s) { console.log(s); return null; } #-}
+{-# COMPILE JS consoleWarn = function(s) { console.warn(s); return null; } #-}
+{-# COMPILE JS consoleError = function(s) { console.error(s); return null; } #-}
 
 ------------------------------------------------------------------------
 -- Timing (low-level, prefer Event.interval/timeout)
@@ -48,11 +59,26 @@ postulate
 postulate
   TimerHandle : Set
 
+{-# COMPILE JS TimerHandle = function(x) { return x; } #-}
+
 postulate
   setTimeout    : ℕ → Element → TimerHandle
   clearTimeout  : TimerHandle → Element
   setInterval   : ℕ → Element → TimerHandle
   clearInterval : TimerHandle → Element
+
+{-# COMPILE JS setTimeout = function(ms) { return function(cb) {
+  return window.setTimeout(cb, Number(ms));
+}; } #-}
+{-# COMPILE JS clearTimeout = function(h) {
+  window.clearTimeout(h); return null;
+} #-}
+{-# COMPILE JS setInterval = function(ms) { return function(cb) {
+  return window.setInterval(cb, Number(ms));
+}; } #-}
+{-# COMPILE JS clearInterval = function(h) {
+  window.clearInterval(h); return null;
+} #-}
 
 ------------------------------------------------------------------------
 -- Storage (low-level, prefer Cmd.getItem/setItem)
@@ -63,6 +89,21 @@ postulate
   localStorageSet    : String → String → Element
   localStorageRemove : String → Element
 
+{-# COMPILE JS localStorageGet = function(key) {
+  try {
+    const val = localStorage.getItem(key);
+    return val !== null ? (cases) => cases.just(val) : (cases) => cases.nothing();
+  } catch(e) { return (cases) => cases.nothing(); }
+} #-}
+{-# COMPILE JS localStorageSet = function(key) { return function(val) {
+  try { localStorage.setItem(key, val); } catch(e) {}
+  return null;
+}; } #-}
+{-# COMPILE JS localStorageRemove = function(key) {
+  try { localStorage.removeItem(key); } catch(e) {}
+  return null;
+} #-}
+
 ------------------------------------------------------------------------
 -- Clipboard (low-level, prefer Cmd.writeClipboard/readClipboard)
 ------------------------------------------------------------------------
@@ -70,6 +111,11 @@ postulate
 postulate
   clipboardWrite : String → Element
   -- clipboardRead is async, handled by Cmd
+
+{-# COMPILE JS clipboardWrite = function(text) {
+  navigator.clipboard.writeText(text).catch(() => {});
+  return null;
+} #-}
 
 ------------------------------------------------------------------------
 -- URL / History (low-level, prefer Cmd.pushUrl/replaceUrl)
@@ -80,14 +126,20 @@ postulate
   pushState   : String → Element
   replaceState : String → Element
 
+{-# COMPILE JS getPathname = null #-}
+{-# COMPILE JS pushState = function(url) {
+  window.history.pushState(null, '', url); return null;
+} #-}
+{-# COMPILE JS replaceState = function(url) {
+  window.history.replaceState(null, '', url); return null;
+} #-}
+
 ------------------------------------------------------------------------
 -- SharedArrayBuffer (requires COOP/COEP headers)
 ------------------------------------------------------------------------
 
--- Opaque shared buffer handle
--- At JS level this is a SharedArrayBuffer object
-postulate
-  SharedBuffer : Set
+-- Re-exported from FFI.Shared for convenience
+open import Agdelte.FFI.Shared using (SharedBuffer) public
 
 -- Note: SharedBuffer allocation and worker access are handled by
 -- Event constructors (allocShared, workerShared) in Event.agda.
