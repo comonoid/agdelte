@@ -7,12 +7,11 @@
 
 module Agdelte.Html.Controls.Stepper where
 
-open import Data.String using (String; _≟_)
+open import Data.String using (String)
 open import Data.List using (List; []; _∷_; map; length)
 open import Data.Nat using (ℕ; zero; suc; _<ᵇ_; _≡ᵇ_)
 open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Function using (_∘_)
-open import Relation.Nullary using (yes; no)
 
 open import Agdelte.Reactive.Node
 open import Agdelte.Html.Controls.Util using (eqStr)
@@ -32,6 +31,17 @@ record Step : Set where
 open Step public
 
 ------------------------------------------------------------------------
+-- Step class helper (shared)
+------------------------------------------------------------------------
+
+private
+  getStepClass : ℕ → ℕ → String
+  getStepClass idx current =
+    if idx <ᵇ current then "agdelte-stepper__step agdelte-stepper__step--completed"
+    else if idx ≡ᵇ current then "agdelte-stepper__step agdelte-stepper__step--active"
+    else "agdelte-stepper__step"
+
+------------------------------------------------------------------------
 -- Horizontal stepper
 ------------------------------------------------------------------------
 
@@ -46,12 +56,6 @@ stepper {M} {A} currentStep steps =
   div ( class "agdelte-stepper" ∷ attr "role" "navigation" ∷ [] )
     (renderSteps 0 (length steps) steps)
   where
-    getStepClass : ℕ → ℕ → String
-    getStepClass idx current =
-      if idx <ᵇ current then "agdelte-stepper__step agdelte-stepper__step--completed"
-      else if idx ≡ᵇ current then "agdelte-stepper__step agdelte-stepper__step--active"
-      else "agdelte-stepper__step"
-
     renderStep : ℕ → ℕ → Step → Node M A
     renderStep idx total step =
       div ( attrBind "class" (mkBinding
@@ -96,12 +100,6 @@ clickableStepper {M} {A} currentStep goToStep steps =
       ∷ [] )
     (renderSteps 0 (length steps) steps)
   where
-    getStepClass : ℕ → ℕ → String
-    getStepClass idx current =
-      if idx <ᵇ current then "agdelte-stepper__step agdelte-stepper__step--completed"
-      else if idx ≡ᵇ current then "agdelte-stepper__step agdelte-stepper__step--active"
-      else "agdelte-stepper__step"
-
     renderStep : ℕ → ℕ → Step → Node M A
     renderStep idx total step =
       button ( attrBind "class" (mkBinding
@@ -141,12 +139,6 @@ verticalStepper {M} {A} currentStep steps =
       ∷ [] )
     (renderSteps 0 (length steps) steps)
   where
-    getStepClass : ℕ → ℕ → String
-    getStepClass idx current =
-      if idx <ᵇ current then "agdelte-stepper__step agdelte-stepper__step--completed"
-      else if idx ≡ᵇ current then "agdelte-stepper__step agdelte-stepper__step--active"
-      else "agdelte-stepper__step"
-
     renderStep : ℕ → ℕ → Step → Node M A
     renderStep idx total step =
       div ( attrBind "class" (mkBinding

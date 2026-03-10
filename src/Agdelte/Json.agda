@@ -216,7 +216,14 @@ postulate
         }
         results.push(r.value);
       }
-      return { tag: 'ok', value: results };
+      // Convert JS array to Scott-encoded Agda List
+      let agdaList = (cases) => cases['[]']();
+      for (let i = results.length - 1; i >= 0; i--) {
+        const elem = results[i];
+        const tail = agdaList;
+        agdaList = (cases) => cases['_∷_'](elem, tail);
+      }
+      return { tag: 'ok', value: agdaList };
     }
   };
 } #-}
@@ -320,11 +327,20 @@ postulate
   return {
     decode: (json) => {
       const errors = [];
-      for (let i = 0; i < decoders.length; i++) {
-        const result = decoders[i].decode(json);
-        if (result.tag === 'ok') return result;
-        errors.push(result.error);
+      let current = decoders;
+      let found = null;
+      let done = false;
+      while (!done) {
+        current({
+          '[]': () => { done = true; },
+          '_∷_': (head, tail) => {
+            const result = head.decode(json);
+            if (result.tag === 'ok') { found = result; done = true; }
+            else { errors.push(result.error); current = tail; }
+          }
+        });
       }
+      if (found) return found;
       return { tag: 'err', error: 'None of ' + errors.length + ' decoders matched: ' + errors.join('; ') };
     }
   };
@@ -404,7 +420,18 @@ postulate
 
 {-# COMPILE JS encodeList = function(encoder) {
   return {
-    encode: (list) => list.map(x => encoder.encode(x))
+    encode: (list) => {
+      const arr = [];
+      let current = list;
+      let done = false;
+      while (!done) {
+        current({
+          '[]': () => { done = true; },
+          '_∷_': (head, tail) => { arr.push(encoder.encode(head)); current = tail; }
+        });
+      }
+      return arr;
+    }
   };
 } #-}
 
@@ -435,9 +462,16 @@ postulate
 
 {-# COMPILE JS object = function(pairs) {
   const obj = {};
-  for (let i = 0; i < pairs.length; i++) {
-    const pair = pairs[i];
-    pair["_,_"]({"_,_": (k, v) => { obj[k] = v; }});
+  let current = pairs;
+  let done = false;
+  while (!done) {
+    current({
+      '[]': () => { done = true; },
+      '_∷_': (head, tail) => {
+        head({ '_,_': (k, v) => { obj[k] = v; } });
+        current = tail;
+      }
+    });
   }
   return obj;
 } #-}

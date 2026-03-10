@@ -142,6 +142,6 @@ progressRules =
       ∷ "align-items" ∶ "center"
       ∷ "justify-content" ∶ "center"
       ∷ "background" ∶ "var(--agdelte-backdrop)"
-      ∷ "z-index" ∶ "var(--agdelte-z-dropdown)"
+      ∷ "z-index" ∶ "var(--agdelte-z-modal)"
       ∷ [])
   ∷ []

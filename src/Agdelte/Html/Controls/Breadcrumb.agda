@@ -7,12 +7,11 @@
 
 module Agdelte.Html.Controls.Breadcrumb where
 
-open import Data.String using (String; _≟_)
+open import Data.String using (String)
 open import Data.List using (List; []; _∷_; map; length)
 open import Data.Nat using (ℕ; zero; suc; _≡ᵇ_; _∸_)
 open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Function using (_∘_)
-open import Relation.Nullary using (yes; no)
 
 open import Agdelte.Reactive.Node
 
@@ -27,6 +26,14 @@ record BreadcrumbItem (A : Set) : Set where
     crumbMsg   : A          -- click message (for navigation)
 
 open BreadcrumbItem public
+
+------------------------------------------------------------------------
+-- Helpers (shared)
+------------------------------------------------------------------------
+
+private
+  isLast : ℕ → ℕ → Bool
+  isLast idx total = suc idx ≡ᵇ total
 
 ------------------------------------------------------------------------
 -- Simple breadcrumb
@@ -45,9 +52,6 @@ breadcrumb {M} {A} items =
         (renderItems 0 (length items) items)
     ∷ [] )
   where
-    isLast : ℕ → ℕ → Bool
-    isLast idx total = suc idx ≡ᵇ total
-
     renderItem : ℕ → ℕ → BreadcrumbItem A → Node M A
     renderItem idx total item =
       elem "li" ( class "agdelte-breadcrumb__item" ∷ [] )
@@ -89,9 +93,6 @@ breadcrumbWith {M} {A} sep items =
         (renderItems 0 (length items) items)
     ∷ [] )
   where
-    isLast : ℕ → ℕ → Bool
-    isLast idx total = suc idx ≡ᵇ total
-
     renderItem : ℕ → ℕ → BreadcrumbItem A → Node M A
     renderItem idx total item =
       elem "li" ( class "agdelte-breadcrumb__item" ∷ [] )
@@ -134,9 +135,6 @@ simpleBreadcrumb {M} {A} handler labels =
         (renderItems 0 (length labels) labels)
     ∷ [] )
   where
-    isLast : ℕ → ℕ → Bool
-    isLast idx total = suc idx ≡ᵇ total
-
     renderItem : ℕ → ℕ → String → Node M A
     renderItem idx total lbl =
       elem "li" ( class "agdelte-breadcrumb__item" ∷ [] )

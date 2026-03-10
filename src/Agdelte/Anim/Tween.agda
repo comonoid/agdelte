@@ -14,10 +14,8 @@
 module Agdelte.Anim.Tween where
 
 open import Data.Nat using (ℕ; _+_; _⊓_)
-open import Data.Nat.Properties using (≤-decTotalOrder)
 open import Data.Bool using (Bool; not)
 open import Data.Product using (_×_; _,_)
-open import Relation.Nullary.Decidable using (does)
 
 import Data.Float as F
 import Data.Float.Base as FB

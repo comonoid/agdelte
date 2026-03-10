@@ -1,6 +1,10 @@
 {-# OPTIONS --without-K --guardedness #-}
 
--- Request: HTTP requests
+-- Request: HTTP requests (Primitive API)
+--
+-- NOTE: This module uses raw JS objects with a separate runtime path.
+-- For the canonical API using Scott-encoded AST interpreted by the
+-- standard runtime (events.js), use Core.Event.httpGet/httpPost.
 
 module Agdelte.Primitive.Request where
 
@@ -29,18 +33,13 @@ record RequestConfig : Set where
 
 open RequestConfig public
 
--- Request result
-data Response (A : Set) : Set where
-  success : A → Response A
-  failure : String → Response A
-
 ------------------------------------------------------------------------
 -- HTTP Request Events
 ------------------------------------------------------------------------
 
 postulate
   -- Execute HTTP request
-  httpRequest : ∀ {A B : Set}
+  httpRequest : ∀ {A : Set}
               → RequestConfig
               → (String → A)    -- onSuccess (JSON string)
               → (String → A)    -- onError
@@ -61,19 +60,33 @@ postulate
            → (String → A)    -- onError
            → Event A
 
-{-# COMPILE JS httpRequest = _ => _ => config => onSuccess => onError => ({
-  type: 'request',
-  config: {
-    method: config.method,
-    url: config.url,
-    body: config.body,
-    headers: config.headers,
-    onSuccess,
-    onError
-  },
-  now: [],
-  get next() { return this; }
-}) #-}
+{-# COMPILE JS httpRequest = _ => config => onSuccess => onError =>
+  config["mkRequest"]({mkRequest: (method, url, body, headers) => {
+    const methodStr = method({
+      "GET": () => "GET", "POST": () => "POST", "PUT": () => "PUT",
+      "DELETE": () => "DELETE", "PATCH": () => "PATCH"
+    });
+    const bodyStr = body({just: s => s, nothing: () => null});
+    const hdrs = {};
+    let cur = headers;
+    let done = false;
+    while (!done) {
+      cur({
+        '[]': () => { done = true; },
+        '_∷_': (pair, rest) => {
+          pair({'_,_': (k, v) => { hdrs[k] = v; }});
+          cur = rest;
+        }
+      });
+    }
+    return {
+      type: 'request',
+      config: { method: methodStr, url, body: bodyStr, headers: hdrs, onSuccess, onError },
+      now: [],
+      get next() { return this; }
+    };
+  }})
+#-}
 
 {-# COMPILE JS httpGet = _ => url => onSuccess => onError => ({
   type: 'request',

@@ -7,13 +7,12 @@
 
 module Agdelte.Html.Controls.TreeView where
 
-open import Data.String using (String; _≟_)
+open import Data.String using (String)
 open import Data.List using (List; []; _∷_; map)
 open import Data.Nat using (ℕ; zero; suc; _≡ᵇ_)
 open import Data.Bool using (Bool; true; false; if_then_else_; not)
 open import Data.Maybe using (Maybe; just; nothing)
 open import Function using (_∘_)
-open import Relation.Nullary using (yes; no)
 
 open import Agdelte.Reactive.Node
 open import Agdelte.Html.Controls.Util using (eqStr)

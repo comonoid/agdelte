@@ -62,10 +62,10 @@ postulate
 {-# COMPILE JS TimerHandle = function(x) { return x; } #-}
 
 postulate
-  setTimeout    : ℕ → Element → TimerHandle
-  clearTimeout  : TimerHandle → Element
-  setInterval   : ℕ → Element → TimerHandle
-  clearInterval : TimerHandle → Element
+  setTimeout    : ℕ → (⊤ → ⊤) → TimerHandle
+  clearTimeout  : TimerHandle → ⊤
+  setInterval   : ℕ → (⊤ → ⊤) → TimerHandle
+  clearInterval : TimerHandle → ⊤
 
 {-# COMPILE JS setTimeout = function(ms) { return function(cb) {
   return window.setTimeout(cb, Number(ms));
@@ -86,8 +86,8 @@ postulate
 
 postulate
   localStorageGet    : String → Maybe String
-  localStorageSet    : String → String → Element
-  localStorageRemove : String → Element
+  localStorageSet    : String → String → ⊤
+  localStorageRemove : String → ⊤
 
 {-# COMPILE JS localStorageGet = function(key) {
   try {
@@ -109,7 +109,7 @@ postulate
 ------------------------------------------------------------------------
 
 postulate
-  clipboardWrite : String → Element
+  clipboardWrite : String → ⊤
   -- clipboardRead is async, handled by Cmd
 
 {-# COMPILE JS clipboardWrite = function(text) {
@@ -122,9 +122,9 @@ postulate
 ------------------------------------------------------------------------
 
 postulate
-  getPathname : Element  -- returns dummy; runtime reads window.location.pathname
-  pushState   : String → Element
-  replaceState : String → Element
+  getPathname  : ⊤  -- returns dummy; runtime reads window.location.pathname
+  pushState    : String → ⊤
+  replaceState : String → ⊤
 
 {-# COMPILE JS getPathname = null #-}
 {-# COMPILE JS pushState = function(url) {

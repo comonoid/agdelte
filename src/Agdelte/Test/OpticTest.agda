@@ -11,6 +11,7 @@ open import Data.String using (String)
 open import Data.Maybe using (Maybe; just; nothing)
 open import Data.List using (List; []; _∷_)
 open import Data.Product using (_×_; _,_; proj₁; proj₂)
+open import Data.Unit using (⊤; tt)
 open import Function using (_∘_; id)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl)
 
@@ -24,14 +25,14 @@ open import Agdelte.Reactive.Optic
 data Color : Set where
   Red Green Blue : Color
 
--- Prism into Red
-redPrism : Prism Color ℕ
+-- Prism into Red (sub-type ⊤ since Red carries no data)
+redPrism : Prism Color ⊤
 redPrism = mkPrism matchRed buildRed
   where
-    matchRed : Color → Maybe ℕ
-    matchRed Red = just 0
+    matchRed : Color → Maybe ⊤
+    matchRed Red = just tt
     matchRed _   = nothing
-    buildRed : ℕ → Color
+    buildRed : ⊤ → Color
     buildRed _ = Red
 
 ------------------------------------------------------------------------
@@ -54,14 +55,18 @@ test-lens-compose = refl
 -- Prism tests
 ------------------------------------------------------------------------
 
-test-prism-match : match redPrism Red ≡ just 0
+test-prism-match : match redPrism Red ≡ just tt
 test-prism-match = refl
 
 test-prism-miss : match redPrism Green ≡ nothing
 test-prism-miss = refl
 
-test-prism-build : build redPrism 42 ≡ Red
+test-prism-build : build redPrism tt ≡ Red
 test-prism-build = refl
+
+-- Prism law: match (build x) ≡ just x
+test-prism-law : match redPrism (build redPrism tt) ≡ just tt
+test-prism-law = refl
 
 ------------------------------------------------------------------------
 -- Affine tests
@@ -117,9 +122,9 @@ test-ixList-set = refl
 data TestMsg : Set where
   LeftInc RightInc : TestMsg
 
-leftPrism : Prism TestMsg ℕ
+leftPrism : Prism TestMsg ⊤
 leftPrism = mkPrism
-  (λ { LeftInc → just 0 ; RightInc → nothing })
+  (λ { LeftInc → just tt ; RightInc → nothing })
   (λ _ → LeftInc)
 
 test-route-match : routeMsg leftPrism fstLens (λ _ n → suc n) LeftInc (5 , 10) ≡ (6 , 10)

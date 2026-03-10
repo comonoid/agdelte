@@ -6,12 +6,11 @@
 
 module Agdelte.Html.Controls.Checkbox where
 
-open import Data.String using (String; _≟_)
+open import Data.String using (String)
 open import Data.List using (List; []; _∷_; map; any)
 open import Data.Nat using (ℕ)
 open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Function using (_∘_)
-open import Relation.Nullary using (yes; no)
 
 open import Agdelte.Reactive.Node
 open import Agdelte.Html.Controls.Util using (eqStr)

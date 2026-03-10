@@ -77,7 +77,10 @@ dropdownRules =
       ∷ "color" ∶ "var(--agdelte-text)"
       ∷ "transition" ∶ "background var(--agdelte-transition)"
       ∷ [])
-  ∷ rule ".agdelte-dropdown__option:hover, .agdelte-dropdown__option:focus-visible"
+  ∷ rule ".agdelte-dropdown__option:hover"
+      ( "background" ∶ "var(--agdelte-bg-hover)"
+      ∷ [])
+  ∷ rule ".agdelte-dropdown__option:focus-visible"
       ( "background" ∶ "var(--agdelte-bg-hover)"
       ∷ "outline" ∶ "2px solid var(--agdelte-primary)"
       ∷ "outline-offset" ∶ "-2px"

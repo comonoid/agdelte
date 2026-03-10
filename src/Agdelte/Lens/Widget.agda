@@ -5,14 +5,12 @@
 
 module Agdelte.Lens.Widget where
 
-open import Data.String using (String; _++_)
-open import Data.List using (List; []; _∷_; map; length) renaming (_++_ to _++L_)
+open import Data.String using (String)
+open import Data.List using (List; []; _∷_; map) renaming (_++_ to _++L_)
 open import Data.Nat using (ℕ; zero; suc)
-open import Data.Nat.Show using (show)
 open import Data.Product using (_×_; _,_; proj₁; proj₂)
 open import Data.Unit using (⊤; tt)
 open import Data.Bool using (Bool; true; false; if_then_else_)
-open import Function using (_∘_; id)
 
 ------------------------------------------------------------------------
 -- DOM Path: location in the DOM tree
@@ -87,7 +85,8 @@ dynamicText showFn = mkWidget
 -- Wrap widget in an element
 element : ∀ {Model Msg} → String → List (String × String) → Widget Model Msg → Widget Model Msg
 element tag attrs inner = mkWidget
-  (map (λ { (p , s) → (child 0 p , s) }) (template inner))
+  (map (λ { (name , val) → (attr name , val) }) attrs
+   ++L map (λ { (p , s) → (child 0 p , s) }) (template inner))
   (λ old new → map (λ { (p , m) → (child 0 p , m) }) (diff inner old new))
   (map (λ { (p , e , h) → (child 0 p , e , h) }) (handlers inner))
 

@@ -1,13 +1,17 @@
 {-# OPTIONS --without-K --guardedness #-}
 
--- Mouse: mouse events
+-- Mouse: mouse events (Primitive API)
+--
+-- NOTE: This module uses raw JS objects with a separate runtime path.
+-- For the canonical API using Scott-encoded AST interpreted by the
+-- standard runtime (events.js), use Core.Event constructors.
 
 module Agdelte.Primitive.Mouse where
 
 open import Data.Nat using (ℕ)
-open import Data.Bool using (Bool; true)
+open import Data.Bool using (Bool; if_then_else_)
 open import Data.Product using (_×_; _,_)
-open import Agdelte.Core.Event
+open import Agdelte.Core.Event using (Event; mapFilterE)
 
 ------------------------------------------------------------------------
 -- Mouse Event Data
@@ -49,14 +53,9 @@ postulate
   type: 'mouse',
   config: {
     eventType: 'mousemove',
-    handler: (e) => handler({
-      x: e.x,
-      y: e.y,
-      pageX: e.pageX,
-      pageY: e.pageY,
-      button: e.button,
-      buttons: e.buttons
-    })
+    handler: (e) => handler({"mkMouseEvent": cb => cb["mkMouseEvent"](
+      BigInt(e.clientX), BigInt(e.clientY), BigInt(e.pageX), BigInt(e.pageY), BigInt(e.button), BigInt(e.buttons)
+    )})
   },
   now: [],
   get next() { return this; }
@@ -66,7 +65,7 @@ postulate
   type: 'mouse',
   config: {
     eventType: 'mousemove',
-    handler: (e) => handler([e.x, e.y])
+    handler: (e) => handler(cases => cases['_,_'](BigInt(e.clientX), BigInt(e.clientY)))
   },
   now: [],
   get next() { return this; }
@@ -76,14 +75,9 @@ postulate
   type: 'mouse',
   config: {
     eventType: 'mousedown',
-    handler: (e) => handler({
-      x: e.x,
-      y: e.y,
-      pageX: e.pageX,
-      pageY: e.pageY,
-      button: e.button,
-      buttons: e.buttons
-    })
+    handler: (e) => handler({"mkMouseEvent": cb => cb["mkMouseEvent"](
+      BigInt(e.clientX), BigInt(e.clientY), BigInt(e.pageX), BigInt(e.pageY), BigInt(e.button), BigInt(e.buttons)
+    )})
   },
   now: [],
   get next() { return this; }
@@ -93,14 +87,9 @@ postulate
   type: 'mouse',
   config: {
     eventType: 'mouseup',
-    handler: (e) => handler({
-      x: e.x,
-      y: e.y,
-      pageX: e.pageX,
-      pageY: e.pageY,
-      button: e.button,
-      buttons: e.buttons
-    })
+    handler: (e) => handler({"mkMouseEvent": cb => cb["mkMouseEvent"](
+      BigInt(e.clientX), BigInt(e.clientY), BigInt(e.pageX), BigInt(e.pageY), BigInt(e.button), BigInt(e.buttons)
+    )})
   },
   now: [],
   get next() { return this; }
@@ -110,14 +99,9 @@ postulate
   type: 'mouse',
   config: {
     eventType: 'click',
-    handler: (e) => handler({
-      x: e.x,
-      y: e.y,
-      pageX: e.pageX,
-      pageY: e.pageY,
-      button: e.button,
-      buttons: e.buttons
-    })
+    handler: (e) => handler({"mkMouseEvent": cb => cb["mkMouseEvent"](
+      BigInt(e.clientX), BigInt(e.clientY), BigInt(e.pageX), BigInt(e.pageY), BigInt(e.button), BigInt(e.buttons)
+    )})
   },
   now: [],
   get next() { return this; }
@@ -127,15 +111,18 @@ postulate
 -- Utilities
 ------------------------------------------------------------------------
 
--- Helper predicates (button filtering will be in runtime)
-private
-  alwaysTrue : ∀ {A : Set} → A → Bool
-  alwaysTrue _ = true
-
--- Left click only
+-- Left click only (button 0)
 onLeftClick : ∀ {A : Set} → A → Event A
-onLeftClick msg = filterE alwaysTrue (onMouseDown (λ _ → msg))
+onLeftClick msg = mapFilterE (λ e → if button e ≡ᵇ 0 then just msg else nothing) (onMouseDown id)
+  where
+    open import Data.Nat using (_≡ᵇ_)
+    open import Data.Maybe using (just; nothing)
+    open import Function using (id)
 
--- Right click only
+-- Right click only (button 2)
 onRightClick : ∀ {A : Set} → A → Event A
-onRightClick msg = filterE alwaysTrue (onMouseDown (λ _ → msg))
+onRightClick msg = mapFilterE (λ e → if button e ≡ᵇ 2 then just msg else nothing) (onMouseDown id)
+  where
+    open import Data.Nat using (_≡ᵇ_)
+    open import Data.Maybe using (just; nothing)
+    open import Function using (id)

@@ -12,8 +12,6 @@
 
 module Agdelte.Concurrent.CoSession where
 
-open import Data.Product using (_×_; _,_; proj₁; proj₂)
-open import Data.Sum using (_⊎_; inj₁; inj₂)
 open import Data.Unit using (⊤; tt)
 open import Agda.Builtin.String using (String)
 open import Agda.Builtin.Nat using (Nat; zero; suc)

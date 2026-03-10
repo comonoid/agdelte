@@ -109,37 +109,48 @@ postulate
 
 {-# COMPILE JS email = function(s) {
   const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (re.test(s)) return { "[]": null };
-  return { "_∷_": [{ "mkError": ["", "Invalid email format"] }, { "[]": null }] };
+  const nil = (cases) => cases['[]']();
+  if (re.test(s)) return nil;
+  const e = {"mkError": cb => cb["mkError"]("", "Invalid email format")};
+  return (cases) => cases['_∷_'](e, nil);
 } #-}
 
 {-# COMPILE JS url = function(s) {
+  const nil = (cases) => cases['[]']();
   try {
     new URL(s);
-    return { "[]": null };
+    return nil;
   } catch {
-    return { "_∷_": [{ "mkError": ["", "Invalid URL format"] }, { "[]": null }] };
+    const e = {"mkError": cb => cb["mkError"]("", "Invalid URL format")};
+    return (cases) => cases['_∷_'](e, nil);
   }
 } #-}
 
 {-# COMPILE JS pattern = function(pat) { return function(errMsg) { return function(s) {
+  const nil = (cases) => cases['[]']();
   try {
     const re = new RegExp(pat);
-    if (re.test(s)) return { "[]": null };
-    return { "_∷_": [{ "mkError": ["", errMsg] }, { "[]": null }] };
+    if (re.test(s)) return nil;
+    const e = {"mkError": cb => cb["mkError"]("", errMsg)};
+    return (cases) => cases['_∷_'](e, nil);
   } catch {
-    return { "_∷_": [{ "mkError": ["", "Invalid pattern"] }, { "[]": null }] };
+    const e = {"mkError": cb => cb["mkError"]("", "Invalid pattern")};
+    return (cases) => cases['_∷_'](e, nil);
   }
 }; }; } #-}
 
 {-# COMPILE JS numeric = function(s) {
-  if (/^\d+$/.test(s)) return { "[]": null };
-  return { "_∷_": [{ "mkError": ["", "Must contain only digits"] }, { "[]": null }] };
+  const nil = (cases) => cases['[]']();
+  if (/^\d+$/.test(s)) return nil;
+  const e = {"mkError": cb => cb["mkError"]("", "Must contain only digits")};
+  return (cases) => cases['_∷_'](e, nil);
 } #-}
 
 {-# COMPILE JS alphanumeric = function(s) {
-  if (/^[a-zA-Z0-9]+$/.test(s)) return { "[]": null };
-  return { "_∷_": [{ "mkError": ["", "Must be alphanumeric"] }, { "[]": null }] };
+  const nil = (cases) => cases['[]']();
+  if (/^[a-zA-Z0-9]+$/.test(s)) return nil;
+  const e = {"mkError": cb => cb["mkError"]("", "Must be alphanumeric")};
+  return (cases) => cases['_∷_'](e, nil);
 } #-}
 
 ------------------------------------------------------------------------
@@ -202,13 +213,17 @@ postulate
   notEquals : String → Validator String
 
 {-# COMPILE JS equals = function(expected) { return function(s) {
-  if (s === expected) return { "[]": null };
-  return { "_∷_": [{ "mkError": ["", "Must equal \"" + expected + "\""] }, { "[]": null }] };
+  const nil = (cases) => cases['[]']();
+  if (s === expected) return nil;
+  const e = { errorField: "", errorMessage: "Must equal \"" + expected + "\"" };
+  return (cases) => cases['_∷_'](e, nil);
 }; } #-}
 
 {-# COMPILE JS notEquals = function(forbidden) { return function(s) {
-  if (s !== forbidden) return { "[]": null };
-  return { "_∷_": [{ "mkError": ["", "Must not equal \"" + forbidden + "\""] }, { "[]": null }] };
+  const nil = (cases) => cases['[]']();
+  if (s !== forbidden) return nil;
+  const e = { errorField: "", errorMessage: "Must not equal \"" + forbidden + "\"" };
+  return (cases) => cases['_∷_'](e, nil);
 }; } #-}
 
 ------------------------------------------------------------------------
@@ -223,24 +238,29 @@ postulate
   positive : Validator String
 
 {-# COMPILE JS inRange = function(min) { return function(max) { return function(s) {
+  const nil = (cases) => cases['[]']();
   const n = parseInt(s, 10);
   if (isNaN(n)) {
-    return { "_∷_": [{ "mkError": ["", "Must be a number"] }, { "[]": null }] };
+    const e = { errorField: "", errorMessage: "Must be a number" };
+    return (cases) => cases['_∷_'](e, nil);
   }
   const minN = Number(min);
   const maxN = Number(max);
   if (n < minN || n > maxN) {
-    return { "_∷_": [{ "mkError": ["", "Must be between " + minN + " and " + maxN] }, { "[]": null }] };
+    const e = { errorField: "", errorMessage: "Must be between " + minN + " and " + maxN };
+    return (cases) => cases['_∷_'](e, nil);
   }
-  return { "[]": null };
+  return nil;
 }; }; } #-}
 
 {-# COMPILE JS positive = function(s) {
+  const nil = (cases) => cases['[]']();
   const n = parseInt(s, 10);
   if (isNaN(n) || n <= 0) {
-    return { "_∷_": [{ "mkError": ["", "Must be a positive number"] }, { "[]": null }] };
+    const e = { errorField: "", errorMessage: "Must be a positive number" };
+    return (cases) => cases['_∷_'](e, nil);
   }
-  return { "[]": null };
+  return nil;
 } #-}
 
 ------------------------------------------------------------------------
@@ -293,19 +313,32 @@ postulate
 
 {-# COMPILE JS combineErrors = function(lists) {
   const result = [];
-  let current = lists;
-  while (current["_∷_"]) {
-    let errors = current["_∷_"][0];
-    while (errors["_∷_"]) {
-      result.push(errors["_∷_"][0]);
-      errors = errors["_∷_"][1];
-    }
-    current = current["_∷_"][1];
+  // Walk outer Scott-encoded list of lists
+  let outerDone = false;
+  let outer = lists;
+  while (!outerDone) {
+    outer({
+      '[]': () => { outerDone = true; },
+      '_∷_': (errors, tail) => {
+        // Walk inner Scott-encoded list of errors
+        let innerDone = false;
+        let inner = errors;
+        while (!innerDone) {
+          inner({
+            '[]': () => { innerDone = true; },
+            '_∷_': (e, rest) => { result.push(e); inner = rest; }
+          });
+        }
+        outer = tail;
+      }
+    });
   }
-  // Convert back to Agda list
-  let agdaList = { "[]": null };
+  // Convert back to Scott-encoded Agda list
+  let agdaList = (cases) => cases['[]']();
   for (let i = result.length - 1; i >= 0; i--) {
-    agdaList = { "_∷_": [result[i], agdaList] };
+    const elem = result[i];
+    const tail = agdaList;
+    agdaList = (cases) => cases['_∷_'](elem, tail);
   }
   return agdaList;
 } #-}

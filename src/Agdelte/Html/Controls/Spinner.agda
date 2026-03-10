@@ -11,7 +11,8 @@ module Agdelte.Html.Controls.Spinner where
 
 open import Data.String using (String; _++_)
 open import Data.List using (List; []; _∷_)
-open import Data.Bool using (Bool; true; false; if_then_else_)
+open import Data.Bool using (Bool; true; false; if_then_else_; not)
+open import Function using (_∘_)
 
 open import Agdelte.Reactive.Node
 
@@ -124,8 +125,5 @@ withSpinner : ∀ {M A}
 withSpinner {M} isLoading content =
   div (class "agdelte-spinner-wrapper" ∷ [])
     ( when isLoading spinner
-    ∷ when (not' isLoading) content
+    ∷ when (not ∘ isLoading) content
     ∷ [] )
-  where
-    not' : (M → Bool) → M → Bool
-    not' f m = if f m then false else true

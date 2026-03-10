@@ -84,8 +84,10 @@ mutual
 
   renderRulesAt : String → List Rule → String
   renderRulesAt ind []       = ""
-  renderRulesAt ind (r ∷ []) = renderRuleAt ind r
-  renderRulesAt ind (r ∷ rs) = renderRuleAt ind r ++ "\n\n" ++ renderRulesAt ind rs
+  renderRulesAt ind (r ∷ rs) with renderRuleAt ind r | renderRulesAt ind rs
+  ... | "" | rest = rest
+  ... | s  | ""   = s
+  ... | s  | rest = s ++ "\n\n" ++ rest
 
 ------------------------------------------------------------------------
 -- Public API
@@ -96,5 +98,7 @@ renderRule = renderRuleAt ""
 
 renderStylesheet : Stylesheet → String
 renderStylesheet []       = ""
-renderStylesheet (r ∷ []) = renderRule r ++ "\n"
-renderStylesheet (r ∷ rs) = renderRule r ++ "\n\n" ++ renderStylesheet rs
+renderStylesheet (r ∷ rs) with renderRule r | renderStylesheet rs
+... | "" | rest = rest
+... | s  | ""   = s ++ "\n"
+... | s  | rest = s ++ "\n\n" ++ rest

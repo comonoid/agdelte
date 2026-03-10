@@ -21,7 +21,7 @@ open import Agda.Builtin.Unit using (⊤)
 open import Agda.Builtin.String using (String)
 open import Data.Maybe using (Maybe; just; nothing)
 
-open import Agdelte.FFI.Server using (_>>=_; _>>_; pure; _++s_)
+open import Agdelte.FFI.Server using (_>>=_; _>>_; pure)
 
 ------------------------------------------------------------------------
 -- IOOptic: effectful optic over a transport
@@ -74,31 +74,6 @@ processAgentOptic socketPath = mkIOOptic peekIO overIO
       stepProcess h input       >>= λ result →
       closeProcess h            >>
       pure result
-
-------------------------------------------------------------------------
--- ClientOptic: WebSocket-backed IOOptic to a browser client
-------------------------------------------------------------------------
-
--- The server sends WS messages to a specific client.
--- Protocol:
---   peek → send {"peek":"model"} → client responds with serialized model
---   over → send {"over":"MsgPayload"} → client dispatches, responds with new state
---
--- This requires:
---   1. Server knows client IDs (assigned on WS connect)
---   2. Server can send targeted WS messages (not just broadcast)
---   3. Client handles incoming peek/over requests
---
--- For now, we define the Agda-side type. The WS transport FFI will be
--- added in 8B when we extend AgentServer.hs.
-
--- Placeholder: will be backed by WS FFI in 8B
-postulate
-  wsPeekClient : String → IO (Maybe String)   -- clientId → peek
-  wsOverClient : String → String → IO String   -- clientId → input → result
-
-clientOptic : String → IOOptic
-clientOptic clientId = mkIOOptic (wsPeekClient clientId) (wsOverClient clientId)
 
 ------------------------------------------------------------------------
 -- IOOptic composition

@@ -46,8 +46,8 @@ record Model : Set where
 
 open Model public
 
-initModel : Model
-initModel = mkModel ProgressDemo "" "" false "" false "" false
+initialModel : Model
+initialModel = mkModel ProgressDemo "" "" false "" false "" false
 
 ------------------------------------------------------------------------
 -- Messages
@@ -189,4 +189,4 @@ subs' m =
 ------------------------------------------------------------------------
 
 app : ReactiveApp Model Msg
-app = mkReactiveApp initModel updateModel parallelTemplate (λ _ _ → ε) subs'
+app = mkReactiveApp initialModel updateModel parallelTemplate (λ _ _ → ε) subs'

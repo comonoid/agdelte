@@ -51,8 +51,8 @@ record Model : Set where
 
 open Model public
 
-initModel : Model
-initModel = mkModel 0 0 0 0 0 0 false 0 0 0 0 0 0
+initialModel : Model
+initialModel = mkModel 0 0 0 0 0 0 false 0 0 0 0 0 0
 
 ------------------------------------------------------------------------
 -- Messages
@@ -103,7 +103,7 @@ updateModel Measure m = record m
   ; opsPerSec = frames m * batchSize
   ; frames    = 0
   }
-updateModel Reset m = initModel
+updateModel Reset m = initialModel
 
 ------------------------------------------------------------------------
 -- Display helpers
@@ -282,4 +282,4 @@ subs' m =
 ------------------------------------------------------------------------
 
 app : ReactiveApp Model Msg
-app = mkReactiveApp initModel updateModel stressTemplate (λ _ _ → ε) subs'
+app = mkReactiveApp initialModel updateModel stressTemplate (λ _ _ → ε) subs'

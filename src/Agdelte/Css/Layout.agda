@@ -23,9 +23,11 @@ row = "display" ∶ "flex" ∷ "flex-direction" ∶ "row" ∷ []
 col : Style
 col = "display" ∶ "flex" ∷ "flex-direction" ∶ "column" ∷ []
 
+-- Requires row or col (sets justify-content + align-items without display: flex)
 center : Style
 center = "justify-content" ∶ "center" ∷ "align-items" ∶ "center" ∷ []
 
+-- Requires row or col (sets justify-content + align-items without display: flex)
 spaceBetween : Style
 spaceBetween = "justify-content" ∶ "space-between" ∷ "align-items" ∶ "center" ∷ []
 

@@ -84,7 +84,7 @@ stepperRules =
       ( "flex" ∶ "1"
       ∷ "height" ∶ "2px"
       ∷ "background" ∶ "var(--agdelte-border)"
-      ∷ "margin" ∶ "15px var(--agdelte-spacing-sm) 0"
+      ∷ "margin" ∶ "16px var(--agdelte-spacing-sm) 0"
       ∷ [])
   ∷ rule ".agdelte-stepper__step--completed .agdelte-stepper__line"
       ( "background" ∶ "var(--agdelte-success)"
@@ -92,7 +92,7 @@ stepperRules =
   ∷ rule ".agdelte-stepper--vertical .agdelte-stepper__line"
       ( "width" ∶ "2px"
       ∷ "height" ∶ "24px"
-      ∷ "margin" ∶ "var(--agdelte-spacing-xs) 0 0 15px"
+      ∷ "margin" ∶ "var(--agdelte-spacing-xs) 0 0 16px"
       ∷ "flex" ∶ "none"
       ∷ [])
   -- Clickable stepper

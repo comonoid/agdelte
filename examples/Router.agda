@@ -10,9 +10,7 @@ open import Data.Nat using (ℕ; zero; suc)
 open import Data.Nat.Show using (show)
 open import Data.String using (String; _++_)
 open import Data.List using (List; []; _∷_; [_])
-open import Data.Bool using (Bool; true; false; if_then_else_)
-open import Agda.Builtin.String using (primStringEquality)
-open import Function using (_∘_; const)
+open import Data.Bool using (Bool; true; false)
 
 open import Agdelte.Core.Event
 open import Agdelte.Core.Cmd
@@ -109,16 +107,6 @@ visitCountText m = "Page visits: " ++ show (visitCount m)
 -- Template: reactive bindings (no Virtual DOM)
 ------------------------------------------------------------------------
 
--- Navigation item
-navItem : Route → Route → Node Model Msg
-navItem current target =
-  let activeClass = if routeEq current target then "nav-link active" else "nav-link"
-  in a (href (routeToPath target)
-       ∷ onClick (Navigate target)
-       ∷ class activeClass
-       ∷ [])
-       [ text (routeName target) ]
-
 -- Page content based on route
 pageContent : Route → Node Model Msg
 pageContent Home =
@@ -144,16 +132,6 @@ pageContent NotFound =
     ( h2 [] [ text "404 - Page Not Found" ]
     ∷ p [] [ text "The page you're looking for doesn't exist." ]
     ∷ button [ onClick (Navigate Home) ] [ text "Go Home" ]
-    ∷ [] )
-
--- Navigation component (static, doesn't need bindings for active state since we rebuild on route change)
--- Note: In a real app, you might want dynamic class bindings for active state
-navigation : Route → Node Model Msg
-navigation r =
-  nav [ class "main-nav" ]
-    ( navItem r Home
-    ∷ navItem r About
-    ∷ navItem r Contact
     ∷ [] )
 
 -- Main template

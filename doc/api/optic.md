@@ -124,7 +124,6 @@ record IOOptic : Set where
 
 ```agda
 processAgentOptic : String → IOOptic    -- Unix socket
-clientOptic : String → IOOptic          -- WebSocket to browser
 refOptic : IORef String → IOOptic       -- Local IORef (testing)
 constIOOptic : String → IOOptic         -- Constant (testing)
 ```

@@ -19,8 +19,9 @@ open import Agda.Builtin.Nat using (Nat)
 open import Data.List using (List; []; _∷_)
 open import Data.Maybe using (Maybe; just; nothing)
 
+open import Data.String using (_++_)
 open import Agdelte.FFI.Server using
-  ( _>>=_; _>>_; pure; putStrLn; _++s_
+  ( _>>=_; _>>_; pure; putStrLn
   ; IORef; readIORef
   )
 open import Agdelte.Reactive.BigLens using (IOOptic; mkIOOptic; ioPeek; ioOver)
@@ -49,8 +50,8 @@ inspectOne label optic =
   printResult label result
   where
     printResult : String → Maybe String → IO ⊤
-    printResult l nothing  = putStrLn ("  " ++s l ++s ": <unavailable>")
-    printResult l (just v) = putStrLn ("  " ++s l ++s ": " ++s v)
+    printResult l nothing  = putStrLn ("  " ++ l ++ ": <unavailable>")
+    printResult l (just v) = putStrLn ("  " ++ l ++ ": " ++ v)
 
 open import Data.Product using (_×_; _,_)
 
@@ -89,7 +90,7 @@ diagramOptics d = go (slots d)
 inspectDiagram : Diagram → IO ⊤
 inspectDiagram d =
   putStrLn "=== Network Inspector ===" >>
-  putStrLn ("Agents: " ++s showCount (slots d)) >>
+  putStrLn ("Agents: " ++ showCount (slots d)) >>
   inspectAll (diagramOptics d) >>
   putStrLn "========================="
   where
@@ -118,6 +119,6 @@ sendCommand optic input = ioOver optic input
 -- Send command and print result
 sendAndPrint : String → IOOptic → String → IO ⊤
 sendAndPrint label optic input =
-  putStrLn ("Sending to " ++s label ++s ": " ++s input) >>
+  putStrLn ("Sending to " ++ label ++ ": " ++ input) >>
   sendCommand optic input >>= λ result →
-  putStrLn ("  Result: " ++s result)
+  putStrLn ("  Result: " ++ result)

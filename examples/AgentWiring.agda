@@ -35,14 +35,7 @@ counter = mkAgent zero id (λ n _ → suc n)
 doublerAgent : Agent ℕ ℕ ℕ
 doublerAgent = mkAgent zero id (λ _ n → n * 2)
 
--- Threshold: classifies input as "low" or "high"
-thresholdAgent : ℕ → Agent ⊤ ℕ String
-thresholdAgent t = mkAgent tt (const "?") classify
-  where
-    classify : ⊤ → ℕ → ⊤
-    classify _ _ = tt
-
--- Better: an agent that remembers the classification
+-- Classifier: remembers the classification
 classifier : ℕ → Agent String ℕ String
 classifier threshold = mkAgent "?" id classify
   where
@@ -140,12 +133,13 @@ selfCounter = loop feedbackAgent
 -- 9. mapI / mapO: simple transformations
 ------------------------------------------------------------------------
 
--- Wrap counter to accept Bool (true=tick, false=noop)
+-- Counter that only ticks on true (false=noop)
 boolCounter : Agent ℕ Bool ℕ
-boolCounter = mapI boolToUnit counter
+boolCounter = mkAgent zero id stepBool
   where
-    boolToUnit : Bool → ⊤
-    boolToUnit _ = tt
+    stepBool : ℕ → Bool → ℕ
+    stepBool n true  = suc n
+    stepBool n false = n
 
 -- Wrap counter to output String
 showingCounter : Agent ℕ ⊤ String

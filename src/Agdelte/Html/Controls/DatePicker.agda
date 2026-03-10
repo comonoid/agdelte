@@ -9,7 +9,7 @@ module Agdelte.Html.Controls.DatePicker where
 
 open import Data.String as Str using (String; _++_)
 open import Data.List as List using (List; []; _∷_) renaming (_++_ to _++ᴸ_)
-open import Data.Nat using (ℕ; zero; suc; _+_; _∸_)
+open import Data.Nat using (ℕ; zero; suc; _+_; _∸_; _<ᵇ_)
 open import Data.Nat.Show using (show)
 open import Data.Bool using (Bool; true; false; if_then_else_; _∧_)
 open import Data.Maybe using (Maybe; just; nothing)
@@ -64,6 +64,28 @@ monthName 12 = "December"
 monthName _ = "Unknown"
 
 ------------------------------------------------------------------------
+-- Arithmetic helpers (shared)
+------------------------------------------------------------------------
+
+modN : ℕ → ℕ → ℕ
+modN _ 0 = 0
+modN n m = mod' n m n
+  where
+    mod' : ℕ → ℕ → ℕ → ℕ
+    mod' _ _ zero = 0
+    mod' acc divisor (suc fuel) =
+      if acc <ᵇ divisor then acc else mod' (acc ∸ divisor) divisor fuel
+
+divN : ℕ → ℕ → ℕ
+divN _ 0 = 0
+divN n m = div' n m n 0
+  where
+    div' : ℕ → ℕ → ℕ → ℕ → ℕ
+    div' _ _ zero acc = acc
+    div' num divisor (suc fuel) acc =
+      if num <ᵇ divisor then acc else div' (num ∸ divisor) divisor fuel (suc acc)
+
+------------------------------------------------------------------------
 -- Leap year and days-in-month (must precede datePickerSimple)
 ------------------------------------------------------------------------
 
@@ -77,17 +99,6 @@ private
     in (mod4 ==ℕ 0 ∧ not (mod100 ==ℕ 0)) ∨ (mod400 ==ℕ 0)
     where
       open import Data.Bool using (not; _∨_)
-
-      modN : ℕ → ℕ → ℕ
-      modN _ 0 = 0
-      modN n m = mod' n m n
-        where
-          mod' : ℕ → ℕ → ℕ → ℕ
-          mod' _ _ zero = 0
-          mod' acc divisor (suc fuel) =
-            if acc <ᵇ divisor then acc else mod' (acc ∸ divisor) divisor fuel
-            where
-              open import Data.Nat using (_<ᵇ_)
 
 -- Days in month with leap year support
 daysInMonthLeap : ℕ → ℕ → ℕ
@@ -211,8 +222,9 @@ datePickerInput {M} {A} getSelected isOpen viewYear viewMonth onSelect toggle on
 
 -- | Navigate to previous month (returns new year, month)
 prevMonth : ℕ → ℕ → ℕ × ℕ
-prevMonth y 1 = (y ∸ 1 , 12)
-prevMonth y m = (y , m ∸ 1)
+prevMonth 0       1 = (0 , 1)       -- clamp at January year 0
+prevMonth (suc y) 1 = (y , 12)
+prevMonth y       m = (y , m ∸ 1)
 
 -- | Navigate to next month (returns new year, month)
 nextMonth : ℕ → ℕ → ℕ × ℕ
@@ -235,25 +247,7 @@ firstDayOfMonth y m =
       h = modN (q + divN (13 * (m' + 1)) 5 + k + divN k 4 + divN j 4 + 5 * j) 7
   in modN (h + 6) 7
   where
-    open import Data.Nat using (_<ᵇ_; _*_)
-
-    modN : ℕ → ℕ → ℕ
-    modN _ 0 = 0
-    modN n m' = mod' n m' n
-      where
-        mod' : ℕ → ℕ → ℕ → ℕ
-        mod' _ _ zero = 0
-        mod' acc divisor (suc fuel) =
-          if acc <ᵇ divisor then acc else mod' (acc ∸ divisor) divisor fuel
-
-    divN : ℕ → ℕ → ℕ
-    divN _ 0 = 0
-    divN n m' = div' n m' n 0
-      where
-        div' : ℕ → ℕ → ℕ → ℕ → ℕ
-        div' _ _ zero acc = acc
-        div' num divisor (suc fuel) acc =
-          if num <ᵇ divisor then acc else div' (num ∸ divisor) divisor fuel (suc acc)
+    open import Data.Nat using (_*_)
 
 -- | Compare dates
 dateLt : Date → Date → Bool
@@ -264,8 +258,6 @@ dateLt d1 d2 =
     else if month d1 ==ℕ month d2 then day d1 <ᵇ day d2
     else false
   else false
-  where
-    open import Data.Nat using (_<ᵇ_)
 
 dateLte : Date → Date → Bool
 dateLte d1 d2 = dateLt d1 d2 ∨ eqDate d1 d2
@@ -374,16 +366,6 @@ datePickerFull {M} {A} cfg getSelected viewYear viewMonth onSelect onPrev onNext
       if dpStartMonday cfg
       then modN (fd + 6) 7   -- Sunday-based → Monday-based
       else fd
-      where
-        open import Data.Nat using (_<ᵇ_)
-        modN : ℕ → ℕ → ℕ
-        modN _ 0 = 0
-        modN n m = mod' n m n
-          where
-            mod' : ℕ → ℕ → ℕ → ℕ
-            mod' _ _ zero = 0
-            mod' acc divisor (suc fuel) =
-              if acc <ᵇ divisor then acc else mod' (acc ∸ divisor) divisor fuel
 
     isSelected : ℕ → M → Bool
     isSelected d m with getSelected m
@@ -566,12 +548,25 @@ dateRangeCalendar {M} {A} cfg getStart getEnd isSelectingEnd viewYear viewMonth 
     -- Weekday headers
     ∷ div (class "agdelte-datepicker__weekdays" ∷ [])
         (renderWeekdays (weekdayHeaders (dpLocale cfg) (dpStartMonday cfg)))
-    -- Day grid
+    -- Day grid with proper first-day offset
     ∷ div (class "agdelte-datepicker__grid" ∷ [])
-        (renderDays 1 (daysInMonthLeap viewYear viewMonth))
+        (renderEmptyDays (adjustFirstDay (firstDayOfMonth viewYear viewMonth))
+         ++ᴸ renderDays 1 (daysInMonthLeap viewYear viewMonth))
     ∷ [] )
   where
     open import Data.Bool using (not; _∨_)
+
+    adjustFirstDay : ℕ → ℕ
+    adjustFirstDay fd =
+      if dpStartMonday cfg
+      then modN (fd + 6) 7
+      else fd
+
+    renderEmptyDays : ℕ → List (Node M A)
+    renderEmptyDays zero = []
+    renderEmptyDays (suc n) =
+      span (class "agdelte-datepicker__day agdelte-datepicker__day--empty" ∷ []) (text "" ∷ [])
+      ∷ renderEmptyDays n
 
     getDayClass : ℕ → M → String
     getDayClass d m =

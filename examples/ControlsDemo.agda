@@ -220,8 +220,8 @@ initCheckboxStates = mkCheckboxStates false true false
 initLayoutState : LayoutState
 initLayoutState = mkLayoutState true false false true false
 
-initModel : Model
-initModel = mkModel
+initialModel : Model
+initialModel = mkModel
   0                    -- activeTab
   false                -- modalOpen
   []                   -- toasts
@@ -842,4 +842,4 @@ cmdHandler _ _ = ε
 ------------------------------------------------------------------------
 
 app : ReactiveApp Model Msg
-app = mkReactiveApp initModel updateModel view cmdHandler (const never)
+app = mkReactiveApp initialModel updateModel view cmdHandler (const never)

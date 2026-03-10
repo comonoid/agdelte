@@ -2,6 +2,10 @@
 
 -- Result: error handling for events
 -- Provides Result E A type and Event combinators for filtering ok/err
+--
+-- NOTE: This module imports Event for the filterOk/filterErr combinators.
+-- The Result type itself has no Event dependency. If circular imports arise,
+-- split the combinators into a separate module (e.g., Result.Event).
 
 module Agdelte.Core.Result where
 

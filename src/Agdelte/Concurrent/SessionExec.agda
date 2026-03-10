@@ -17,8 +17,7 @@
 module Agdelte.Concurrent.SessionExec where
 
 open import Agda.Builtin.IO using (IO)
-open import Agda.Builtin.Unit using (⊤; tt)
-open import Agda.Builtin.String using (String)
+open import Agda.Builtin.String using (String; primShowNat)
 open import Agda.Builtin.Nat using (Nat; zero; suc)
 open import Data.Product using (_×_; _,_; proj₁; proj₂)
 open import Data.Sum using (_⊎_; inj₁; inj₂)
@@ -77,12 +76,13 @@ open SessionRunner public
 
 -- Most common pattern: recv → process → send → done
 -- Compile to a single Agent with (Phase × S) state.
+-- Tracks phase transitions only; business logic is in the pipeline
+-- approach below (recvAgent >>> sendAgent f).
 
-reqRespAgent : ∀ {Req Resp S : Set} →
+reqRespAgent : ∀ {S : Set} →
                S →                       -- initial state
-               (S → Req → S × Resp) →    -- process: state + request → new state + response
                Agent (Phase × S) String String
-reqRespAgent {Req} {Resp} s₀ process = record
+reqRespAgent s₀ = record
   { state   = waiting , s₀
   ; observe = observeF
   ; step    = stepF
@@ -235,9 +235,5 @@ echoCo = record
 counterCo : Coroutine Nat
 counterCo = record
   { coState = zero
-  ; coStep  = λ n _ → showNat n , suc n
+  ; coStep  = λ n _ → primShowNat n , suc n
   }
-  where
-    showNat : Nat → String
-    showNat zero = "0"
-    showNat (suc n) = "suc"  -- simplified; full show requires more machinery

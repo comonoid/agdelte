@@ -11,7 +11,8 @@ module Agdelte.Html.Controls.Skeleton where
 open import Data.String using (String; _++_)
 open import Data.List using (List; []; _∷_)
 open import Data.Nat using (ℕ; zero; suc)
-open import Data.Bool using (Bool; true; false; if_then_else_)
+open import Data.Bool using (Bool; true; false; if_then_else_; not)
+open import Function using (_∘_)
 
 open import Agdelte.Reactive.Node
 
@@ -184,8 +185,5 @@ withSkeleton : ∀ {M A}
 withSkeleton {M} isLoading skeletonNode content =
   div (class "agdelte-skeleton-wrapper" ∷ [])
     ( when isLoading skeletonNode
-    ∷ when (not' isLoading) content
+    ∷ when (not ∘ isLoading) content
     ∷ [] )
-  where
-    not' : (M → Bool) → M → Bool
-    not' f m = if f m then false else true

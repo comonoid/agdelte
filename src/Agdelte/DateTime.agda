@@ -6,8 +6,7 @@
 module Agdelte.DateTime where
 
 open import Data.String using (String)
-open import Data.Nat using (ℕ)
-open import Data.Int using (ℤ)
+open import Data.Nat using (ℕ; _*_)
 open import Data.Bool using (Bool)
 open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Product using (_×_; _,_)
@@ -83,7 +82,9 @@ postulate
   -- From components (year, month 1-12, day, hour, minute, second)
   fromComponents : ℕ → ℕ → ℕ → ℕ → ℕ → ℕ → Date
 
-  -- Parse with format string
+  -- Parse date from string
+  -- NOTE: format parameter is currently ignored; uses new Date(s) parsing.
+  -- A full implementation would require a library like date-fns.
   parse : String → String → Maybe Date
 
 {-# COMPILE JS fromMillis = function(ms) {
@@ -163,7 +164,7 @@ postulate
   -- Subtract duration from date
   subDuration : Duration → Date → Date
 
-  -- Difference between dates (second - first)
+  -- Absolute difference between dates (always non-negative, since Duration uses ℕ)
   diffDates : Date → Date → Duration
 
   -- Set specific component
@@ -175,16 +176,19 @@ postulate
   setSecond : ℕ → Date → Date
 
 {-# COMPILE JS addDuration = function(dur) { return function(d) {
-  return new Date(d.getTime() + Number(dur.milliseconds));
+  const ms = dur["mkDuration"]({mkDuration: ms => ms});
+  return new Date(d.getTime() + Number(ms));
 }; } #-}
 
 {-# COMPILE JS subDuration = function(dur) { return function(d) {
-  return new Date(d.getTime() - Number(dur.milliseconds));
+  const ms = dur["mkDuration"]({mkDuration: ms => ms});
+  return new Date(d.getTime() - Number(ms));
 }; } #-}
 
 {-# COMPILE JS diffDates = function(d1) { return function(d2) {
   const diff = d2.getTime() - d1.getTime();
-  return { milliseconds: BigInt(Math.abs(diff)) };
+  const ms = BigInt(Math.abs(diff));
+  return {"mkDuration": cb => cb["mkDuration"](ms)};
 }; } #-}
 
 {-# COMPILE JS setYear = function(y) { return function(d) {

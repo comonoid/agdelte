@@ -68,16 +68,13 @@ fromCoalgStr c = record
   ; step    = Coalg.update c
   }
 
-toCoalgStr : ∀ {S I O : Set} → AgentStructure S I O → Coalg (Mono O I)
-toCoalgStr {S} as = mkCoalg S (AgentStructure.observe as) (AgentStructure.step as)
-
 ------------------------------------------------------------------------
 -- Round-trip proofs
 ------------------------------------------------------------------------
 
 -- AgentStructure → Coalg → AgentStructure = id
 round-trip-str : ∀ {S I O} (as : AgentStructure S I O)
-               → fromCoalgStr (toCoalgStr as) ≡ as
+               → fromCoalgStr (structureToCoalg as) ≡ as
 round-trip-str _ = refl
 
 -- Agent → Coalg → AgentStructure preserves observe and step

@@ -4,26 +4,22 @@
 
 module Agdelte.Primitive.Keyboard where
 
+open import Data.Nat using (ℕ)
 open import Data.String using (String)
 open import Data.Bool using (Bool)
 open import Data.Product using (_×_)
-open import Agdelte.Core.Event using (Event)
+open import Agdelte.Core.Event using (Event; KeyboardEvent; mkKeyboardEvent)
 
 ------------------------------------------------------------------------
 -- Keyboard Event Data
 ------------------------------------------------------------------------
 
-record KeyEvent : Set where
-  constructor mkKeyEvent
-  field
-    key   : String    -- "a", "Enter", "ArrowUp", etc.
-    code  : String    -- "KeyA", "Enter", "ArrowUp"
-    ctrl  : Bool
-    alt   : Bool
-    shift : Bool
-    meta  : Bool      -- Cmd on Mac, Win on Windows
+-- Re-export KeyboardEvent from Core.Event as the canonical type
+-- KeyEvent is kept as an alias for backward compatibility
+KeyEvent : Set
+KeyEvent = KeyboardEvent
 
-open KeyEvent public
+open KeyboardEvent public
 
 ------------------------------------------------------------------------
 -- Keyboard Events
@@ -49,14 +45,12 @@ postulate
   type: 'keyboard',
   config: {
     eventType: 'keydown',
-    handler: (e) => handler({
-      key: e.key,
-      code: e.code,
-      ctrl: e.ctrl,
-      alt: e.alt,
-      shift: e.shift,
-      meta: e.meta
-    })
+    handler: (e) => {
+      const b = v => v ? (c => c["true"]()) : (c => c["false"]());
+      return handler({"mkKeyboardEvent": cb => cb["mkKeyboardEvent"](
+        e.key, e.code, b(e.ctrlKey), b(e.altKey), b(e.shiftKey), b(e.metaKey), b(e.repeat), BigInt(e.location)
+      )});
+    }
   },
   now: [],
   get next() { return this; }
@@ -66,14 +60,12 @@ postulate
   type: 'keyboard',
   config: {
     eventType: 'keyup',
-    handler: (e) => handler({
-      key: e.key,
-      code: e.code,
-      ctrl: e.ctrl,
-      alt: e.alt,
-      shift: e.shift,
-      meta: e.meta
-    })
+    handler: (e) => {
+      const b = v => v ? (c => c["true"]()) : (c => c["false"]());
+      return handler({"mkKeyboardEvent": cb => cb["mkKeyboardEvent"](
+        e.key, e.code, b(e.ctrlKey), b(e.altKey), b(e.shiftKey), b(e.metaKey), b(e.repeat), BigInt(e.location)
+      )});
+    }
   },
   now: [],
   get next() { return this; }

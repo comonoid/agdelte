@@ -54,8 +54,8 @@ record Model : Set where
 
 open Model public
 
-initModel : Model
-initModel = mkModel enterName "" "" "" "" 1
+initialModel : Model
+initialModel = mkModel enterName "" "" "" "" 1
 
 
 ------------------------------------------------------------------------
@@ -115,7 +115,7 @@ updateModel : Msg → Model → Model
 updateModel (UpdateInput s) m = record m { curInput = s }
 updateModel Submit m = submitStep m
 updateModel Back m = backStep m
-updateModel Reset _ = initModel
+updateModel Reset _ = initialModel
 
 ------------------------------------------------------------------------
 -- View helpers
@@ -210,4 +210,4 @@ formTemplate =
 ------------------------------------------------------------------------
 
 app : ReactiveApp Model Msg
-app = simpleApp initModel updateModel formTemplate
+app = simpleApp initialModel updateModel formTemplate
