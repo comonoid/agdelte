@@ -380,27 +380,39 @@ postulate
   }
 }; } #-}
 
--- NOTE: toJS assumes Array is backed by native JS arrays (arr.map, pairs.forEach).
--- This is correct for the current Array postulate. If Array ever becomes
--- Scott-encoded, toJS will need updating.
+-- FFI-FRAGILE: jNull, jBool, jNumber, jFloat, jString, jArray, jObject (JsonValue),
+--   true/false (Bool), _,_ (Pair), [] / _∷_ (List)
 {-# COMPILE JS decodeValue = function(decoder) { return function(json) {
-  function toJS(v) {
-    return v({
-      jNull: () => null,
-      jBool: (b) => b({"true": () => true, "false": () => false}),
-      jNumber: (n) => Number(n),
-      jFloat: (f) => f,
-      jString: (s) => s,
-      jArray: (arr) => arr.map(toJS),
-      jObject: (pairs) => {
-        const obj = {};
-        pairs.forEach(p => {
-          p({ '_,_': (k, v2) => { obj[k] = toJS(v2); } });
-        });
-        return obj;
-      }
-    });
+  var expectedKeys = ['jNull','jBool','jNumber','jFloat','jString','jArray','jObject'];
+  function toList(x) {
+    if (Array.isArray(x)) return x;
+    var arr = [], current = x, done = false;
+    while (!done) {
+      current({ '[]': function() { done = true; }, '_∷_': function(h, t) { arr.push(h); current = t; } });
+    }
+    return arr;
   }
+  var dispatch = {
+    jNull: () => null,
+    jBool: (b) => b({"true": () => true, "false": () => false}),
+    jNumber: (n) => Number(n),
+    jFloat: (f) => f,
+    jString: (s) => s,
+    jArray: (arr) => toList(arr).map(toJS),
+    jObject: (pairs) => {
+      const obj = {};
+      toList(pairs).forEach(p => {
+        p({ '_,_': (k, v2) => { obj[k] = toJS(v2); } });
+      });
+      return obj;
+    }
+  };
+  for (var i = 0; i < expectedKeys.length; i++) {
+    if (!(expectedKeys[i] in dispatch)) {
+      throw new Error('decodeValue: missing Scott key ' + expectedKeys[i] + ' — JsonValue constructors may have been renamed');
+    }
+  }
+  function toJS(v) { return v(dispatch); }
   const jsValue = toJS(json);
   const result = decoder.decode(jsValue);
   if (result.tag === 'ok') {
@@ -489,16 +501,26 @@ postulate
 -- Object encoding
 ------------------------------------------------------------------------
 
+-- Opaque type for raw JS values produced by encoders.
+-- Not Scott-encoded — cannot be passed to decodeValue or pattern-matched.
+-- Use encodeToString to get a String, or pass directly to JS FFI.
+postulate RawJson : Set
+{-# COMPILE JS RawJson = function(x) { return x; } #-}
+
 postulate
   -- Build object from key-value pairs
   object : List (String × JsonValue) → JsonValue
 
-  -- Encode a value and wrap as JsonValue
-  encodeWith : ∀ {A : Set} → Encoder A → A → JsonValue
+  -- Encode a value to a raw JS representation.
+  encodeWith : ∀ {A : Set} → Encoder A → A → RawJson
 
   -- Encode to JSON string
   encodeToString : ∀ {A : Set} → Encoder A → A → String
 
+-- NOTE: arr contains Scott-encoded pairs (cb => cb["_,_"](k, v)).
+-- decodeValue.toJS relies on this — it calls p({"_,_": (k,v) => ...}).
+-- Do NOT convert pairs to native JS objects here.
+-- FFI-FRAGILE: [] (List), _∷_ (List), jObject (JsonValue)
 {-# COMPILE JS object = function(pairs) {
   const arr = [];
   let current = pairs;

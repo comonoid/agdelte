@@ -6,7 +6,7 @@
 --   1. Define simple String→String agents (counter, echo, bang)
 --   2. Build Diagrams with singleAgent, dualAgent, pipeline
 --   3. Use wireSlot to bridge pure Agent to mutable IO
---   4. Use inspectDiagram to peek all agents and print states
+--   4. Use inspectInitial to peek all agents and print states
 --   5. Use sendAndPrint to send a command via IOOptic
 --   6. Demonstrate _⊕D_ — merge two diagrams
 --   7. Use refOptic for local IORef-based IOOptic
@@ -99,22 +99,22 @@ main =
 
   -- 1. Inspect single-agent diagram (initial state)
   putStrLn "═══ 1. Single-agent Diagram (counter) ═══" >>
-  inspectDiagram counterDiagram >>
+  inspectInitial counterDiagram >>
   putStrLn "" >>
 
   -- 2. Inspect dual-agent diagram
   putStrLn "═══ 2. Dual-agent Diagram (counter + echo) ═══" >>
-  inspectDiagram dualDiagram >>
+  inspectInitial dualDiagram >>
   putStrLn "" >>
 
   -- 3. Inspect pipeline diagram
   putStrLn "═══ 3. Pipeline Diagram (echo >>> bang) ═══" >>
-  inspectDiagram pipelineDiagram >>
+  inspectInitial pipelineDiagram >>
   putStrLn "" >>
 
   -- 4. Inspect merged diagram
   putStrLn "═══ 4. Merged Diagram (counter ⊕ pipeline) ═══" >>
-  inspectDiagram mergedDiagram >>
+  inspectInitial mergedDiagram >>
   putStrLn "" >>
 
   -- 5. wireSlot + refOptic: bridge Agent to mutable IO

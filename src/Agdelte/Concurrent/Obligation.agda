@@ -48,7 +48,7 @@ run (pureS a)          = pure a
 run (bindS m f)        = run m >>= λ b → run (f b)
 run (liftS io)         = io
 run (withIpcS path f)  =
-  bracket (connect path) close (λ h → run (f h))
+  bracket (connect path) (λ h → close h >> pure tt) (λ h → run (f h))
 
 ------------------------------------------------------------------------
 -- SafeIO monad operations

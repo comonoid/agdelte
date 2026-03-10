@@ -90,9 +90,11 @@ updateModel SendMessage m = record m
 -- Command
 ------------------------------------------------------------------------
 
+-- NOTE: cmd receives the PRE-update model, so pendingSend is stale.
+-- Use inputText directly (it hasn't been cleared yet in the pre-update model).
 cmd' : Msg → Model → Cmd Msg
 cmd' SendMessage m with connStatus m
-... | Connected = wsSend wsUrl (pendingSend m)
+... | Connected = wsSend wsUrl (inputText m)
 ... | _ = ε
 cmd' _ _ = ε
 

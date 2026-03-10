@@ -101,7 +101,9 @@ postulate
 
 {-# COMPILE JS fromComponents = function(year) { return function(month) { return function(day) {
   return function(hour) { return function(minute) { return function(second) {
-    return new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
+    const d = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
+    d.setFullYear(Number(year));
+    return d;
   }; }; };
 }; }; } #-}
 
@@ -176,18 +178,19 @@ postulate
   setMinute : ℕ → Date → Date
   setSecond : ℕ → Date → Date
 
--- Scott encoding extraction: dur["mkDuration"]({mkDuration: ms => ms})
--- is the standard pattern for deconstructing a single-field Agda record.
+-- Scott encoding extraction: dur({mkDuration: ms => ms})
+-- Duration is a record, so compiled as a function (cb) => cb["mkDuration"](ms).
+-- To extract ms, call dur as a function with a cases object.
 -- Fragile if the constructor is renamed, but there's no better FFI approach.
 -- FFI-FRAGILE: mkDuration (Duration)
 {-# COMPILE JS addDuration = function(dur) { return function(d) {
-  const ms = dur["mkDuration"]({mkDuration: ms => ms});
+  const ms = dur({mkDuration: ms => ms});
   return new Date(d.getTime() + Number(ms));
 }; } #-}
 
 -- FFI-FRAGILE: mkDuration (Duration)
 {-# COMPILE JS subDuration = function(dur) { return function(d) {
-  const ms = dur["mkDuration"]({mkDuration: ms => ms});
+  const ms = dur({mkDuration: ms => ms});
   return new Date(d.getTime() - Number(ms));
 }; } #-}
 
@@ -195,7 +198,7 @@ postulate
 {-# COMPILE JS diffDates = function(d1) { return function(d2) {
   const diff = d2.getTime() - d1.getTime();
   const ms = BigInt(Math.abs(diff));
-  return {"mkDuration": cb => cb["mkDuration"](ms)};
+  return (cb) => cb["mkDuration"](ms);
 }; } #-}
 
 {-# COMPILE JS setYear = function(y) { return function(d) {
@@ -317,6 +320,10 @@ postulate
   -- Get relative time string (e.g., "2 hours ago", "in 3 days")
   relativeTime : Date → Date → String
 
+-- NOTE: relativeTime uses approximate month (30 days) and year (365 days)
+-- calculations. This is standard for UI "time ago" displays (used by
+-- GitHub, Twitter, etc.). For calendar-accurate differences, use the
+-- Date component getters (getYear, getMonth, getDay) and compute manually.
 {-# COMPILE JS relativeTime = function(from) { return function(to) {
   const diff = to.getTime() - from.getTime();
   const abs = Math.abs(diff);

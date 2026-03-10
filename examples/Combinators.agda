@@ -1,7 +1,7 @@
 {-# OPTIONS --without-K #-}
 
 -- Combinators: stateful event combinators
--- Demonstrates: foldE (internal state), mapFilterE (filter + transform)
+-- Demonstrates: foldE (internal state), mapE (transform)
 
 module Combinators where
 
@@ -11,7 +11,6 @@ open import Data.Nat.DivMod using (_%_)
 open import Data.Bool using (Bool; true; false; not; if_then_else_)
 open import Data.String using (String; _++_)
 open import Data.List using (List; []; _∷_; [_])
-open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Unit using (⊤; tt)
 
 open import Agdelte.Core.Event
@@ -60,12 +59,12 @@ updateModel (BatchTick n) m = record m
 updateModel Reset m = record m { running = false ; tickCount = 0 ; batchCount = 0 ; lastBatchAt = 0 }
 
 ------------------------------------------------------------------------
--- Subscriptions: foldE + mapFilterE pipeline
+-- Subscriptions: foldE + mapE pipeline
 --
 -- Pipeline:
 --   interval 300ms ⊤           -- raw tick source
 --   → foldE 0 (λ _ n → suc n) -- count internally: 1, 2, 3, 4, 5, ...
---   → mapFilterE classify      -- every 5th → BatchTick, rest → Tick
+--   → mapE classify            -- every 5th → BatchTick, rest → Tick
 ------------------------------------------------------------------------
 
 isBatch : ℕ → Bool
@@ -73,11 +72,11 @@ isBatch n = (n % 5) ≡ᵇ 0
 
 subs' : Model → Event Msg
 subs' m = if running m
-  then mapFilterE classify (foldE 0 (λ _ n → suc n) (interval 300 tt))
+  then mapE classify (foldE 0 (λ _ n → suc n) (interval 300 tt))
   else never
   where
-    classify : ℕ → Maybe Msg
-    classify n = if isBatch n then just (BatchTick n) else just Tick
+    classify : ℕ → Msg
+    classify n = if isBatch n then BatchTick n else Tick
 
 ------------------------------------------------------------------------
 -- Template
@@ -102,7 +101,7 @@ combinatorsTemplate =
   div [ class "combinators-demo" ]
     ( h1 [] [ text "Combinators" ]
     ∷ p [ class "description" ]
-        [ text "foldE + mapFilterE: stateful event pipeline" ]
+        [ text "foldE + mapE: stateful event pipeline" ]
 
     ∷ div [ class "controls" ]
         ( button (onClick Toggle ∷ class "btn" ∷ []) [ bindF toggleText ]
@@ -125,9 +124,9 @@ combinatorsTemplate =
         ∷ [] )
 
     ∷ div [ class "explanation" ]
-        ( p [] [ text "Pipeline: interval 300ms → foldE (count internally) → mapFilterE (classify)" ]
+        ( p [] [ text "Pipeline: interval 300ms → foldE (count internally) → mapE (classify)" ]
         ∷ p [] [ text "foldE maintains a tick counter as internal state (not in the model)" ]
-        ∷ p [] [ text "mapFilterE: every 5th tick → BatchTick, others → Tick" ]
+        ∷ p [] [ text "mapE: every 5th tick → BatchTick, others → Tick" ]
         ∷ [] )
     ∷ [] )
 

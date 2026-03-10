@@ -76,13 +76,15 @@ postulate
   clearInterval : TimerHandle → ⊤
 
 {-# COMPILE JS setTimeout = function(ms) { return function(cb) {
-  return window.setTimeout(cb, Number(ms));
+  var tt = function(cases) { return cases["tt"](); };
+  return window.setTimeout(function() { cb(tt); }, Number(ms));
 }; } #-}
 {-# COMPILE JS clearTimeout = function(h) {
   window.clearTimeout(h); return null;
 } #-}
 {-# COMPILE JS setInterval = function(ms) { return function(cb) {
-  return window.setInterval(cb, Number(ms));
+  var tt = function(cases) { return cases["tt"](); };
+  return window.setInterval(function() { cb(tt); }, Number(ms));
 }; } #-}
 {-# COMPILE JS clearInterval = function(h) {
   window.clearInterval(h); return null;

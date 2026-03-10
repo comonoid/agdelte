@@ -6,10 +6,11 @@
 module Agdelte.Forms where
 
 open import Data.String using (String; length) renaming (_++_ to _++ˢ_)
-open import Data.Nat using (ℕ; _<ᵇ_; _≤ᵇ_)
+open import Data.Nat using (ℕ; _<ᵇ_; _≤ᵇ_; _≡ᵇ_)
+open import Data.Nat.Show renaming (show to showℕ)
 open import Data.Bool using (Bool; true; false; if_then_else_; _∧_; _∨_; not)
 open import Data.Maybe using (Maybe; just; nothing)
-open import Data.List using (List; []; _∷_; _++_; map; null)
+open import Data.List using (List; []; _∷_; _++_; map; null; concat)
 open import Data.Product using (_×_; _,_; proj₁; proj₂)
 open import Function using (_∘_; id)
 
@@ -62,25 +63,18 @@ invalid msg _ = mkError "" msg ∷ []
 -- Required: non-empty string
 required : Validator String
 required s = if length s ≡ᵇ 0 then mkError "" "This field is required" ∷ [] else []
-  where open import Data.Nat using (_≡ᵇ_)
 
 -- Minimum length
 minLength : ℕ → Validator String
 minLength n s = if length s <ᵇ n
   then mkError "" ("Must be at least " ++ˢ showℕ n ++ˢ " characters") ∷ []
   else []
-  where
-    open import Agda.Builtin.String using (primShowNat)
-    showℕ = primShowNat
 
 -- Maximum length
 maxLength : ℕ → Validator String
 maxLength n s = if n <ᵇ length s
   then mkError "" ("Must be at most " ++ˢ showℕ n ++ˢ " characters") ∷ []
   else []
-  where
-    open import Agda.Builtin.String using (primShowNat)
-    showℕ = primShowNat
 
 -- Length in range
 lengthBetween : ℕ → ℕ → Validator String
@@ -89,9 +83,6 @@ lengthBetween min max s =
   if (len <ᵇ min) ∨ (max <ᵇ len)
   then mkError "" ("Length must be between " ++ˢ showℕ min ++ˢ " and " ++ˢ showℕ max) ∷ []
   else []
-  where
-    open import Agda.Builtin.String using (primShowNat)
-    showℕ = primShowNat
 
 ------------------------------------------------------------------------
 -- Pattern validators (via FFI)
@@ -116,6 +107,12 @@ postulate
   -- Alphanumeric
   alphanumeric : Validator String
 
+-- NOTE: email validation is intentionally simple (UI-level only).
+-- The regex /^[^\s@]+@[^\s@]+\.[^\s@]+$/ accepts some technically
+-- invalid addresses (e.g., a@b.c) and rejects some valid ones
+-- (e.g., "user name"@example.com). For strict validation, use
+-- server-side verification. This matches the HTML5 <input type=email>
+-- philosophy: catch obvious typos, don't enforce RFC 5322.
 -- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
 {-# COMPILE JS email = function(s) {
   const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -154,7 +151,7 @@ postulate
 -- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
 {-# COMPILE JS numeric = function(s) {
   const nil = (cases) => cases['[]']();
-  if (/^\d+$/.test(s)) return nil;
+  if (/^\d*$/.test(s)) return nil;
   const e = (cb) => cb["mkError"]("", "Must contain only digits");
   return (cases) => cases['_∷_'](e, nil);
 } #-}
@@ -162,7 +159,7 @@ postulate
 -- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
 {-# COMPILE JS alphanumeric = function(s) {
   const nil = (cases) => cases['[]']();
-  if (/^[a-zA-Z0-9]+$/.test(s)) return nil;
+  if (/^[a-zA-Z0-9]*$/.test(s)) return nil;
   const e = (cb) => cb["mkError"]("", "Must be alphanumeric");
   return (cases) => cases['_∷_'](e, nil);
 } #-}
@@ -296,9 +293,9 @@ record FormField (A : Set) : Set where
 
 open FormField public
 
--- Create new field
+-- Create new field (runs validator on initial value)
 newField : ∀ {A : Set} → String → A → Validator A → FormField A
-newField name value validator = mkField name value validator false []
+newField name value validator = mkField name value validator false (validator value)
 
 -- Update field value and revalidate
 updateField : ∀ {A : Set} → A → FormField A → FormField A
@@ -328,7 +325,6 @@ getValidValue f = if isFieldValid f then just (fieldValue f) else nothing
 -- Combine field errors from multiple fields (flatten list of lists)
 combineErrors : List (List ValidationError) → List ValidationError
 combineErrors = concat
-  where open import Data.List using (concat)
 
 ------------------------------------------------------------------------
 -- Cross-field validation

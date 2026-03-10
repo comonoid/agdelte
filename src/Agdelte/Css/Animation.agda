@@ -11,14 +11,14 @@
 
 module Agdelte.Css.Animation where
 
-open import Data.Nat using (ℕ; zero; _*_)
+open import Data.Nat using (ℕ; _*_)
 open import Data.Nat.Show using (show)
 open import Data.List using (List; []; _∷_)
 open import Data.Product using (_×_; _,_)
 open import Data.String using (String; _++_)
 
 open import Agdelte.Css.Decl using (Decl; Style; _∶_)
-open import Agdelte.Css.Easing using (Easing; Duration; showEasing; showDuration; ms; ease)
+open import Agdelte.Css.Easing using (Easing; Duration; showEasing; showDuration; renderDelay; ms; ease)
 open import Agdelte.Css.Stylesheet using (Rule; rule; keyframe)
 
 ------------------------------------------------------------------------
@@ -116,10 +116,6 @@ anim n d = mkAnim n d ease (ms 0) (times 1) normal fmNone
 ------------------------------------------------------------------------
 
 private
-  renderDelay : Duration → String
-  renderDelay (ms zero) = ""
-  renderDelay d         = " " ++ showDuration d
-
   renderCount : IterCount → String
   renderCount (times 1) = ""
   renderCount c         = " " ++ showIterCount c
@@ -143,7 +139,7 @@ private
     ++ renderFill (Animation.fillMode a)
 
   renderAnims : List Animation → String
-  renderAnims []       = ""
+  renderAnims []       = "none"
   renderAnims (a ∷ []) = renderAnim a
   renderAnims (a ∷ as) = renderAnim a ++ ", " ++ renderAnims as
 

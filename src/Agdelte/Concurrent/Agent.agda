@@ -7,7 +7,7 @@ module Agdelte.Concurrent.Agent where
 
 open import Data.Product using (_×_; _,_; proj₁; proj₂)
 
--- Agent as coalgebra of polynomial functor p(y) = S × (I → S)
+-- Agent as coalgebra of polynomial functor p(y) = O × y^I
 -- State S, Input I, Output O
 record Agent (S I O : Set) : Set where
   field

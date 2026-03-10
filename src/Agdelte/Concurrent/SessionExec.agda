@@ -19,6 +19,7 @@ module Agdelte.Concurrent.SessionExec where
 open import Agda.Builtin.IO using (IO)
 open import Agda.Builtin.String using (String; primShowNat)
 open import Agda.Builtin.Nat using (Nat; zero; suc)
+open import Data.Nat using (_⊔_)
 open import Data.Product using (_×_; _,_; proj₁; proj₂)
 open import Data.Sum using (_⊎_; inj₁; inj₂)
 open import Data.Unit using (⊤; tt)
@@ -39,8 +40,8 @@ open import Agdelte.Concurrent.Session
 sessionSteps : Session → Nat
 sessionSteps (send _ s) = suc (sessionSteps s)
 sessionSteps (recv _ s) = suc (sessionSteps s)
-sessionSteps (offer s₁ s₂) = suc (sessionSteps s₁)  -- follow left branch for counting
-sessionSteps (choose s₁ s₂) = suc (sessionSteps s₁)
+sessionSteps (offer s₁ s₂) = suc (sessionSteps s₁ ⊔ sessionSteps s₂)
+sessionSteps (choose s₁ s₂) = suc (sessionSteps s₁ ⊔ sessionSteps s₂)
 sessionSteps done = zero
 
 ------------------------------------------------------------------------
@@ -147,11 +148,12 @@ threeStep f g = recvAgent >>> (processAgent f >>> sendAgent g)
 -- Returns the pipeline Agent with appropriate state nesting.
 
 -- Single step agents for each session primitive
+-- Both are identity agents (pass-through); separate names for documentation.
 sendStepAgent : Agent String String String
 sendStepAgent = mkAgent "" id (λ _ i → i)
 
 recvStepAgent : Agent String String String
-recvStepAgent = mkAgent "" id (λ _ i → i)
+recvStepAgent = sendStepAgent
 
 -- Compile a session into a pipeline (for linear sessions)
 -- We compile inductively, building nested (S₁ × S₂) state types.

@@ -6,7 +6,7 @@
 -- Widget Lenses: UI without Virtual DOM
 -- Svelte-style direct updates through lenses (Path/Mutation approach)
 
-module Agdelte.Lens.Widget where
+module Agdelte.Experimental.Widget where
 
 open import Data.String using (String)
 open import Data.List using (List; []; _∷_; map) renaming (_++_ to _++L_)
@@ -69,10 +69,10 @@ staticText s = mkWidget
   []
 
 -- Dynamic text that shows model (for simple cases)
--- showFn converts model to string
-dynamicText : ∀ {Msg} → (ℕ → String) → Widget ℕ Msg
-dynamicText showFn = mkWidget
-  ((text , "") ∷ [])  -- initial placeholder; first diff sets actual value
+-- showFn converts model to string, init is the initial model value
+dynamicText : ∀ {Msg} → (ℕ → String) → ℕ → Widget ℕ Msg
+dynamicText showFn init = mkWidget
+  ((text , showFn init) ∷ [])
   (λ old new → if old ≡? new then [] else (text , setText (showFn new)) ∷ [])
   []
   where

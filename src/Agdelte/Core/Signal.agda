@@ -112,6 +112,12 @@ takeS zero    s = []
 takeS (suc n) s = now s ∷ takeS n (next s)
 
 -- Skip n values
+-- NOTE: dropS forces `next` n times eagerly. Safe as a standalone
+-- function (ℕ provides termination). However, using dropS inside a
+-- coinductive definition (e.g., `next (foo s) = dropS n (...)`)
+-- may violate the guardedness checker because the recursive call to `next`
+-- is not syntactically guarded. In such cases, inline the skip logic
+-- or use {-# TERMINATING #-} with a justification.
 dropS : ℕ → Signal A → Signal A
 dropS zero    s = s
 dropS (suc n) s = dropS n (next s)

@@ -71,13 +71,24 @@ data Task (A : Set) : Set where
 ------------------------------------------------------------------------
 
 -- bind (>>=)
+-- Errors are terminal: onErr produces a final value, not a continuation.
+-- For errors as recovery paths (flowing downstream), use _>>=ₑ_ instead.
 _>>=_ : Task A → (A → Task B) → Task B
 pure a >>= f = f a
 fail e >>= f = fail e
-httpGet url onOk onErr >>= f = httpGet url (λ s → onOk s >>= f) (λ e → onErr e >>= f)
-httpPost url body onOk onErr >>= f = httpPost url body (λ s → onOk s >>= f) (λ e → onErr e >>= f)
+httpGet url onOk onErr >>= f = httpGet url (λ s → onOk s >>= f) onErr
+httpPost url body onOk onErr >>= f = httpPost url body (λ s → onOk s >>= f) onErr
 
-infixl 1 _>>=_
+infixl 1 _>>=_ _>>=ₑ_
+
+-- bind with error-as-recovery (errors flow downstream into f).
+-- Use this when error handlers should produce intermediate values
+-- that continue the computation rather than terminating.
+_>>=ₑ_ : Task A → (A → Task B) → Task B
+pure a >>=ₑ f = f a
+fail e >>=ₑ f = fail e
+httpGet url onOk onErr >>=ₑ f = httpGet url (λ s → onOk s >>=ₑ f) (λ e → onErr e >>=ₑ f)
+httpPost url body onOk onErr >>=ₑ f = httpPost url body (λ s → onOk s >>=ₑ f) (λ e → onErr e >>=ₑ f)
 
 -- fmap (<$>)
 _<$>_ : (A → B) → Task A → Task B

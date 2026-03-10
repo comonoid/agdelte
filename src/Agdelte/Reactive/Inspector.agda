@@ -65,38 +65,32 @@ inspectAll (p ∷ rest) =
   where open import Data.Product using (proj₁; proj₂)
 
 ------------------------------------------------------------------------
--- Inspect a Diagram (in-process: read agent state directly)
+-- Inspect a Diagram (pure / initial state)
 ------------------------------------------------------------------------
 
 -- Build IOOptic for each slot using its pure Agent's observe.
--- NOTE: This reads the *initial* state. For a pure Agent, ioOver steps
--- the agent and returns the new observation, but cannot persist the
--- new state (no IORef). For live inspection, use refOptic on the IORef
--- created by wireSlot, or processAgentOptic for remote agents.
-slotOptic : Slot → IOOptic
-slotOptic s =
+-- Reads the *initial* state only — ioOver steps from initial state
+-- each time and cannot persist updates. Use inspectLive for running servers.
+slotInitialOptic : Slot → IOOptic
+slotInitialOptic s =
   let a = agent s in
   mkIOOptic (pure (just (observe a (state a))))
             (λ input → pure (observe a (step a (state a) input)))
 
--- NOTE: slotOptic reads the *initial* state of the agent.
--- For live inspection of a running server, use refOptic on the
--- IORef created by wireSlot, or processAgentOptic for remote agents.
-
--- Collect all slot optics from a diagram
-diagramOptics : Diagram → List (String × IOOptic)
-diagramOptics d = go (slots d)
+-- Collect all slot optics from a diagram (initial state)
+diagramInitialOptics : Diagram → List (String × IOOptic)
+diagramInitialOptics d = go (slots d)
   where
     go : List Slot → List (String × IOOptic)
     go [] = []
-    go (s ∷ rest) = (name s , slotOptic s) ∷ go rest
+    go (s ∷ rest) = (name s , slotInitialOptic s) ∷ go rest
 
--- Print full diagram inspection
-inspectDiagram : Diagram → IO ⊤
-inspectDiagram d =
-  putStrLn "=== Network Inspector ===" >>
+-- Print diagram inspection from initial state (pure, no IORef needed)
+inspectInitial : Diagram → IO ⊤
+inspectInitial d =
+  putStrLn "=== Network Inspector (initial state) ===" >>
   putStrLn ("Agents: " ++ showCount (slots d)) >>
-  inspectAll (diagramOptics d) >>
+  inspectAll (diagramInitialOptics d) >>
   putStrLn "========================="
   where
     showCount : List Slot → String
@@ -107,6 +101,27 @@ inspectDiagram d =
         len : List Slot → Nat
         len [] = zero
         len (_ ∷ rest) = suc (len rest)
+
+------------------------------------------------------------------------
+-- Inspect live state via IORef (for running servers)
+------------------------------------------------------------------------
+
+open import Agdelte.FFI.Server using (IORef)
+
+-- Build IOOptic from a live IORef (created by wireSlot/wireAgent)
+slotRefOptic : String → IORef String → String × IOOptic
+slotRefOptic label ref = label , refOptic ref
+
+-- Print live diagram inspection from a list of (name, IORef) pairs
+inspectLive : List (String × IORef String) → IO ⊤
+inspectLive refs =
+  putStrLn "=== Network Inspector (live) ===" >>
+  inspectAll (go refs) >>
+  putStrLn "========================="
+  where
+    go : List (String × IORef String) → List (String × IOOptic)
+    go [] = []
+    go ((label , ref) ∷ rest) = slotRefOptic label ref ∷ go rest
 
 ------------------------------------------------------------------------
 -- Remote inspection via Unix socket

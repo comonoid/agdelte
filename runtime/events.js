@@ -54,11 +54,18 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
   const dispatchBackground = dispatchers?.background || dispatch;
 
   // Scott encoding: call event with handler object
+  // Event is split into structural constructors (never, sub, merge, debounce,
+  // throttle, foldE, mapFilterE, switchE, parallel, race) and leaf sources (Sub).
+  // The `sub` handler delegates to interpretSub for leaf event sources.
   return event({
     // never: do nothing
     never: () => ({ unsubscribe: () => {} }),
 
-    // interval: periodic event (P2 - background)
+    // sub: delegate to interpretSub for leaf event sources
+    sub: (subEvent) => interpretSub(subEvent, dispatch, dispatchers),
+
+    // interval: backward compat (removed from Event, now in Sub via smart constructor)
+    // These are kept temporarily for any direct Scott-encoded values in flight.
     interval: (ms, msg) => {
       const msNum = ensureNumber(ms);
       const id = setInterval(() => dispatchBackground(msg), msNum);
@@ -932,6 +939,307 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       return {
         unsubscribe: () => { running = false; cancelAnimationFrame(rafId); }
       };
+    }
+  });
+}
+
+/**
+ * Interprets Sub AST (leaf event sources) and creates subscriptions.
+ * Sub contains all event sources that don't recursively contain Event.
+ * Adding a new event source only requires adding a handler here.
+ */
+function interpretSub(subEvent, dispatch, dispatchers = null) {
+  const dispatchImmediate = dispatchers?.immediate || dispatch;
+  const dispatchNormal = dispatchers?.normal || dispatch;
+  const dispatchBackground = dispatchers?.background || dispatch;
+
+  return subEvent({
+    interval: (ms, msg) => {
+      const msNum = ensureNumber(ms);
+      const id = setInterval(() => dispatchBackground(msg), msNum);
+      return { unsubscribe: () => clearInterval(id) };
+    },
+    timeout: (ms, msg) => {
+      const msNum = ensureNumber(ms);
+      const id = setTimeout(() => dispatchNormal(msg), msNum);
+      return { unsubscribe: () => clearTimeout(id) };
+    },
+    animationFrame: (msg) => {
+      let running = true;
+      let rafId = 0;
+      const loop = () => {
+        if (!running) return;
+        dispatchNormal(msg);
+        if (running) rafId = requestAnimationFrame(loop);
+      };
+      rafId = requestAnimationFrame(loop);
+      return { unsubscribe: () => { running = false; cancelAnimationFrame(rafId); } };
+    },
+    animationFrameWithTime: (handler) => {
+      let running = true;
+      let rafId = 0;
+      const loop = (timestamp) => {
+        if (!running) return;
+        dispatchNormal(handler(timestamp));
+        if (running) rafId = requestAnimationFrame(loop);
+      };
+      rafId = requestAnimationFrame(loop);
+      return { unsubscribe: () => { running = false; cancelAnimationFrame(rafId); } };
+    },
+    springLoop: (cfg, onTick, onSettled) => {
+      let position, velocity, target, stiffness, damping;
+      cfg({ mkSpringConfig: (p, v, t, s, d) => { position = p; velocity = v; target = t; stiffness = s; damping = d; } });
+      let running = true;
+      let lastTime = null;
+      let pos = ensureNumber(position);
+      let vel = ensureNumber(velocity);
+      const tgt = ensureNumber(target);
+      const stiff = ensureNumber(stiffness);
+      const damp = ensureNumber(damping);
+      if (!isFinite(pos) || !isFinite(vel) || !isFinite(tgt) || !isFinite(stiff) || !isFinite(damp)) {
+        console.warn('springLoop: invalid parameters (NaN/Infinity), settling immediately');
+        queueMicrotask(() => dispatchNormal(onSettled));
+        return { unsubscribe: () => {} };
+      }
+      if (stiff < 0 || damp < 0) console.warn('springLoop: negative stiffness/damping clamped to 0');
+      const stiffClamped = Math.max(0, stiff);
+      const dampClamped = Math.max(0, damp);
+      if (stiffClamped === 0 && dampClamped === 0) {
+        queueMicrotask(() => dispatchNormal(onSettled));
+        return { unsubscribe: () => {} };
+      }
+      const tick = (dt) => {
+        const dtSec = dt / 1000;
+        const force = stiffClamped * (tgt - pos) - dampClamped * vel;
+        vel = vel + force * dtSec;
+        pos = pos + vel * dtSec;
+      };
+      const range = Math.abs(ensureNumber(position) - tgt);
+      const posThreshold = Math.max(0.01, range * 0.001);
+      const velThreshold = Math.max(0.01, range * 0.001);
+      const isSettled = () => Math.abs(pos - tgt) < posThreshold && Math.abs(vel) < velThreshold;
+      let rafId = 0;
+      const loop = (timestamp) => {
+        if (!running) return;
+        if (lastTime === null) { lastTime = timestamp; rafId = requestAnimationFrame(loop); return; }
+        const dt = Math.min(timestamp - lastTime, 64);
+        lastTime = timestamp;
+        if (dt <= 0) { rafId = requestAnimationFrame(loop); return; }
+        let remaining = dt;
+        while (remaining >= 4) { tick(4); remaining -= 4; }
+        if (remaining > 0) tick(remaining);
+        dispatchNormal(onTick(pos));
+        if (isSettled()) { running = false; dispatchNormal(onSettled); }
+        else { rafId = requestAnimationFrame(loop); }
+      };
+      rafId = requestAnimationFrame(loop);
+      return { unsubscribe: () => { running = false; cancelAnimationFrame(rafId); } };
+    },
+    onKeyDown: (handler) => {
+      const ac = new AbortController();
+      document.addEventListener('keydown', (e) => {
+        const msg = fromMaybe(handler(mkKeyboardEvent(e)));
+        if (msg !== null) dispatchImmediate(msg);
+      }, { signal: ac.signal });
+      return { unsubscribe: () => ac.abort() };
+    },
+    onKeyUp: (handler) => {
+      const ac = new AbortController();
+      document.addEventListener('keyup', (e) => {
+        const msg = fromMaybe(handler(mkKeyboardEvent(e)));
+        if (msg !== null) dispatchImmediate(msg);
+      }, { signal: ac.signal });
+      return { unsubscribe: () => ac.abort() };
+    },
+    onMouseDown: (handler) => {
+      const ac = new AbortController();
+      document.addEventListener('mousedown', (e) => {
+        const msg = fromMaybe(handler(mkMouseEvent(e)));
+        if (msg !== null) dispatchImmediate(msg);
+      }, { signal: ac.signal });
+      return { unsubscribe: () => ac.abort() };
+    },
+    onMouseUp: (handler) => {
+      const ac = new AbortController();
+      document.addEventListener('mouseup', (e) => {
+        const msg = fromMaybe(handler(mkMouseEvent(e)));
+        if (msg !== null) dispatchImmediate(msg);
+      }, { signal: ac.signal });
+      return { unsubscribe: () => ac.abort() };
+    },
+    onMouseMove: (handler) => {
+      const ac = new AbortController();
+      document.addEventListener('mousemove', (e) => {
+        const msg = fromMaybe(handler(mkMouseEvent(e)));
+        if (msg !== null) dispatchNormal(msg);
+      }, { signal: ac.signal });
+      return { unsubscribe: () => ac.abort() };
+    },
+    onClick: (handler) => {
+      const ac = new AbortController();
+      document.addEventListener('click', (e) => {
+        const msg = fromMaybe(handler(mkMouseEvent(e)));
+        if (msg !== null) dispatchImmediate(msg);
+      }, { signal: ac.signal });
+      return { unsubscribe: () => ac.abort() };
+    },
+    httpGet: (url, onSuccess, onError) => {
+      const controller = new AbortController();
+      let completed = false;
+      fetch(url, { signal: controller.signal })
+        .then(async (response) => {
+          if (completed) return;
+          if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          const text = await response.text();
+          if (completed) return;
+          completed = true;
+          dispatchBackground(onSuccess(text));
+        })
+        .catch((error) => {
+          if (completed || error.name === 'AbortError') return;
+          completed = true;
+          dispatchBackground(onError(error.message));
+        });
+      return { unsubscribe: () => { completed = true; controller.abort(); } };
+    },
+    httpPost: (url, body, onSuccess, onError) => {
+      const controller = new AbortController();
+      let completed = false;
+      let contentType = 'text/plain';
+      if (typeof body === 'string' && body.length > 0) {
+        const ch = body[0];
+        if (ch === '{' || ch === '[' || ch === '"') {
+          try { JSON.parse(body); contentType = 'application/json'; } catch {}
+        }
+      }
+      fetch(url, { method: 'POST', headers: { 'Content-Type': contentType }, body, signal: controller.signal })
+        .then(async (response) => {
+          if (completed) return;
+          if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          const text = await response.text();
+          if (completed) return;
+          completed = true;
+          dispatchBackground(onSuccess(text));
+        })
+        .catch((error) => {
+          if (completed || error.name === 'AbortError') return;
+          completed = true;
+          dispatchBackground(onError(error.message));
+        });
+      return { unsubscribe: () => { completed = true; controller.abort(); } };
+    },
+    wsConnect: (url, handler) => {
+      let ws;
+      try { ws = new WebSocket(url); }
+      catch (e) {
+        dispatchNormal(handler(mkWsMsg('WsError', e.message || 'Invalid WebSocket URL')));
+        return { unsubscribe: () => {} };
+      }
+      const connId = ++_wsConnectionCounter;
+      ws.onopen = () => dispatchNormal(handler(mkWsMsg('WsConnected')));
+      ws.onmessage = (e) => dispatchBackground(handler(mkWsMsg('WsMessage', e.data)));
+      ws.onerror = (e) => {
+        const errorMsg = e.error?.message || (ws.readyState === WebSocket.CLOSED ? 'Connection failed' : 'WebSocket error');
+        dispatchNormal(handler(mkWsMsg('WsError', errorMsg)));
+      };
+      ws.onclose = () => {
+        dispatchNormal(handler(mkWsMsg('WsClosed')));
+        const urlConns = wsConnections.get(url);
+        if (urlConns) { urlConns.delete(connId); if (urlConns.size === 0) wsConnections.delete(url); }
+      };
+      if (!wsConnections.has(url)) wsConnections.set(url, new Map());
+      wsConnections.get(url).set(connId, ws);
+      return {
+        unsubscribe: () => {
+          const urlConns = wsConnections.get(url);
+          if (urlConns) { urlConns.delete(connId); if (urlConns.size === 0) wsConnections.delete(url); }
+          ws.onopen = null; ws.onmessage = null; ws.onclose = null; ws.onerror = null;
+          if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close();
+        }
+      };
+    },
+    onUrlChange: (handler) => {
+      const getRoutePath = () => { const hash = window.location.hash; return hash ? hash.slice(1) : '/'; };
+      let lastDispatchedUrl = null;
+      const ac = new AbortController();
+      const listener = () => {
+        const url = getRoutePath();
+        if (url !== lastDispatchedUrl) { lastDispatchedUrl = url; dispatchNormal(handler(url)); }
+      };
+      window.addEventListener('popstate', listener, { signal: ac.signal });
+      window.addEventListener('hashchange', listener, { signal: ac.signal });
+      listener();
+      return { unsubscribe: () => ac.abort() };
+    },
+    worker: (scriptUrl, input, onResult, onError) => {
+      let w;
+      try { w = new Worker(scriptUrl, { type: 'module' }); }
+      catch (e) { dispatchBackground(onError(e.message || 'Failed to create worker')); return { unsubscribe: () => {} }; }
+      let terminated = false;
+      w.onmessage = (e) => { if (!terminated) dispatchBackground(onResult(ensureString(e.data))); };
+      w.onerror = (e) => { if (!terminated) dispatchBackground(onError(formatWorkerError(e))); };
+      w.postMessage(input);
+      return { unsubscribe: () => { terminated = true; w.terminate(); } };
+    },
+    workerWithProgress: (scriptUrl, input, onProgress, onResult, onError) => {
+      let w;
+      try { w = new Worker(scriptUrl, { type: 'module' }); }
+      catch (e) { dispatchBackground(onError(e.message || 'Failed to create worker')); return { unsubscribe: () => {} }; }
+      let terminated = false;
+      w.onmessage = (e) => { if (!terminated) dispatchWorkerProgress(e.data, dispatchBackground, onProgress, onResult, onError); };
+      w.onerror = (e) => { if (!terminated) dispatchBackground(onError(formatWorkerError(e))); };
+      w.postMessage(input);
+      return { unsubscribe: () => { terminated = true; w.terminate(); } };
+    },
+    poolWorker: (poolSize, scriptUrl, input, onResult, onError) => {
+      const pool = getPool(poolSize, scriptUrl);
+      const handle = pool.submit(input, (e) => dispatchBackground(onResult(ensureString(e.data))), (errMsg) => dispatchBackground(onError(errMsg)));
+      return { unsubscribe: () => handle.cancel() };
+    },
+    poolWorkerWithProgress: (poolSize, scriptUrl, input, onProgress, onResult, onError) => {
+      const pool = getPool(poolSize, scriptUrl);
+      const handle = pool.submit(input, (e) => dispatchWorkerProgress(e.data, dispatchBackground, onProgress, onResult, onError), (errMsg) => dispatchBackground(onError(errMsg)));
+      return { unsubscribe: () => handle.cancel() };
+    },
+    workerChannel: (scriptUrl, onMessage, onError) => {
+      let w;
+      try { w = new Worker(scriptUrl, { type: 'module' }); }
+      catch (e) { dispatchBackground(onError(e.message || 'Failed to create worker')); return { unsubscribe: () => {} }; }
+      let terminated = false;
+      w.onmessage = (e) => { if (!terminated) dispatchBackground(onMessage(ensureString(e.data))); };
+      w.onerror = (e) => { if (!terminated) dispatchBackground(onError(formatWorkerError(e))); };
+      channelConnections.set(scriptUrl, w);
+      return { unsubscribe: () => { terminated = true; channelConnections.delete(scriptUrl); w.terminate(); } };
+    },
+    allocShared: (numBytes, handler, onError) => {
+      const n = ensureNumber(numBytes);
+      try { dispatchNormal(handler(new SharedArrayBuffer(n))); }
+      catch (e) { console.error('allocShared failed (COOP/COEP headers required):', e.message); if (onError) dispatchNormal(onError(e.message)); }
+      return { unsubscribe: () => {} };
+    },
+    workerShared: (buffer, scriptUrl, input, onResult, onError) => {
+      let w;
+      try { w = new Worker(scriptUrl, { type: 'module' }); }
+      catch (e) { dispatchBackground(onError(e.message || 'Failed to create worker')); return { unsubscribe: () => {} }; }
+      let terminated = false;
+      w.onmessage = (e) => { if (!terminated) dispatchBackground(onResult(ensureString(e.data))); };
+      w.onerror = (e) => { if (!terminated) dispatchBackground(onError(formatWorkerError(e))); };
+      w.postMessage({ input, buffer }, []);
+      return { unsubscribe: () => { terminated = true; w.terminate(); } };
+    },
+    allocImage: (width, height, handler) => {
+      const w = ensureNumber(width); const h = ensureNumber(height);
+      const id = bufferRegistry.allocateImage(w, h);
+      if (id !== -1) { dispatchNormal(handler(mkBufferHandle(id, bufferRegistry.version(id), w, h))); }
+      else { console.error('allocImage failed (COOP/COEP headers required)'); }
+      return { unsubscribe: () => {} };
+    },
+    allocBuffer: (size, handler) => {
+      const n = ensureNumber(size);
+      const id = bufferRegistry.allocate(n);
+      if (id !== -1) { dispatchNormal(handler(mkBufferHandle(id, bufferRegistry.version(id), n, 1))); }
+      else { console.error('allocBuffer failed (COOP/COEP headers required)'); }
+      return { unsubscribe: () => {} };
     }
   });
 }

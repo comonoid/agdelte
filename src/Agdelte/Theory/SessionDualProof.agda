@@ -35,8 +35,25 @@ dual-injective {s₁} {s₂} p =
 -- SessionI and SessionO respect duality
 ------------------------------------------------------------------------
 
--- SessionI (dual s) ≡ SessionO s now holds structurally:
+open import Data.Product using (_×_)
+open import Data.Sum using (_⊎_)
+open import Data.Unit using (⊤)
+
+-- SessionI (dual s) ≡ SessionO s:
 --   dual swaps send↔recv, offer↔choose
 --   SessionI(choose) = × and SessionO(offer) = ×
 --   SessionI(offer) = ⊎ and SessionO(choose) = ⊎
--- A formal proof is left for future work.
+dual-IO : (s : Session) → SessionI (dual s) ≡ SessionO s
+dual-IO (send A s)     = dual-IO s
+dual-IO (recv A s)     = cong (A ×_) (dual-IO s)
+dual-IO (offer s₁ s₂)  = cong₂ _×_ (dual-IO s₁) (dual-IO s₂)
+dual-IO (choose s₁ s₂) = cong₂ _⊎_ (dual-IO s₁) (dual-IO s₂)
+dual-IO done            = refl
+
+-- Symmetric: SessionO (dual s) ≡ SessionI s
+dual-OI : (s : Session) → SessionO (dual s) ≡ SessionI s
+dual-OI (send A s)     = cong (A ×_) (dual-OI s)
+dual-OI (recv A s)     = dual-OI s
+dual-OI (offer s₁ s₂)  = cong₂ _⊎_ (dual-OI s₁) (dual-OI s₂)
+dual-OI (choose s₁ s₂) = cong₂ _×_ (dual-OI s₁) (dual-OI s₂)
+dual-OI done            = refl

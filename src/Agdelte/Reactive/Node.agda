@@ -70,9 +70,11 @@ open Transition public
 ------------------------------------------------------------------------
 
 -- Attr and Node are in Set₁ because constructors like foreach/glCanvas
--- quantify over (A : Set), lifting the data type. This is safe: the JS
--- backend erases universe levels (Scott encoding). Using NO_UNIVERSE_CHECK
--- avoids infecting every consumer with level-polymorphism.
+-- quantify over (A : Set), lifting the data type. This is intentional:
+-- we avoid NO_UNIVERSE_CHECK here (unlike Event) to keep universe
+-- consistency. The trade-off: ReactiveApp is also Set₁, which may
+-- complicate use in level-polymorphic contexts. For the JS backend
+-- this is irrelevant (Scott encoding erases levels).
 data Attr (Model Msg : Set) : Set₁ where
   -- Static attribute
   attr : String → String → Attr Model Msg
@@ -329,6 +331,11 @@ zoomAttr get wrap (style name val) = style name val
 zoomAttr get wrap (styleBind name b) = styleBind name (focusBinding get b)
 
 -- Internal: remap node without adding scope wrapper (used by zoomNode)
+-- TERMINATING: structurally recursive on the Node argument. The foreach/
+-- foreachKeyed cases apply the recursive call to `render a i`, which is not
+-- a syntactic subterm but always produces a smaller Node (the render function
+-- returns a subtree, not a self-referential node). Agda's termination checker
+-- cannot verify this because `render` is an opaque function.
 {-# TERMINATING #-}
 zoomNode' : ∀ {M M' Msg Msg'} → (M → M') → (Msg' → Msg) → Node M' Msg' → Node M Msg
 zoomNode' get wrap (text s) = text s

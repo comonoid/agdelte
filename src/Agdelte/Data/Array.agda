@@ -12,13 +12,13 @@ open import Data.List using (List; []; _∷_)
 open import Data.String using (String)
 
 ------------------------------------------------------------------------
--- Ordering type for comparisons
+-- Comparison result type (CmpResult avoids name clash with stdlib Ordering)
 ------------------------------------------------------------------------
 
-data Ordering : Set where
-  lt : Ordering
-  eq : Ordering
-  gt : Ordering
+data CmpResult : Set where
+  cmpLT : CmpResult
+  cmpEQ : CmpResult
+  cmpGT : CmpResult
 
 ------------------------------------------------------------------------
 -- Array type (opaque, backed by JS Array)
@@ -27,6 +27,8 @@ data Ordering : Set where
 postulate
   Array : Set → Set
 
+-- Identity: Agda's JS backend erases type constructors via Scott encoding,
+-- so Array A is represented as a raw JS array at runtime.
 {-# COMPILE JS Array = function(x) { return x; } #-}
 
 ------------------------------------------------------------------------
@@ -180,7 +182,7 @@ postulate
   reverse : ∀ {A : Set} → Array A → Array A
 
   -- Sort with comparator
-  sortBy : ∀ {A : Set} → (A → A → Ordering) → Array A → Array A
+  sortBy : ∀ {A : Set} → (A → A → CmpResult) → Array A → Array A
 
 {-# COMPILE JS map = function(f) { return function(arr) {
   return arr.map(f);
@@ -196,7 +198,7 @@ postulate
 
 {-# COMPILE JS sortBy = function(cmp) { return function(arr) {
   return [...arr].sort((a, b) =>
-    cmp(a)(b)({ lt: () => -1, eq: () => 0, gt: () => 1 })
+    cmp(a)(b)({ cmpLT: () => -1, cmpEQ: () => 0, cmpGT: () => 1 })
   );
 }; } #-}
 

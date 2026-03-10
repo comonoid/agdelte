@@ -45,6 +45,12 @@ open SharedAgent public
 
 -- A LinearAgent can be used exactly once. After stepping, it's consumed.
 -- This models one-shot workers, single-use channels, etc.
+--
+-- WARNING: The "linear" invariant is enforced BY CONVENTION ONLY.
+-- LinearAgent is structurally identical to SharedAgent — Agda lacks
+-- linear types, so nothing prevents calling useLinear multiple times
+-- on the same value. The restricted API (useLinear returns O, not
+-- LinearAgent × O) discourages reuse, but does not prevent it.
 record LinearAgent (I O : Set) : Set₁ where
   constructor mkLinear
   field

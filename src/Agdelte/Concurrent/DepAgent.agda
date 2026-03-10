@@ -110,6 +110,26 @@ dep⊕ da₁ da₂ = record
     stepF (inj₁ s₁) i = inj₁ (step da₁ s₁ i)
     stepF (inj₂ s₂) i = inj₂ (step da₂ s₂ i)
 
+-- ⊕ starting in the right branch (symmetric with Wiring._⊕ᵣ_)
+dep⊕ᵣ : ∀ {S₁ S₂ O₁ O₂}
+        {I₁ : O₁ → Set} {I₂ : O₂ → Set}
+      → DepAgent S₁ O₁ I₁
+      → DepAgent S₂ O₂ I₂
+      → DepAgent (S₁ ⊎ S₂) (O₁ ⊎ O₂) (depI I₁ I₂)
+dep⊕ᵣ da₁ da₂ = record
+  { state   = inj₂ (state da₂)
+  ; observe = obsF
+  ; step    = stepF
+  }
+  where
+    obsF : _ → _
+    obsF (inj₁ s₁) = inj₁ (observe da₁ s₁)
+    obsF (inj₂ s₂) = inj₂ (observe da₂ s₂)
+
+    stepF : (s : _) → _ → _
+    stepF (inj₁ s₁) i = inj₁ (step da₁ s₁ i)
+    stepF (inj₂ s₂) i = inj₂ (step da₂ s₂ i)
+
 ------------------------------------------------------------------------
 -- Exact & for DepAgent
 ------------------------------------------------------------------------

@@ -89,19 +89,24 @@ formAgent = mkAgent initForm formObserve formStep
 -- Pipeline approach: each step is a separate Agent
 ------------------------------------------------------------------------
 
--- Step 1: receive name, store it
+-- Step 1: receive name, store it, observe the stored name
 nameAgent : Agent String String String
-nameAgent = mkAgent "" (const "Enter name:") (λ _ input → input)
+nameAgent = mkAgent "" id (λ _ input → input)
 
--- Step 2: receive email, store it
+-- Step 2: receive email, store it, observe the stored email
 emailAgent : Agent String String String
-emailAgent = mkAgent "" (const "Enter email:") (λ _ input → input)
+emailAgent = mkAgent "" id (λ _ input → input)
 
 -- Step 3: produce summary from the two inputs
+-- CAVEAT: In a _>>>_ pipeline, each step cascades the same external input
+-- through all stages. summaryAgent only sees observe(emailAgent), which is
+-- the email after step 2 but is the name after step 1. This means summaryAgent
+-- cannot distinguish name from email — it just sees a stream of strings.
+-- For real multi-field forms, use formAgent (phased state machine) above.
 summaryAgent : Agent (String × String) String String
 summaryAgent = mkAgent ("" , "")
   (λ { (n , e) → "Summary: " ++ n ++ " <" ++ e ++ ">" })
-  (λ { (_ , _) input → input , input })  -- stores latest input in both slots
+  (λ { (_ , old) input → old , input })
 
 -- Pipeline: name >>> email >>> summary
 formPipeline : Agent (String × (String × (String × String))) String String

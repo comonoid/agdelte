@@ -90,6 +90,20 @@ a >>> b = record
       in  s₁' , step b s₂ (observe a s₁') }
   }
 
+-- Pipeline with pre-step (dataflow) semantics:
+-- b sees a's output BEFORE the current step (observe of old state).
+-- Use when b should react to a's previous output, not the just-computed one.
+infixr 6 _>>>pre_
+_>>>pre_ : Agent S₁ I M → Agent S₂ M O → Agent (S₁ × S₂) I O
+a >>>pre b = record
+  { state   = state a , state b
+  ; observe = λ { (s₁ , s₂) → observe b s₂ }
+  ; step    = λ { (s₁ , s₂) i →
+      let m   = observe a s₁
+          s₁' = step a s₁ i
+      in  s₁' , step b s₂ m }
+  }
+
 -- Parallel: independent agents, independent interfaces
 infixr 7 _***_
 _***_ : Agent S₁ I₁ O₁ → Agent S₂ I₂ O₂ → Agent (S₁ × S₂) (I₁ × I₂) (O₁ × O₂)
@@ -135,7 +149,9 @@ a & b = record
 -- ⊕ (plus / internal choice): one agent active, picked by state tag
 -- Coproduct in Poly: positions sum, directions inherited per side
 -- Use case: system switches between two modes (e.g., editing vs viewing)
--- Note: input tag must match state tag; mismatched input is no-op (safe)
+-- Note: input tag must match state tag; mismatched input is no-op (safe).
+-- This can mask routing bugs in complex agent networks. For a strict
+-- alternative where mismatched input is a type error, use DepAgent.dep⊕.
 -- Starts in the left branch by default; use ⊕ᵣ to start in the right branch.
 infixr 5 _⊕_
 _⊕_ : Agent S₁ I₁ O₁ → Agent S₂ I₂ O₂ → Agent (S₁ ⊎ S₂) (I₁ ⊎ I₂) (O₁ ⊎ O₂)

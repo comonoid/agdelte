@@ -67,9 +67,20 @@ mutual
     ind ++ sel ++ " {\n"
     ++ renderDecls (ind ++ "  ") style ++ "\n"
     ++ ind ++ "}"
-  renderRuleAt ind (variant _ _ varSel []) = ""
-  renderRuleAt ind (variant _ _ varSel overrides) =
+  renderRuleAt ind (variant baseSel [] varSel []) = ""
+  renderRuleAt ind (variant baseSel [] varSel overrides) =
     ind ++ varSel ++ " {\n"
+    ++ renderDecls (ind ++ "  ") overrides ++ "\n"
+    ++ ind ++ "}"
+  renderRuleAt ind (variant baseSel baseStyle varSel []) =
+    ind ++ baseSel ++ " {\n"
+    ++ renderDecls (ind ++ "  ") baseStyle ++ "\n"
+    ++ ind ++ "}"
+  renderRuleAt ind (variant baseSel baseStyle varSel overrides) =
+    ind ++ baseSel ++ " {\n"
+    ++ renderDecls (ind ++ "  ") baseStyle ++ "\n"
+    ++ ind ++ "}\n\n"
+    ++ ind ++ varSel ++ " {\n"
     ++ renderDecls (ind ++ "  ") overrides ++ "\n"
     ++ ind ++ "}"
   renderRuleAt ind (media query rules) =

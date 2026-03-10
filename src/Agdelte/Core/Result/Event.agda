@@ -28,5 +28,10 @@ filterErr = mapFilterE λ where
   (err e) → just e
 
 -- Split into (successes, errors)
+-- NOTE: creates two mapFilterE subscriptions on the same event source.
+-- At runtime, this means the event fires handlers twice per occurrence.
+-- Acceptable for httpGet/httpPost results (low-frequency), but could be
+-- an issue for high-frequency events. A native partition constructor
+-- with a single runtime subscription would eliminate the duplication.
 partitionResult : Event (Result E A) → Event A × Event E
 partitionResult e = (filterOk e , filterErr e)

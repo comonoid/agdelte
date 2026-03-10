@@ -223,8 +223,7 @@ wireAgent name path agent =
   newIORef (observe agent (state agent)) >>= λ stateRef →
   newIORef agent                         >>= λ agentRef →
   let observeIO : IO String
-      observeIO = readIORef agentRef >>= λ a →
-                  pure (observe a (state a))
+      observeIO = readIORef stateRef
 
       stepIO : String → IO String
       stepIO input = atomicModifyIORef agentRef

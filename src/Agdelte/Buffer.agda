@@ -9,7 +9,7 @@
 module Agdelte.Buffer where
 
 open import Data.Nat using (ℕ; _*_; _≡ᵇ_)
-open import Data.Bool using (Bool; not)
+open import Data.Bool using (Bool; not; _∧_)
 open import Data.String using (String)
 
 open import Agdelte.Core.Event using (Event; BufferHandle; bufferHandle; allocImage; allocBuffer)
@@ -62,10 +62,11 @@ touchBufferCmd = touchBuffer
 -- Buffer predicates
 ------------------------------------------------------------------------
 
--- Check if buffer version changed (for reactive updates)
+-- Check if buffer content changed (for reactive updates)
+-- Compares both buffer ID (same buffer) and version (content changed)
 bufferChanged : BufferHandle → BufferHandle → Bool
 bufferChanged old new =
-  not (bufferVersion old ≡ᵇ bufferVersion new)
+  (bufferId old ≡ᵇ bufferId new) ∧ not (bufferVersion old ≡ᵇ bufferVersion new)
 
 -- Get image buffer size in bytes (RGBA, 4 bytes per pixel)
 imageBufferSize : BufferHandle → ℕ

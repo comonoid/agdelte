@@ -158,11 +158,17 @@ dep⊕-observe _ _ (inj₁ _) = refl
 dep⊕-observe _ _ (inj₂ _) = refl
 
 -- step/update also match (by case on state tag)
-dep⊕-step : ∀ {S₁ S₂ O₁ O₂ : Set} {I₁ : O₁ → Set} {I₂ : O₂ → Set}
-           → (da₁ : DepAgent S₁ O₁ I₁) (da₂ : DepAgent S₂ O₂ I₂)
-           → (s₁ : S₁) (i : I₁ (D.observe da₁ s₁))
-           → D.step (dep⊕ da₁ da₂) (inj₁ s₁) i ≡ inj₁ (D.step da₁ s₁ i)
-dep⊕-step _ _ _ _ = refl
+dep⊕-step-left : ∀ {S₁ S₂ O₁ O₂ : Set} {I₁ : O₁ → Set} {I₂ : O₂ → Set}
+               → (da₁ : DepAgent S₁ O₁ I₁) (da₂ : DepAgent S₂ O₂ I₂)
+               → (s₁ : S₁) (i : I₁ (D.observe da₁ s₁))
+               → D.step (dep⊕ da₁ da₂) (inj₁ s₁) i ≡ inj₁ (D.step da₁ s₁ i)
+dep⊕-step-left _ _ _ _ = refl
+
+dep⊕-step-right : ∀ {S₁ S₂ O₁ O₂ : Set} {I₁ : O₁ → Set} {I₂ : O₂ → Set}
+                → (da₁ : DepAgent S₁ O₁ I₁) (da₂ : DepAgent S₂ O₂ I₂)
+                → (s₂ : S₂) (i : I₂ (D.observe da₂ s₂))
+                → D.step (dep⊕ da₁ da₂) (inj₂ s₂) i ≡ inj₂ (D.step da₂ s₂ i)
+dep⊕-step-right _ _ _ _ = refl
 
 ------------------------------------------------------------------------
 -- dep& corresponds to parallel on Coalg level

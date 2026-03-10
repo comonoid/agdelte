@@ -10,13 +10,18 @@
 -- JS String() already strips trailing ".0" for integers and trailing
 -- zeros for decimals. The COMPILE JS pragma adds handling for the
 -- scientific notation case (e.g. 1e-7) which String() does not fix.
+--
+-- Known limits of toFixed(6):
+--   Values < 1e-6 round to "0"  (e.g. 1e-8 → "0")
+--   Values >= 1e21 pass through as scientific notation ("1e+21")
+-- Both are non-issues for CSS (sub-pixel precision / astronomical values).
 
 module Agdelte.Css.Show where
 
-open import Agda.Builtin.Float using (Float; primShowFloat)
-open import Agda.Builtin.String using (String)
+open import Data.Float.Base using (Float) renaming (show to showFloat′)
+open import Data.String using (String)
 
 showFloat : Float → String
-showFloat = primShowFloat
+showFloat = showFloat′
 
 {-# COMPILE JS showFloat = f => { const s = String(f); return s.includes('e') ? f.toFixed(6).replace(/\.?0+$/, '') : s; } #-}

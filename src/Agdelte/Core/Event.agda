@@ -2,6 +2,10 @@
 
 -- Event: discrete events as AST (description of subscriptions)
 -- Runtime interprets this description and creates real subscriptions
+--
+-- Architecture: Event is split into structural combinators (Event) and
+-- leaf event sources (Sub). mapE/filterE only handle structural cases,
+-- so adding new event sources to Sub doesn't require updating them.
 
 module Agdelte.Core.Event where
 
@@ -111,7 +115,68 @@ record BufferHandle : Set where
 open BufferHandle public
 
 ------------------------------------------------------------------------
--- Event as data type (AST) - stays in Set
+-- Sub: leaf event sources (no Event sub-expressions)
+------------------------------------------------------------------------
+
+-- Sub contains all event sources that don't recursively contain Event.
+-- Adding a new event source only requires:
+--   1. Add constructor to Sub
+--   2. Add handler to runtime/events.js interpretSub
+-- No changes needed to mapE or filterE.
+--
+-- MAINTENANCE: when adding a new constructor to Sub, also update:
+--   • runtime/events.js  (interpretSub handler)
+data Sub (A : Set) : Set where
+  -- === Time primitives ===
+  interval : ℕ → A → Sub A
+  timeout  : ℕ → A → Sub A
+
+  -- === Animation ===
+  animationFrame : A → Sub A
+  animationFrameWithTime : (Float → A) → Sub A
+  springLoop : SpringConfig → (Float → A) → A → Sub A
+
+  -- === Keyboard ===
+  onKeyDown : (KeyboardEvent → Maybe A) → Sub A
+  onKeyUp   : (KeyboardEvent → Maybe A) → Sub A
+
+  -- === Mouse ===
+  onMouseDown  : (MouseEvent → Maybe A) → Sub A
+  onMouseUp    : (MouseEvent → Maybe A) → Sub A
+  onMouseMove  : (MouseEvent → Maybe A) → Sub A
+  onClick      : (MouseEvent → Maybe A) → Sub A
+
+  -- === HTTP ===
+  httpGet  : String → (String → A) → (String → A) → Sub A
+  httpPost : String → String → (String → A) → (String → A) → Sub A
+
+  -- === WebSocket ===
+  wsConnect : String → (WsMsg → A) → Sub A
+
+  -- === Routing ===
+  onUrlChange : (String → A) → Sub A
+
+  -- === Web Worker ===
+  worker : String → String → (String → A) → (String → A) → Sub A
+  workerWithProgress : String → String → (String → A) → (String → A) → (String → A) → Sub A
+
+  -- === Pool workers ===
+  poolWorker : ℕ → String → String → (String → A) → (String → A) → Sub A
+  poolWorkerWithProgress : ℕ → String → String → (String → A) → (String → A) → (String → A) → Sub A
+
+  -- === Worker channel ===
+  workerChannel : String → (String → A) → (String → A) → Sub A
+
+  -- === SharedArrayBuffer ===
+  allocShared : ℕ → (SharedBuffer → A) → Sub A
+  workerShared : SharedBuffer → String → String → (String → A) → (String → A) → Sub A
+
+  -- === Buffer Registry ===
+  allocImage : ℕ → ℕ → (BufferHandle → A) → Sub A
+  allocBuffer : ℕ → (BufferHandle → A) → Sub A
+
+------------------------------------------------------------------------
+-- Event: structural combinators (AST) - stays in Set
 ------------------------------------------------------------------------
 
 -- Design notes:
@@ -131,226 +196,138 @@ open BufferHandle public
 -- The update function IS foldp: update : Msg → Model → Model.
 -- Adding separate constructors would duplicate what the architecture
 -- already provides, with no runtime benefit.
--- MAINTENANCE: when adding a new constructor to Event, also update:
---   • mapE       (below, under TERMINATING)
---   • filterE    (below, under TERMINATING)
---   • runtime/events.js  (interpreter)
 {-# NO_POSITIVITY_CHECK #-}
 {-# NO_UNIVERSE_CHECK #-}
 data Event (A : Set) : Set where
   -- Empty event
   never : Event A
 
-  -- === Time primitives ===
-  interval : ℕ → A → Event A
-  timeout  : ℕ → A → Event A
-
-  -- === Animation ===
-  -- Fire on every animation frame (~60fps)
-  animationFrame : A → Event A
-  -- Fire on every frame with timestamp (ms since navigation start)
-  animationFrameWithTime : (Float → A) → Event A
-  -- Spring animation: fires each frame with current position until settled
-  -- springLoop config onTick onSettled
-  springLoop : SpringConfig → (Float → A) → A → Event A
-
-  -- === Keyboard ===
-  -- Handler returns Maybe A (nothing = ignore)
-  onKeyDown : (KeyboardEvent → Maybe A) → Event A
-  onKeyUp   : (KeyboardEvent → Maybe A) → Event A
-
-  -- === Mouse ===
-  -- Handler returns Maybe A (nothing = ignore)
-  onMouseDown  : (MouseEvent → Maybe A) → Event A
-  onMouseUp    : (MouseEvent → Maybe A) → Event A
-  onMouseMove  : (MouseEvent → Maybe A) → Event A
-  onClick      : (MouseEvent → Maybe A) → Event A
-
-  -- === HTTP (subscriptions: persistent, re-fire on each response) ===
-  -- For one-shot requests, use Cmd.httpGet / Cmd.httpPost instead.
-  httpGet  : String → (String → A) → (String → A) → Event A
-  httpPost : String → String → (String → A) → (String → A) → Event A
-
-  -- === WebSocket ===
-  -- wsConnect url → Event with messages about connection state
-  wsConnect : String → (WsMsg → A) → Event A
-
-  -- === Routing ===
-  -- Event on URL change (popstate)
-  onUrlChange : (String → A) → Event A
-
-  -- === Web Worker ===
-  -- Spawn a worker, send input, receive results
-  -- worker scriptUrl input onResult onError
-  -- Structured concurrency: unsubscribe terminates the worker
-  worker : String → String → (String → A) → (String → A) → Event A
-
-  -- === Concurrency combinators ===
-  -- Worker with progress: onProgress, onResult, onError (all get String)
-  workerWithProgress : String → String → (String → A) → (String → A) → (String → A) → Event A
-
-  -- Parallel: subscribe to all, collect first result from each, apply mapping
-  parallel : ∀ {B : Set} → List (Event B) → (List B → A) → Event A
-
-  -- Race: subscribe to all, first to fire wins, cancel rest
-  race : List (Event A) → Event A
-
-  -- Pool worker: reuses workers from a pool (poolSize, scriptUrl, input, onResult, onError)
-  poolWorker : ℕ → String → String → (String → A) → (String → A) → Event A
-
-  -- Pool worker with progress
-  poolWorkerWithProgress : ℕ → String → String → (String → A) → (String → A) → (String → A) → Event A
-
-  -- Worker channel: long-lived worker connection (like wsConnect for workers)
-  -- scriptUrl, onMessage, onError
-  workerChannel : String → (String → A) → (String → A) → Event A
-
-  -- === SharedArrayBuffer ===
-  -- Allocate shared buffer of N bytes, dispatch handle
-  -- Requires COOP/COEP headers on the page
-  allocShared : ℕ → (SharedBuffer → A) → Event A
-
-  -- Worker with shared buffer access
-  -- buffer, scriptUrl, input, onResult, onError
-  workerShared : SharedBuffer → String → String → (String → A) → (String → A) → Event A
-
-  -- === Buffer Registry ===
-  -- Allocate RGBA image buffer (4 bytes/pixel), dispatch handle
-  allocImage : ℕ → ℕ → (BufferHandle → A) → Event A
-  -- Allocate generic byte buffer, dispatch handle
-  allocBuffer : ℕ → (BufferHandle → A) → Event A
+  -- Leaf event source (see Sub above)
+  sub : Sub A → Event A
 
   -- === Combinators ===
   merge    : Event A → Event A → Event A
-  debounce : ℕ → Event A → Event A    -- delay after pause
-  throttle : ℕ → Event A → Event A    -- rate limiting
+  debounce : ℕ → Event A → Event A
+  throttle : ℕ → Event A → Event A
 
   -- === Stateful combinators ===
-  -- foldE: accumulate state across event occurrences
-  -- Runtime maintains internal state A; on each B from inner event,
-  -- computes new A = step(B, oldA), dispatches new A.
-  -- The initial value a₀ is NOT emitted — only post-event values are
-  -- dispatched. This is standard fold-event semantics.
   foldE : ∀ {B : Set} → A → (B → A → A) → Event B → Event A
-
-  -- mapFilterE: map + filter in one step (Nothing = skip, Just b = dispatch b)
   mapFilterE : ∀ {B : Set} → (B → Maybe A) → Event B → Event A
-
-  -- switchE: start with first event, switch to new source on each meta-event
-  -- Runtime manages current subscription, swaps on meta-event occurrence
   switchE : Event A → Event (Event A) → Event A
 
+  -- === Concurrency ===
+  parallel : ∀ {B : Set} → List (Event B) → (List B → A) → Event A
+  race : List (Event A) → Event A
+
 ------------------------------------------------------------------------
--- mapE - function, not constructor (to keep Event ∈ Set)
+-- Backward-compatible smart constructors for Sub
 ------------------------------------------------------------------------
 
--- TERMINATING: Event uses NO_POSITIVITY_CHECK (for switchE : Event (Event A)),
--- so Agda can't prove structural recursion. Must cover all Event constructors.
+-- These wrap Sub constructors in Event, preserving the old API.
+-- User code using `interval 1000 msg` works unchanged.
+
+interval : ℕ → A → Event A
+interval n a = sub (Sub.interval n a)
+
+timeout : ℕ → A → Event A
+timeout n a = sub (Sub.timeout n a)
+
+animationFrame : A → Event A
+animationFrame a = sub (Sub.animationFrame a)
+
+animationFrameWithTime : (Float → A) → Event A
+animationFrameWithTime h = sub (Sub.animationFrameWithTime h)
+
+springLoop : SpringConfig → (Float → A) → A → Event A
+springLoop cfg onTick onSettled = sub (Sub.springLoop cfg onTick onSettled)
+
+onKeyDown : (KeyboardEvent → Maybe A) → Event A
+onKeyDown h = sub (Sub.onKeyDown h)
+
+onKeyUp : (KeyboardEvent → Maybe A) → Event A
+onKeyUp h = sub (Sub.onKeyUp h)
+
+onMouseDown : (MouseEvent → Maybe A) → Event A
+onMouseDown h = sub (Sub.onMouseDown h)
+
+onMouseUp : (MouseEvent → Maybe A) → Event A
+onMouseUp h = sub (Sub.onMouseUp h)
+
+onMouseMove : (MouseEvent → Maybe A) → Event A
+onMouseMove h = sub (Sub.onMouseMove h)
+
+onClick : (MouseEvent → Maybe A) → Event A
+onClick h = sub (Sub.onClick h)
+
+httpGet : String → (String → A) → (String → A) → Event A
+httpGet url onOk onErr = sub (Sub.httpGet url onOk onErr)
+
+httpPost : String → String → (String → A) → (String → A) → Event A
+httpPost url body onOk onErr = sub (Sub.httpPost url body onOk onErr)
+
+wsConnect : String → (WsMsg → A) → Event A
+wsConnect url h = sub (Sub.wsConnect url h)
+
+onUrlChange : (String → A) → Event A
+onUrlChange h = sub (Sub.onUrlChange h)
+
+worker : String → String → (String → A) → (String → A) → Event A
+worker url input onOk onErr = sub (Sub.worker url input onOk onErr)
+
+workerWithProgress : String → String → (String → A) → (String → A) → (String → A) → Event A
+workerWithProgress url input onProg onRes onErr = sub (Sub.workerWithProgress url input onProg onRes onErr)
+
+poolWorker : ℕ → String → String → (String → A) → (String → A) → Event A
+poolWorker n url input onOk onErr = sub (Sub.poolWorker n url input onOk onErr)
+
+poolWorkerWithProgress : ℕ → String → String → (String → A) → (String → A) → (String → A) → Event A
+poolWorkerWithProgress n url input onProg onRes onErr = sub (Sub.poolWorkerWithProgress n url input onProg onRes onErr)
+
+workerChannel : String → (String → A) → (String → A) → Event A
+workerChannel url onMsg onErr = sub (Sub.workerChannel url onMsg onErr)
+
+allocShared : ℕ → (SharedBuffer → A) → Event A
+allocShared n h = sub (Sub.allocShared n h)
+
+workerShared : SharedBuffer → String → String → (String → A) → (String → A) → Event A
+workerShared buf url input onOk onErr = sub (Sub.workerShared buf url input onOk onErr)
+
+allocImage : ℕ → ℕ → (BufferHandle → A) → Event A
+allocImage w h handler = sub (Sub.allocImage w h handler)
+
+allocBuffer : ℕ → (BufferHandle → A) → Event A
+allocBuffer n handler = sub (Sub.allocBuffer n handler)
+
+------------------------------------------------------------------------
+-- mapE - only handles structural constructors
+------------------------------------------------------------------------
+
+-- Leaf events (sub) are wrapped in mapFilterE, so adding new Sub
+-- constructors never requires updating mapE.
 {-# TERMINATING #-}
 mapE : (A → B) → Event A → Event B
 mapE f never = never
-mapE f (interval n a) = interval n (f a)
-mapE f (timeout n a) = timeout n (f a)
-mapE f (animationFrame a) = animationFrame (f a)
-mapE f (animationFrameWithTime h) = animationFrameWithTime (f ∘ h)
-mapE f (springLoop cfg onTick onSettled) =
-  springLoop cfg (f ∘ onTick) (f onSettled)
-mapE f (onKeyDown h) = onKeyDown (λ e → Data.Maybe.map f (h e))
-  where import Data.Maybe
-mapE f (onKeyUp h) = onKeyUp (λ e → Data.Maybe.map f (h e))
-  where import Data.Maybe
-mapE f (onMouseDown h) = onMouseDown (λ e → Data.Maybe.map f (h e))
-  where import Data.Maybe
-mapE f (onMouseUp h) = onMouseUp (λ e → Data.Maybe.map f (h e))
-  where import Data.Maybe
-mapE f (onMouseMove h) = onMouseMove (λ e → Data.Maybe.map f (h e))
-  where import Data.Maybe
-mapE f (onClick h) = onClick (λ e → Data.Maybe.map f (h e))
-  where import Data.Maybe
-mapE f (httpGet url onOk onErr) = httpGet url (f ∘ onOk) (f ∘ onErr)
-mapE f (httpPost url body onOk onErr) = httpPost url body (f ∘ onOk) (f ∘ onErr)
-mapE f (wsConnect url h) = wsConnect url (f ∘ h)
-mapE f (onUrlChange h) = onUrlChange (f ∘ h)
-mapE f (worker url input onOk onErr) = worker url input (f ∘ onOk) (f ∘ onErr)
-mapE f (workerWithProgress url input onProg onRes onErr) =
-  workerWithProgress url input (f ∘ onProg) (f ∘ onRes) (f ∘ onErr)
-mapE f (parallel es g) = parallel es (f ∘ g)
-mapE f (race es) = race (map (mapE f) es)
-mapE f (poolWorker n url input onOk onErr) = poolWorker n url input (f ∘ onOk) (f ∘ onErr)
-mapE f (poolWorkerWithProgress n url input onProg onRes onErr) =
-  poolWorkerWithProgress n url input (f ∘ onProg) (f ∘ onRes) (f ∘ onErr)
-mapE f (workerChannel url onMsg onErr) = workerChannel url (f ∘ onMsg) (f ∘ onErr)
-mapE f (allocShared n h) = allocShared n (f ∘ h)
-mapE f (workerShared buf url input onOk onErr) = workerShared buf url input (f ∘ onOk) (f ∘ onErr)
-mapE f (allocImage w h handler) = allocImage w h (f ∘ handler)
-mapE f (allocBuffer n handler) = allocBuffer n (f ∘ handler)
+mapE f (sub s) = mapFilterE (λ a → just (f a)) (sub s)
 mapE f (merge e₁ e₂) = merge (mapE f e₁) (mapE f e₂)
 mapE f (debounce n e) = debounce n (mapE f e)
 mapE f (throttle n e) = throttle n (mapE f e)
--- Note: wraps in mapFilterE(just ∘ f) because foldE's accumulator type B
--- prevents fusing f into the fold step (step : B → A → A, but f : A → C).
--- The extra `just` is harmless: chained mapE calls fuse into one mapFilterE
--- (see mapE/mapFilterE case below), and the per-event overhead of one Just
--- allocation is negligible for a UI framework. Adding a foldMapE constructor
--- would bloat Event (30+ constructors) for no practical gain.
 mapE f (foldE a₀ step inner) = mapFilterE (λ a → just (f a)) (foldE a₀ step inner)
 mapE f (mapFilterE g inner) = mapFilterE (λ x → Data.Maybe.map f (g x)) inner
   where import Data.Maybe
 mapE f (switchE initial meta) = switchE (mapE f initial) (mapE (mapE f) meta)
+mapE f (parallel es g) = parallel es (f ∘ g)
+mapE f (race es) = race (map (mapE f) es)
 
 ------------------------------------------------------------------------
--- filterE - through mapE with Maybe
+-- filterE - only handles structural constructors
 ------------------------------------------------------------------------
 
--- TERMINATING: same reason as mapE. Must cover all Event constructors.
+-- Leaf events (sub) are wrapped in mapFilterE, so adding new Sub
+-- constructors never requires updating filterE.
 {-# TERMINATING #-}
 filterE : (A → Bool) → Event A → Event A
 filterE p never = never
-filterE p (interval n a) = if p a then interval n a else never
-filterE p (timeout n a) = if p a then timeout n a else never
-filterE p (animationFrame a) = if p a then animationFrame a else never
-filterE p (animationFrameWithTime h) =
-  mapFilterE (λ t → let a = h t in if p a then just a else nothing) (animationFrameWithTime id)
-filterE p (springLoop cfg onTick onSettled) =
-  mapFilterE (λ a → if p a then just a else nothing)
-             (springLoop cfg onTick onSettled)
-filterE p (onKeyDown h) = onKeyDown (λ e → filterMaybe p (h e))
-filterE p (onKeyUp h) = onKeyUp (λ e → filterMaybe p (h e))
-filterE p (onMouseDown h) = onMouseDown (λ e → filterMaybe p (h e))
-filterE p (onMouseUp h) = onMouseUp (λ e → filterMaybe p (h e))
-filterE p (onMouseMove h) = onMouseMove (λ e → filterMaybe p (h e))
-filterE p (onClick h) = onClick (λ e → filterMaybe p (h e))
-filterE p (httpGet url onOk onErr) =
-  mapFilterE (λ a → if p a then just a else nothing) (httpGet url onOk onErr)
-filterE p (httpPost url body onOk onErr) =
-  mapFilterE (λ a → if p a then just a else nothing) (httpPost url body onOk onErr)
-filterE p (wsConnect url h) =
-  mapFilterE (λ a → if p a then just a else nothing) (wsConnect url h)
-filterE p (onUrlChange h) =
-  mapFilterE (λ a → if p a then just a else nothing) (onUrlChange h)
-filterE p (worker url input onOk onErr) =
-  mapFilterE (λ a → if p a then just a else nothing) (worker url input onOk onErr)
-filterE p (workerWithProgress url input onProg onRes onErr) =
-  mapFilterE (λ a → if p a then just a else nothing)
-             (workerWithProgress url input onProg onRes onErr)
-filterE p (parallel es g) =
-  mapFilterE (λ a → if p a then just a else nothing) (parallel es g)
-filterE p (race es) = race (map (filterE p) es)
-filterE p (poolWorker n url input onOk onErr) =
-  mapFilterE (λ a → if p a then just a else nothing) (poolWorker n url input onOk onErr)
-filterE p (poolWorkerWithProgress n url input onProg onRes onErr) =
-  mapFilterE (λ a → if p a then just a else nothing)
-             (poolWorkerWithProgress n url input onProg onRes onErr)
-filterE p (workerChannel url onMsg onErr) =
-  mapFilterE (λ a → if p a then just a else nothing) (workerChannel url onMsg onErr)
-filterE p (allocShared n h) =
-  mapFilterE (λ a → if p a then just a else nothing) (allocShared n h)
-filterE p (workerShared buf url input onOk onErr) =
-  mapFilterE (λ a → if p a then just a else nothing) (workerShared buf url input onOk onErr)
-filterE p (allocImage w h handler) =
-  mapFilterE (λ a → if p a then just a else nothing) (allocImage w h handler)
-filterE p (allocBuffer n handler) =
-  mapFilterE (λ a → if p a then just a else nothing) (allocBuffer n handler)
+filterE p (sub s) = mapFilterE (λ a → if p a then just a else nothing) (sub s)
 filterE p (merge e₁ e₂) = merge (filterE p e₁) (filterE p e₂)
 filterE p (debounce n e) = debounce n (filterE p e)
 filterE p (throttle n e) = throttle n (filterE p e)
@@ -360,6 +337,9 @@ filterE p (mapFilterE g inner) =
   mapFilterE (λ x → filterMaybe p (g x)) inner
 filterE p (switchE initial meta) =
   switchE (filterE p initial) (mapE (filterE p) meta)
+filterE p (parallel es g) =
+  mapFilterE (λ a → if p a then just a else nothing) (parallel es g)
+filterE p (race es) = race (map (filterE p) es)
 
 ------------------------------------------------------------------------
 -- Convenient constructors for keyboard

@@ -274,7 +274,7 @@ stressTemplate =
 subs' : Model → Event Msg
 subs' m =
   if running m
-  then merge (interval 1 Frame) (interval 1000 Measure)
+  then merge (interval 16 Frame) (interval 1000 Measure)
   else never
 
 ------------------------------------------------------------------------

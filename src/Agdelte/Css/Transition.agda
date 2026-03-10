@@ -8,12 +8,11 @@
 
 module Agdelte.Css.Transition where
 
-open import Data.Nat using (ℕ; zero)
 open import Data.List using (List; []; _∷_)
 open import Data.String using (String; _++_)
 
 open import Agdelte.Css.Decl using (Decl; _∶_)
-open import Agdelte.Css.Easing using (Easing; Duration; showEasing; showDuration; ms)
+open import Agdelte.Css.Easing using (Easing; Duration; showEasing; showDuration; renderDelay; ms)
 
 ------------------------------------------------------------------------
 -- TransSpec
@@ -36,10 +35,6 @@ trans p d e = mkTransSpec p d e (ms 0)
 ------------------------------------------------------------------------
 
 private
-  renderDelay : Duration → String
-  renderDelay (ms zero) = ""
-  renderDelay d         = " " ++ showDuration d
-
   renderSpec : TransSpec → String
   renderSpec t =
     TransSpec.property t ++ " "
@@ -48,7 +43,7 @@ private
     ++ renderDelay (TransSpec.delay t)
 
   renderSpecs : List TransSpec → String
-  renderSpecs []       = ""
+  renderSpecs []       = "none"
   renderSpecs (s ∷ []) = renderSpec s
   renderSpecs (s ∷ ss) = renderSpec s ++ ", " ++ renderSpecs ss
 

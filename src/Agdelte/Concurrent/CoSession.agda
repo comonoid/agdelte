@@ -127,14 +127,28 @@ chatB : CoSession
 chatB = coDual chatA
 
 -- Bounded loop: repeat N times then done
+-- Walks through one cycle of the session, replacing the terminal doneStep
+-- with the next repetition. For multi-step sessions (e.g. send → recv → done),
+-- the entire cycle is preserved in each repetition.
 repeatN : Nat → CoSession → CoSession
 repeatN zero    _  = coDone
-repeatN (suc n) s  = step s n
+repeatN (suc n) s  = splice s (repeatN n s)
   where
-    step : CoSession → Nat → CoSession
-    head (step s n) = head s
-    left (step s n) = repeatN n s    -- decrement counter on left continuation
-    right (step s n) = repeatN n s   -- decrement counter on right continuation too
+    -- Replace doneStep leaves with the continuation k.
+    -- For sendStep/recvStep, only recurse into left (the continuation);
+    -- right is always coDone by invariant and must stay that way.
+    splice : CoSession → CoSession → CoSession
+    head (splice s k) with head s
+    ... | doneStep = head k
+    ... | other    = other
+    left (splice s k) with head s
+    ... | doneStep = left k
+    ... | _        = splice (left s) k
+    right (splice s k) with head s
+    ... | doneStep    = right k
+    ... | sendStep _  = coDone
+    ... | recvStep _  = coDone
+    ... | _           = splice (right s) k
 
 ------------------------------------------------------------------------
 -- Embedding finite Session into CoSession

@@ -13,9 +13,10 @@
 
 module Agdelte.Css.Easing where
 
-open import Data.Nat using (ℕ)
+open import Data.Nat using (ℕ; zero)
 open import Data.Nat.Show using (show)
-open import Data.Float using (Float)
+open import Data.Float using (Float; _≡ᵇ_)
+open import Data.Bool using (if_then_else_)
 open import Data.String using (String; _++_)
 
 open import Agdelte.Css.Show using (showFloat)
@@ -51,6 +52,15 @@ data Duration : Set where
 showDuration : Duration → String
 showDuration (ms n) = show n ++ "ms"
 showDuration (s f)  = showFloat f ++ "s"
+
+-- | Render an optional delay suffix for transition/animation shorthand.
+-- Zero delay (both `ms 0` and `s 0.0`) is omitted for cleaner output.
+-- NB: Float._≡ᵇ_ treats -0.0 ≡ᵇ 0.0 = true in JS (Object.is is not used),
+-- and NaN ≡ᵇ NaN = false. CSS delays are non-negative and finite, so this is safe.
+renderDelay : Duration → String
+renderDelay (ms zero)  = ""
+renderDelay (s f)      = if f ≡ᵇ 0.0 then "" else " " ++ showDuration (s f)
+renderDelay d          = " " ++ showDuration d
 
 ------------------------------------------------------------------------
 -- Easing as Float → Float (for model-driven animations)
