@@ -16,6 +16,7 @@ open import Function using (_∘_)
 open import Relation.Nullary using (yes; no)
 
 open import Agdelte.Reactive.Node
+open import Agdelte.Html.Controls.Util using (eqStr; case_of_)
 
 ------------------------------------------------------------------------
 -- Sidebar item definition
@@ -41,16 +42,6 @@ record SidebarSection (A : Set) : Set₁ where
     sectionItems : List (SidebarItem A)
 
 open SidebarSection public
-
-------------------------------------------------------------------------
--- Helper
-------------------------------------------------------------------------
-
-private
-  eqStr : String → String → Bool
-  eqStr a b with a ≟ b
-  ... | yes _ = true
-  ... | no _  = false
 
 ------------------------------------------------------------------------
 -- Simple sidebar (flat list of items)
@@ -86,6 +77,9 @@ simpleSidebar {M} {A} title activeIndex items =
                             then "agdelte-sidebar__link agdelte-sidebar__link--active"
                             else "agdelte-sidebar__link")
                      eqStr)
+                 ∷ attrBind "aria-current" (mkBinding
+                     (λ m → if isActive idx m then "page" else "")
+                     eqStr)
                  ∷ onClick (sidebarMsg item)
                  ∷ [] )
             ( (case sidebarIcon item of λ where
@@ -97,8 +91,6 @@ simpleSidebar {M} {A} title activeIndex items =
                ∷ [] ) )
         ∷ [] )
       where
-        case_of_ : ∀ {a b} {A : Set a} {B : Set b} → A → (A → B) → B
-        case x of f = f x
         open import Data.List using (_++_)
 
     renderItems : ℕ → List (SidebarItem A) → List (Node M A)
@@ -155,6 +147,9 @@ collapsibleSidebar {M} {A} title isCollapsed toggleMsg activeIndex items =
                             then "agdelte-sidebar__link agdelte-sidebar__link--active"
                             else "agdelte-sidebar__link")
                      eqStr)
+                 ∷ attrBind "aria-current" (mkBinding
+                     (λ m → if isActive idx m then "page" else "")
+                     eqStr)
                  ∷ attr "title" (sidebarLabel item)  -- tooltip when collapsed
                  ∷ onClick (sidebarMsg item)
                  ∷ [] )
@@ -168,8 +163,6 @@ collapsibleSidebar {M} {A} title isCollapsed toggleMsg activeIndex items =
                ∷ [] ) )
         ∷ [] )
       where
-        case_of_ : ∀ {a b} {A : Set a} {B : Set b} → A → (A → B) → B
-        case x of f = f x
         open import Data.List using (_++_)
 
     renderItems : ℕ → List (SidebarItem A) → List (Node M A)

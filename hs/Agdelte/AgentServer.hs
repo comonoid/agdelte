@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 -- | Multi-Agent server with HTTP REST + WebSocket push
--- Each Agent is a pure coalgebra (step : S → I → S, observe : S → O)
+-- Each Agent is a pure coalgebra (step : S -> I -> S, observe : S -> O)
 -- Multiple agents can be registered at different paths
 -- WebSocket clients on /ws receive broadcasts on any agent state change
 --
@@ -8,18 +9,28 @@
 module Agdelte.AgentServer
   ( AgentDef(..)
   , runAgentServer
+  , mkAgentApp
+  , splitPath
+  , addCorsHeaders
   ) where
 
-import Control.Concurrent (forkIO)
+import Control.Concurrent.Async (race_)
 import Control.Concurrent.STM
 import Control.Concurrent.MVar
+import Control.Exception (SomeException, bracket_, try)
+import System.IO (hPutStrLn, stderr)
 import qualified Data.IORef as IORef
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Map.Strict as Map
+import System.Timeout (timeout)
+
+import qualified Network.Wai as Wai
+import qualified Network.Wai.Handler.Warp as Warp
 
 import qualified Agdelte.Http as Http
 import qualified Agdelte.WebSocket as WS
+import qualified Network.WebSockets as NWS
 
 -- | Agent definition: name, initial state, observe, step
 data AgentDef = AgentDef
@@ -40,38 +51,46 @@ data WsClient = WsClient
   , clientPendingPeek :: MVar Text  -- response slot for peek requests
   }
 
--- | Client registry: clientId → WsClient
+-- | Client registry: clientId -> WsClient
 type ClientRegistry = TVar (Map.Map Text WsClient)
+
+-- | Build a WAI Application from agents and CORS config.
+-- Allocates broadcast channel, client registry, and counter internally.
+-- Useful for testing (Warp.testWithApplication) without starting a server.
+mkAgentApp :: Maybe Text -> [AgentDef] -> IO Wai.Application
+mkAgentApp corsOrigin agents = do
+  broadcast <- newBroadcastTChanIO
+  registry  <- newTVarIO Map.empty
+  clientCounter <- IORef.newIORef (0 :: Int)
+  let routeMap = Map.fromList [(agentPath a, a) | a <- agents]
+  return $ Http.mkApp
+    (httpHandler corsOrigin routeMap registry broadcast)
+    (Just ("/ws", wsHandler broadcast registry clientCounter))
 
 -- | Run multi-agent server
 runAgentServer :: Int -> Maybe Text -> [AgentDef] -> IO ()
 runAgentServer port corsOrigin agents = do
-  broadcast <- newBroadcastTChanIO
-  registry  <- newTVarIO Map.empty
-  clientCounter <- IORef.newIORef (0 :: Int)
-
-  -- Build route map
-  let routeMap = Map.fromList [(agentPath a, a) | a <- agents]
-
   putStrLn $ "Agdelte Agent Server on port " ++ show port
   putStrLn $ "  Agents: " ++ show [T.unpack (agentName a) ++ " at " ++ T.unpack (agentPath a) | a <- agents]
   putStrLn "  WebSocket: /ws (broadcasts + peek/over protocol)"
 
-  Http.serveWithWs port
-    (httpHandler corsOrigin routeMap registry broadcast)
-    (Just ("/ws", wsHandler broadcast registry clientCounter))
+  app <- mkAgentApp corsOrigin agents
+  Warp.runSettings settings app
+  where
+    settings = Warp.setPort port $ Warp.setHost "*" $ Warp.defaultSettings
 
 httpHandler :: Maybe Text -> Map.Map Text AgentDef -> ClientRegistry -> BroadcastChan -> Http.Request -> IO Http.Response
 httpHandler corsOrigin routes registry broadcast req
   | Http.reqMethod req == "OPTIONS" = return $ addCorsHeaders corsOrigin (Http.Response 200 T.empty [])
   | otherwise = do
-      let path = Http.reqPath req
+      let method = Http.reqMethod req
+          path = Http.reqPath req
           body = Http.reqBody req
-      resp <- routeRequest routes registry broadcast path body
+      resp <- routeRequest routes registry broadcast method path body
       return $ addCorsHeaders corsOrigin resp
 
-routeRequest :: Map.Map Text AgentDef -> ClientRegistry -> BroadcastChan -> Text -> Text -> IO Http.Response
-routeRequest routes registry broadcast path body = do
+routeRequest :: Map.Map Text AgentDef -> ClientRegistry -> BroadcastChan -> Text -> Text -> Text -> IO Http.Response
+routeRequest routes registry broadcast method path body = do
   -- Parse path: /agent-path/action or /client/clientId/action
   let (agentPath', action) = splitPath path
 
@@ -82,15 +101,19 @@ routeRequest routes registry broadcast path body = do
       case Map.lookup agentPath' routes of
         Nothing -> return $ Http.Response 404 "Agent not found" []
         Just agent -> case action of
-          "state" -> do
-            output <- agentObserve agent
-            return $ Http.Response 200 output []
-          "step" -> do
-            output <- agentStep agent body
-            -- Broadcast to WebSocket clients
-            let msg = agentName agent <> ":" <> output
-            atomically $ writeTChan broadcast msg
-            return $ Http.Response 200 output []
+          "state"
+            | method == "POST" -> return $ Http.Response 405 "Use GET for /state" []
+            | otherwise -> do
+                output <- agentObserve agent
+                return $ Http.Response 200 output []
+          "step"
+            | method == "GET" -> return $ Http.Response 405 "Use POST for /step" []
+            | otherwise -> do
+                output <- agentStep agent body
+                -- Broadcast to WebSocket clients
+                let msg = agentName agent <> ":" <> output
+                atomically $ writeTChan broadcast msg
+                return $ Http.Response 200 output []
           _ -> return $ Http.Response 404 "Unknown action (use /state or /step)" []
 
 addCorsHeaders :: Maybe Text -> Http.Response -> Http.Response
@@ -102,8 +125,8 @@ addCorsHeaders (Just origin) resp = resp { Http.resHeaders = Http.resHeaders res
   ] }
 
 -- | Handle /client/{clientId}/{action} requests
--- GET /client/{clientId}/peek → peek client model via WS
--- POST /client/{clientId}/over → send msg to client via WS
+-- GET /client/{clientId}/peek -> peek client model via WS
+-- POST /client/{clientId}/over -> send msg to client via WS
 handleClientRequest :: ClientRegistry -> Text -> Text -> IO Http.Response
 handleClientRequest registry rest body = do
   let (clientId', action) = case T.breakOn "/" rest of
@@ -114,15 +137,25 @@ handleClientRequest registry rest body = do
     Nothing -> return $ Http.Response 404 ("Client not found: " <> clientId') []
     Just client -> case action of
       "peek" -> do
-        -- Send peek request to client via WS, wait for response
-        WS.wsSend (clientConn client) ("peek:" <> clientId')
-        -- Wait for response (client will put it in the MVar)
-        response <- takeMVar (clientPendingPeek client)
-        return $ Http.Response 200 response []
+        -- Drain any stale peek response left from a previous timed-out request
+        -- (rec #8: prevents returning outdated data from a previous peek cycle)
+        _ <- tryTakeMVar (clientPendingPeek client)
+        result <- try $ WS.wsSend (clientConn client) ("peek:" <> clientId')
+        case result of
+          Left (_ :: SomeException) ->
+            return $ Http.Response 502 "Client disconnected" []
+          Right () -> do
+            mResponse <- timeout 5000000 $ takeMVar (clientPendingPeek client)
+            case mResponse of
+              Just response -> return $ Http.Response 200 response []
+              Nothing       -> return $ Http.Response 504 "Client peek timeout" []
       "over" -> do
-        -- Send over (dispatch msg) to client via WS
-        WS.wsSend (clientConn client) ("over:" <> body)
-        return $ Http.Response 200 "ok" []
+        result <- try $ WS.wsSend (clientConn client) ("over:" <> body)
+        case result of
+          Left (_ :: SomeException) ->
+            return $ Http.Response 502 "Client disconnected" []
+          Right () ->
+            return $ Http.Response 200 "ok" []
       _ -> return $ Http.Response 404 "Unknown client action (use /peek or /over)" []
 
 -- | Split "/counter/step" into ("/counter", "step")
@@ -134,58 +167,52 @@ splitPath path =
     [p]    -> ("/" <> p, "state")  -- default to state
     (p:a:_) -> ("/" <> p, a)
 
-wsHandler :: BroadcastChan -> ClientRegistry -> IORef.IORef Int -> WS.WsConn -> IO ()
-wsHandler broadcast registry counter conn = do
-  -- Assign unique client ID
-  cid <- IORef.atomicModifyIORef' counter (\n -> (n + 1, n))
-  let clientId' = "client-" <> T.pack (show cid)
+wsHandler :: BroadcastChan -> ClientRegistry -> IORef.IORef Int -> NWS.PendingConnection -> IO ()
+wsHandler broadcast registry counter pending = do
+  result <- try $ NWS.acceptRequest pending
+  case result of
+    Left (_ :: SomeException) -> return ()  -- bad handshake, ignore
+    Right conn -> do
+      cid <- IORef.atomicModifyIORef' counter (\n -> (n + 1, n))
+      let clientId' = "client-" <> T.pack (show cid)
+      wsHandlerBody broadcast registry clientId' (WS.WsConn conn)
 
-  -- Create pending peek MVar
+wsHandlerBody :: BroadcastChan -> ClientRegistry -> Text -> WS.WsConn -> IO ()
+wsHandlerBody broadcast registry clientId' conn = do
   peekMVar <- newEmptyMVar
-
   let client = WsClient clientId' conn peekMVar
-
-  -- Register client
-  atomically $ modifyTVar' registry (Map.insert clientId' client)
-
-  -- Each WS client gets its own copy of the broadcast channel
   ch <- atomically $ dupTChan broadcast
+  bracket_
+    (atomically $ modifyTVar' registry (Map.insert clientId' client))
+    (do atomically $ modifyTVar' registry (Map.delete clientId')
+        _ <- try $ WS.wsClose conn :: IO (Either SomeException ())
+        return ())
+    (do WS.wsSend conn ("connected:" <> clientId')
+        race_ (broadcastLoop conn ch) (clientLoop client))
 
-  -- Send welcome with client ID
-  WS.wsSend conn ("connected:" <> clientId')
-
-  -- Spawn broadcast reader thread
-  _ <- forkIO $ broadcastLoop conn ch
-
-  -- Main loop: read from client (handle peek responses, close, ping)
-  clientLoop client registry peekMVar
-
--- | Forward broadcasts to this client
+-- | Forward broadcasts to this client.
+-- Catches send exceptions silently — if the connection is gone, the loop
+-- exits and race_ cancels clientLoop (rec #16, #19).
 broadcastLoop :: WS.WsConn -> TChan Text -> IO ()
 broadcastLoop conn ch = do
   msg <- atomically $ readTChan ch
-  WS.wsSend conn msg
-  broadcastLoop conn ch
+  result <- try $ WS.wsSend conn msg
+  case result of
+    Left (_ :: SomeException) -> return ()  -- connection gone, exit cleanly
+    Right () -> broadcastLoop conn ch
 
 -- | Read from WS client
-clientLoop :: WsClient -> ClientRegistry -> MVar Text -> IO ()
-clientLoop client registry peekMVar = do
+clientLoop :: WsClient -> IO ()
+clientLoop client = do
   mmsg <- WS.wsReceive (clientConn client)
   case mmsg of
-    Just WS.WsClose -> do
-      -- Unregister client
-      atomically $ modifyTVar' registry (Map.delete (clientId client))
-      WS.wsClose (clientConn client)
     Just (WS.WsText msg) -> do
-      -- Check if this is a peek response
       case T.stripPrefix "peek-response:" msg of
         Just value -> do
-          -- Fill the pending peek MVar
-          _ <- tryPutMVar peekMVar value
-          return ()
-        Nothing -> return ()  -- ignore other messages for now
-      clientLoop client registry peekMVar
-    Just _ -> clientLoop client registry peekMVar
-    Nothing -> do
-      -- Connection lost — unregister
-      atomically $ modifyTVar' registry (Map.delete (clientId client))
+          ok <- tryPutMVar (clientPendingPeek client) value
+          if ok then return ()
+                else hPutStrLn stderr $ "AgentServer: peek response dropped for "
+                       ++ T.unpack (clientId client) ++ " (previous response not consumed)"
+        Nothing -> return ()
+      clientLoop client
+    _ -> return ()  -- WsClose or connection error — bracket_ cleanup handles unregister + close

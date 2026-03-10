@@ -25,7 +25,6 @@ open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.Maybe using (Maybe; just; nothing; maybe)
 open import Data.Product using (_×_; _,_; proj₁; proj₂)
 open import Function using (_∘_; id)
-open import Relation.Binary.PropositionalEquality using (_≡_; refl)
 
 private
   variable
@@ -122,40 +121,4 @@ interpretApp update model (tick ∷ rest) =
     applyAll update m [] = m
     applyAll update m (msg ∷ msgs) = applyAll update (update msg m) msgs
 
-------------------------------------------------------------------------
--- Test examples (propositional equality proofs)
-------------------------------------------------------------------------
-
--- mapE test
-test-mapE : simMapE suc ((1 ∷ 2 ∷ []) ∷ [] ∷ (3 ∷ []) ∷ [])
-          ≡ ((2 ∷ 3 ∷ []) ∷ [] ∷ (4 ∷ []) ∷ [])
-test-mapE = refl
-
--- filterE test
-test-filterE : simFilterE (λ { zero → false ; (suc _) → true })
-                ((0 ∷ 1 ∷ 2 ∷ []) ∷ (3 ∷ 0 ∷ []) ∷ [])
-             ≡ ((1 ∷ 2 ∷ []) ∷ (3 ∷ []) ∷ [])
-test-filterE = refl
-
--- foldE test: count events
-test-foldE : simFoldE 0 (λ _ n → suc n)
-              ((1 ∷ []) ∷ (2 ∷ 3 ∷ []) ∷ [] ∷ (4 ∷ []) ∷ [])
-           ≡ ((1 ∷ []) ∷ (2 ∷ 3 ∷ []) ∷ [] ∷ (4 ∷ []) ∷ [])
-test-foldE = refl
-
--- accumE test: apply increment functions
-test-accumE : simAccumE 0 ((suc ∷ []) ∷ (suc ∷ suc ∷ []) ∷ [])
-            ≡ ((1 ∷ []) ∷ (2 ∷ 3 ∷ []) ∷ [])
-test-accumE = refl
-
--- interpretApp test
-test-app : interpretApp (λ _ n → suc n) 0
-            ((1 ∷ []) ∷ (2 ∷ 3 ∷ []) ∷ [] ∷ [])
-         ≡ (1 ∷ 3 ∷ 3 ∷ [])
-test-app = refl
-
--- merge test
-test-merge : simMerge ((1 ∷ []) ∷ [] ∷ (3 ∷ []) ∷ [])
-                      ((10 ∷ []) ∷ (20 ∷ []) ∷ [])
-           ≡ ((1 ∷ 10 ∷ []) ∷ (20 ∷ []) ∷ (3 ∷ []) ∷ [])
-test-merge = refl
+-- Tests live in test/EventTest.agda

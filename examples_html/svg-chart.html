@@ -3,8 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1a2e">
+  <link rel="icon" href="data:,">
   <title>SVG Bar Chart Demo - Agdelte</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="generated/examples.css">
   <style>
     .chart-demo {
       text-align: center;
@@ -20,25 +22,31 @@
   </style>
 </head>
 <body>
-  <div style="max-width:600px;margin:1rem auto;padding:0.75rem 1rem;background:rgba(74,158,255,0.08);border-left:3px solid #4a9eff;border-radius:0 8px 8px 0;color:#bbb;font-size:0.9rem;line-height:1.5;">
+  <header>
+    <a href="../index.html" class="back">&larr; Back to examples</a>
+    <h1>SVG Bar Chart</h1>
+    <p class="subtitle">Data visualization with foreach, reactive bindings, and click selection</p>
+  </header>
+
+  <main>
+  <div class="instructions">
     <strong>Expected:</strong> An SVG bar chart with colored bars. Click a bar to select it (it turns dark blue).
     Buttons +/&minus; adjust the selected bar's value. <em>Add</em> appends a new bar, <em>Remove</em> deletes the selected one.
     Bar heights, labels, and colors update reactively. A Y-axis with gridlines is drawn.
     The selected bar info is displayed below the chart.
   </div>
 
-  <div id="app" data-agdelte="SvgChart"></div>
+  <div id="app" data-agdelte="SvgChart">
+    <p class="loading">Loading compiled Agda...</p>
+    <noscript><p>This demo requires JavaScript.</p></noscript>
+  </div>
 
-  <script type="module">
-    import { mountReactive } from '../runtime/reactive.js';
+  <div class="info">
+    <p>Source: <code>examples/SvgChart.agda</code></p>
+    <p>Compiled: <code>_build/jAgda.SvgChart.mjs</code></p>
+  </div>
+  </main>
 
-    const appEl = document.querySelector('[data-agdelte]');
-    const moduleName = appEl.dataset.agdelte;
-
-    mountReactive(moduleName, appEl).then(app => {
-      console.log('Bar Chart demo mounted');
-      window.app = app;
-    });
-  </script>
+  <script type="module" src="../runtime/reactive-auto.js"></script>
 </body>
 </html>

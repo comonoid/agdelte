@@ -114,14 +114,23 @@ raceText m = if racing m then "Racing..." else raceResult m
 -- Template
 ------------------------------------------------------------------------
 
+demoEq : Demo → Demo → Bool
+demoEq ProgressDemo ProgressDemo = true
+demoEq ParallelDemo ParallelDemo = true
+demoEq RaceDemo     RaceDemo     = true
+demoEq _            _            = false
+
+navClass : Demo → Demo → String
+navClass target current = if demoEq target current then "active" else ""
+
 parallelTemplate : Node Model Msg
 parallelTemplate =
   div [ class "parallel-demo" ]
     ( h1 [] [ text "Concurrency Demos" ]
     ∷ div [ class "nav" ]
-        ( button [ onClick ShowProgress ] [ text "Progress" ]
-        ∷ button [ onClick ShowParallel ] [ text "Parallel" ]
-        ∷ button [ onClick ShowRace ] [ text "Race" ]
+        ( button (onClick ShowProgress ∷ classBind (navClass ProgressDemo ∘ demo) ∷ []) [ text "Progress" ]
+        ∷ button (onClick ShowParallel ∷ classBind (navClass ParallelDemo ∘ demo) ∷ []) [ text "Parallel" ]
+        ∷ button (onClick ShowRace ∷ classBind (navClass RaceDemo ∘ demo) ∷ []) [ text "Race" ]
         ∷ [] )
     -- Progress demo section
     ∷ div [ class "demo-section" ]

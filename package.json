@@ -7,10 +7,18 @@
   "exports": {
     ".": "./runtime/reactive.js",
     "./events": "./runtime/events.js",
-    "./primitives": "./runtime/primitives.js"
+    "./agda-values": "./runtime/agda-values.js",
+    "./svg-events": "./runtime/svg-events.js",
+    "./buffer-registry": "./runtime/buffer-registry.js",
+    "./worker-pool": "./runtime/worker-pool.js"
   },
   "scripts": {
     "test": "node test/runtime.test.js",
+    "test:smoke": "node test/smoke.test.js",
+    "test:gl": "node test/gl-math.test.js",
+    "test:agda": "agda -i src -i test test/EventTest.agda",
+    "test:css": "node test/css-pipeline.test.js",
+    "test:all": "npm test && npm run test:smoke && npm run test:gl && npm run test:css && npm run test:agda",
     "verify": "bash scripts/verify-build.sh",
     "build:counter": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/Counter.agda",
     "build:timer": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/Timer.agda",
@@ -40,28 +48,37 @@
     "build:webgl-full-demo": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/WebGLFullDemo.agda",
     "build:webgl-controls-demo": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/WebGLControlsDemo.agda",
     "build:controls-demo": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/ControlsDemo.agda",
-    "build:all": "npm run build:counter && npm run build:timer && npm run build:todo && npm run build:keyboard && npm run build:http && npm run build:task && npm run build:websocket && npm run build:router && npm run build:composition && npm run build:transitions && npm run build:combinators && npm run build:optic-dynamic && npm run build:worker && npm run build:parallel && npm run build:session-form && npm run build:stress-test && npm run build:css-demo && npm run build:css-full-demo && npm run build:anim-demo && npm run build:svg-test && npm run build:svg-smil && npm run build:svg-panzoom && npm run build:svg-chart && npm run build:svg-linedraw && npm run build:webgl-test && npm run build:webgl-full-demo && npm run build:webgl-controls-demo && npm run build:controls-demo && npm run build:styles && npm run build:remote-agent && npm run build:server && npm run build:multi-agent && npm run build:shared-demo && npm run build:inspector-demo && npm run build:main",
+    "build:all": "bash scripts/verify-build.sh",
     "build:styles": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/Styles.agda",
     "css:examples": "node scripts/generate-css.js jAgda.Styles examplesCSS examples_html/generated/examples.css",
     "css:demo": "node scripts/generate-css.js jAgda.CssDemo appCSS examples_html/generated/css-demo.css",
     "css:full-demo": "node scripts/generate-css.js jAgda.CssFullDemo appCSS examples_html/generated/css-full-demo.css",
     "css:anim-data": "node scripts/generate-anim-data.js examples_html/generated/anim-demo.json",
     "css:controls-demo": "node scripts/generate-css.js jAgda.ControlsDemo appCSS examples_html/generated/controls-demo.css",
-    "css:all": "npm run css:examples && npm run css:demo && npm run css:full-demo && npm run css:anim-data && npm run css:controls-demo",
+    "build:controls-css": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src src/Agdelte/Css/Controls.agda",
+    "css:controls": "node scripts/generate-css.js jAgda.Agdelte.Css.Controls controlsCSS examples_html/generated/agdelte-controls.css",
+    "build:index-styles": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/IndexStyles.agda",
+    "css:index": "node scripts/generate-css.js jAgda.IndexStyles indexCSS examples_html/generated/index.css",
+    "css:all": "npm run css:examples && npm run css:demo && npm run css:full-demo && npm run css:anim-data && npm run css:controls-demo && npm run css:controls && npm run css:index",
     "typecheck": "agda -i src src/Agdelte/Reactive/Node.agda",
     "typecheck:theory": "agda -i src src/Agdelte/Theory/Poly.agda",
-    "typecheck:all": "agda -i src src/Agdelte/Reactive/Node.agda && agda -i src src/Agdelte/Theory/Poly.agda && agda -i src src/Agdelte/Theory/DepPoly.agda && agda -i src src/Agdelte/Theory/PolySignal.agda && agda -i src src/Agdelte/Theory/LensLaws.agda && agda -i src src/Agdelte/Theory/OpticPolyLens.agda && agda -i src src/Agdelte/Theory/BigLensPolyLens.agda && agda -i src src/Agdelte/Theory/SessionDualProof.agda && agda -i src src/Agdelte/Theory/AgentCoalg.agda && agda -i src src/Agdelte/Test/OpticTest.agda && agda -i src src/Agdelte/Test/Interpret.agda && agda -i src -i examples examples/Counter.agda && agda -i src -i examples examples/Timer.agda && agda -i src -i examples examples/Todo.agda && agda -i src -i examples examples/Keyboard.agda && agda -i src -i examples examples/Http.agda && agda -i src -i examples examples/Task.agda && agda -i src -i examples examples/WebSocket.agda && agda -i src -i examples examples/Router.agda && agda -i src -i examples examples/Composition.agda && agda -i src -i examples examples/Transitions.agda && agda -i src -i examples examples/Combinators.agda && agda -i src -i examples examples/OpticDynamic.agda && agda -i src -i examples examples/Worker.agda && agda -i src -i examples examples/Parallel.agda && agda -i src -i examples examples/SessionFormDemo.agda && agda -i src -i examples examples/StressTest.agda && agda -i src -i examples examples/CssDemo.agda && agda -i src -i examples examples/CssFullDemo.agda && agda -i src -i examples examples/AnimDemo.agda && agda -i src -i examples examples/SvgTest.agda && agda -i src -i examples examples/SvgSmil.agda && agda -i src -i examples examples/SvgPanZoom.agda && agda -i src -i examples examples/SvgChart.agda && agda -i src -i examples examples/SvgLineDraw.agda && agda -i src -i examples examples/WebGLTest.agda && agda -i src -i examples examples/WebGLFullDemo.agda && agda -i src -i examples examples/WebGLControlsDemo.agda && agda -i src -i examples examples/ControlsDemo.agda && agda -i src -i examples examples/Styles.agda && agda -i src -i examples examples/RemoteAgent.agda && agda -i src -i examples examples/AgentWiring.agda && agda -i src -i examples examples/DepAgentDemo.agda && agda -i src -i examples examples/SessionDual.agda",
+    "typecheck:all": "bash scripts/typecheck-all.sh",
     "dev": "node serve.cjs",
-    "build:main": "agda --compile --compile-dir=_build --ghc-flag=-ihs --ghc-flag=\"-odir _build\" --ghc-flag=\"-hidir _build\" -i src -i server server/Main.agda",
+    "build:main": "agda --compile --compile-dir=_build --ghc-flag=-ihs --ghc-flag=\"-odir _build\" --ghc-flag=\"-hidir _build\" --ghc-flag=\"-package network\" --ghc-flag=\"-package text\" --ghc-flag=\"-package bytestring\" --ghc-flag=\"-package stm\" --ghc-flag=\"-package containers\" --ghc-flag=\"-package websockets\" --ghc-flag=\"-package warp\" --ghc-flag=\"-package wai\" --ghc-flag=\"-package wai-websockets\" --ghc-flag=\"-package http-types\" --ghc-flag=\"-package async\" -i src -i server server/Main.agda",
     "build:remote-agent": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/RemoteAgent.agda",
-    "build:server": "agda --compile --compile-dir=_build --ghc-flag=-ihs --ghc-flag=\"-odir _build\" --ghc-flag=\"-hidir _build\" --ghc-flag=\"-package network\" --ghc-flag=\"-package text\" --ghc-flag=\"-package bytestring\" --ghc-flag=\"-package crypton\" --ghc-flag=\"-package base64-bytestring\" --ghc-flag=\"-package memory\" --ghc-flag=\"-package stm\" --ghc-flag=\"-package containers\" server/HttpAgent.agda",
-    "build:multi-agent": "agda --compile --compile-dir=_build --ghc-flag=-ihs --ghc-flag=\"-odir _build\" --ghc-flag=\"-hidir _build\" --ghc-flag=\"-package network\" --ghc-flag=\"-package text\" --ghc-flag=\"-package bytestring\" --ghc-flag=\"-package crypton\" --ghc-flag=\"-package base64-bytestring\" --ghc-flag=\"-package stm\" --ghc-flag=\"-package memory\" --ghc-flag=\"-package containers\" server/MultiAgent.agda",
-    "build:shared-demo": "agda --compile --compile-dir=_build --ghc-flag=-ihs --ghc-flag=\"-odir _build\" --ghc-flag=\"-hidir _build\" --ghc-flag=\"-package network\" --ghc-flag=\"-package text\" --ghc-flag=\"-package bytestring\" --ghc-flag=\"-package crypton\" --ghc-flag=\"-package base64-bytestring\" --ghc-flag=\"-package memory\" --ghc-flag=\"-package stm\" --ghc-flag=\"-package containers\" server/SharedAgentDemo.agda",
-    "build:inspector-demo": "agda --compile --compile-dir=_build --ghc-flag=-ihs --ghc-flag=\"-odir _build\" --ghc-flag=\"-hidir _build\" --ghc-flag=\"-package network\" --ghc-flag=\"-package text\" --ghc-flag=\"-package bytestring\" --ghc-flag=\"-package crypton\" --ghc-flag=\"-package base64-bytestring\" --ghc-flag=\"-package memory\" --ghc-flag=\"-package stm\" --ghc-flag=\"-package containers\" server/InspectorDemo.agda",
+    "build:agent-wiring": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/AgentWiring.agda",
+    "build:dep-agent-demo": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/DepAgentDemo.agda",
+    "build:session-dual": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/SessionDual.agda",
+    "build:server": "agda --compile --compile-dir=_build --ghc-flag=-ihs --ghc-flag=\"-odir _build\" --ghc-flag=\"-hidir _build\" --ghc-flag=\"-package network\" --ghc-flag=\"-package text\" --ghc-flag=\"-package bytestring\" --ghc-flag=\"-package stm\" --ghc-flag=\"-package containers\" --ghc-flag=\"-package websockets\" --ghc-flag=\"-package warp\" --ghc-flag=\"-package wai\" --ghc-flag=\"-package wai-websockets\" --ghc-flag=\"-package http-types\" --ghc-flag=\"-package async\" server/HttpAgent.agda",
+    "build:multi-agent": "agda --compile --compile-dir=_build --ghc-flag=-ihs --ghc-flag=\"-odir _build\" --ghc-flag=\"-hidir _build\" --ghc-flag=\"-package network\" --ghc-flag=\"-package text\" --ghc-flag=\"-package bytestring\" --ghc-flag=\"-package stm\" --ghc-flag=\"-package containers\" --ghc-flag=\"-package websockets\" --ghc-flag=\"-package warp\" --ghc-flag=\"-package wai\" --ghc-flag=\"-package wai-websockets\" --ghc-flag=\"-package http-types\" --ghc-flag=\"-package async\" server/MultiAgent.agda",
+    "build:shared-demo": "agda --compile --compile-dir=_build --ghc-flag=-ihs --ghc-flag=\"-odir _build\" --ghc-flag=\"-hidir _build\" --ghc-flag=\"-package network\" --ghc-flag=\"-package text\" --ghc-flag=\"-package bytestring\" --ghc-flag=\"-package stm\" --ghc-flag=\"-package containers\" --ghc-flag=\"-package websockets\" --ghc-flag=\"-package warp\" --ghc-flag=\"-package wai\" --ghc-flag=\"-package wai-websockets\" --ghc-flag=\"-package http-types\" --ghc-flag=\"-package async\" server/SharedAgentDemo.agda",
+    "build:inspector-demo": "agda --compile --compile-dir=_build --ghc-flag=-ihs --ghc-flag=\"-odir _build\" --ghc-flag=\"-hidir _build\" --ghc-flag=\"-package network\" --ghc-flag=\"-package text\" --ghc-flag=\"-package bytestring\" --ghc-flag=\"-package stm\" --ghc-flag=\"-package containers\" --ghc-flag=\"-package websockets\" --ghc-flag=\"-package warp\" --ghc-flag=\"-package wai\" --ghc-flag=\"-package wai-websockets\" --ghc-flag=\"-package http-types\" --ghc-flag=\"-package async\" server/InspectorDemo.agda",
     "run:server": "./_build/HttpAgent",
     "run:multi-agent": "./_build/MultiAgent",
     "run:shared-demo": "./_build/SharedAgentDemo",
     "run:inspector-demo": "./_build/InspectorDemo",
+    "build:test-server": "ghc -ihs -o _build/Spec hs/test/Spec.hs -package hspec -package network -package text -package bytestring -package stm -package containers -package websockets -package warp -package wai -package wai-websockets -package http-types -package async -package case-insensitive",
+    "test:server": "npm run build:test-server && ./_build/Spec",
     "clean": "rm -rf _build MAlonzo jAgda"
   },
   "keywords": [
@@ -81,11 +98,11 @@
     "url": "https://github.com/comonoid/agdelte.git"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   },
   "devDependencies": {},
   "agda": {
-    "version": ">=2.6.4",
+    "version": ">=2.9",
     "standardLibrary": ">=2.0"
   }
 }

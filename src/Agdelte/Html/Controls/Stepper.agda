@@ -15,6 +15,7 @@ open import Function using (_∘_)
 open import Relation.Nullary using (yes; no)
 
 open import Agdelte.Reactive.Node
+open import Agdelte.Html.Controls.Util using (eqStr)
 
 open import Agda.Builtin.String using (primShowNat)
 
@@ -29,16 +30,6 @@ record Step : Set where
     stepDescription : String   -- optional description
 
 open Step public
-
-------------------------------------------------------------------------
--- Helper
-------------------------------------------------------------------------
-
-private
-  eqStr : String → String → Bool
-  eqStr a b with a ≟ b
-  ... | yes _ = true
-  ... | no _  = false
 
 ------------------------------------------------------------------------
 -- Horizontal stepper

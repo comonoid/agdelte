@@ -3,29 +3,6 @@
  *
  * Interprets Scott-encoded Scene values from Agdelte.WebGL.Types
  * and renders them using WebGL2. Supports:
- */
-
-import { listToArray as _listToArrayFull } from './agda-values.js';
-
-// ---------------------------------------------------------------------------
-// Configuration constants (centralized for maintainability)
-// ---------------------------------------------------------------------------
-
-const CONFIG = {
-  MAX_LIGHTS: 8,               // Maximum lights per scene (matches shader arrays)
-  MAX_NAT_VALUE: 100000,       // Maximum for Scott-encoded natural numbers
-  SPHERE_SLICES: 24,           // Sphere geometry horizontal segments
-  SPHERE_STACKS: 16,           // Sphere geometry vertical segments
-  CYLINDER_SEGMENTS: 24,       // Cylinder geometry segments
-  FONT_ATLAS_SIZE: 1024,       // Font atlas texture size
-  FONT_RENDER_SIZE: 48,        // Font rendering size for atlas
-  PICK_HOVER_THROTTLE: 16,     // Hover event throttle (ms) ~60fps
-  DRAG_THRESHOLD: 3,           // Pixels before drag starts
-};
-
-/**
- * Interprets Scott-encoded Scene values from Agdelte.WebGL.Types
- * and renders them using WebGL2. Supports:
  *   - Static geometry (box, sphere, plane, cylinder), transforms, cameras
  *   - Materials: unlit, flat (ambient-only), phong, pbr (Cook-Torrance), textured
  *   - Lights: ambient, directional, point, spot; bindLight (reactive)
@@ -57,6 +34,24 @@ const CONFIG = {
  *   DIRTY     — changes pending, one rAF scheduled
  *   ANIMATING — active animations, rAF loop (future)
  */
+
+import { listToArray as _listToArrayFull, ensureNumber } from './agda-values.js';
+
+// ---------------------------------------------------------------------------
+// Configuration constants (centralized for maintainability)
+// ---------------------------------------------------------------------------
+
+const CONFIG = {
+  MAX_LIGHTS: 8,               // Maximum lights per scene (matches shader arrays)
+  MAX_NAT_VALUE: 100000,       // Maximum for Scott-encoded natural numbers
+  SPHERE_SLICES: 24,           // Sphere geometry horizontal segments
+  SPHERE_STACKS: 16,           // Sphere geometry vertical segments
+  CYLINDER_SEGMENTS: 24,       // Cylinder geometry segments
+  FONT_ATLAS_SIZE: 1024,       // Font atlas texture size
+  FONT_RENDER_SIZE: 48,        // Font rendering size for atlas
+  PICK_HOVER_THROTTLE: 16,     // Hover event throttle (ms) ~60fps
+  DRAG_THRESHOLD: 3,           // Pixels before drag starts
+};
 
 // ---------------------------------------------------------------------------
 // Scott-encoding interpreters
@@ -289,7 +284,7 @@ function interpretSceneAttr(attr) {
  */
 function interpretDuration(dur) {
   return dur({
-    ms: (n) => scottNatToNumber(n)
+    ms: (n) => ensureNumber(n)
   });
 }
 
@@ -304,31 +299,6 @@ function interpretEasing(easing) {
     easeInOut:   () => 'easeInOut',
     cubicBezier: (x1, y1, x2, y2) => ({ type: 'cubicBezier', x1, y1, x2, y2 })
   });
-}
-
-/**
- * Convert an Agda ℕ to a JS number.
- * The Agda JS backend may represent ℕ as:
- *   - BigInt (for literals like 300)
- *   - Scott-encoded (for computed values: zero/suc)
- */
-function scottNatToNumber(n) {
-  // BigInt (optimized literal)
-  if (typeof n === 'bigint') return Number(n);
-  // Plain number
-  if (typeof n === 'number') return n;
-  // Scott-encoded: walk zero/suc chain
-  let result = 0;
-  let current = n;
-  for (let i = 0; i < CONFIG.MAX_NAT_VALUE; i++) {
-    let done = false;
-    current({
-      'zero': () => { done = true; },
-      'suc': (pred) => { result++; current = pred; }
-    });
-    if (done) break;
-  }
-  return result;
 }
 
 /**
@@ -385,7 +355,11 @@ function interpretTransform(tfm) {
 
 /** Convert Agda List to JS Array (delegates to agda-values.js) */
 function listToArray(list) {
-  return _listToArrayFull(list).items;
+  const { items, incomplete } = _listToArrayFull(list);
+  if (incomplete) {
+    console.warn('reactive-gl: scene node list truncated — exceeded iteration limit');
+  }
+  return items;
 }
 
 // ---------------------------------------------------------------------------
@@ -1313,6 +1287,9 @@ function rayPickGroupForId(ray, entry, parentMat, targetPickId) {
 // ---------------------------------------------------------------------------
 
 function createBoxGeometry(gl, dims) {
+  if (dims.x <= 0 || dims.y <= 0 || dims.z <= 0) {
+    console.warn('createBoxGeometry: zero/negative dimensions', dims);
+  }
   const hw = dims.x * 0.5, hh = dims.y * 0.5, hd = dims.z * 0.5;
   const positions = new Float32Array([
     -hw, -hh,  hd,   hw, -hh,  hd,   hw,  hh,  hd,  -hw,  hh,  hd,
@@ -1351,7 +1328,10 @@ function createBoxGeometry(gl, dims) {
 }
 
 function createSphereGeometry(gl, radius) {
-  const slices = 24, stacks = 16;
+  if (radius <= 0) {
+    console.warn('createSphereGeometry: zero/negative radius', radius);
+  }
+  const slices = CONFIG.SPHERE_SLICES, stacks = CONFIG.SPHERE_STACKS;
   const positions = [], normals = [], indices = [];
   for (let s = 0; s <= stacks; s++) {
     const phi = (s / stacks) * Math.PI;
@@ -1376,6 +1356,9 @@ function createSphereGeometry(gl, radius) {
 }
 
 function createPlaneGeometry(gl, size) {
+  if (size.x <= 0 || size.y <= 0) {
+    console.warn('createPlaneGeometry: zero/negative size', size);
+  }
   const hw = size.x * 0.5, hh = size.y * 0.5;
   const positions = new Float32Array([-hw, 0, -hh, hw, 0, -hh, hw, 0, hh, -hw, 0, hh]);
   const normals = new Float32Array([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0]);
@@ -1386,7 +1369,10 @@ function createPlaneGeometry(gl, size) {
 }
 
 function createCylinderGeometry(gl, radius, height) {
-  const segments = 24;
+  if (radius <= 0 || height <= 0) {
+    console.warn('createCylinderGeometry: zero/negative radius/height', { radius, height });
+  }
+  const segments = CONFIG.CYLINDER_SEGMENTS;
   const positions = [], normals = [], indices = [];
   const hh = height * 0.5;
   // Side wall
@@ -1428,7 +1414,8 @@ function createCylinderGeometry(gl, radius, height) {
     const next = (i + 1) % segments;
     indices.push(botCenter, botCenter + 1 + next, botCenter + 1 + i);
   }
-  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), new Uint16Array(indices));
+  const vertexCount = positions.length / 3;
+  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), makeIndexArray(indices, vertexCount));
 }
 
 function makeIndexArray(indices, vertexCount) {
@@ -1622,6 +1609,9 @@ function createQuadGeometry(gl, size) {
  * minorSegments: segments around the tube
  */
 function createTorusGeometry(gl, majorRadius, minorRadius, majorSegments, minorSegments) {
+  if (majorRadius <= 0 || minorRadius <= 0 || majorSegments < 3 || minorSegments < 3) {
+    console.warn('createTorusGeometry: invalid parameters', { majorRadius, minorRadius, majorSegments, minorSegments });
+  }
   const positions = [], normals = [], indices = [];
   for (let i = 0; i <= majorSegments; i++) {
     const u = (i / majorSegments) * 2 * Math.PI;
@@ -1645,13 +1635,17 @@ function createTorusGeometry(gl, majorRadius, minorRadius, majorSegments, minorS
       indices.push(a, b, a + 1, b, b + 1, a + 1);
     }
   }
-  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), new Uint16Array(indices));
+  const vertexCount = positions.length / 3;
+  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), makeIndexArray(indices, vertexCount));
 }
 
 /**
  * Create a capsule (cylinder with hemispherical caps).
  */
 function createCapsuleGeometry(gl, radius, height, segments) {
+  if (radius <= 0 || height <= 0 || segments < 3) {
+    console.warn('createCapsuleGeometry: invalid parameters', { radius, height, segments });
+  }
   const positions = [], normals = [], indices = [];
   const halfHeight = height * 0.5 - radius; // Cylinder height excluding caps
   const stacks = Math.floor(segments / 2);
@@ -1720,7 +1714,8 @@ function createCapsuleGeometry(gl, radius, height, segments) {
     }
   }
 
-  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), new Uint16Array(indices));
+  const vertexCount = positions.length / 3;
+  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), makeIndexArray(indices, vertexCount));
 }
 
 /**
@@ -1730,6 +1725,9 @@ function createCapsuleGeometry(gl, radius, height, segments) {
  * height: height of cone
  */
 function createConeGeometry(gl, bottomRadius, topRadius, height, segments) {
+  if (bottomRadius < 0 || topRadius < 0 || height <= 0 || segments < 3) {
+    console.warn('createConeGeometry: invalid parameters', { bottomRadius, topRadius, height, segments });
+  }
   const positions = [], normals = [], indices = [];
   const hh = height * 0.5;
   const slope = (bottomRadius - topRadius) / height;
@@ -1781,13 +1779,17 @@ function createConeGeometry(gl, bottomRadius, topRadius, height, segments) {
     indices.push(botCenter, botCenter + 1 + next, botCenter + 1 + i);
   }
 
-  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), new Uint16Array(indices));
+  const vertexCount = positions.length / 3;
+  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), makeIndexArray(indices, vertexCount));
 }
 
 /**
  * Create an n-sided pyramid.
  */
 function createPyramidGeometry(gl, baseSize, height, sides) {
+  if (baseSize <= 0 || height <= 0 || sides < 3) {
+    console.warn('createPyramidGeometry: invalid parameters', { baseSize, height, sides });
+  }
   const positions = [], normals = [], indices = [];
   const hb = baseSize * 0.5;
 
@@ -1831,13 +1833,17 @@ function createPyramidGeometry(gl, baseSize, height, sides) {
     indices.push(baseCenter, baseCenter + 1 + next, baseCenter + 1 + i);
   }
 
-  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), new Uint16Array(indices));
+  const vertexCount = positions.length / 3;
+  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), makeIndexArray(indices, vertexCount));
 }
 
 /**
  * Create a tube (hollow cylinder/pipe).
  */
 function createTubeGeometry(gl, innerRadius, outerRadius, height, segments) {
+  if (innerRadius < 0 || outerRadius <= 0 || innerRadius >= outerRadius || height <= 0 || segments < 3) {
+    console.warn('createTubeGeometry: invalid parameters', { innerRadius, outerRadius, height, segments });
+  }
   const positions = [], normals = [], indices = [];
   const hh = height * 0.5;
 
@@ -1900,13 +1906,17 @@ function createTubeGeometry(gl, innerRadius, outerRadius, height, segments) {
     indices.push(a, c, b, b, c, d);  // Reversed for bottom
   }
 
-  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), new Uint16Array(indices));
+  const vertexCount = positions.length / 3;
+  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), makeIndexArray(indices, vertexCount));
 }
 
 /**
  * Create a flat ring (2D washer shape in XZ plane).
  */
 function createRingGeometry(gl, innerRadius, outerRadius, segments) {
+  if (innerRadius < 0 || outerRadius <= 0 || innerRadius >= outerRadius || segments < 3) {
+    console.warn('createRingGeometry: invalid parameters', { innerRadius, outerRadius, segments });
+  }
   const positions = [], normals = [], indices = [];
 
   for (let i = 0; i <= segments; i++) {
@@ -1922,13 +1932,15 @@ function createRingGeometry(gl, innerRadius, outerRadius, segments) {
     indices.push(a, b, c, b, d, c);
   }
 
-  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), new Uint16Array(indices));
+  const vertexCount = positions.length / 3;
+  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), makeIndexArray(indices, vertexCount));
 }
 
 /**
  * Create a tetrahedron (4 triangular faces).
  */
 function createTetrahedronGeometry(gl, radius) {
+  if (radius <= 0) console.warn('createTetrahedronGeometry: zero/negative radius', radius);
   // Vertices of a regular tetrahedron
   const a = radius / Math.sqrt(3);
   const verts = [
@@ -1964,6 +1976,7 @@ function createTetrahedronGeometry(gl, radius) {
  * Create an octahedron (8 triangular faces).
  */
 function createOctahedronGeometry(gl, radius) {
+  if (radius <= 0) console.warn('createOctahedronGeometry: zero/negative radius', radius);
   const verts = [
     { x: radius, y: 0, z: 0 },
     { x: -radius, y: 0, z: 0 },
@@ -2001,6 +2014,7 @@ function createOctahedronGeometry(gl, radius) {
  * Create an icosahedron (20 triangular faces).
  */
 function createIcosahedronGeometry(gl, radius) {
+  if (radius <= 0) console.warn('createIcosahedronGeometry: zero/negative radius', radius);
   const t = (1 + Math.sqrt(5)) / 2;  // Golden ratio
   const s = radius / Math.sqrt(1 + t * t);
   const verts = [
@@ -2042,6 +2056,7 @@ function createIcosahedronGeometry(gl, radius) {
  * Create a dodecahedron (12 pentagonal faces, triangulated = 36 triangles).
  */
 function createDodecahedronGeometry(gl, radius) {
+  if (radius <= 0) console.warn('createDodecahedronGeometry: zero/negative radius', radius);
   const t = (1 + Math.sqrt(5)) / 2;
   const s = radius / Math.sqrt(3);
   const a = s, b = s / t, c = s * t;
@@ -2105,6 +2120,9 @@ function createDodecahedronGeometry(gl, radius) {
  * Simplified: uses bevel by offsetting corner vertices.
  */
 function createRoundedBoxGeometry(gl, dims, radius, segments) {
+  if (dims.x <= 0 || dims.y <= 0 || dims.z <= 0 || radius < 0 || segments < 1) {
+    console.warn('createRoundedBoxGeometry: invalid parameters', { dims, radius, segments });
+  }
   // Rounded box as a single continuous mesh using ray-SDF intersection.
   // Each face of a subdivided cube is projected onto the rounded box surface.
   const hw = Math.max(dims.x * 0.5 - radius, 0);
@@ -2218,14 +2236,15 @@ function createRoundedBoxGeometry(gl, dims, radius, segments) {
   addFace((u, v) => [ sx, v * sy, u * sz], true,   1,  0,  0);  // +X right
   addFace((u, v) => [-sx, v * sy, u * sz], false, -1,  0,  0);  // -X left
 
-  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), new Uint16Array(indices));
+  const vertexCount = positions.length / 3;
+  return uploadGeometry(gl, new Float32Array(positions), new Float32Array(normals), makeIndexArray(indices, vertexCount));
 }
 
 // ---------------------------------------------------------------------------
 // Texture cache — loads images asynchronously, creates GL textures
 // ---------------------------------------------------------------------------
 
-function createTextureCache(gl, scheduleFrame, maxSize = 128) {
+function createTextureCache(gl, scheduleFrame, isDisposed, maxSize = 128) {
   const cache = new Map();  // Map preserves insertion order for LRU
   // 1x1 white fallback while loading
   const fallbackTex = gl.createTexture();
@@ -2271,6 +2290,7 @@ function createTextureCache(gl, scheduleFrame, maxSize = 128) {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
+      if (isDisposed()) return;
       const tex = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
@@ -2284,6 +2304,7 @@ function createTextureCache(gl, scheduleFrame, maxSize = 128) {
       scheduleFrame();  // re-render with loaded texture
     };
     img.onerror = () => {
+      if (isDisposed()) return;
       console.warn('[reactive-gl] Failed to load texture:', url);
       entry.tex = errorTex;
       scheduleFrame();
@@ -2292,7 +2313,16 @@ function createTextureCache(gl, scheduleFrame, maxSize = 128) {
     return entry;
   }
 
-  return { getTexture };
+  function dispose() {
+    for (const entry of cache.values()) {
+      if (entry.loaded && entry.tex) gl.deleteTexture(entry.tex);
+    }
+    cache.clear();
+    gl.deleteTexture(fallbackTex);
+    gl.deleteTexture(errorTex);
+  }
+
+  return { getTexture, dispose };
 }
 
 // ---------------------------------------------------------------------------
@@ -2375,6 +2405,9 @@ function createFontAtlas(gl, fontFamily, fontSize) {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
+  // Release offscreen canvas memory (texture data is now on GPU)
+  canvas2d.width = canvas2d.height = 0;
+
   return { texture: tex, glyphs, lineHeight: lineHeight / renderSize, atlasSize, renderSize };
 }
 
@@ -2400,7 +2433,14 @@ function createFontCache(gl) {
     return atlas;
   }
 
-  return { getAtlas };
+  function dispose() {
+    for (const atlas of cache.values()) {
+      if (atlas && atlas.texture) gl.deleteTexture(atlas.texture);
+    }
+    cache.clear();
+  }
+
+  return { getAtlas, dispose };
 }
 
 /**
@@ -2646,10 +2686,7 @@ function createTextRenderProgram(gl) {
   const prog = gl.createProgram();
   gl.attachShader(prog, vert);
   gl.attachShader(prog, frag);
-  gl.linkProgram(prog);
-  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-    throw new Error('Text program link error: ' + gl.getProgramInfoLog(prog));
-  }
+  linkAndCleanShaders(gl, prog, vert, frag, 'Text program');
   return {
     program: prog,
     uniforms: {
@@ -2678,18 +2715,28 @@ function compileShader(gl, type, source) {
   return shader;
 }
 
+function linkAndCleanShaders(gl, prog, vert, frag, label) {
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+    const log = gl.getProgramInfoLog(prog);
+    gl.deleteShader(vert);
+    gl.deleteShader(frag);
+    gl.deleteProgram(prog);
+    throw new Error(label + ' link error: ' + log);
+  }
+  gl.detachShader(prog, vert);
+  gl.detachShader(prog, frag);
+  gl.deleteShader(vert);
+  gl.deleteShader(frag);
+}
+
 function createProgram(gl) {
   const vert = compileShader(gl, gl.VERTEX_SHADER, VERT_SRC);
   const frag = compileShader(gl, gl.FRAGMENT_SHADER, FRAG_SRC);
   const prog = gl.createProgram();
   gl.attachShader(prog, vert);
   gl.attachShader(prog, frag);
-  gl.linkProgram(prog);
-  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-    const log = gl.getProgramInfoLog(prog);
-    gl.deleteProgram(prog);
-    throw new Error('Program link error: ' + log);
-  }
+  linkAndCleanShaders(gl, prog, vert, frag, 'Program');
   return {
     program: prog,
     uniforms: {
@@ -2707,12 +2754,7 @@ function createPhongProgram(gl) {
   const prog = gl.createProgram();
   gl.attachShader(prog, vert);
   gl.attachShader(prog, frag);
-  gl.linkProgram(prog);
-  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-    const log = gl.getProgramInfoLog(prog);
-    gl.deleteProgram(prog);
-    throw new Error('Phong program link error: ' + log);
-  }
+  linkAndCleanShaders(gl, prog, vert, frag, 'Phong program');
   const uniforms = {
     model:     gl.getUniformLocation(prog, 'u_model'),
     view:      gl.getUniformLocation(prog, 'u_view'),
@@ -2750,12 +2792,7 @@ function createPbrProgram(gl) {
   const prog = gl.createProgram();
   gl.attachShader(prog, vert);
   gl.attachShader(prog, frag);
-  gl.linkProgram(prog);
-  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-    const log = gl.getProgramInfoLog(prog);
-    gl.deleteProgram(prog);
-    throw new Error('PBR program link error: ' + log);
-  }
+  linkAndCleanShaders(gl, prog, vert, frag, 'PBR program');
   const uniforms = {
     model:     gl.getUniformLocation(prog, 'u_model'),
     view:      gl.getUniformLocation(prog, 'u_view'),
@@ -2788,12 +2825,7 @@ function createTexProgram(gl) {
   const prog = gl.createProgram();
   gl.attachShader(prog, vert);
   gl.attachShader(prog, frag);
-  gl.linkProgram(prog);
-  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-    const log = gl.getProgramInfoLog(prog);
-    gl.deleteProgram(prog);
-    throw new Error('Tex program link error: ' + log);
-  }
+  linkAndCleanShaders(gl, prog, vert, frag, 'Tex program');
   const uniforms = {
     model:     gl.getUniformLocation(prog, 'u_model'),
     view:      gl.getUniformLocation(prog, 'u_view'),
@@ -2831,12 +2863,7 @@ function createPickProgram(gl) {
   const prog = gl.createProgram();
   gl.attachShader(prog, vert);
   gl.attachShader(prog, frag);
-  gl.linkProgram(prog);
-  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-    const log = gl.getProgramInfoLog(prog);
-    gl.deleteProgram(prog);
-    throw new Error('Pick program link error: ' + log);
-  }
+  linkAndCleanShaders(gl, prog, vert, frag, 'Pick program');
   return {
     program: prog,
     uniforms: {
@@ -2858,12 +2885,7 @@ function createInstancedPhongProgram(gl) {
   const prog = gl.createProgram();
   gl.attachShader(prog, vert);
   gl.attachShader(prog, frag);
-  gl.linkProgram(prog);
-  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-    const log = gl.getProgramInfoLog(prog);
-    gl.deleteProgram(prog);
-    throw new Error('Instanced phong program link error: ' + log);
-  }
+  linkAndCleanShaders(gl, prog, vert, frag, 'Instanced phong program');
   const uniforms = {
     view:      gl.getUniformLocation(prog, 'u_view'),
     proj:      gl.getUniformLocation(prog, 'u_proj'),
@@ -2903,12 +2925,7 @@ function createInstancedPickProgram(gl) {
   const prog = gl.createProgram();
   gl.attachShader(prog, vert);
   gl.attachShader(prog, frag);
-  gl.linkProgram(prog);
-  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-    const log = gl.getProgramInfoLog(prog);
-    gl.deleteProgram(prog);
-    throw new Error('Instanced pick program link error: ' + log);
-  }
+  linkAndCleanShaders(gl, prog, vert, frag, 'Instanced pick program');
   return {
     program: prog,
     uniforms: {
@@ -4595,6 +4612,8 @@ function buildCameraMatrices(cameraData, aspect, model) {
 function initGLCanvas(canvas) {
   const scene = canvas.__glScene;
   if (!scene) return;
+  // Re-start observer if it was disconnected (new canvas appeared)
+  if (!_glObserver && typeof document !== 'undefined') startObserver();
 
   const gl = canvas.getContext('webgl2', { antialias: true });
   if (!gl) {
@@ -4673,8 +4692,10 @@ function initGLCanvas(canvas) {
   //   ANIMATING — rAF loop active (transitions in progress)
   let renderState = 'IDLE';
   let pickDirty = hasPickables;  // pick buffer needs initial render
+  let disposed = false;
 
   function scheduleFrame() {
+    if (disposed) return;
     if (renderState === 'IDLE') {
       renderState = 'DIRTY';
       requestAnimationFrame(doFrame);
@@ -4684,9 +4705,10 @@ function initGLCanvas(canvas) {
   }
 
   // Texture cache (loads images, triggers re-render on load)
-  const texCache = createTextureCache(gl, scheduleFrame);
+  const texCache = createTextureCache(gl, scheduleFrame, () => disposed);
 
   function doFrame(timestamp) {
+    if (disposed) return;
     // Tick continuous animate nodes (time in seconds)
     if (hasAnimations) {
       tickAnimateNodes(animateNodes, timestamp / 1000.0, hoveredId);
@@ -4754,8 +4776,8 @@ function initGLCanvas(canvas) {
     const cssX = event.clientX - rect.left;
     const cssY = event.clientY - rect.top;
     // Convert CSS coords to canvas pixel coords
-    const x = Math.round(cssX * (canvas.width / rect.width));
-    const y = Math.round(cssY * (canvas.height / rect.height));
+    const x = Math.floor(cssX * (canvas.width / rect.width));
+    const y = Math.floor(cssY * (canvas.height / rect.height));
     if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) return 0;
     return readPickId(gl, pickFB, x, y);
   }
@@ -4797,8 +4819,20 @@ function initGLCanvas(canvas) {
     return entry.attrs.some(a => a.type === attrType);
   }
 
+  // Event listener tracking for cleanup
+  const eventCleanups = [];
+  function addCanvasListener(type, handler, options) {
+    canvas.addEventListener(type, handler, options);
+    eventCleanups.push({ type, handler, options });
+  }
+
+  // Window-level mouseup for drag release outside canvas
+  let handleWindowMouseUp = null;
+
   if (hasPickables) {
-    canvas.addEventListener('click', (e) => {
+    let lastHoverTime = 0;
+
+    addCanvasListener('click', (e) => {
       // Suppress click if a drag just occurred (mousedown → mousemove → mouseup → click)
       if (didDrag) { didDrag = false; return; }
       ensurePickBuffer();
@@ -4826,7 +4860,7 @@ function initGLCanvas(canvas) {
       }
     });
 
-    canvas.addEventListener('mousedown', (e) => {
+    addCanvasListener('mousedown', (e) => {
       if (!dispatch) return;
       const isMiddle = e.button === 1;
 
@@ -4904,9 +4938,9 @@ function initGLCanvas(canvas) {
     });
 
     // Prevent middle-click auto-scroll
-    canvas.addEventListener('auxclick', (e) => { if (e.button === 1) e.preventDefault(); });
+    addCanvasListener('auxclick', (e) => { if (e.button === 1) e.preventDefault(); });
 
-    canvas.addEventListener('mousemove', (e) => {
+    addCanvasListener('mousemove', (e) => {
       // Handle active drag
       if (dragState && dispatch) {
         didDrag = true;
@@ -4946,6 +4980,11 @@ function initGLCanvas(canvas) {
         return; // Don't process hover during drag
       }
 
+      // Throttle hover checks to avoid synchronous GPU stalls from readPixels
+      const now = performance.now();
+      if (now - lastHoverTime < CONFIG.PICK_HOVER_THROTTLE) return;
+      lastHoverTime = now;
+
       ensurePickBuffer();
       const id = getPickIdAt(e);
       if (id !== hoveredId) {
@@ -4957,24 +4996,23 @@ function initGLCanvas(canvas) {
       }
     });
 
-    canvas.addEventListener('mouseup', () => {
-      dragState = null;
-    });
+    // mouseup on window so drag releases even when cursor is outside canvas
+    handleWindowMouseUp = () => { dragState = null; };
+    window.addEventListener('mouseup', handleWindowMouseUp);
 
-    canvas.addEventListener('mouseleave', () => {
+    addCanvasListener('mouseleave', () => {
       if (hoveredId !== 0) {
         dispatchAttr(hoveredId, 'onLeave');
         hoveredId = 0;
       }
-      dragState = null;
     });
 
-    canvas.addEventListener('wheel', (e) => {
+    addCanvasListener('wheel', (e) => {
       if (!dispatch) return;
-      e.preventDefault();
       ensurePickBuffer();
       const id = getPickIdAt(e);
       const dispatched = new Set();
+      let handled = false;
       // Per-object scroll (color-picked object under cursor)
       if (id !== 0) {
         const entry = pickRegistry.map.get(id);
@@ -4983,6 +5021,7 @@ function initGLCanvas(canvas) {
             if (attr.type === 'onScroll') {
               dispatch(attr.handler(e.deltaY));
               dispatched.add(id);
+              handled = true;
             }
           }
         }
@@ -4994,9 +5033,12 @@ function initGLCanvas(canvas) {
           if (attr.type === 'onScroll') {
             dispatch(attr.handler(e.deltaY));
             dispatched.add(eid);
+            handled = true;
           }
         }
       }
+      // Only prevent default scrolling if a handler actually consumed the event
+      if (handled) e.preventDefault();
     }, { passive: false });
 
     // --- Keyboard event handling (focusable + onKeyDown + onInput) ---
@@ -5007,7 +5049,7 @@ function initGLCanvas(canvas) {
       canvas.style.outline = 'none'; // prevent default focus outline on canvas
     }
 
-    canvas.addEventListener('keydown', (e) => {
+    addCanvasListener('keydown', (e) => {
       if (!dispatch || focusedId === 0) return;
       const entry = pickRegistry.map.get(focusedId);
       if (!entry) return;
@@ -5080,12 +5122,35 @@ function initGLCanvas(canvas) {
   canvas.__glRender = () => renderScene(gl, programs, geoCache, texCache, fontCache, renderList, projMat, viewMat, lights, cameraPos);
   canvas.__glContext = gl;
 
+  // --- Context loss handling ---
+  addCanvasListener('webglcontextlost', (e) => {
+    e.preventDefault();  // allows context restoration
+    disposed = true;
+    renderState = 'IDLE';
+  });
+
+  addCanvasListener('webglcontextrestored', () => {
+    // Clean up old event listeners before re-init to prevent duplicates
+    for (const { type, handler, options } of eventCleanups) {
+      canvas.removeEventListener(type, handler, options);
+    }
+    eventCleanups.length = 0;
+    if (handleWindowMouseUp) {
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+      handleWindowMouseUp = null;
+    }
+    canvas.__glContext = null;
+    disposed = false;
+    initGLCanvas(canvas);
+  });
+
   // --- Resize handling (HiDPI aware) ---
   // Lock CSS size to the initial layout size to prevent resize loops.
   // Without explicit CSS width/height, setting canvas.width changes intrinsic
   // CSS size, which triggers ResizeObserver again → exponential growth.
   let cssLocked = false;
   function handleResize() {
+    if (disposed) return;
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
 
@@ -5129,12 +5194,66 @@ function initGLCanvas(canvas) {
     scheduleFrame();
   }
 
-  new ResizeObserver(handleResize).observe(canvas);
+  const resizeObs = new ResizeObserver(handleResize);
+  resizeObs.observe(canvas);
 
-  const bindingCount = glBindings.length;
-  const pickCount = pickRegistry.map.size;
-  const lightCount = lights.length;
-  const animCount = animateNodes.length;
+  // --- Dispose function: release all GL resources on canvas removal ---
+  function disposeGLCanvas() {
+    if (disposed) return;
+    disposed = true;
+    renderState = 'IDLE';
+
+    // Remove canvas event listeners
+    for (const { type, handler, options } of eventCleanups) {
+      canvas.removeEventListener(type, handler, options);
+    }
+    eventCleanups.length = 0;
+
+    // Remove window-level mouseup
+    if (handleWindowMouseUp) {
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+      handleWindowMouseUp = null;
+    }
+
+    // Disconnect observers
+    resizeObs.disconnect();
+
+    // Delete shader programs
+    const allProgs = [
+      programs.unlit, programs.phong, programs.pbr,
+      programs.tex, programs.text, programs.instancedPhong,
+      pickProg, instancedPickProg,
+    ];
+    for (const p of allProgs) {
+      if (p && p.program) gl.deleteProgram(p.program);
+    }
+
+    // Delete cached geometry
+    for (const geo of geoCache.values()) {
+      deleteGeometry(gl, geo);
+    }
+    geoCache.clear();
+
+    // Delete cached textures and font atlases
+    if (texCache && texCache.dispose) texCache.dispose();
+    if (fontCache && fontCache.dispose) fontCache.dispose();
+
+    // Delete pick framebuffer
+    if (pickFB) {
+      gl.deleteTexture(pickFB.colorTex);
+      gl.deleteRenderbuffer(pickFB.depthRb);
+      gl.deleteFramebuffer(pickFB.fb);
+      pickFB = null;
+    }
+
+    // Clear canvas hooks
+    canvas.__glUpdate = null;
+    canvas.__glRender = null;
+    canvas.__glContext = null;
+    canvas.__glDispose = null;
+  }
+
+  canvas.__glDispose = disposeGLCanvas;
 }
 
 // ---------------------------------------------------------------------------
@@ -5146,11 +5265,28 @@ function initAllCanvases(root) {
   for (const c of canvases) {
     if (c.__glScene && !c.__glContext) {
       initGLCanvas(c);
+      _trackCanvasAdd();
     }
   }
 }
 
+let _glObserver = null;
+let _glCanvasCount = 0;
+
+function _trackCanvasAdd() {
+  _glCanvasCount++;
+}
+
+function _trackCanvasRemove() {
+  _glCanvasCount--;
+  if (_glCanvasCount <= 0) {
+    _glCanvasCount = 0;
+    disconnectGLObserver();
+  }
+}
+
 function startObserver() {
+  if (_glObserver) return; // Already observing
   initAllCanvases(document);
 
   const observer = new MutationObserver((mutations) => {
@@ -5159,21 +5295,60 @@ function startObserver() {
         if (node.nodeType !== Node.ELEMENT_NODE) continue;
         if (node.tagName === 'CANVAS' && node.__glScene) {
           initGLCanvas(node);
+          _trackCanvasAdd();
         }
         if (node.querySelectorAll) {
-          initAllCanvases(node);
+          for (const c of node.querySelectorAll('canvas')) {
+            if (c.__glScene && !c.__glContext) {
+              initGLCanvas(c);
+              _trackCanvasAdd();
+            }
+          }
+        }
+      }
+      // Dispose GL resources when canvases are removed from DOM
+      for (const node of mut.removedNodes) {
+        if (node.nodeType !== Node.ELEMENT_NODE) continue;
+        if (node.tagName === 'CANVAS' && node.__glDispose) {
+          node.__glDispose();
+          _trackCanvasRemove();
+        }
+        if (node.querySelectorAll) {
+          for (const c of node.querySelectorAll('canvas')) {
+            if (c.__glDispose) {
+              c.__glDispose();
+              _trackCanvasRemove();
+            }
+          }
         }
       }
     }
   });
 
   observer.observe(document.body, { childList: true, subtree: true });
+  _glObserver = observer;
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', startObserver);
-} else {
-  startObserver();
+function disconnectGLObserver() {
+  if (_glObserver) {
+    _glObserver.disconnect();
+    _glObserver = null;
+  }
 }
 
-export { initGLCanvas };
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startObserver);
+  } else {
+    startObserver();
+  }
+}
+
+export { initGLCanvas, disconnectGLObserver };
+
+// Pure math/geometry functions exported for testing (no WebGL dependency)
+export const _test = {
+  mat4Identity, mat4Ortho, mat4Perspective, mat4LookAt,
+  mat4FromTRS, mat4Multiply, mat4Invert, unprojectPoint,
+  raySphere, rayAABB, rayPlane, rayToLocal, rayAt,
+};

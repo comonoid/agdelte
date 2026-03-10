@@ -27,7 +27,7 @@ center : Style
 center = "justify-content" ∶ "center" ∷ "align-items" ∶ "center" ∷ []
 
 spaceBetween : Style
-spaceBetween = "justify-content" ∶ "space-between" ∷ []
+spaceBetween = "justify-content" ∶ "space-between" ∷ "align-items" ∶ "center" ∷ []
 
 wrap : Style
 wrap = "flex-wrap" ∶ "wrap" ∷ []
@@ -37,7 +37,7 @@ wrap = "flex-wrap" ∶ "wrap" ∷ []
 ------------------------------------------------------------------------
 
 grid : String → Style
-grid template = "display" ∶ "grid" ∷ "grid-template" ∶ template ∷ []
+grid cols = "display" ∶ "grid" ∷ "grid-template-columns" ∶ cols ∷ []
 
 ------------------------------------------------------------------------
 -- Common patterns

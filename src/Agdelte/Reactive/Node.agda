@@ -79,6 +79,8 @@ data Attr (Model Msg : Set) : Set₁ where
   onValue : String → (String → Msg) → Attr Model Msg
   -- Event with screen coordinates (for drag/pan - no SVG conversion)
   onValueScreen : String → (String → Msg) → Attr Model Msg
+  -- Keyboard event filtered to specific keys; calls preventDefault
+  onKeyFiltered : List String → (String → Msg) → Attr Model Msg
   -- Style
   style : String → String → Attr Model Msg
   -- Dynamic style
@@ -194,6 +196,9 @@ onKeyDown = onValue "keydown"
 
 onKeyUp : ∀ {Model Msg} → (String → Msg) → Attr Model Msg
 onKeyUp = onValue "keyup"
+
+onKeyDownFiltered : ∀ {Model Msg} → List String → (String → Msg) → Attr Model Msg
+onKeyDownFiltered = onKeyFiltered
 
 onChange : ∀ {Model Msg} → (String → Msg) → Attr Model Msg
 onChange = onValue "change"
@@ -314,10 +319,12 @@ zoomAttr get wrap (attrBind name b) = attrBind name (focusBinding get b)
 zoomAttr get wrap (on event msg) = on event (wrap msg)
 zoomAttr get wrap (onValue event handler) = onValue event (wrap ∘ handler)
 zoomAttr get wrap (onValueScreen event handler) = onValueScreen event (wrap ∘ handler)
+zoomAttr get wrap (onKeyFiltered keys handler) = onKeyFiltered keys (wrap ∘ handler)
 zoomAttr get wrap (style name val) = style name val
 zoomAttr get wrap (styleBind name b) = styleBind name (focusBinding get b)
 
 -- Internal: remap node without adding scope wrapper (used by zoomNode)
+{-# TERMINATING #-}
 zoomNode' : ∀ {M M' Msg Msg'} → (M → M') → (Msg' → Msg) → Node M' Msg' → Node M Msg
 zoomNode' get wrap (text s) = text s
 zoomNode' get wrap (bind b) = bind (focusBinding get b)

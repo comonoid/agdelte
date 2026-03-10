@@ -15,19 +15,10 @@ open import Function using (_∘_)
 open import Relation.Nullary using (yes; no)
 
 open import Agdelte.Reactive.Node
+open import Agdelte.Html.Controls.Util using (eqStr)
 
 -- Re-use SelectOption from Dropdown
 open import Agdelte.Html.Controls.Dropdown using (SelectOption; mkOption; optValue; optLabel)
-
-------------------------------------------------------------------------
--- Helper: string equality
-------------------------------------------------------------------------
-
-private
-  eqStr : String → String → Bool
-  eqStr a b with a ≟ b
-  ... | yes _ = true
-  ... | no _  = false
 
 ------------------------------------------------------------------------
 -- Radio group with typed values
@@ -64,6 +55,9 @@ radioGroup {V} {M} {A} name eqV getSelected selectMsg options =
                 ∷ attrBind "checked" (mkBinding
                     (λ m → if isSelected (optValue opt) m then "true" else "")
                     eqStr)
+                ∷ attrBind "aria-checked" (mkBinding
+                    (λ m → if isSelected (optValue opt) m then "true" else "false")
+                    eqStr)
                 ∷ onChange (λ _ → selectMsg (optValue opt))
                 ∷ [] )
         ∷ span ( class "agdelte-radio__label" ∷ [] )
@@ -98,6 +92,9 @@ radioGroupIdx {M} {A} name getSelected selectMsg labels =
                 ∷ class "agdelte-radio__input"
                 ∷ attrBind "checked" (mkBinding
                     (λ m → if isSelected idx m then "true" else "")
+                    eqStr)
+                ∷ attrBind "aria-checked" (mkBinding
+                    (λ m → if isSelected idx m then "true" else "false")
                     eqStr)
                 ∷ onChange (λ _ → selectMsg idx)
                 ∷ [] )
@@ -138,6 +135,9 @@ stringRadioGroup {M} {A} name getSelected selectMsg labels =
                 ∷ class "agdelte-radio__input"
                 ∷ attrBind "checked" (mkBinding
                     (λ m → if isSelected lbl m then "true" else "")
+                    eqStr)
+                ∷ attrBind "aria-checked" (mkBinding
+                    (λ m → if isSelected lbl m then "true" else "false")
                     eqStr)
                 ∷ onChange (λ _ → selectMsg lbl)
                 ∷ [] )

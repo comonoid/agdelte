@@ -3,31 +3,37 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1a2e">
+  <link rel="icon" href="data:,">
   <title>WebSocket Demo - Agdelte</title>
-  <link rel="stylesheet" href="common.css">
+  <link rel="stylesheet" href="generated/examples.css">
 </head>
 <body>
-  <a href="../index.html" class="back">&larr; Back to examples</a>
+  <header>
+    <a href="../index.html" class="back">&larr; Back to examples</a>
+    <h1>WebSocket Demo</h1>
+    <p class="subtitle">Real-time echo client with WebSocket</p>
+  </header>
 
-  <h1>WebSocket Demo</h1>
-  <p class="subtitle">Real-time echo client with WebSocket</p>
+  <main>
+    <div class="instructions">
+      <strong>Expected:</strong> A <em>Connect</em> button and a text input. After connecting to the local echo server
+      (<code>ws://&lt;host&gt;/echo</code>, built into <code>serve.cjs</code>),
+      type a message and click <em>Send</em>. The sent message appears on the right (blue, "You"),
+      the echoed response on the left (green, "Echo") &mdash; the same text back.
+      Status shows connected/disconnected/error. <em>Disconnect</em> closes the WebSocket.
+    </div>
 
-  <div class="instructions">
-    <strong>Expected:</strong> A <em>Connect</em> button and a text input. After connecting to the local echo server
-    (<code>ws://localhost:8080/echo</code>, built into <code>serve.cjs</code>),
-    type a message and click <em>Send</em>. The sent message appears on the right (blue, "You"),
-    the echoed response on the left (green, "Echo") &mdash; the same text back.
-    Status shows connected/disconnected/error. <em>Disconnect</em> closes the WebSocket.
-  </div>
+    <div id="app" data-agdelte="WebSocket">
+      <p class="loading">Loading compiled Agda...</p>
+      <noscript><p>This demo requires JavaScript.</p></noscript>
+    </div>
 
-  <div id="app" data-agdelte="WebSocket">
-    <p class="loading">Loading compiled Agda...</p>
-  </div>
-
-  <div class="info">
-    <p>Source: <code>examples/WebSocket.agda</code></p>
-    <p>Compiled: <code>_build/jAgda.WebSocket.mjs</code></p>
-  </div>
+    <div class="info">
+      <p>Source: <code>examples/WebSocket.agda</code></p>
+      <p>Compiled: <code>_build/jAgda.WebSocket.mjs</code></p>
+    </div>
+  </main>
 
   <script type="module" src="../runtime/reactive-auto.js"></script>
 </body>

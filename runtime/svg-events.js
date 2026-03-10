@@ -13,11 +13,10 @@
 export function screenToSvg(svg, clientX, clientY) {
   const ctm = svg.getScreenCTM();
   if (!ctm) return null;
-  const pt = svg.createSVGPoint();
-  pt.x = clientX;
-  pt.y = clientY;
-  const svgPt = pt.matrixTransform(ctm.inverse());
-  return { x: svgPt.x, y: svgPt.y };
+  try {
+    const svgPt = new DOMPoint(clientX, clientY).matrixTransform(ctm.inverse());
+    return { x: svgPt.x, y: svgPt.y };
+  } catch { return null; }
 }
 
 /**
@@ -30,10 +29,7 @@ export function screenToSvg(svg, clientX, clientY) {
 export function svgToScreen(svg, svgX, svgY) {
   const ctm = svg.getScreenCTM();
   if (!ctm) return null;
-  const pt = svg.createSVGPoint();
-  pt.x = svgX;
-  pt.y = svgY;
-  const screenPt = pt.matrixTransform(ctm);
+  const screenPt = new DOMPoint(svgX, svgY).matrixTransform(ctm);
   return { x: screenPt.x, y: screenPt.y };
 }
 
@@ -45,7 +41,7 @@ export function svgToScreen(svg, svgX, svgY) {
 export function findSvgRoot(el) {
   let current = el;
   while (current) {
-    if (current.tagName === 'svg') return current;
+    if (current.tagName === 'svg' || current.tagName === 'SVG') return current;
     current = current.parentElement;
   }
   return null;
@@ -131,7 +127,6 @@ export function createSvgDrag(target, callbacks) {
  */
 export function createSvgPinch(svg, callbacks) {
   let initialDistance = null;
-  let initialCenter = null;
   const activePointers = new Map();
 
   const getDistance = () => {
@@ -157,7 +152,6 @@ export function createSvgPinch(svg, callbacks) {
     activePointers.set(e.pointerId, pt);
     if (activePointers.size === 2) {
       initialDistance = getDistance();
-      initialCenter = getCenter();
     }
   };
 
@@ -182,7 +176,6 @@ export function createSvgPinch(svg, callbacks) {
     activePointers.delete(e.pointerId);
     if (activePointers.size < 2) {
       initialDistance = null;
-      initialCenter = null;
     }
   };
 

@@ -3,42 +3,48 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1a2e">
+  <link rel="icon" href="data:,">
   <title>Controls Demo - Agdelte</title>
-  <link rel="stylesheet" href="common.css">
-  <link rel="stylesheet" href="../runtime/agdelte-controls.css">
+  <link rel="stylesheet" href="generated/agdelte-controls.css">
   <!-- Common styles for all examples (typed CSS from Agda) -->
   <link rel="stylesheet" href="generated/examples.css">
+  <link rel="stylesheet" href="generated/controls-demo.css">
   <style>
     .demo-btn:hover { opacity: 0.9; }
   </style>
 </head>
 <body>
-  <a href="../index.html" class="back">&larr; Back to examples</a>
+  <header>
+    <a href="../index.html" class="back">&larr; Back to examples</a>
+    <h1>Agdelte Controls</h1>
+    <p class="subtitle">Complete HTML Controls Library</p>
+  </header>
 
-  <h1>Agdelte Controls</h1>
-  <p class="subtitle">Complete HTML Controls Library</p>
+  <main>
+    <div class="instructions">
+      <strong>Controls:</strong>
+      <ul>
+        <li><strong>Forms</strong> - Checkbox, RadioGroup, Slider, Dropdown</li>
+        <li><strong>Navigation</strong> - TabBar, Pagination, Breadcrumb, Sidebar</li>
+        <li><strong>Layout</strong> - Accordion, TreeView</li>
+        <li><strong>Feedback</strong> - Modal, Toast, Tooltip, Progress</li>
+        <li><strong>Data</strong> - DataGrid</li>
+        <li><strong>Wizard</strong> - Stepper</li>
+      </ul>
+    </div>
 
-  <div class="instructions">
-    <strong>Controls:</strong>
-    <ul>
-      <li><strong>Forms</strong> - Checkbox, RadioGroup, Slider, Dropdown</li>
-      <li><strong>Navigation</strong> - TabBar, Pagination, Breadcrumb, Sidebar</li>
-      <li><strong>Layout</strong> - Accordion, TreeView</li>
-      <li><strong>Feedback</strong> - Modal, Toast, Tooltip, Progress</li>
-      <li><strong>Data</strong> - DataGrid</li>
-      <li><strong>Wizard</strong> - Stepper</li>
-    </ul>
-  </div>
+    <div id="app" data-agdelte="ControlsDemo">
+      <p class="loading">Loading compiled Agda...</p>
+      <noscript><p>This demo requires JavaScript.</p></noscript>
+    </div>
 
-  <div id="app" data-agdelte="ControlsDemo">
-    <p class="loading">Loading compiled Agda...</p>
-  </div>
-
-  <div class="info">
-    <p>Source: <code>examples/ControlsDemo.agda</code></p>
-    <p>Controls: <code>src/Agdelte/Html/Controls.agda</code></p>
-    <p>CSS: <code>runtime/agdelte-controls.css</code></p>
-  </div>
+    <div class="info">
+      <p>Source: <code>examples/ControlsDemo.agda</code></p>
+      <p>Controls: <code>src/Agdelte/Html/Controls.agda</code></p>
+      <p>CSS: <code>src/Agdelte/Css/Controls.agda</code> (generated)</p>
+    </div>
+  </main>
 
   <script type="module" src="../runtime/reactive-auto.js"></script>
 </body>

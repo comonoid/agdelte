@@ -47,22 +47,6 @@ private
 eqDate : Date → Date → Bool
 eqDate d1 d2 = (year d1 ==ℕ year d2) ∧ (month d1 ==ℕ month d2) ∧ (day d1 ==ℕ day d2)
 
--- Days in month (simplified)
-daysInMonth : ℕ → ℕ → ℕ
-daysInMonth _ 1 = 31
-daysInMonth _ 2 = 28
-daysInMonth _ 3 = 31
-daysInMonth _ 4 = 30
-daysInMonth _ 5 = 31
-daysInMonth _ 6 = 30
-daysInMonth _ 7 = 31
-daysInMonth _ 8 = 31
-daysInMonth _ 9 = 30
-daysInMonth _ 10 = 31
-daysInMonth _ 11 = 30
-daysInMonth _ 12 = 31
-daysInMonth _ _ = 30
-
 -- Month name
 monthName : ℕ → String
 monthName 1 = "January"
@@ -78,6 +62,48 @@ monthName 10 = "October"
 monthName 11 = "November"
 monthName 12 = "December"
 monthName _ = "Unknown"
+
+------------------------------------------------------------------------
+-- Leap year and days-in-month (must precede datePickerSimple)
+------------------------------------------------------------------------
+
+private
+  -- Check if year is a leap year
+  isLeapYear : ℕ → Bool
+  isLeapYear y =
+    let mod4 = modN y 4
+        mod100 = modN y 100
+        mod400 = modN y 400
+    in (mod4 ==ℕ 0 ∧ not (mod100 ==ℕ 0)) ∨ (mod400 ==ℕ 0)
+    where
+      open import Data.Bool using (not; _∨_)
+
+      modN : ℕ → ℕ → ℕ
+      modN _ 0 = 0
+      modN n m = mod' n m n
+        where
+          mod' : ℕ → ℕ → ℕ → ℕ
+          mod' _ _ zero = 0
+          mod' acc divisor (suc fuel) =
+            if acc <ᵇ divisor then acc else mod' (acc ∸ divisor) divisor fuel
+            where
+              open import Data.Nat using (_<ᵇ_)
+
+-- Days in month with leap year support
+daysInMonthLeap : ℕ → ℕ → ℕ
+daysInMonthLeap y 1 = 31
+daysInMonthLeap y 2 = if isLeapYear y then 29 else 28
+daysInMonthLeap _ 3 = 31
+daysInMonthLeap _ 4 = 30
+daysInMonthLeap _ 5 = 31
+daysInMonthLeap _ 6 = 30
+daysInMonthLeap _ 7 = 31
+daysInMonthLeap _ 8 = 31
+daysInMonthLeap _ 9 = 30
+daysInMonthLeap _ 10 = 31
+daysInMonthLeap _ 11 = 30
+daysInMonthLeap _ 12 = 31
+daysInMonthLeap _ _ = 30
 
 ------------------------------------------------------------------------
 -- Simple DatePicker
@@ -101,12 +127,14 @@ datePickerSimple {M} {A} getSelected viewYear viewMonth onSelect onPrev onNext =
     ( -- Header
       div (class "agdelte-datepicker__header" ∷ [])
         ( button ( class "agdelte-datepicker__nav"
+                 ∷ attr "aria-label" "Previous month"
                  ∷ onClick onPrev
                  ∷ [] )
             ( text "◀" ∷ [] )
         ∷ span (class "agdelte-datepicker__title" ∷ [])
             ( text (monthName viewMonth ++ " " ++ show viewYear) ∷ [] )
         ∷ button ( class "agdelte-datepicker__nav"
+                 ∷ attr "aria-label" "Next month"
                  ∷ onClick onNext
                  ∷ [] )
             ( text "▶" ∷ [] )
@@ -123,7 +151,7 @@ datePickerSimple {M} {A} getSelected viewYear viewMonth onSelect onPrev onNext =
         ∷ [] )
     -- Day grid
     ∷ div (class "agdelte-datepicker__grid" ∷ [])
-        (renderDays 1 (daysInMonth viewYear viewMonth))
+        (renderDays 1 (daysInMonthLeap viewYear viewMonth))
     ∷ [] )
   where
     isSelected : ℕ → M → Bool
@@ -141,6 +169,7 @@ datePickerSimple {M} {A} getSelected viewYear viewMonth onSelect onPrev onNext =
     renderDays _ zero = []
     renderDays d (suc k) =
       button ( classBind (dayClass d)
+             ∷ attr "aria-label" (show d ++ " " ++ monthName viewMonth ++ " " ++ show viewYear)
              ∷ onClick (onSelect (mkDate viewYear viewMonth d))
              ∷ [] )
         ( text (show d) ∷ [] )
@@ -191,46 +220,8 @@ nextMonth y 12 = (y + 1 , 1)
 nextMonth y m = (y , m + 1)
 
 ------------------------------------------------------------------------
--- Leap year and advanced date utilities
+-- Advanced date utilities
 ------------------------------------------------------------------------
-
-private
-  -- Check if year is a leap year
-  isLeapYear : ℕ → Bool
-  isLeapYear y =
-    let mod4 = modN y 4
-        mod100 = modN y 100
-        mod400 = modN y 400
-    in (mod4 ==ℕ 0 ∧ not (mod100 ==ℕ 0)) ∨ (mod400 ==ℕ 0)
-    where
-      open import Data.Bool using (not; _∨_)
-
-      modN : ℕ → ℕ → ℕ
-      modN _ 0 = 0
-      modN n m = mod' n m n
-        where
-          mod' : ℕ → ℕ → ℕ → ℕ
-          mod' _ _ zero = 0
-          mod' acc divisor (suc fuel) =
-            if acc <ᵇ divisor then acc else mod' (acc ∸ divisor) divisor fuel
-            where
-              open import Data.Nat using (_<ᵇ_)
-
--- Days in month with leap year support
-daysInMonthLeap : ℕ → ℕ → ℕ
-daysInMonthLeap y 1 = 31
-daysInMonthLeap y 2 = if isLeapYear y then 29 else 28
-daysInMonthLeap _ 3 = 31
-daysInMonthLeap _ 4 = 30
-daysInMonthLeap _ 5 = 31
-daysInMonthLeap _ 6 = 30
-daysInMonthLeap _ 7 = 31
-daysInMonthLeap _ 8 = 31
-daysInMonthLeap _ 9 = 30
-daysInMonthLeap _ 10 = 31
-daysInMonthLeap _ 11 = 30
-daysInMonthLeap _ 12 = 31
-daysInMonthLeap _ _ = 30
 
 -- | First day of month (0 = Sunday, 6 = Saturday)
 -- Uses Zeller's congruence simplified
@@ -357,12 +348,14 @@ datePickerFull {M} {A} cfg getSelected viewYear viewMonth onSelect onPrev onNext
     ( -- Header with navigation
       div (class "agdelte-datepicker__header" ∷ [])
         ( button ( class "agdelte-datepicker__nav"
+                 ∷ attr "aria-label" "Previous month"
                  ∷ onClick onPrev
                  ∷ [] )
             ( text "◀" ∷ [] )
         ∷ span (class "agdelte-datepicker__title" ∷ [])
             ( text (monthNameLocalized (dpLocale cfg) viewMonth ++ " " ++ show viewYear) ∷ [] )
         ∷ button ( class "agdelte-datepicker__nav"
+                 ∷ attr "aria-label" "Next month"
                  ∷ onClick onNext
                  ∷ [] )
             ( text "▶" ∷ [] )
@@ -379,8 +372,18 @@ datePickerFull {M} {A} cfg getSelected viewYear viewMonth onSelect onPrev onNext
     adjustFirstDay : ℕ → ℕ
     adjustFirstDay fd =
       if dpStartMonday cfg
-      then (fd + 6) ∸ (if fd ==ℕ 0 then 0 else 0)  -- adjust for Monday start
+      then modN (fd + 6) 7   -- Sunday-based → Monday-based
       else fd
+      where
+        open import Data.Nat using (_<ᵇ_)
+        modN : ℕ → ℕ → ℕ
+        modN _ 0 = 0
+        modN n m = mod' n m n
+          where
+            mod' : ℕ → ℕ → ℕ → ℕ
+            mod' _ _ zero = 0
+            mod' acc divisor (suc fuel) =
+              if acc <ᵇ divisor then acc else mod' (acc ∸ divisor) divisor fuel
 
     isSelected : ℕ → M → Bool
     isSelected d m with getSelected m
@@ -397,8 +400,7 @@ datePickerFull {M} {A} cfg getSelected viewYear viewMonth onSelect onPrev onNext
            (just minD , just maxD) → dateLt thisDate minD ∨ dateLt maxD thisDate
       where
         open import Data.Bool using (_∨_)
-        case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
-        case x of f = f x
+        open import Agdelte.Html.Controls.Util using (case_of_)
 
     dayClass : ℕ → M → String
     dayClass d m =
@@ -423,11 +425,14 @@ datePickerFull {M} {A} cfg getSelected viewYear viewMonth onSelect onPrev onNext
     renderDays _ zero = []
     renderDays d (suc k) =
       let disabled = isDisabled d
+          dayLabel = show d ++ " " ++ monthNameLocalized (dpLocale cfg) viewMonth ++ " " ++ show viewYear
       in (if disabled
           then span ( classBind (dayClass d)
+                    ∷ attr "aria-label" dayLabel
                     ∷ [] )
                  ( text (show d) ∷ [] )
           else button ( classBind (dayClass d)
+                      ∷ attr "aria-label" dayLabel
                       ∷ onClick (onSelect (mkDate viewYear viewMonth d))
                       ∷ [] )
                  ( text (show d) ∷ [] ))
@@ -551,11 +556,11 @@ dateRangeCalendar {M} {A} cfg getStart getEnd isSelectingEnd viewYear viewMonth 
   div (class "agdelte-datepicker agdelte-datepicker--range" ∷ [])
     ( -- Header
       div (class "agdelte-datepicker__header" ∷ [])
-        ( button ( class "agdelte-datepicker__nav" ∷ onClick onPrev ∷ [] )
+        ( button ( class "agdelte-datepicker__nav" ∷ attr "aria-label" "Previous month" ∷ onClick onPrev ∷ [] )
             ( text "◀" ∷ [] )
         ∷ span (class "agdelte-datepicker__title" ∷ [])
             ( text (monthNameLocalized (dpLocale cfg) viewMonth ++ " " ++ show viewYear) ∷ [] )
-        ∷ button ( class "agdelte-datepicker__nav" ∷ onClick onNext ∷ [] )
+        ∷ button ( class "agdelte-datepicker__nav" ∷ attr "aria-label" "Next month" ∷ onClick onNext ∷ [] )
             ( text "▶" ∷ [] )
         ∷ [] )
     -- Weekday headers
@@ -600,6 +605,7 @@ dateRangeCalendar {M} {A} cfg getStart getEnd isSelectingEnd viewYear viewMonth 
     renderDays _ zero = []
     renderDays d (suc k) =
       button ( classBind (getDayClass d)
+             ∷ attr "aria-label" (show d ++ " " ++ monthNameLocalized (dpLocale cfg) viewMonth ++ " " ++ show viewYear)
              ∷ onClick (onClick' (mkDate viewYear viewMonth d))
              ∷ [] )
         ( text (show d) ∷ [] )

@@ -1,10 +1,9 @@
 /**
  * Agdelte Runtime Tests
- * Tests for JavaScript runtime (reactive.js, events.js, primitives.js)
+ * Tests for JavaScript runtime (reactive.js, events.js, agda-values.js)
  */
 
 import { debounce, throttle } from '../runtime/events.js';
-import { interval, animationFrame, onKey } from '../runtime/primitives.js';
 
 // Simple test runner
 let passed = 0;
@@ -58,27 +57,6 @@ test('throttle limits call rate', () => {
   fn(); fn(); fn();
   // First call should go through immediately
   assertEqual(callCount, 1);
-});
-
-// ========================================
-// Primitives Tests
-// ========================================
-
-console.log('\n=== Primitives Tests ===\n');
-
-test('interval creates event spec', () => {
-  const spec = interval(1000);
-  assert(typeof spec === 'function', 'interval should return a function');
-});
-
-test('animationFrame creates event spec', () => {
-  const spec = animationFrame;
-  assert(typeof spec === 'function', 'animationFrame should be a function');
-});
-
-test('onKey creates keyboard event spec', () => {
-  const spec = onKey('Enter');
-  assert(typeof spec === 'function', 'onKey should return a function');
 });
 
 // ========================================
@@ -315,46 +293,14 @@ test('match works with Scott-encoded values', () => {
   assertEqual(result2, 0, 'nothing should return 0');
 });
 
-test('match works with tagged arrays', () => {
-  const justTagged = ['just', 42];
-  const nothingTagged = ['nothing'];
-
-  const result1 = AgdaValues.match(justTagged, {
-    just: (x) => x * 2,
-    nothing: () => 0
-  });
-  assertEqual(result1, 84, 'tagged just(42) should return 84');
-
-  const result2 = AgdaValues.match(nothingTagged, {
-    just: (x) => x * 2,
-    nothing: () => 0
-  });
-  assertEqual(result2, 0, 'tagged nothing should return 0');
-});
-
-test('getCtor works with both formats', () => {
+test('getCtor works with Scott-encoded values', () => {
   const scottValue = (c) => c.myConstructor(1, 2, 3);
-  const taggedValue = ['myConstructor', 1, 2, 3];
-
   assertEqual(AgdaValues.getCtor(scottValue), 'myConstructor', 'Scott getCtor');
-  assertEqual(AgdaValues.getCtor(taggedValue), 'myConstructor', 'Tagged getCtor');
 });
 
-test('getSlots works with both formats', () => {
+test('getSlots works with Scott-encoded values', () => {
   const scottValue = (c) => c.mk(1, 2, 3);
-  const taggedValue = ['mk', 1, 2, 3];
-
   assertDeepEqual(AgdaValues.getSlots(scottValue), [1, 2, 3], 'Scott getSlots');
-  assertDeepEqual(AgdaValues.getSlots(taggedValue), [1, 2, 3], 'Tagged getSlots');
-});
-
-test('listToArray works with tagged array lists', () => {
-  // Tagged array list: [1, 2, 3]
-  const taggedList = ['_∷_', 1, ['_∷_', 2, ['_∷_', 3, ['[]']]]];
-
-  const result = AgdaValues.listToArray(taggedList);
-  assertDeepEqual(result.items, [1, 2, 3], 'tagged list items');
-  assertEqual(result.incomplete, false, 'tagged list complete');
 });
 
 test('construct creates correct format', () => {
@@ -366,20 +312,13 @@ test('construct creates correct format', () => {
   assertDeepEqual(slots, ['a', 'b'], 'constructed value has correct slots');
 });
 
-test('deepEqual works with both formats', () => {
+test('deepEqual works with Scott-encoded values', () => {
   const scott1 = (c) => c.pair(1, 2);
   const scott2 = (c) => c.pair(1, 2);
   const scott3 = (c) => c.pair(1, 3);
 
-  assert(AgdaValues.deepEqual(scott1, scott2), 'equal Scott values');
-  assert(!AgdaValues.deepEqual(scott1, scott3), 'different Scott values');
-
-  const tagged1 = ['pair', 1, 2];
-  const tagged2 = ['pair', 1, 2];
-  const tagged3 = ['pair', 1, 3];
-
-  assert(AgdaValues.deepEqual(tagged1, tagged2), 'equal tagged values');
-  assert(!AgdaValues.deepEqual(tagged1, tagged3), 'different tagged values');
+  assert(deepEqual(scott1, scott2, 0), 'equal Scott values');
+  assert(!deepEqual(scott1, scott3, 0), 'different Scott values');
 });
 
 // ========================================
@@ -646,6 +585,93 @@ test('array dedup logic does not mutate original array', () => {
     'dedup should keep last occurrence of duplicate key');
 });
 
+console.log('\n=== Rec #3: foreachKeyed reconciliation ===\n');
+
+test('foreachKeyed dedup removes correct items', () => {
+  // Simulate the full dedup+reconcile logic from updateKeyedList
+  // Input: items with keys [A, B, C, B, D] — B is duplicated
+  const items = [{k: 'A', v: 1}, {k: 'B', v: 2}, {k: 'C', v: 3}, {k: 'B', v: 4}, {k: 'D', v: 5}];
+  const keyFn = item => item.k;
+
+  let newItems = items;
+  let newKeys = newItems.map(keyFn);
+
+  // Dedup: keep last occurrence
+  const seen = new Set();
+  const duplicates = new Set();
+  for (const key of newKeys) {
+    if (seen.has(key)) duplicates.add(key);
+    seen.add(key);
+  }
+  if (duplicates.size > 0) {
+    const lastSeen = new Set();
+    const keep = new Array(newItems.length).fill(false);
+    for (let i = newItems.length - 1; i >= 0; i--) {
+      if (!lastSeen.has(newKeys[i])) {
+        lastSeen.add(newKeys[i]);
+        keep[i] = true;
+      }
+    }
+    newItems = newItems.filter((_, i) => keep[i]);
+    newKeys = newKeys.filter((_, i) => keep[i]);
+  }
+
+  assertDeepEqual(newKeys, ['A', 'C', 'B', 'D'], 'dedup keeps last B');
+  assertEqual(newItems[2].v, 4, 'kept B should be the last occurrence (v=4)');
+});
+
+test('foreachKeyed reordering preserves correct items', () => {
+  // Simulate key-based reconciliation: old [A, B, C] → new [C, A, B]
+  const oldEntries = [
+    {key: 'A', value: 1},
+    {key: 'B', value: 2},
+    {key: 'C', value: 3},
+  ];
+  const newKeys = ['C', 'A', 'B'];
+
+  const oldKeyMap = new Map();
+  for (const e of oldEntries) oldKeyMap.set(e.key, e);
+
+  const newRendered = [];
+  for (const key of newKeys) {
+    const old = oldKeyMap.get(key);
+    assert(old !== undefined, `key ${key} should be found in old map`);
+    newRendered.push(old);
+  }
+
+  assertDeepEqual(
+    newRendered.map(e => e.key),
+    ['C', 'A', 'B'],
+    'reordered keys should match new order'
+  );
+  assertDeepEqual(
+    newRendered.map(e => e.value),
+    [3, 1, 2],
+    'reordered values should match correct keys'
+  );
+});
+
+test('foreachKeyed removal destroys correct entries', () => {
+  // old [A, B, C, D], new [A, D] — B and C should be removed
+  const oldKeys = ['A', 'B', 'C', 'D'];
+  const newKeySet = new Set(['A', 'D']);
+
+  const removed = oldKeys.filter(k => !newKeySet.has(k));
+  const kept = oldKeys.filter(k => newKeySet.has(k));
+
+  assertDeepEqual(removed, ['B', 'C'], 'B and C should be removed');
+  assertDeepEqual(kept, ['A', 'D'], 'A and D should be kept');
+});
+
+test('foreachKeyed addition creates new entries', () => {
+  // old [A, B], new [A, B, C, D] — C and D are new
+  const oldKeyMap = new Map([['A', 1], ['B', 2]]);
+  const newKeys = ['A', 'B', 'C', 'D'];
+
+  const newEntries = newKeys.filter(k => !oldKeyMap.has(k));
+  assertDeepEqual(newEntries, ['C', 'D'], 'C and D should be created');
+});
+
 console.log('\n=== Bug #7: Dead variable removal ===\n');
 
 test('WorkerPool.submit cancel does not use local cancelled variable', () => {
@@ -695,7 +721,7 @@ test('probeSlots returns null for non-probeables', () => {
   assertEqual(probeSlots('str'), null, 'string');
 });
 
-test('detectSlots returns null for multi-dependency bindings', () => {
+test('detectSlots returns full dependency set for multi-dependency bindings', () => {
   // Model with 3 slots
   const model = (c) => c.mk(1, 2, 3);
   // Extract depends on slot 0 AND slot 2
@@ -705,8 +731,7 @@ test('detectSlots returns null for multi-dependency bindings', () => {
     return val;
   };
   const slots = detectSlots(extract, model, 3);
-  // 2+ dependencies → returns null (falls back to full check)
-  assertEqual(slots, null, 'multi-dependency should return null');
+  assertDeepEqual(slots, [0, 2], 'multi-dependency should return [0, 2]');
 });
 
 test('detectSlots returns null for extract that throws', () => {

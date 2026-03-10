@@ -13,6 +13,7 @@ open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Function using (_∘_)
 
 open import Agdelte.Reactive.Node
+open import Agdelte.Html.Controls.Util using (eqStr)
 
 ------------------------------------------------------------------------
 -- Tab record: label + content
@@ -42,7 +43,7 @@ private
       ∷ attr "role" "tab"
       ∷ attrBind "aria-selected" (mkBinding
           (λ m → if getActive m ≡ᵇ idx then "true" else "false")
-          (λ a b → true))  -- always update (simple equality)
+          eqStr)
       ∷ onClick (selectMsg idx)
       ∷ [] )
       ( text (Tab.tabLabel tab) ∷ [] )

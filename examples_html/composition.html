@@ -3,30 +3,36 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1a2e">
+  <link rel="icon" href="data:,">
   <title>Composition Demo - Agdelte</title>
-  <link rel="stylesheet" href="common.css">
+  <link rel="stylesheet" href="generated/examples.css">
 </head>
 <body>
-  <a href="../index.html" class="back">&larr; Back to examples</a>
+  <header>
+    <a href="../index.html" class="back">&larr; Back to examples</a>
+    <h1>Composition Demo</h1>
+    <p class="subtitle">Two counters composed with _∥_</p>
+  </header>
 
-  <h1>Composition Demo</h1>
-  <p class="subtitle">Two counters composed with _∥_</p>
+  <main>
+    <div class="instructions">
+      <strong>Expected:</strong> Two independent counters side by side (Left / Right), each with +/&minus; buttons.
+      Below them, a shared <em>Total</em> that shows the sum of both counters. Each counter operates independently
+      (via <code>zoomNode</code>), but the total updates reactively from the combined model.
+      A <em>Reset</em> button sets both counters to 0.
+    </div>
 
-  <div class="instructions">
-    <strong>Expected:</strong> Two independent counters side by side (Left / Right), each with +/&minus; buttons.
-    Below them, a shared <em>Total</em> that shows the sum of both counters. Each counter operates independently
-    (via <code>zoomNode</code>), but the total updates reactively from the combined model.
-    A <em>Reset</em> button sets both counters to 0.
-  </div>
+    <div id="app" data-agdelte="Composition">
+      <p class="loading">Loading compiled Agda...</p>
+      <noscript><p>This demo requires JavaScript.</p></noscript>
+    </div>
 
-  <div id="app" data-agdelte="Composition">
-    <p class="loading">Loading compiled Agda...</p>
-  </div>
-
-  <div class="info">
-    <p>Source: <code>examples/Composition.agda</code></p>
-    <p>Compiled: <code>_build/jAgda.Composition.mjs</code></p>
-  </div>
+    <div class="info">
+      <p>Source: <code>examples/Composition.agda</code></p>
+      <p>Compiled: <code>_build/jAgda.Composition.mjs</code></p>
+    </div>
+  </main>
 
   <script type="module" src="../runtime/reactive-auto.js"></script>
 </body>

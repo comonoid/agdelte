@@ -15,6 +15,7 @@ open import Data.Maybe using (Maybe; just; nothing)
 open import Function using (_∘_)
 
 open import Agdelte.Reactive.Node
+open import Agdelte.Html.Controls.Util using (case_of_)
 
 ------------------------------------------------------------------------
 -- Column definition
@@ -51,6 +52,7 @@ private
   renderHeaderCell : ∀ {R M A} → Column R M A → Node M A
   renderHeaderCell col =
     div ( class "agdelte-grid__cell agdelte-grid__cell--header"
+        ∷ attr "role" "columnheader"
         ∷ style "width" (colWidth col)
         ∷ [] )
       ( text (colHeader col) ∷ [] )
@@ -69,18 +71,17 @@ private
     case onRowClick cfg of λ where
       nothing →
         div ( class "agdelte-grid__row"
+            ∷ attr "role" "row"
             ∷ keyAttr (rowKey cfg row)
             ∷ [] )
           (map (renderDataCell row) (columns cfg))
       (just handler) →
         div ( class "agdelte-grid__row agdelte-grid__row--clickable"
+            ∷ attr "role" "row"
             ∷ keyAttr (rowKey cfg row)
             ∷ onClick (handler row)
             ∷ [] )
           (map (renderDataCell row) (columns cfg))
-    where
-      case_of_ : ∀ {a b} {A : Set a} {B : Set b} → A → (A → B) → B
-      case x of f = f x
 
 ------------------------------------------------------------------------
 -- Main dataGrid function
@@ -91,8 +92,8 @@ private
 -- | getData: extract list of rows from model
 dataGrid : ∀ {R M A} → GridConfig R M A → (M → List R) → Node M A
 dataGrid cfg getData =
-  div ( class "agdelte-grid" ∷ [] )
-    ( div ( class "agdelte-grid__header" ∷ [] )
+  div ( class "agdelte-grid" ∷ attr "role" "grid" ∷ [] )
+    ( div ( class "agdelte-grid__header" ∷ attr "role" "row" ∷ [] )
         (map renderHeaderCell (columns cfg))
     ∷ div ( class "agdelte-grid__body" ∷ [] )
         ( foreachKeyed getData (rowKey cfg) (renderRow cfg)

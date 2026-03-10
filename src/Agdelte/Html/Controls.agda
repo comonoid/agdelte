@@ -34,13 +34,15 @@ open import Agdelte.Html.Controls.TreeView public
 
 -- Feedback
 open import Agdelte.Html.Controls.Tooltip public
-  renaming (popover to tooltipPopover)
+  hiding (popover; popoverWithClose; positionClass)
 open import Agdelte.Html.Controls.Progress public
   renaming ( spinner to progressSpinner
            ; spinnerWithText to progressSpinnerWithText
            ; skeletonText to progressSkeletonText
-           ; skeletonCircle to progressSkeletonCircle )
+           ; skeletonCircle to progressSkeletonCircle
+           ; withSkeleton to progressWithSkeleton )
 open import Agdelte.Html.Controls.Popover public
+  hiding (Top; Bottom; Left; Right)
 open import Agdelte.Html.Controls.Spinner public
 open import Agdelte.Html.Controls.Skeleton public
 

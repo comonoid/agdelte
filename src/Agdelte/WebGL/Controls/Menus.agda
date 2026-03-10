@@ -39,7 +39,7 @@ disabledItem : ∀ {Msg} → String → MenuItem Msg
 disabledItem lbl = menuItem lbl nothing false
 
 private
-  maybeClickAttr : ∀ {M Msg} → Maybe Msg → Bool → List (SceneAttr Msg)
+  maybeClickAttr : ∀ {Msg} → Maybe Msg → Bool → List (SceneAttr Msg)
   maybeClickAttr (just action) true = onClick action ∷ []
   maybeClickAttr _ _ = []
 

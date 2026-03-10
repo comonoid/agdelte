@@ -19,18 +19,35 @@ const MIME = {
   '.jpg': 'image/jpeg',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
+  '.wasm': 'application/wasm',
+  '.woff2': 'font/woff2',
+  '.woff': 'font/woff',
+  '.ttf': 'font/ttf',
+  '.otf': 'font/otf',
+  '.webp': 'image/webp',
+  '.avif': 'image/avif',
+  '.gif': 'image/gif',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.map': 'application/json',
 };
 
 const server = http.createServer((req, res) => {
   const parsed = new URL(req.url, `http://localhost:${PORT}`);
-  const pathname = decodeURIComponent(parsed.pathname);
+  let pathname;
+  try { pathname = decodeURIComponent(parsed.pathname); }
+  catch { res.writeHead(400); return res.end('Bad Request'); }
 
   // /api/random-delay?name=X — respond after random 500-2500ms delay
   if (pathname === '/api/random-delay') {
     const name = parsed.searchParams.get('name') || 'unknown';
     const delay = 500 + Math.floor(Math.random() * 2000);
     setTimeout(() => {
-      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.writeHead(200, {
+        'Content-Type': 'text/plain',
+        'Cross-Origin-Opener-Policy': 'same-origin',
+        'Cross-Origin-Embedder-Policy': 'require-corp'
+      });
       res.end(`${name} (${delay}ms)`);
     }, delay);
     return;
@@ -44,20 +61,37 @@ const server = http.createServer((req, res) => {
     return res.end('Forbidden');
   }
 
-  fs.readFile(filePath, (err, data) => {
-    if (err) {
-      res.writeHead(err.code === 'ENOENT' ? 404 : 500, { 'Content-Type': 'text/plain' });
-      return res.end(err.code === 'ENOENT' ? '404: Not Found' : `Error: ${err.code}`);
+  // Resolve symlinks and re-check to prevent symlink escape
+  fs.realpath(filePath, (rpErr, realPath) => {
+    if (rpErr) {
+      // If realpath fails, fall through to readFile which will report the actual error
+    } else if (!realPath.startsWith(ROOT + path.sep) && realPath !== ROOT) {
+      res.writeHead(403);
+      return res.end('Forbidden');
     }
-    const ext = path.extname(filePath).toLowerCase();
-    res.writeHead(200, {
-      'Content-Type': MIME[ext] || 'application/octet-stream',
-      'Cache-Control': 'no-store, no-cache, must-revalidate',
-      'Pragma': 'no-cache',
-      'Expires': '0'
+
+    fs.readFile(filePath, (err, data) => {
+      if (err) {
+        const notFound = err.code === 'ENOENT' || err.code === 'EISDIR';
+        res.writeHead(notFound ? 404 : 500, {
+          'Content-Type': 'text/plain',
+          'Cross-Origin-Opener-Policy': 'same-origin',
+          'Cross-Origin-Embedder-Policy': 'require-corp'
+        });
+        return res.end(notFound ? '404: Not Found' : `Error: ${err.code}`);
+      }
+      const ext = path.extname(filePath).toLowerCase();
+      res.writeHead(200, {
+        'Content-Type': MIME[ext] || 'application/octet-stream',
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+        'Cross-Origin-Opener-Policy': 'same-origin',
+        'Cross-Origin-Embedder-Policy': 'require-corp'
+      });
+      res.end(data);
     });
-    res.end(data);
-  });
+  }); // fs.realpath
 });
 
 // ----------------------------------------------------------------
@@ -119,6 +153,18 @@ server.on('upgrade', (req, socket, head) => {
   socket.on('data', (chunk) => {
     buf = Buffer.concat([buf, chunk]);
 
+    // Reject accumulated buffer exceeding max frame size (prevents unbounded growth)
+    if (buf.length > MAX_WS_FRAME_SIZE) {
+      console.log('  WS: buffer too large, closing with 1009');
+      const closeFrame = Buffer.alloc(4);
+      closeFrame[0] = 0x88; // FIN + close
+      closeFrame[1] = 0x02; // payload length = 2
+      closeFrame.writeUInt16BE(1009, 2); // 1009 = message too big
+      socket.write(closeFrame);
+      socket.end();
+      return;
+    }
+
     while (buf.length >= 2) {
       const opcode = buf[0] & 0x0f;
       const masked = !!(buf[1] & 0x80);
@@ -137,8 +183,13 @@ server.on('upgrade', (req, socket, head) => {
 
       // Reject frames exceeding max size to prevent unbounded allocation
       if (payloadLen > MAX_WS_FRAME_SIZE) {
-        console.log('  WS: frame too large, closing');
-        socket.destroy();
+        console.log('  WS: frame too large, closing with 1009');
+        const closeFrame = Buffer.alloc(4);
+        closeFrame[0] = 0x88;
+        closeFrame[1] = 0x02;
+        closeFrame.writeUInt16BE(1009, 2);
+        socket.write(closeFrame);
+        socket.end();
         return;
       }
 

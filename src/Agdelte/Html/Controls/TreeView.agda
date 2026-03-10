@@ -16,6 +16,7 @@ open import Function using (_∘_)
 open import Relation.Nullary using (yes; no)
 
 open import Agdelte.Reactive.Node
+open import Agdelte.Html.Controls.Util using (eqStr)
 
 ------------------------------------------------------------------------
 -- Tree node definition
@@ -32,16 +33,6 @@ record TreeNode (A : Set) : Set where
     nodeData     : Maybe A    -- optional associated data
 
 open TreeNode public
-
-------------------------------------------------------------------------
--- Helper
-------------------------------------------------------------------------
-
-private
-  eqStr : String → String → Bool
-  eqStr a b with a ≟ b
-  ... | yes _ = true
-  ... | no _  = false
 
 ------------------------------------------------------------------------
 -- Simple tree view (all expanded)
@@ -134,6 +125,11 @@ collapsibleTree {M} {A} isExpanded toggleNode onNodeClick roots =
                                  (λ m → if isExpanded (nodeId node) m
                                         then "agdelte-tree__toggle agdelte-tree__toggle--open"
                                         else "agdelte-tree__toggle")
+                                 eqStr)
+                             ∷ attrBind "aria-expanded" (mkBinding
+                                 (λ m → if isExpanded (nodeId node) m
+                                        then "true"
+                                        else "false")
                                  eqStr)
                              ∷ onClick (toggleNode (nodeId node))
                              ∷ [] )

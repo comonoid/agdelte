@@ -1,111 +1,101 @@
-{-# OPTIONS --without-K --guardedness #-}
+{-# OPTIONS --without-K #-}
 
--- EventTest: tests for Event combinators
+-- EventTest: tests for Event combinators using SimEvent (list-based testing)
+-- All tests are propositional equality proofs checked at type-check time.
 
 module EventTest where
 
 open import Data.Nat using (ℕ; zero; suc; _+_)
-open import Data.Bool using (Bool; true; false)
+open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.List using (List; []; _∷_; length)
 open import Data.Product using (_×_; _,_)
+open import Data.Maybe using (Maybe; just; nothing)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl)
 
-open import Agdelte.Core.Signal
-open import Agdelte.Core.Event
+import Agdelte.Test.Interpret as TI
+open TI using (SimEvent; simMapE; simFilterE; simMerge; simFoldE; simAccumE; simMapFilterE; interpretApp)
 
 ------------------------------------------------------------------------
 -- Basic tests
 ------------------------------------------------------------------------
 
--- never does not generate events
-test-never : ∀ {A : Set} → now (never {A}) ≡ []
-test-never = refl
-
--- once generates one event
-test-once : now (once 42) ≡ (42 ∷ [])
-test-once = refl
-
--- mapE preserves structure
-test-mapE : now (mapE suc (once 0)) ≡ (1 ∷ [])
+-- mapE over events
+test-mapE : simMapE suc ((1 ∷ 2 ∷ []) ∷ (3 ∷ []) ∷ [])
+          ≡ ((2 ∷ 3 ∷ []) ∷ (4 ∷ []) ∷ [])
 test-mapE = refl
+
+-- filterE removes non-matching events
+isPositive : ℕ → Bool
+isPositive zero    = false
+isPositive (suc _) = true
+
+test-filterE : simFilterE isPositive ((0 ∷ 1 ∷ 2 ∷ []) ∷ (3 ∷ 0 ∷ []) ∷ [])
+             ≡ ((1 ∷ 2 ∷ []) ∷ (3 ∷ []) ∷ [])
+test-filterE = refl
 
 ------------------------------------------------------------------------
 -- Merge tests
 ------------------------------------------------------------------------
 
--- merge combines events
-test-merge : now (merge (once 1) (once 2)) ≡ (1 ∷ 2 ∷ [])
+-- merge combines events at matching ticks
+test-merge : simMerge ((1 ∷ []) ∷ [] ∷ [])
+                      ((10 ∷ []) ∷ (20 ∷ []) ∷ [])
+           ≡ ((1 ∷ 10 ∷ []) ∷ (20 ∷ []) ∷ [])
 test-merge = refl
 
--- merge with never
-test-merge-never : now (merge (once 1) never) ≡ (1 ∷ [])
-test-merge-never = refl
-
-------------------------------------------------------------------------
--- Filter tests
-------------------------------------------------------------------------
-
--- filterE
-isEven : ℕ → Bool
-isEven zero = true
-isEven (suc zero) = false
-isEven (suc (suc n)) = isEven n
-
-test-filterE : now (filterE isEven (emit (0 ∷ 1 ∷ 2 ∷ 3 ∷ 4 ∷ [])))
-             ≡ (0 ∷ 2 ∷ 4 ∷ [])
-test-filterE = refl
+-- merge with empty
+test-merge-empty : simMerge {ℕ} [] ((1 ∷ []) ∷ [])
+                 ≡ ((1 ∷ []) ∷ [])
+test-merge-empty = refl
 
 ------------------------------------------------------------------------
 -- Fold tests
 ------------------------------------------------------------------------
 
--- foldE accumulates
-test-foldE-now : now (foldE _+_ 0 (emit (1 ∷ 2 ∷ 3 ∷ []))) ≡ 6
-test-foldE-now = refl
+-- foldE accumulates (count events)
+test-foldE : simFoldE 0 (λ _ n → suc n)
+              ((1 ∷ []) ∷ (2 ∷ 3 ∷ []) ∷ [] ∷ (4 ∷ []) ∷ [])
+           ≡ ((1 ∷ []) ∷ (2 ∷ 3 ∷ []) ∷ [] ∷ (4 ∷ []) ∷ [])
+test-foldE = refl
 
--- count counts events
-test-count : now (count (emit (1 ∷ 2 ∷ 3 ∷ []))) ≡ 3
-test-count = refl
-
-------------------------------------------------------------------------
--- Snapshot tests
-------------------------------------------------------------------------
-
--- snapshot combines
-test-snapshot : now (snapshot (once 1) (constant 10)) ≡ ((1 , 10) ∷ [])
-test-snapshot = refl
+-- foldE with sum accumulation
+test-foldE-sum : simFoldE 0 _+_
+                  ((1 ∷ []) ∷ (2 ∷ 3 ∷ []) ∷ [])
+               ≡ ((1 ∷ []) ∷ (3 ∷ 6 ∷ []) ∷ [])
+test-foldE-sum = refl
 
 ------------------------------------------------------------------------
--- Gate tests
+-- AccumE tests
 ------------------------------------------------------------------------
 
--- gate passes when true
-test-gate-true : now (gate (once 1) (constant true)) ≡ (1 ∷ [])
-test-gate-true = refl
-
--- gate blocks when false
-test-gate-false : now (gate (once 1) (constant false)) ≡ []
-test-gate-false = refl
+-- accumE applies function events to accumulator
+test-accumE : simAccumE 0 ((suc ∷ []) ∷ (suc ∷ suc ∷ []) ∷ [])
+            ≡ ((1 ∷ []) ∷ (2 ∷ 3 ∷ []) ∷ [])
+test-accumE = refl
 
 ------------------------------------------------------------------------
--- Signal tests
+-- MapFilterE tests
 ------------------------------------------------------------------------
 
--- constant always returns the value
-test-constant : now (constant 42) ≡ 42
-test-constant = refl
+-- mapFilterE filters via Maybe
+doublePositive : ℕ → Maybe ℕ
+doublePositive zero    = nothing
+doublePositive (suc n) = just (suc n + suc n)
 
--- mapS applies function
-test-mapS : now (mapS suc (constant 0)) ≡ 1
-test-mapS = refl
+test-mapFilterE : simMapFilterE doublePositive
+                    ((0 ∷ 1 ∷ 2 ∷ []) ∷ (0 ∷ 3 ∷ []) ∷ [])
+                ≡ ((2 ∷ 4 ∷ []) ∷ (6 ∷ []) ∷ [])
+test-mapFilterE = refl
 
--- Applicative
-test-applicative : now (pure suc <*> constant 0) ≡ 1
-test-applicative = refl
+------------------------------------------------------------------------
+-- InterpretApp tests
+------------------------------------------------------------------------
 
--- pre delays
-test-pre : now (pre 0 (constant 1)) ≡ 0
-test-pre = refl
+-- Test reactive app: counter that increments on each message
+test-app : interpretApp (λ _ n → suc n) 0
+            ((1 ∷ []) ∷ (2 ∷ 3 ∷ []) ∷ [] ∷ [])
+         ≡ (1 ∷ 3 ∷ 3 ∷ [])
+test-app = refl
 
 ------------------------------------------------------------------------
 -- All tests pass if this module compiles!

@@ -1,25 +1,15 @@
 /**
- * Agda Value Abstraction Layer
+ * Agda Value Utilities
  *
- * Provides uniform interface for both encoding formats:
- * - Scott-encoded: (cases) => cases.ctor(arg1, arg2, ...)
- * - Tagged arrays: ["ctor", arg1, arg2, ...]
+ * Scott-encoded format: (cases) => cases.ctor(arg1, arg2, ...)
  *
- * When the compiler switches to tagged arrays, only this module
- * needs updating — all other runtime code uses these abstractions.
+ * Probing, pattern matching, construction, deep equality,
+ * slot-based dependency tracking for reactive bindings.
  */
 
 // ─────────────────────────────────────────────────────────────────────
 // Format Detection
 // ─────────────────────────────────────────────────────────────────────
-
-/**
- * Check if value is a tagged array (future compiler format)
- * Format: ["ctor", arg1, arg2, ...]
- */
-export function isTaggedArray(value) {
-  return Array.isArray(value) && typeof value[0] === 'string';
-}
 
 /**
  * Check if value is Scott-encoded
@@ -30,10 +20,10 @@ export function isScottEncoded(value) {
 }
 
 /**
- * Check if value is an Agda ADT (either format)
+ * Check if value is an Agda ADT
  */
 export function isAgdaValue(value) {
-  return isTaggedArray(value) || isScottEncoded(value);
+  return isScottEncoded(value);
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -46,11 +36,6 @@ export function isAgdaValue(value) {
  */
 export function getCtor(value) {
   if (!value) return null;
-
-  // Tagged array
-  if (isTaggedArray(value)) {
-    return value[0];
-  }
 
   // Scott-encoded function
   if (typeof value === 'function') {
@@ -80,11 +65,6 @@ export function getCtor(value) {
  */
 export function getSlots(value) {
   if (!value) return null;
-
-  // Tagged array
-  if (isTaggedArray(value)) {
-    return value.slice(1);
-  }
 
   // Scott-encoded function
   if (typeof value === 'function') {
@@ -117,11 +97,6 @@ export function getSlots(value) {
  */
 export function probe(value) {
   if (!value) return null;
-
-  // Tagged array
-  if (isTaggedArray(value)) {
-    return { ctor: value[0], slots: value.slice(1) };
-  }
 
   // Scott-encoded function
   if (typeof value === 'function') {
@@ -161,14 +136,12 @@ export function probe(value) {
 
 /**
  * Match Agda value against cases object (like Scott-encoded call)
- * Works with both tagged arrays and Scott-encoded values.
  *
- * @param {*} value - Agda value (tagged array or Scott-encoded)
+ * @param {*} value - Agda value (Scott-encoded)
  * @param {Object} cases - Object with constructor handlers
  * @returns {*} - Result of matched handler
  *
  * @example
- * // Works with both formats:
  * match(maybeValue, {
  *   just: (x) => x * 2,
  *   nothing: () => 0
@@ -177,16 +150,6 @@ export function probe(value) {
 export function match(value, cases) {
   if (!value) {
     throw new Error('match: value is null/undefined');
-  }
-
-  // Tagged array: ["ctor", arg1, arg2, ...]
-  if (isTaggedArray(value)) {
-    const [ctor, ...args] = value;
-    const handler = cases[ctor];
-    if (!handler) {
-      throw new Error(`match: no handler for constructor "${ctor}"`);
-    }
-    return handler(...args);
   }
 
   // Scott-encoded: call value with cases
@@ -224,34 +187,205 @@ export function matchOr(value, cases, defaultValue) {
 // ─────────────────────────────────────────────────────────────────────
 
 /**
- * Create an Agda value in the current encoding format.
- * Set AGDA_USE_TAGGED_ARRAYS=true to use tagged arrays.
+ * Create a Scott-encoded Agda value.
  *
  * @param {string} ctor - Constructor name
  * @param {...*} args - Constructor arguments
- * @returns {*} - Agda value (tagged array or Scott-encoded)
+ * @returns {Function} - Scott-encoded value
  */
 export function construct(ctor, ...args) {
-  if (typeof globalThis !== 'undefined' && globalThis.AGDA_USE_TAGGED_ARRAYS) {
-    // Tagged array format
-    return [ctor, ...args];
+  return (cases) => cases[ctor](...args);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Deep Structural Equality
+// ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Maximum nesting depth for deep equality comparison.
+ * Models with deeper nesting will be assumed equal at the limit,
+ * which may skip updates but avoids false re-renders every cycle.
+ */
+const MAX_DEEP_EQUAL_DEPTH = 50;
+let _deepEqualWarnCount = 0;
+const _DEEP_EQUAL_WARN_INTERVAL = 100;
+
+export function deepEqual(a, b, depth) {
+  if (a === b) return true;
+  if (depth > MAX_DEEP_EQUAL_DEPTH) {
+    _deepEqualWarnCount++;
+    if (_deepEqualWarnCount === 1 || _deepEqualWarnCount % _DEEP_EQUAL_WARN_INTERVAL === 0) {
+      console.warn(`deepEqual: max depth (${MAX_DEEP_EQUAL_DEPTH}) exceeded ${_deepEqualWarnCount} time(s), assuming different. Consider flattening your model.`);
+    }
+    return false;
   }
-  // Scott-encoded format (default)
-  return (cases) => cases[ctor](...args);
+  const ta = typeof a, tb = typeof b;
+  if (ta !== tb) return false;
+  if (ta !== 'function' && ta !== 'object') return a === b;
+  if (a === null || b === null) return a === b;
+
+  // Plain objects (e.g. from FFI) are not compared structurally — only
+  // Scott-encoded functions are. An FFI object will compare by reference (===).
+  // This is intentional: Scott values define the Agda model structure.
+
+  // Scott-encoded functions — probe via Proxy
+  if (ta === 'function') {
+    let aCtor, aArgs, bCtor, bArgs;
+    const probeA = new Proxy({}, {
+      get(_, name) { return (...args) => { aCtor = name; aArgs = args; }; }
+    });
+    const probeB = new Proxy({}, {
+      get(_, name) { return (...args) => { bCtor = name; bArgs = args; }; }
+    });
+    try {
+      a(probeA);
+      b(probeB);
+    } catch {
+      return false;  // not a Scott-encoded value
+    }
+    if (aCtor !== bCtor) return false;
+    if (!aArgs || !bArgs || aArgs.length !== bArgs.length) return false;
+    for (let i = 0; i < aArgs.length; i++) {
+      if (!deepEqual(aArgs[i], bArgs[i], depth + 1)) return false;
+    }
+    return true;
+  }
+
+  return false;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Slot-based Dependency Tracking
+// ─────────────────────────────────────────────────────────────────────
+
+/** Count slots (fields) of a Scott-encoded record */
+export function countSlots(model) {
+  if (typeof model !== 'function') return 0;
+  let count = 0;
+  try {
+    model(new Proxy({}, {
+      get(_, name) { return (...args) => { count = args.length; }; }
+    }));
+  } catch { return 0; }
+  return count;
+}
+
+/** Create a model with slot `idx` replaced by a unique sentinel */
+export function replaceSlot(model, idx) {
+  const sentinel = Symbol();
+  const replaced = (cases) => model(new Proxy({}, {
+    get(_, ctorName) {
+      return (...args) => {
+        const modified = [...args];
+        modified[idx] = sentinel;
+        return cases[ctorName](...modified);
+      };
+    }
+  }));
+  return replaced;
 }
 
 /**
- * Create a tagged array (explicit format)
+ * Detect which top-level model slots a binding's extract depends on.
+ *
+ * Algorithm: replace each slot with a unique Symbol sentinel, run extract.
+ * If extract throws or returns different value, that slot is a dependency.
+ *
+ * Returns array of dependent slot indices, or null if detection fails.
+ *
+ * Complexity: O(N) where N = number of slots. Called once per binding at setup.
+ * For models with many fields (>20), consider using nested records.
  */
-export function tagged(ctor, ...args) {
-  return [ctor, ...args];
+export function detectSlots(extract, model, numSlots) {
+  if (numSlots === 0) return null;
+
+  // Get base value once
+  let baseValue;
+  try { baseValue = extract(model); } catch { return null; }
+
+  const deps = [];
+  for (let i = 0; i < numSlots; i++) {
+    const sentinel = Symbol();
+    const replaced = (cases) => model(new Proxy({}, {
+      get(_, ctorName) {
+        return (...args) => {
+          const modified = args.slice();
+          modified[i] = sentinel;
+          return cases[ctorName](...modified);
+        };
+      }
+    }));
+
+    let isDep = false;
+    try {
+      const modifiedValue = extract(replaced);
+      isDep = modifiedValue !== baseValue;
+    } catch {
+      isDep = true; // if it throws, assume dependency
+    }
+
+    if (isDep) deps.push(i);
+  }
+
+  return deps.length > 0 ? deps : null;
+}
+
+/** Probe a Scott-encoded model, return its constructor args */
+const _slotProbe = new Proxy({}, {
+  get(_, name) { return (...args) => args; }
+});
+
+/**
+ * Probe slots from Scott-encoded model.
+ * Supports two Agda→JS formats:
+ * 1. Function: model(cases) => cases["ctor"](a, b)
+ * 2. Object: {ctor: (c) => c.ctor(a, b)}
+ */
+export function probeSlots(model) {
+  if (!model) return null;
+
+  // Format 1: function
+  if (typeof model === 'function') {
+    try {
+      const result = model(_slotProbe);
+      return Array.isArray(result) ? result : null;
+    } catch { return null; }
+  }
+
+  // Format 2: object with single method
+  if (typeof model === 'object') {
+    const keys = Object.keys(model);
+    if (keys.length === 1 && typeof model[keys[0]] === 'function') {
+      try { return model[keys[0]](_slotProbe); } catch { return null; }
+    }
+  }
+
+  return null;
 }
 
 /**
- * Create a Scott-encoded value (explicit format)
+ * Probe constructor name of a Scott-encoded value.
  */
-export function scott(ctor, ...args) {
-  return (cases) => cases[ctor](...args);
+export function probeCtor(model) {
+  return getCtor(model);
+}
+
+/**
+ * Detect which top-level slots changed between cached args and new model.
+ * scope.cachedArgs stores previous probe result; updated in-place.
+ * Returns a Set of changed slot indices, or null if not trackable.
+ */
+export function changedSlotsFromCache(scope, newModel) {
+  const newArgs = probeSlots(newModel);
+  if (!newArgs) return null;
+  const oldArgs = scope.cachedArgs;
+  scope.cachedArgs = newArgs;
+  if (!oldArgs || oldArgs.length !== newArgs.length) return null;
+  const changed = new Set();
+  for (let i = 0; i < oldArgs.length; i++) {
+    if (oldArgs[i] !== newArgs[i]) changed.add(i);
+  }
+  return changed;
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -262,16 +396,15 @@ const MAX_LIST_ITEMS = 100000;
 
 /**
  * Convert Agda List to JS Array
- * Handles both tagged arrays and Scott-encoded lists.
  *
- * @param {*} list - Agda List
+ * @param {*} list - Agda List (Scott-encoded)
  * @returns {{ items: Array, incomplete: boolean }}
  */
 export function listToArray(list) {
   if (!list) return { items: [], incomplete: false };
 
-  // Already a JS array (not tagged)
-  if (Array.isArray(list) && !isTaggedArray(list)) {
+  // Already a JS array
+  if (Array.isArray(list)) {
     return { items: list, incomplete: false };
   }
 
@@ -282,19 +415,6 @@ export function listToArray(list) {
   while (true) {
     if (iterations++ > MAX_LIST_ITEMS) {
       console.error('listToArray: possible infinite loop');
-      return { items: result, incomplete: true };
-    }
-
-    // Tagged array format
-    if (isTaggedArray(current)) {
-      const [ctor, ...args] = current;
-      if (ctor === '[]') break;
-      if (ctor === '_∷_') {
-        result.push(args[0]);
-        current = args[1];
-        continue;
-      }
-      console.warn(`listToArray: unexpected constructor "${ctor}"`);
       return { items: result, incomplete: true };
     }
 
@@ -322,7 +442,7 @@ export function listToArray(list) {
 /**
  * Convert JS Array to Agda List
  * @param {Array} arr
- * @returns {*} - Agda List (in current encoding format)
+ * @returns {Function} - Scott-encoded Agda List
  */
 export function arrayToList(arr) {
   let result = construct('[]');
@@ -340,29 +460,12 @@ const MAX_NAT_VALUE = 100000;
 
 /**
  * Convert Agda ℕ to JS number
- * Handles: BigInt, tagged array (zero/suc), Scott-encoded
+ * Handles: BigInt, Scott-encoded
  */
 export function natToNumber(n) {
   // Already a number
   if (typeof n === 'number') return n;
   if (typeof n === 'bigint') return Number(n);
-
-  // Tagged array
-  if (isTaggedArray(n)) {
-    let count = 0;
-    let current = n;
-    while (count < MAX_NAT_VALUE) {
-      if (current[0] === 'zero') return count;
-      if (current[0] === 'suc') {
-        count++;
-        current = current[1];
-        continue;
-      }
-      break;
-    }
-    console.warn('natToNumber: exceeded max or invalid structure');
-    return count;
-  }
 
   // Scott-encoded
   if (typeof n === 'function') {
@@ -384,6 +487,7 @@ export function natToNumber(n) {
       }
       break;
     }
+    console.warn(`natToNumber: reached MAX_NAT_VALUE (${MAX_NAT_VALUE}), result may be truncated`);
     return count;
   }
 
@@ -399,6 +503,33 @@ export function numberToNat(num) {
     result = construct('suc', result);
   }
   return result;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Numeric Coercion (Agda ℕ → JS number, any representation)
+// ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Convert Agda numeric value to JS number.
+ * Handles BigInt literals, plain numbers, and Scott-encoded ℕ.
+ */
+export function ensureNumber(n) {
+  if (typeof n === 'number') return n;
+  if (typeof n === 'bigint') return Number(n);
+  return natToNumber(n);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// String Coercion (worker/message data → JS string)
+// ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Ensure a value is a string.
+ * If already a string, return as-is. Otherwise JSON.stringify.
+ * Used at FFI boundary for worker message data.
+ */
+export function ensureString(data) {
+  return typeof data === 'string' ? data : JSON.stringify(data);
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -451,34 +582,40 @@ export function toBool(value) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// Default export
 // ─────────────────────────────────────────────────────────────────────
-// Exports for backward compatibility
-// ─────────────────────────────────────────────────────────────────────
-
-// Note: deepEqual lives in scott-utils.js — import it directly from there.
 
 export default {
   // Detection
-  isTaggedArray,
   isScottEncoded,
   isAgdaValue,
   // Probing
   getCtor,
   getSlots,
   probe,
+  probeSlots,
+  probeCtor,
   // Pattern matching
   match,
   matchOr,
   // Construction
   construct,
-  tagged,
-  scott,
+  // Deep equality
+  deepEqual,
+  // Slot tracking
+  countSlots,
+  replaceSlot,
+  detectSlots,
+  changedSlotsFromCache,
   // Lists
   listToArray,
   arrayToList,
   // Naturals
   natToNumber,
   numberToNat,
+  ensureNumber,
+  // Strings
+  ensureString,
   // Maybe
   fromMaybe,
   toMaybe,

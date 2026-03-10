@@ -29,7 +29,8 @@ open import Agdelte.FFI.Server using
   ; serveAgentProcess; connectProcess
   ; queryProcess; stepProcess; closeProcess
   )
-open import Agdelte.FFI.Shared using (Serialize; encode; decode; Result; ok; err)
+open import Agdelte.FFI.Shared using (Serialize; encode; decode)
+open import Agdelte.Core.Result using (Result; ok; err)
 
 private
   variable

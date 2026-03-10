@@ -3,8 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1a2e">
+  <link rel="icon" href="data:,">
   <title>SVG Pan/Zoom Demo - Agdelte</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="generated/examples.css">
   <style>
     .pan-zoom-demo {
       text-align: center;
@@ -12,6 +14,7 @@
     }
     .pan-zoom-demo svg {
       margin: 1rem 0;
+      -webkit-user-select: none;
       user-select: none;
     }
     .pan-zoom-demo button {
@@ -21,25 +24,31 @@
   </style>
 </head>
 <body>
-  <div style="max-width:600px;margin:1rem auto;padding:0.75rem 1rem;background:rgba(74,158,255,0.08);border-left:3px solid #4a9eff;border-radius:0 8px 8px 0;color:#bbb;font-size:0.9rem;line-height:1.5;">
+  <header>
+    <a href="../index.html" class="back">&larr; Back to examples</a>
+    <h1>SVG Pan/Zoom</h1>
+    <p class="subtitle">Interactive pan/zoom with SVG events and coordinate conversion</p>
+  </header>
+
+  <main>
+  <div class="instructions">
     <strong>Expected:</strong> An SVG canvas with colored shapes. Click-and-drag to pan the viewport.
     Scroll wheel (or +/&minus; buttons) to zoom in/out. A <em>Reset</em> button returns to the default view.
     Coordinates are converted from screen to SVG space via <code>getScreenCTM().inverse()</code>.
     The current viewBox values are displayed reactively.
   </div>
 
-  <div id="app" data-agdelte="SvgPanZoom"></div>
+  <div id="app" data-agdelte="SvgPanZoom">
+    <p class="loading">Loading compiled Agda...</p>
+    <noscript><p>This demo requires JavaScript.</p></noscript>
+  </div>
 
-  <script type="module">
-    import { mountReactive } from '../runtime/reactive.js';
+  <div class="info">
+    <p>Source: <code>examples/SvgPanZoom.agda</code></p>
+    <p>Compiled: <code>_build/jAgda.SvgPanZoom.mjs</code></p>
+  </div>
+  </main>
 
-    const appEl = document.querySelector('[data-agdelte]');
-    const moduleName = appEl.dataset.agdelte;
-
-    mountReactive(moduleName, appEl).then(app => {
-      console.log('Pan/Zoom demo mounted');
-      window.app = app;
-    });
-  </script>
+  <script type="module" src="../runtime/reactive-auto.js"></script>
 </body>
 </html>

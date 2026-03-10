@@ -14,19 +14,19 @@ open import Agdelte.Css.Stylesheet
 appCSS : Stylesheet
 appCSS =
     rawRule "@charset \"UTF-8\";"
-  ∷ rule ".card" (
+  ∷ rule ".css-demo .card" (
         "padding"       ∶ "16px"
-      ∷ "background"    ∶ "#fff"
+      ∷ "background"    ∶ "#16213e"
       ∷ "border-radius" ∶ "8px"
       ∷ "transition"    ∶ "box-shadow 0.2s, transform 0.2s"
       ∷ "cursor"        ∶ "pointer"
       ∷ [])
-  ∷ rule ".card:hover" (
+  ∷ rule ".css-demo .card:hover" (
         "box-shadow" ∶ "0 8px 24px rgba(0,0,0,0.3)"
       ∷ "transform"  ∶ "translateY(-2px)"
       ∷ [])
   ∷ media "(max-width: 768px)" (
-        rule ".card" (
+        rule ".css-demo .card" (
             "padding" ∶ "8px"
           ∷ [])
       ∷ [])

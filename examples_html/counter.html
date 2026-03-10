@@ -3,29 +3,35 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1a2e">
+  <link rel="icon" href="data:,">
   <title>Counter - Agdelte</title>
-  <link rel="stylesheet" href="common.css">
+  <link rel="stylesheet" href="generated/examples.css">
 </head>
 <body>
-  <a href="../index.html" class="back">&larr; Back to examples</a>
+  <header>
+    <a href="../index.html" class="back">&larr; Back to examples</a>
+    <h1>Agdelte Counter</h1>
+    <p class="subtitle">Reactive bindings - direct DOM updates, no Virtual DOM</p>
+  </header>
 
-  <h1>Agdelte Counter</h1>
-  <p class="subtitle">Reactive bindings - direct DOM updates, no Virtual DOM</p>
+  <main>
+    <div class="instructions">
+      <strong>Expected:</strong> A number (starting at 0) with three buttons: <em>&minus;</em>, <em>Reset</em>, <em>+</em>.
+      Clicking <em>+</em> increments the number, <em>&minus;</em> decrements (min 0), <em>Reset</em> sets it back to 0.
+      The display updates instantly on each click (reactive binding, no page reload).
+    </div>
 
-  <div class="instructions">
-    <strong>Expected:</strong> A number (starting at 0) with three buttons: <em>&minus;</em>, <em>Reset</em>, <em>+</em>.
-    Clicking <em>+</em> increments the number, <em>&minus;</em> decrements (min 0), <em>Reset</em> sets it back to 0.
-    The display updates instantly on each click (reactive binding, no page reload).
-  </div>
+    <div id="app" data-agdelte="Counter">
+      <p class="loading">Loading compiled Agda...</p>
+      <noscript><p>This demo requires JavaScript.</p></noscript>
+    </div>
 
-  <div id="app" data-agdelte="Counter">
-    <p class="loading">Loading compiled Agda...</p>
-  </div>
-
-  <div class="info">
-    <p>Source: <code>examples/Counter.agda</code></p>
-    <p>Compiled: <code>_build/jAgda.Counter.mjs</code></p>
-  </div>
+    <div class="info">
+      <p>Source: <code>examples/Counter.agda</code></p>
+      <p>Compiled: <code>_build/jAgda.Counter.mjs</code></p>
+    </div>
+  </main>
 
   <script type="module" src="../runtime/reactive-auto.js"></script>
 </body>

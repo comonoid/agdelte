@@ -105,6 +105,7 @@ popoverWithClose isOpen toggle close trigger content =
         ( div (class "agdelte-popover agdelte-popover--bottom" ∷ [])
             ( -- Close button
               button ( class "agdelte-popover__close"
+                     ∷ attr "aria-label" "Close"
                      ∷ onClick close
                      ∷ [] )
                 ( text "×" ∷ [] )
@@ -140,6 +141,7 @@ popoverWithHeader isOpen toggle close title trigger content =
                 ( span (class "agdelte-popover__title" ∷ [])
                     ( text title ∷ [] )
                 ∷ button ( class "agdelte-popover__close"
+                         ∷ attr "aria-label" "Close"
                          ∷ onClick close
                          ∷ [] )
                     ( text "×" ∷ [] )
@@ -188,14 +190,17 @@ popoverMenu {M} {A} isOpen toggle trigger items =
 -- | Popover for confirming actions
 popoverConfirm : ∀ {M A}
                → (M → Bool)
+               → A              -- toggle (open/close)
                → A              -- cancel (close)
                → A              -- confirm
                → String         -- message
                → Node M A       -- trigger
                → Node M A
-popoverConfirm isOpen cancel confirm message trigger =
+popoverConfirm isOpen toggle cancel confirm message trigger =
   div (class "agdelte-popover-container" ∷ [])
-    ( div (class "agdelte-popover__trigger" ∷ [])
+    ( div ( class "agdelte-popover__trigger"
+          ∷ onClick toggle
+          ∷ [] )
         ( trigger ∷ [] )
     ∷ when isOpen
         ( div (class "agdelte-popover agdelte-popover--bottom agdelte-popover--confirm" ∷ [])

@@ -24,12 +24,12 @@ open import Agda.Builtin.String using (primShowNat)
 -- Typed CSS
 open import Agdelte.Css.Decl using (Style; _∶_)
 open import Agdelte.Css.Length using (px; rem; pct)
-open import Agdelte.Css.Color using (hex; named; rgba)
+open import Agdelte.Css.Color using (hex; named; rgba; var)
 open import Agdelte.Css.Properties using (padding'; margin'; backgroundColor';
                                           color'; fontSize'; borderRadius';
                                           gap'; maxWidth')
 open import Agdelte.Css.Layout using (row; col; center; wrap)
-open import Agdelte.Css.Stylesheet using (Rule; rule; Stylesheet; renderStylesheet)
+open import Agdelte.Css.Stylesheet using (Rule; rule; variant; Stylesheet; renderStylesheet)
 
 ------------------------------------------------------------------------
 -- Parse natural number from string
@@ -86,45 +86,49 @@ demoBtnStyle =
   ∷ fontSize' (rem 1.0)
   ∷ "cursor" ∶ "pointer"
   ∷ "border" ∶ "none"
+  ∷ backgroundColor' (hex "#3a3a5a")
+  ∷ color' (hex "#eee")
+  ∷ "transition" ∶ "transform 0.1s, background 0.2s"
   ∷ []
 
--- Button variants
+-- Button variants (override-only — base properties come from .demo-btn)
 infoBtnStyle : Style
-infoBtnStyle = demoBtnStyle ++ (backgroundColor' (hex "#3b82f6") ∷ color' (named "white") ∷ [])
+infoBtnStyle = backgroundColor' (var "agdelte-info") ∷ color' (named "white") ∷ []
 
 successBtnStyle : Style
-successBtnStyle = demoBtnStyle ++ (backgroundColor' (hex "#10b981") ∷ color' (named "white") ∷ [])
+successBtnStyle = backgroundColor' (var "agdelte-success") ∷ color' (hex "#1a1a2e") ∷ []
 
 warningBtnStyle : Style
-warningBtnStyle = demoBtnStyle ++ (backgroundColor' (hex "#f59e0b") ∷ color' (hex "#1f2937") ∷ [])
+warningBtnStyle = backgroundColor' (var "agdelte-warning") ∷ color' (hex "#1f2937") ∷ []
 
 errorBtnStyle : Style
-errorBtnStyle = demoBtnStyle ++ (backgroundColor' (hex "#ef4444") ∷ color' (named "white") ∷ [])
+errorBtnStyle = backgroundColor' (var "agdelte-error") ∷ color' (named "white") ∷ []
 
 -- Toast buttons container
 toastButtonsStyle : Style
 toastButtonsStyle = row ++ wrap ++ (gap' (px 8) ∷ [])
 
--- Selected display box
+-- Selected display box (dark theme)
 selectedDisplayStyle : Style
 selectedDisplayStyle =
     "margin-top" ∶ "16px"
   ∷ padding' (px 12)
-  ∷ backgroundColor' (hex "#e8f4e8")
-  ∷ borderRadius' (px 4)
-  ∷ "border" ∶ "1px solid #ccc"
-  ∷ color' (hex "#1f2937")
+  ∷ "background" ∶ "color-mix(in srgb, var(--agdelte-success) 15%, var(--agdelte-bg))"
+  ∷ borderRadius' (px 6)
+  ∷ "border" ∶ "1px solid var(--agdelte-success)"
+  ∷ color' (var "agdelte-success")
   ∷ "font-weight" ∶ "500"
   ∷ []
 
--- Timeout input container
+-- Timeout input container (dark theme)
 timeoutInputStyle : Style
 timeoutInputStyle =
     "margin-bottom" ∶ "16px"
   ∷ padding' (px 12)
-  ∷ backgroundColor' (hex "#f0f4f8")
-  ∷ borderRadius' (px 4)
-  ∷ color' (hex "#1f2937")
+  ∷ backgroundColor' (var "agdelte-bg")
+  ∷ borderRadius' (px 6)
+  ∷ "border" ∶ "1px solid var(--agdelte-border)"
+  ∷ color' (var "agdelte-text")
   ∷ []
 
 ------------------------------------------------------------------------
@@ -136,10 +140,10 @@ appCSS =
     rule ".controls-demo" demoContainerStyle
   ∷ rule ".tab-content" tabContentStyle
   ∷ rule ".demo-btn" demoBtnStyle
-  ∷ rule ".demo-btn.info" infoBtnStyle
-  ∷ rule ".demo-btn.success" successBtnStyle
-  ∷ rule ".demo-btn.warning" warningBtnStyle
-  ∷ rule ".demo-btn.error" errorBtnStyle
+  ∷ variant ".demo-btn" demoBtnStyle ".demo-btn.info" infoBtnStyle
+  ∷ variant ".demo-btn" demoBtnStyle ".demo-btn.success" successBtnStyle
+  ∷ variant ".demo-btn" demoBtnStyle ".demo-btn.warning" warningBtnStyle
+  ∷ variant ".demo-btn" demoBtnStyle ".demo-btn.error" errorBtnStyle
   ∷ rule ".toast-buttons" toastButtonsStyle
   ∷ rule ".selected-display" selectedDisplayStyle
   ∷ rule ".timeout-input" timeoutInputStyle
@@ -183,8 +187,9 @@ record Model : Set where
     nextToastId     : ℕ
     toastTimeoutStr : String
     -- Dropdown
-    dropdownOpen    : Bool
-    selectedOption  : Maybe ℕ
+    dropdownOpen      : Bool
+    selectedOption    : Maybe ℕ
+    highlightedOption : Maybe ℕ
     -- Forms: Checkbox
     checkStates     : CheckboxStates
     -- Forms: Radio
@@ -224,6 +229,7 @@ initModel = mkModel
   "3000"               -- toastTimeoutStr
   false                -- dropdownOpen
   nothing              -- selectedOption
+  nothing              -- highlightedOption
   initCheckboxStates   -- checkStates
   0                    -- selectedRadio
   "50"                 -- sliderValue
@@ -255,6 +261,7 @@ data Msg : Set where
   -- Dropdown
   ToggleDropdown : Msg
   PickOption     : ℕ → Msg
+  DropdownKey    : String → Msg
   -- Forms: Checkbox
   ToggleCheck1   : Msg
   ToggleCheck2   : Msg
@@ -310,6 +317,10 @@ _∷ʳ_ : ∀ {A : Set} → List A → A → List A
 clamp : ℕ → ℕ → ℕ → ℕ
 clamp lo hi n = if n <ᵇ lo then lo else if hi <ᵇ n then hi else n
 
+-- Helper (needed in updateModel for DropdownKey)
+case_of_ : ∀ {a b} {A : Set a} {B : Set b} → A → (A → B) → B
+case x of f = f x
+
 updateModel : Msg → Model → Model
 -- Navigation
 updateModel (SelectTab n) m = record m { activeTab = n }
@@ -325,8 +336,32 @@ updateModel (AddToast ttype msg) m =
 updateModel (DismissToast id) m = record m { toasts = removeToast id (toasts m) }
 updateModel (SetTimeout s) m = record m { toastTimeoutStr = s }
 -- Dropdown
-updateModel ToggleDropdown m = record m { dropdownOpen = not (dropdownOpen m) }
-updateModel (PickOption n) m = record m { selectedOption = just n ; dropdownOpen = false }
+updateModel ToggleDropdown m = record m { dropdownOpen = not (dropdownOpen m) ; highlightedOption = nothing }
+updateModel (PickOption n) m = record m { selectedOption = just n ; dropdownOpen = false ; highlightedOption = nothing }
+updateModel (DropdownKey k) m = ddKey k m
+  where
+    numOptions : ℕ
+    numOptions = 4
+    ddKey : String → Model → Model
+    ddKey k m with dropdownOpen m
+    ... | false = record m { dropdownOpen = true ; highlightedOption = just 0 }
+    ... | true  with k ≟ "Escape"
+    ...   | yes _ = record m { dropdownOpen = false ; highlightedOption = nothing }
+    ...   | no _  with k ≟ "ArrowDown"
+    ...     | yes _ = record m { highlightedOption = just (case highlightedOption m of λ where
+                        nothing → 0
+                        (just n) → if suc n ≡ᵇ numOptions then 0 else suc n) }
+    ...     | no _ with k ≟ "ArrowUp"
+    ...       | yes _ = record m { highlightedOption = just (case highlightedOption m of λ where
+                          nothing → numOptions ∸ 1
+                          (just zero) → numOptions ∸ 1
+                          (just (suc n)) → n) }
+              where open import Data.Nat using (_∸_)
+    ...       | no _ with k ≟ "Enter"
+    ...         | yes _ = case highlightedOption m of λ where
+                            nothing → m
+                            (just n) → record m { selectedOption = just n ; dropdownOpen = false ; highlightedOption = nothing }
+    ...         | no _ = m
 -- Forms: Checkbox
 updateModel ToggleCheck1 m =
   record m { checkStates = mkCheckboxStates (not (check1 (checkStates m)))
@@ -399,10 +434,6 @@ updateModel GridNextPage m = record m { gridPage = if gridPage m <ᵇ gridTotalP
 -- View
 ------------------------------------------------------------------------
 
--- Helper
-case_of_ : ∀ {a b} {A : Set a} {B : Set b} → A → (A → B) → B
-case x of f = f x
-
 ------------------------------------------------------------------------
 -- Tab 1: Overview
 ------------------------------------------------------------------------
@@ -465,7 +496,7 @@ tabDropdown =
   div ( class "tab-content" ∷ [] )
     ( h3 [] ( text "Dropdown" ∷ [] )
     ∷ p [] ( text "Select an option:" ∷ [] )
-    ∷ dropdownIdx selectedOption dropdownOpen ToggleDropdown PickOption
+    ∷ dropdownIdx selectedOption highlightedOption dropdownOpen ToggleDropdown PickOption DropdownKey
         ( "Apple" ∷ "Banana" ∷ "Cherry" ∷ "Date" ∷ [] )
     ∷ div ( class "selected-display" ∷ [] )
         ( text "Selected: "
@@ -511,24 +542,24 @@ tabLayout =
     -- Accordion
     ∷ elem "h4" [] ( text "Accordion" ∷ [] )
     ∷ div ( class "demo-section" ∷ [] )
-        ( collapsible "Section 1" (accordion1 ∘ layoutState) ToggleAcc1
+        ( collapsible "acc-1" "Section 1" (accordion1 ∘ layoutState) ToggleAcc1
             (p [] ( text "Content of section 1. This is the first panel." ∷ [] ))
-        ∷ collapsible "Section 2" (accordion2 ∘ layoutState) ToggleAcc2
+        ∷ collapsible "acc-2" "Section 2" (accordion2 ∘ layoutState) ToggleAcc2
             (p [] ( text "Content of section 2. More details here." ∷ [] ))
-        ∷ collapsible "Section 3" (accordion3 ∘ layoutState) ToggleAcc3
+        ∷ collapsible "acc-3" "Section 3" (accordion3 ∘ layoutState) ToggleAcc3
             (p [] ( text "Content of section 3. Final panel content." ∷ [] ))
         ∷ [] )
     -- TreeView
     ∷ elem "h4" [] ( text "TreeView" ∷ [] )
     ∷ div ( class "demo-section" ∷ [] )
-        ( collapsible "📁 Documents" (tree1 ∘ layoutState) ToggleTree1
+        ( collapsible "tree-docs" "📁 Documents" (tree1 ∘ layoutState) ToggleTree1
             (div []
               ( div ( style "padding-left" "20px" ∷ [] )
                   ( text "📄 report.pdf" ∷ [] )
               ∷ div ( style "padding-left" "20px" ∷ [] )
                   ( text "📄 notes.txt" ∷ [] )
               ∷ [] ))
-        ∷ collapsible "📁 Images" (tree2 ∘ layoutState) ToggleTree2
+        ∷ collapsible "tree-images" "📁 Images" (tree2 ∘ layoutState) ToggleTree2
             (div []
               ( div ( style "padding-left" "20px" ∷ [] )
                   ( text "🖼️ photo.jpg" ∷ [] )

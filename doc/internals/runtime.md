@@ -167,25 +167,6 @@ newModel = { time: oldModel.time + 1, audioBuffer: oldModel.audioBuffer }
 // slot 1: ref === ref → SKIP (100MB untouched!)
 ```
 
-### Tagged Arrays (Future)
-
-The runtime is prepared for a future compiler format:
-
-```javascript
-// Current: Scott-encoded function
-model = (cases) => cases["mkModel"](a, b)
-
-// Future: tagged array (naturally mutable)
-model = ["mkModel", a, b]
-
-// Runtime handles both via universal accessors:
-function getSlots(model) {
-  if (isTaggedArray(model)) return model.slice(1);
-  if (model._slots) return model._slots;
-  return probeSlots(model);
-}
-```
-
 ### SharedArrayBuffer Support
 
 Large data (audio, images) can be stored as SharedArrayBuffer in model slots:
@@ -303,7 +284,7 @@ if (scope.project) {
 
 `deepEqual` handles Scott-encoded records via Proxy introspection: probes both values to extract constructor name + args, compares recursively.
 
-**Depth limit:** `deepEqual` recurses to a maximum of 20 levels (`MAX_DEEP_EQUAL_DEPTH`). Models nested deeper than that fall back to reference equality — bindings may silently stop updating. In practice UI models rarely exceed 4–5 levels, but if you use deeply nested records, flatten them or provide a manual `fingerprint` function.
+**Depth limit:** `deepEqual` recurses to a maximum of 50 levels (`MAX_DEEP_EQUAL_DEPTH`). Models nested deeper than that are assumed equal — bindings may silently stop updating. In practice UI models rarely exceed 4–5 levels, but if you use deeply nested records, flatten them or provide a manual `fingerprint` function.
 
 #### Level 2: Slot-Based Dependency Tracking
 

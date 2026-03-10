@@ -46,8 +46,12 @@ open Model public
 initialModel : Model
 initialModel = mkModel false Disconnected [] "" zero
 
-wsUrl : String
-wsUrl = "ws://localhost:8080/echo"
+postulate wsUrl : String
+{-# COMPILE JS wsUrl =
+  (typeof location !== 'undefined'
+    ? (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/echo'
+    : 'ws://localhost:8080/echo')
+#-}
 
 ------------------------------------------------------------------------
 -- Messages

@@ -3,32 +3,35 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1a2e">
+  <link rel="icon" href="data:,">
   <title>Keyboard Demo - Agdelte</title>
-  <link rel="stylesheet" href="common.css">
-  <style>
-    #app { min-width: 500px; min-height: 450px; }
-  </style>
+  <link rel="stylesheet" href="generated/examples.css">
 </head>
 <body>
-  <a href="../index.html" class="back">&larr; Back to examples</a>
+  <header>
+    <a href="../index.html" class="back">&larr; Back to examples</a>
+    <h1>Keyboard Demo</h1>
+    <p class="subtitle">Global keyboard events with reactive style bindings</p>
+  </header>
 
-  <h1>Keyboard Demo</h1>
-  <p class="subtitle">Global keyboard events with reactive style bindings</p>
+  <main>
+    <div class="instructions">
+      <strong>Expected:</strong> A colored box on a dark background. Press arrow keys to move the box:
+      <em>ArrowUp/Down/Left/Right</em>. The box position updates in real-time via <code>styleBind</code>.
+      A <em>Reset</em> button returns the box to center. The current X/Y coordinates display reactively.
+    </div>
 
-  <div class="instructions">
-    <strong>Expected:</strong> A colored box on a dark background. Press arrow keys to move the box:
-    <em>ArrowUp/Down/Left/Right</em>. The box position updates in real-time via <code>styleBind</code>.
-    A <em>Reset</em> button returns the box to center. The current X/Y coordinates display reactively.
-  </div>
+    <div id="app" data-agdelte="Keyboard">
+      <p class="loading">Loading compiled Agda...</p>
+      <noscript><p>This demo requires JavaScript.</p></noscript>
+    </div>
 
-  <div id="app" data-agdelte="Keyboard">
-    <p class="loading">Loading compiled Agda...</p>
-  </div>
-
-  <div class="info">
-    <p>Source: <code>examples/Keyboard.agda</code></p>
-    <p>Compiled: <code>_build/jAgda.Keyboard.mjs</code></p>
-  </div>
+    <div class="info">
+      <p>Source: <code>examples/Keyboard.agda</code></p>
+      <p>Compiled: <code>_build/jAgda.Keyboard.mjs</code></p>
+    </div>
+  </main>
 
   <script type="module" src="../runtime/reactive-auto.js"></script>
 </body>

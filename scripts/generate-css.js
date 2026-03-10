@@ -37,7 +37,7 @@ const forceFlag = args.includes('--force');
 const positional = args.filter(a => !a.startsWith('--'));
 
 if (positional.length < 3) {
-  console.error('Usage: node scripts/generate-css.js <module> <export> <output> [--hash]');
+  console.error('Usage: node scripts/generate-css.js <module> <export> <output> [--hash] [--force]');
   console.error('');
   console.error('Example:');
   console.error('  node scripts/generate-css.js jAgda.MyApp.Styles appCSS dist/app.css');
@@ -63,15 +63,25 @@ if (!forceFlag && existsSync(outputResolved) && existsSync(modulePath)) {
       process.exit(0);
     }
   } catch (e) {
-    // If stat fails, regenerate
+    if (e.code !== 'ENOENT') {
+      console.warn(`Warning: stat failed (${e.code}), regenerating: ${e.message}`);
+    }
   }
 }
 
 // Dynamic import of compiled modules
-const [stylesheetMod, userMod] = await Promise.all([
-  import(pathToFileURL(stylesheetPath).href),
-  import(pathToFileURL(modulePath).href),
-]);
+let stylesheetMod, userMod;
+try {
+  [stylesheetMod, userMod] = await Promise.all([
+    import(pathToFileURL(stylesheetPath).href),
+    import(pathToFileURL(modulePath).href),
+  ]);
+} catch (e) {
+  console.error(`Error: failed to import compiled modules.`);
+  console.error(`  ${e.message}`);
+  console.error(`  Did you run "npm run build:<name>" first?`);
+  process.exit(1);
+}
 
 const renderStylesheet = stylesheetMod.default['renderStylesheet'];
 const stylesheet = userMod.default[exportName];
@@ -90,6 +100,12 @@ if (!stylesheet) {
 // Render
 const css = renderStylesheet(stylesheet);
 
+if (typeof css !== 'string') {
+  console.error(`Error: renderStylesheet returned ${typeof css} instead of string.`);
+  console.error('  This usually means a bug in the Agda module or Stylesheet renderer.');
+  process.exit(1);
+}
+
 // Determine output filename
 let finalPath = outputPath;
 if (hashFlag) {
@@ -103,8 +119,11 @@ if (hashFlag) {
 // Ensure output directory exists
 mkdirSync(dirname(resolve(finalPath)), { recursive: true });
 
+// Add source attribution comment
+const sourceComment = `\n/*# sourceAgda=${moduleName}:${exportName} */\n`;
+
 // Write
-writeFileSync(finalPath, css);
+writeFileSync(finalPath, css + sourceComment);
 
 const bytes = Buffer.byteLength(css, 'utf8');
 console.log(`${finalPath} (${bytes} bytes)`);

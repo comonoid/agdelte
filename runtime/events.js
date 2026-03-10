@@ -11,11 +11,12 @@
  */
 
 import { formatWorkerError, getPool } from './worker-pool.js';
-import { subscribeLegacy } from './legacy-events.js';
-import { listToArray as _listToArrayFull } from './agda-values.js';
+import { listToArray, arrayToList, toBool, fromMaybe, ensureNumber, ensureString } from './agda-values.js';
 
 // WebSocket connections pool (shared with commands)
+// Keyed by URL → Map of connectionId → WebSocket
 export const wsConnections = new Map();
+let _wsConnectionCounter = 0;
 
 // Worker channel connections (shared with commands for channelSend)
 export const channelConnections = new Map();
@@ -58,49 +59,49 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
 
     // interval: periodic event (P2 - background)
     interval: (ms, msg) => {
-      const msNum = typeof ms === 'bigint' ? Number(ms) : ms;
+      const msNum = ensureNumber(ms);
       const id = setInterval(() => dispatchBackground(msg), msNum);
       return { unsubscribe: () => clearInterval(id) };
     },
 
     // timeout: one-shot event (P1 - normal)
     timeout: (ms, msg) => {
-      const msNum = typeof ms === 'bigint' ? Number(ms) : ms;
+      const msNum = ensureNumber(ms);
       const id = setTimeout(() => dispatchNormal(msg), msNum);
       return { unsubscribe: () => clearTimeout(id) };
     },
 
     // onKeyDown: keyboard (keydown) - P0 (immediate)
     onKeyDown: (handler) => {
-      const listener = (e) => {
+      const ac = new AbortController();
+      document.addEventListener('keydown', (e) => {
         const keyEvent = mkKeyboardEvent(e);
         const maybeMsg = handler(keyEvent);
-        const msg = extractMaybe(maybeMsg);
+        const msg = fromMaybe(maybeMsg);
         if (msg !== null) {
           dispatchImmediate(msg);
         }
-      };
-      document.addEventListener('keydown', listener);
-      return { unsubscribe: () => document.removeEventListener('keydown', listener) };
+      }, { signal: ac.signal });
+      return { unsubscribe: () => ac.abort() };
     },
 
     // onKeyUp: keyboard (keyup) - P0 (immediate)
     onKeyUp: (handler) => {
-      const listener = (e) => {
+      const ac = new AbortController();
+      document.addEventListener('keyup', (e) => {
         const keyEvent = mkKeyboardEvent(e);
         const maybeMsg = handler(keyEvent);
-        const msg = extractMaybe(maybeMsg);
+        const msg = fromMaybe(maybeMsg);
         if (msg !== null) {
           dispatchImmediate(msg);
         }
-      };
-      document.addEventListener('keyup', listener);
-      return { unsubscribe: () => document.removeEventListener('keyup', listener) };
+      }, { signal: ac.signal });
+      return { unsubscribe: () => ac.abort() };
     },
 
     // onKeys: key-to-message mapping with P0 (immediate) dispatch
     onKeys: (pairs) => {
-      const pairArray = agdaListToArray(pairs);
+      const pairArray = listToArray(pairs).items;
       const keyMap = new Map();
       for (const pair of pairArray) {
         // Agda pair (_,_) can be:
@@ -116,12 +117,12 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         } catch { /* ignore extraction failure */ }
         if (k !== undefined) keyMap.set(k, m);
       }
-      const listener = (e) => {
+      const ac = new AbortController();
+      document.addEventListener('keydown', (e) => {
         const msg = keyMap.get(e.key);
         if (msg !== undefined) dispatchImmediate(msg);
-      };
-      document.addEventListener('keydown', listener);
-      return { unsubscribe: () => document.removeEventListener('keydown', listener) };
+      }, { signal: ac.signal });
+      return { unsubscribe: () => ac.abort() };
     },
 
     // httpGet: HTTP GET request - P2 (background)
@@ -159,9 +160,17 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       const controller = new AbortController();
       let completed = false;
 
+      // Auto-detect content type: JSON if body looks like JSON, otherwise text/plain
+      let contentType = 'text/plain';
+      if (typeof body === 'string' && body.length > 0) {
+        const ch = body[0];
+        if (ch === '{' || ch === '[' || ch === '"') {
+          try { JSON.parse(body); contentType = 'application/json'; } catch {}
+        }
+      }
       fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
+        headers: { 'Content-Type': contentType },
         body,
         signal: controller.signal
       })
@@ -202,8 +211,9 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
     },
 
     // debounce: delay after pause (P1 - normal)
+    // Immediate-priority events bypass the debounce to preserve their semantics
     debounce: (ms, innerEvent) => {
-      const msNum = typeof ms === 'bigint' ? Number(ms) : ms;
+      const msNum = ensureNumber(ms);
       let timeoutId = null;
       let lastMsg = null;
 
@@ -216,9 +226,8 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         }, msNum);
       };
 
-      // Wrap all dispatcher channels through debouncedDispatch
       const wrappedDispatchers = {
-        immediate: debouncedDispatch,
+        immediate: dispatchImmediate,  // bypass debounce
         normal: debouncedDispatch,
         background: debouncedDispatch
       };
@@ -232,8 +241,9 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
     },
 
     // throttle: rate limiting (P1 - normal)
+    // Immediate-priority events bypass the throttle to preserve their semantics
     throttle: (ms, innerEvent) => {
-      const msNum = typeof ms === 'bigint' ? Number(ms) : ms;
+      const msNum = ensureNumber(ms);
       let lastCall = 0;
       let timeoutId = null;
       let pendingMsg = null;
@@ -264,9 +274,8 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         }
       };
 
-      // Wrap all dispatcher channels through throttledDispatch
       const wrappedDispatchers = {
-        immediate: throttledDispatch,
+        immediate: dispatchImmediate,  // bypass throttle
         normal: throttledDispatch,
         background: throttledDispatch
       };
@@ -280,10 +289,19 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
     },
 
     // wsConnect: WebSocket connection (P2 - background for data, P1 for connection events)
-    // Note: Multiple connections to same URL are supported via wsConnections Map
-    // wsSend uses the most recent connection for each URL
+    // Multiple connections to the same URL are supported — each gets its own entry.
+    // wsSend broadcasts to all open connections for a URL.
     wsConnect: (url, handler) => {
-      const ws = new WebSocket(url);
+      let ws;
+      try {
+        ws = new WebSocket(url);
+      } catch (e) {
+        // Malformed URL or other construction error — dispatch error and return
+        dispatchNormal(handler(mkWsMsg('WsError', e.message || 'Invalid WebSocket URL')));
+        return { unsubscribe: () => {} };
+      }
+
+      const connId = ++_wsConnectionCounter;
 
       ws.onopen = () => {
         dispatchNormal(handler(mkWsMsg('WsConnected')));
@@ -303,33 +321,26 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
 
       ws.onclose = () => {
         dispatchNormal(handler(mkWsMsg('WsClosed')));
-        // Clean up only if this is still the active connection
-        if (wsConnections.get(url) === ws) {
-          wsConnections.delete(url);
+        // Clean up this connection from the pool
+        const urlConns = wsConnections.get(url);
+        if (urlConns) {
+          urlConns.delete(connId);
+          if (urlConns.size === 0) wsConnections.delete(url);
         }
       };
 
-      // Close old WS: null handlers BEFORE close() to prevent
-      // old onclose from dispatching into the new subscription
-      const oldWs = wsConnections.get(url);
-      if (oldWs) {
-        const noop = () => {};
-        oldWs.onopen = noop;
-        oldWs.onmessage = noop;
-        oldWs.onclose = noop;
-        oldWs.onerror = noop;
-        if (oldWs.readyState === WebSocket.OPEN || oldWs.readyState === WebSocket.CONNECTING) {
-          oldWs.close();
-        }
+      // Register for wsSend — multiple connections per URL
+      if (!wsConnections.has(url)) {
+        wsConnections.set(url, new Map());
       }
-      // Register for wsSend (overwrites previous - last connection wins)
-      wsConnections.set(url, ws);
+      wsConnections.get(url).set(connId, ws);
 
       return {
         unsubscribe: () => {
-          // Clean up only if this is still the active connection
-          if (wsConnections.get(url) === ws) {
-            wsConnections.delete(url);
+          const urlConns = wsConnections.get(url);
+          if (urlConns) {
+            urlConns.delete(connId);
+            if (urlConns.size === 0) wsConnections.delete(url);
           }
           ws.onopen = null;
           ws.onmessage = null;
@@ -434,7 +445,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
 
       w.onmessage = (e) => {
         if (terminated) return;
-        dispatchBackground(onResult(typeof e.data === 'string' ? e.data : JSON.stringify(e.data)));
+        dispatchBackground(onResult(ensureString(e.data)));
       };
 
       w.onerror = (e) => {
@@ -467,21 +478,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
 
       w.onmessage = (e) => {
         if (terminated) return;
-        const data = e.data;
-        if (data && typeof data === 'object') {
-          if (data.type === 'progress') {
-            dispatchBackground(onProgress(String(data.value)));
-          } else if (data.type === 'done') {
-            dispatchBackground(onResult(typeof data.result === 'string' ? data.result : JSON.stringify(data.result)));
-          } else if (data.type === 'error') {
-            dispatchBackground(onError(data.message || 'Worker error'));
-          } else {
-            // Default: treat as result
-            dispatchBackground(onResult(JSON.stringify(data)));
-          }
-        } else {
-          dispatchBackground(onResult(typeof data === 'string' ? data : JSON.stringify(data)));
-        }
+        dispatchWorkerProgress(e.data, dispatchBackground, onProgress, onResult, onError);
       };
 
       w.onerror = (e) => {
@@ -502,11 +499,11 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
     // parallel: subscribe to all events in list, collect first result from each (P2 - background)
     // Scott: parallel(_typeB, eventList, mapFn)
     parallel: (_typeB, eventList, mapFn) => {
-      const events = agdaListToArray(eventList);
+      const events = listToArray(eventList).items;
       const total = events.length;
       if (total === 0) {
         // Empty list: dispatch mapped empty list immediately
-        dispatchBackground(mapFn(mkAgdaList([])));
+        dispatchBackground(mapFn(arrayToList([])));
         return { unsubscribe: () => {} };
       }
 
@@ -525,7 +522,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
           remaining--;
           if (remaining === 0) {
             finished = true;
-            dispatchBackground(mapFn(mkAgdaList(results)));
+            dispatchBackground(mapFn(arrayToList(results)));
             // Unsubscribe all after completion
             subs.forEach(s => s.unsubscribe());
           }
@@ -553,7 +550,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
     // otherwise P1 events (timeout) always beat P2 events (httpGet)
     // regardless of which actually fires first.
     race: (eventList) => {
-      const events = agdaListToArray(eventList);
+      const events = listToArray(eventList).items;
       if (events.length === 0) {
         return { unsubscribe: () => {} };
       }
@@ -593,7 +590,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       const handle = pool.submit(
         input,
         (e) => {
-          dispatchBackground(onResult(typeof e.data === 'string' ? e.data : JSON.stringify(e.data)));
+          dispatchBackground(onResult(ensureString(e.data)));
         },
         (errMsg) => {
           dispatchBackground(onError(errMsg));
@@ -609,20 +606,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       const handle = pool.submit(
         input,
         (e) => {
-          const data = e.data;
-          if (data && typeof data === 'object') {
-            if (data.type === 'progress') {
-              dispatchBackground(onProgress(String(data.value)));
-            } else if (data.type === 'done') {
-              dispatchBackground(onResult(typeof data.result === 'string' ? data.result : JSON.stringify(data.result)));
-            } else if (data.type === 'error') {
-              dispatchBackground(onError(data.message || 'Worker error'));
-            } else {
-              dispatchBackground(onResult(JSON.stringify(data)));
-            }
-          } else {
-            dispatchBackground(onResult(typeof data === 'string' ? data : JSON.stringify(data)));
-          }
+          dispatchWorkerProgress(e.data, dispatchBackground, onProgress, onResult, onError);
         },
         (errMsg) => {
           dispatchBackground(onError(errMsg));
@@ -635,7 +619,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
     // Scott: allocShared(numBytes, handler) or allocShared(numBytes, handler, onError)
     // NOTE: Requires Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy headers
     allocShared: (numBytes, handler, onError) => {
-      const n = typeof numBytes === 'bigint' ? Number(numBytes) : numBytes;
+      const n = ensureNumber(numBytes);
       try {
         const buffer = new SharedArrayBuffer(n);
         dispatchNormal(handler(buffer));
@@ -663,7 +647,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
 
       w.onmessage = (e) => {
         if (terminated) return;
-        dispatchBackground(onResult(typeof e.data === 'string' ? e.data : JSON.stringify(e.data)));
+        dispatchBackground(onResult(ensureString(e.data)));
       };
 
       w.onerror = (e) => {
@@ -697,7 +681,7 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
 
       w.onmessage = (e) => {
         if (terminated) return;
-        dispatchBackground(onMessage(typeof e.data === 'string' ? e.data : JSON.stringify(e.data)));
+        dispatchBackground(onMessage(ensureString(e.data)));
       };
 
       w.onerror = (e) => {
@@ -725,49 +709,53 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         return hash ? hash.slice(1) : '/';
       };
 
+      let lastDispatchedUrl = null;
+      const ac = new AbortController();
+
       const listener = () => {
-        dispatchNormal(handler(getRoutePath()));
-      };
-
-      window.addEventListener('popstate', listener);
-      window.addEventListener('hashchange', listener);
-
-      // Dispatch initial URL for this subscription
-      dispatchNormal(handler(getRoutePath()));
-
-      return {
-        unsubscribe: () => {
-          window.removeEventListener('popstate', listener);
-          window.removeEventListener('hashchange', listener);
+        const url = getRoutePath();
+        if (url !== lastDispatchedUrl) {
+          lastDispatchedUrl = url;
+          dispatchNormal(handler(url));
         }
       };
+
+      window.addEventListener('popstate', listener, { signal: ac.signal });
+      window.addEventListener('hashchange', listener, { signal: ac.signal });
+
+      // Dispatch initial URL via the dedup listener (skips if already dispatched)
+      listener();
+
+      return { unsubscribe: () => ac.abort() };
     },
 
     // animationFrame: dispatch message on every animation frame (P1 - normal)
     animationFrame: (msg) => {
       let running = true;
+      let rafId = 0;
       const loop = () => {
         if (!running) return;
         dispatchNormal(msg);
-        requestAnimationFrame(loop);
+        if (running) rafId = requestAnimationFrame(loop);
       };
-      requestAnimationFrame(loop);
+      rafId = requestAnimationFrame(loop);
       return {
-        unsubscribe: () => { running = false; }
+        unsubscribe: () => { running = false; cancelAnimationFrame(rafId); }
       };
     },
 
     // animationFrameWithTime: dispatch with timestamp (ms since origin) (P1 - normal)
     animationFrameWithTime: (handler) => {
       let running = true;
+      let rafId = 0;
       const loop = (timestamp) => {
         if (!running) return;
-        dispatchNormal(handler(String(timestamp)));
-        requestAnimationFrame(loop);
+        dispatchNormal(handler(timestamp));
+        if (running) rafId = requestAnimationFrame(loop);
       };
-      requestAnimationFrame(loop);
+      rafId = requestAnimationFrame(loop);
       return {
-        unsubscribe: () => { running = false; }
+        unsubscribe: () => { running = false; cancelAnimationFrame(rafId); }
       };
     },
 
@@ -781,11 +769,11 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       cfg({ mkSpringConfig: (p, v, t, s, d) => { position = p; velocity = v; target = t; stiffness = s; damping = d; } });
       let running = true;
       let lastTime = null;
-      let pos = Number(position);
-      let vel = Number(velocity);
-      const tgt = Number(target);
-      const stiff = Number(stiffness);
-      const damp = Number(damping);
+      let pos = ensureNumber(position);
+      let vel = ensureNumber(velocity);
+      const tgt = ensureNumber(target);
+      const stiff = ensureNumber(stiffness);
+      const damp = ensureNumber(damping);
 
       // Guard against NaN/Infinity parameters
       if (!isFinite(pos) || !isFinite(vel) || !isFinite(tgt) ||
@@ -814,22 +802,28 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         pos = pos + vel * dtSec;
       };
 
+      // Adaptive threshold: scale with the magnitude of the spring's range
+      // to avoid jitter at extreme stiffness/mass values
+      const range = Math.abs(ensureNumber(position) - tgt);
+      const posThreshold = Math.max(0.01, range * 0.001);
+      const velThreshold = Math.max(0.01, range * 0.001);
       const isSettled = () => {
-        return Math.abs(pos - tgt) < 0.01 && Math.abs(vel) < 0.01;
+        return Math.abs(pos - tgt) < posThreshold && Math.abs(vel) < velThreshold;
       };
 
+      let rafId = 0;
       const loop = (timestamp) => {
         if (!running) return;
         if (lastTime === null) {
           lastTime = timestamp;
-          requestAnimationFrame(loop);  // skip first frame (dt=0)
+          rafId = requestAnimationFrame(loop);  // skip first frame (dt=0)
           return;
         }
         const dt = Math.min(timestamp - lastTime, 64); // cap to avoid spiral of death
         lastTime = timestamp;
 
         // Skip frame if dt is 0 (identical timestamps)
-        if (dt <= 0) { requestAnimationFrame(loop); return; }
+        if (dt <= 0) { rafId = requestAnimationFrame(loop); return; }
 
         // Tick in 4ms steps for stability
         let remaining = dt;
@@ -845,31 +839,35 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
           running = false;
           dispatchNormal(onSettled);
         } else {
-          requestAnimationFrame(loop);
+          rafId = requestAnimationFrame(loop);
         }
       };
-      requestAnimationFrame(loop);
+      rafId = requestAnimationFrame(loop);
       return {
-        unsubscribe: () => { running = false; }
+        unsubscribe: () => { running = false; cancelAnimationFrame(rafId); }
       };
     }
   });
 }
 
 /**
- * Convert Agda List (Scott-encoded) to JS Array.
- * Delegates to the canonical implementation in agda-values.js.
+ * Dispatch a worker message using the progress protocol.
+ * Protocol: {type: 'progress', value} | {type: 'done', result} | {type: 'error', message} | raw data
  */
-function agdaListToArray(list) {
-  return _listToArrayFull(list).items;
-}
-
-/**
- * Convert JS Array to Agda List (Scott-encoded)
- */
-function mkAgdaList(arr) {
-  // Agda JS backend uses native JS Arrays for List
-  return Array.from(arr);
+function dispatchWorkerProgress(data, dispatch, onProgress, onResult, onError) {
+  if (data && typeof data === 'object') {
+    if (data.type === 'progress') {
+      dispatch(onProgress(String(data.value)));
+    } else if (data.type === 'done') {
+      dispatch(onResult(ensureString(data.result)));
+    } else if (data.type === 'error') {
+      dispatch(onError(data.message || 'Worker error'));
+    } else {
+      dispatch(onResult(ensureString(data)));
+    }
+  } else {
+    dispatch(onResult(ensureString(data)));
+  }
 }
 
 /**
@@ -881,38 +879,13 @@ function mkKeyboardEvent(e) {
   return {"mkKeyboardEvent": (cb) => cb["mkKeyboardEvent"](
     e.key,
     e.code,
-    e.ctrlKey,
-    e.altKey,
-    e.shiftKey,
-    e.metaKey,
-    e.repeat,
+    toBool(e.ctrlKey),
+    toBool(e.altKey),
+    toBool(e.shiftKey),
+    toBool(e.metaKey),
+    toBool(e.repeat),
     BigInt(e.location)
   )};
-}
-
-/**
- * Extracts value from Maybe (Scott-encoded)
- * Maybe.just(x)  = cb => cb.just(x)
- * Maybe.nothing  = cb => cb.nothing()
- */
-function extractMaybe(maybe) {
-  if (!maybe) return null;
-  return maybe({
-    just: (x) => x,
-    nothing: () => null
-  });
-}
-
-/**
- * Legacy: event subscription (for compatibility)
- */
-export function subscribe(eventSpec, dispatch) {
-  // If old format (plain object), use old logic
-  if (eventSpec && eventSpec.type) {
-    return subscribeLegacy(eventSpec, dispatch);
-  }
-  // Otherwise interpret as Event AST
-  return interpretEvent(eventSpec, dispatch);
 }
 
 /**

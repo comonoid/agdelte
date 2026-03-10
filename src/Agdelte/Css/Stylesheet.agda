@@ -24,6 +24,7 @@ open import Agdelte.Css.Decl using (Decl; Style; prop; val)
 
 data Rule : Set where
   rule     : String → Style → Rule                    -- .class { ... }
+  variant  : String → Style → String → Style → Rule   -- (base sel, base style, variant sel, overrides) — guard: base ref prevents merging
   media    : String → List Rule → Rule                -- @media (...) { ... }
   keyframe : String → List (String × Style) → Rule    -- @keyframes name { from {} to {} }
   rawRule  : String → Rule                             -- escape hatch
@@ -61,9 +62,15 @@ private
 
 mutual
   renderRuleAt : String → Rule → String
+  renderRuleAt ind (rule sel []) = ""
   renderRuleAt ind (rule sel style) =
     ind ++ sel ++ " {\n"
     ++ renderDecls (ind ++ "  ") style ++ "\n"
+    ++ ind ++ "}"
+  renderRuleAt ind (variant _ _ varSel []) = ""
+  renderRuleAt ind (variant _ _ varSel overrides) =
+    ind ++ varSel ++ " {\n"
+    ++ renderDecls (ind ++ "  ") overrides ++ "\n"
     ++ ind ++ "}"
   renderRuleAt ind (media query rules) =
     ind ++ "@media " ++ query ++ " {\n"

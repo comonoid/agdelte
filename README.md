@@ -408,7 +408,7 @@ runtime/
     events.js                    -- Event interpretation with priority dispatchers
     primitives.js                -- Primitive event sources
     svg-events.js                -- SVG coordinate conversion helpers
-    agda-values.js               -- Abstraction for Scott/tagged array encoding
+    agda-values.js               -- Abstraction for Scott encoding
     buffer-registry.js           -- SharedArrayBuffer management
     update-worker.js             -- Web Worker for heavy update computations
     workers/

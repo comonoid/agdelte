@@ -3,30 +3,36 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1a2e">
+  <link rel="icon" href="data:,">
   <title>Timer - Agdelte</title>
-  <link rel="stylesheet" href="common.css">
+  <link rel="stylesheet" href="generated/examples.css">
 </head>
 <body>
-  <a href="../index.html" class="back">&larr; Back to examples</a>
+  <header>
+    <a href="../index.html" class="back">&larr; Back to examples</a>
+    <h1>Agdelte Timer</h1>
+    <p class="subtitle">Reactive bindings with interval subscriptions</p>
+  </header>
 
-  <h1>Agdelte Timer</h1>
-  <p class="subtitle">Reactive bindings with interval subscriptions</p>
+  <main>
+    <div class="instructions">
+      <strong>Expected:</strong> A timer (MM:SS.d) with <em>Start/Pause</em> and <em>Reset</em> buttons.
+      Clicking <em>Start</em> begins counting up (100ms ticks). The button label changes to <em>Pause</em>.
+      <em>Pause</em> stops the timer but keeps the value. <em>Reset</em> sets the value to 0:00.0 <strong>and</strong> stops the timer.
+      The display updates every 0.1s while running.
+    </div>
 
-  <div class="instructions">
-    <strong>Expected:</strong> A timer (MM:SS.d) with <em>Start/Pause</em> and <em>Reset</em> buttons.
-    Clicking <em>Start</em> begins counting up (100ms ticks). The button label changes to <em>Pause</em>.
-    <em>Pause</em> stops the timer but keeps the value. <em>Reset</em> sets the value to 0:00.0 <strong>and</strong> stops the timer.
-    The display updates every 0.1s while running.
-  </div>
+    <div id="app" data-agdelte="Timer">
+      <p class="loading">Loading compiled Agda...</p>
+      <noscript><p>This demo requires JavaScript.</p></noscript>
+    </div>
 
-  <div id="app" data-agdelte="Timer">
-    <p class="loading">Loading compiled Agda...</p>
-  </div>
-
-  <div class="info">
-    <p>Source: <code>examples/Timer.agda</code></p>
-    <p>Compiled: <code>_build/jAgda.Timer.mjs</code></p>
-  </div>
+    <div class="info">
+      <p>Source: <code>examples/Timer.agda</code></p>
+      <p>Compiled: <code>_build/jAgda.Timer.mjs</code></p>
+    </div>
+  </main>
 
   <script type="module" src="../runtime/reactive-auto.js"></script>
 </body>

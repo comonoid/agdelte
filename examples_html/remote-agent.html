@@ -3,16 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1a2e">
+  <link rel="icon" href="data:,">
   <title>Remote Agent - Agdelte</title>
-  <link rel="stylesheet" href="common.css">
+  <link rel="stylesheet" href="generated/examples.css">
 </head>
 <body>
-  <a href="../index.html" class="back">&larr; Back to examples</a>
+  <header>
+    <a href="../index.html" class="back">&larr; Back to examples</a>
+    <h1>Remote Agent</h1>
+    <p class="subtitle">Browser &harr; Haskell Agent server on port 3000</p>
+    <p class="instructions">Requires Haskell agent server: <code>npm run build:server && npm run run:server</code></p>
+  </header>
 
-  <h1>Remote Agent</h1>
-  <p class="subtitle">Browser &harr; Haskell Agent server on port 3000</p>
-  <p class="instructions">Requires Haskell agent server: <code>npm run build:server && npm run run:server</code></p>
-
+  <main>
   <div class="instructions">
     <strong>Expected:</strong> A counter display with <em>Query</em> and <em>Step</em> buttons.
     <em>Query</em> fetches current agent state from the Haskell server (GET). <em>Step</em> sends an
@@ -22,6 +26,7 @@
 
   <div id="app" data-agdelte="RemoteAgent">
     <p class="loading">Loading compiled Agda...</p>
+    <noscript><p>This demo requires JavaScript.</p></noscript>
   </div>
 
   <div class="info">
@@ -29,6 +34,7 @@
     <p>Server: <code>_build/HttpAgent</code> (run with <code>npm run run:server</code>)</p>
     <p>Compiled: <code>_build/jAgda.RemoteAgent.mjs</code></p>
   </div>
+  </main>
 
   <script type="module" src="../runtime/reactive-auto.js"></script>
 </body>

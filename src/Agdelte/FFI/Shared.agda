@@ -59,6 +59,7 @@ postulate SharedBuffer : Set
 
 ------------------------------------------------------------------------
 -- Re-export Result for cross-process operations
+-- NOTE: Result is NOT re-exported here to avoid a cyclic dependency:
+--   Event → Shared → Result → Event
+-- Import Agdelte.Core.Result directly instead.
 ------------------------------------------------------------------------
-
-open import Agdelte.Core.Result using (Result; ok; err) public

@@ -1,29 +1,25 @@
--- | Minimal HTTP + WebSocket server using Network.Socket
--- No warp/websockets dependency — raw sockets
+{-# LANGUAGE OverloadedStrings #-}
 module Agdelte.Http
-  ( serve
-  , serveWithWs
-  , Request(..)
-  , Response(..)
+  ( serve, serveWithWs, mkApp, toWaiApp, Request(..), Response(..)
   ) where
 
-import Control.Concurrent (forkIO)
-import Control.Exception (bracket, SomeException, try)
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as BS8
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
-import Network.Socket
-import Network.Socket.ByteString (recv, sendAll)
+import Data.Text.Encoding.Error (lenientDecode)
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as LBS
+import qualified Data.CaseInsensitive as CI
+import qualified Network.Wai as Wai
+import qualified Network.Wai.Handler.Warp as Warp
+import qualified Network.HTTP.Types as H
+import qualified Network.WebSockets as WS
+import qualified Network.Wai.Handler.WebSockets as WaiWS
 
-import qualified Agdelte.WebSocket as WS
-
+-- Types preserved for FFI compatibility with Server.agda
 data Request = Request
-  { reqMethod :: Text
-  , reqPath   :: Text
-  , reqBody   :: Text
-  } deriving (Show)
+  { reqMethod :: Text, reqPath :: Text, reqBody :: Text }
+  deriving (Show)
 
 data Response = Response
   { resStatus  :: Int
@@ -31,99 +27,69 @@ data Response = Response
   , resHeaders :: [(Text, Text)]
   }
 
--- | Start HTTP server on given port, call handler for each request
 serve :: Int -> (Request -> IO Response) -> IO ()
-serve port handler = serveWithWs port handler Nothing
+serve port handler = do
+  putStrLn $ "Agdelte server listening on port " ++ show port
+  serveWithWs port handler Nothing
 
--- | Start HTTP + WebSocket server
--- When wsHandler is Just, WebSocket upgrade requests on matching path are handled
-serveWithWs :: Int
-            -> (Request -> IO Response)                    -- HTTP handler
-            -> Maybe (Text, WS.WsConn -> IO ())           -- (path, WS handler)
-            -> IO ()
-serveWithWs port httpHandler wsHandler = do
-  let hints = defaultHints { addrFlags = [AI_PASSIVE], addrSocketType = Stream }
-  addr:_ <- getAddrInfo (Just hints) Nothing (Just (show port))
-  bracket (openSocket addr) close $ \sock -> do
-    setSocketOption sock ReuseAddr 1
-    bind sock (addrAddress addr)
-    listen sock 128
-    putStrLn $ "Agdelte server listening on port " ++ show port
-    acceptLoop sock httpHandler wsHandler
+serveWithWs :: Int -> (Request -> IO Response) -> Maybe (Text, WS.ServerApp) -> IO ()
+serveWithWs port httpHandler mWsHandler = do
+  let settings = Warp.setPort port
+               $ Warp.setHost "*"
+               $ Warp.defaultSettings
+  Warp.runSettings settings (mkApp httpHandler mWsHandler)
 
-acceptLoop :: Socket -> (Request -> IO Response) -> Maybe (Text, WS.WsConn -> IO ()) -> IO ()
-acceptLoop sock httpHandler wsHandler = do
-  (conn, _) <- accept sock
-  _ <- forkIO $ handleConnection conn httpHandler wsHandler
-  acceptLoop sock httpHandler wsHandler
+-- | Build WAI Application with optional WebSocket routing (without starting warp).
+-- Needed for tests (Warp.testWithApplication).
+mkApp :: (Request -> IO Response) -> Maybe (Text, WS.ServerApp) -> Wai.Application
+mkApp httpHandler mWsHandler =
+  let httpApp = toWaiApp httpHandler
+  in case mWsHandler of
+    Nothing -> httpApp
+    Just (wsPath, wsApp) ->
+      let filteredWsApp pending =
+            let rqPath = WS.requestPath (WS.pendingRequest pending)
+                pathOnly = BS.takeWhile (/= 0x3F) rqPath  -- 0x3F = '?'
+            in  if pathOnly == TE.encodeUtf8 wsPath
+                then wsApp pending
+                else WS.rejectRequest pending "Wrong path"
+      in WaiWS.websocketsOr WS.defaultConnectionOptions filteredWsApp httpApp
 
-handleConnection :: Socket -> (Request -> IO Response) -> Maybe (Text, WS.WsConn -> IO ()) -> IO ()
-handleConnection conn httpHandler wsHandler = do
-  result <- try $ do
-    raw <- recv conn 65536
-    if BS.null raw
-      then return ()
-      else do
-        let req = parseRequest raw
-        -- Check for WebSocket upgrade
-        case wsHandler of
-          Just (wsPath, handler) | isWsUpgrade raw && reqPath req == wsPath -> do
-            mConn <- WS.wsAccept conn raw
-            case mConn of
-              Just wsConn -> handler wsConn  -- This blocks until WS handler exits
-              Nothing -> do
-                let resp = Response 400 (T.pack "Bad WebSocket handshake") []
-                sendAll conn (formatResponse resp)
-          _ -> do
-            resp <- httpHandler req
-            sendAll conn (formatResponse resp)
-  case result of
-    Left (_ :: SomeException) -> return ()
-    Right _ -> return ()
-  close conn
+toWaiApp :: (Request -> IO Response) -> Wai.Application
+toWaiApp handler waiReq respond = do
+  body <- Wai.strictRequestBody waiReq
+  let req = Request
+        { reqMethod = TE.decodeUtf8With lenientDecode (Wai.requestMethod waiReq)
+        , reqPath   = TE.decodeUtf8With lenientDecode (Wai.rawPathInfo waiReq)
+        , reqBody   = TE.decodeUtf8With lenientDecode (LBS.toStrict body)
+        }
+  resp <- handler req
+  let userHdrs = map (\(k,v) -> (CI.mk (TE.encodeUtf8 k), TE.encodeUtf8 v)) (resHeaders resp)
+      hasContentType = any (\(k,_) -> CI.foldedCase k == "content-type") userHdrs
+      defaultHdrs = [("Content-Type", "application/json") | not hasContentType]
+                 ++ [ ("Cross-Origin-Opener-Policy", "same-origin")
+                    , ("Cross-Origin-Embedder-Policy", "require-corp") ]
+      hdrs = userHdrs ++ defaultHdrs
+      bodyBS = LBS.fromStrict (TE.encodeUtf8 (resBody resp))
+      status = toStatus (resStatus resp)
+  respond $ Wai.responseLBS status hdrs bodyBS
 
--- | Check if request is a WebSocket upgrade
-isWsUpgrade :: BS.ByteString -> Bool
-isWsUpgrade raw =
-  BS8.isInfixOf (BS8.pack "Upgrade: websocket") raw ||
-  BS8.isInfixOf (BS8.pack "upgrade: websocket") raw
-
-parseRequest :: BS.ByteString -> Request
-parseRequest raw =
-  let ls = BS8.lines raw
-      (method, rest) = case ls of
-        (l:_) -> let ws = BS8.words l
-                 in case ws of
-                      (m:p:_) -> (TE.decodeUtf8 m, TE.decodeUtf8 p)
-                      _       -> (T.pack "GET", T.pack "/")
-        []    -> (T.pack "GET", T.pack "/")
-      -- Body is after empty line
-      body = case break BS.null ls of
-               (_, _:bodyLines) -> TE.decodeUtf8 (BS8.unlines bodyLines)
-               _                -> T.empty
-  in Request method rest body
-
-formatResponse :: Response -> BS.ByteString
-formatResponse (Response status body hdrs) =
-  let bodyBS = TE.encodeUtf8 body
-      statusText = case status of
-        200 -> "OK"
-        400 -> "Bad Request"
-        404 -> "Not Found"
-        405 -> "Method Not Allowed"
-        _   -> "Unknown"
-      defaultHeaders =
-        [ BS8.pack "Content-Type: application/json"
-        , BS8.pack $ "Content-Length: " ++ show (BS.length bodyBS)
-        -- COOP/COEP headers for SharedArrayBuffer support
-        , BS8.pack "Cross-Origin-Opener-Policy: same-origin"
-        , BS8.pack "Cross-Origin-Embedder-Policy: require-corp"
-        , BS8.pack "Connection: close"
-        ]
-      customHeaders = map (\(k, v) -> TE.encodeUtf8 (k <> ": " <> v)) hdrs
-      header = BS8.intercalate (BS8.pack "\r\n") $
-        [ BS8.pack $ "HTTP/1.1 " ++ show status ++ " " ++ statusText ]
-        ++ defaultHeaders
-        ++ customHeaders
-        ++ [ BS8.pack "", BS8.pack "" ]
-  in header <> bodyBS
+-- | Convert Int status code to http-types Status
+toStatus :: Int -> H.Status
+toStatus 200 = H.status200
+toStatus 201 = H.status201
+toStatus 202 = H.status202
+toStatus 204 = H.status204
+toStatus 301 = H.status301
+toStatus 302 = H.status302
+toStatus 304 = H.status304
+toStatus 400 = H.status400
+toStatus 403 = H.status403
+toStatus 404 = H.status404
+toStatus 405 = H.status405
+toStatus 408 = H.status408
+toStatus 500 = H.status500
+toStatus 502 = H.status502
+toStatus 503 = H.status503
+toStatus 504 = H.status504
+toStatus n   = H.mkStatus n "Unknown"

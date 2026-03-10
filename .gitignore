@@ -27,5 +27,8 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Nix
+result
+
 # Claude Code
 .claude/

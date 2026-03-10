@@ -8,16 +8,6 @@
  * Actual buffer data lives in this registry.
  */
 
-// Check for SharedArrayBuffer support at load time
-if (typeof SharedArrayBuffer === 'undefined') {
-  console.warn(
-    '[agdelte] SharedArrayBuffer is not available. ' +
-    'Worker/Parallel features require COOP/COEP headers:\n' +
-    '  Cross-Origin-Opener-Policy: same-origin\n' +
-    '  Cross-Origin-Embedder-Policy: require-corp'
-  );
-}
-
 /**
  * Buffer Registry singleton
  */
@@ -25,6 +15,21 @@ class BufferRegistry {
   constructor() {
     this.buffers = new Map();  // handle id → { buffer, width?, height?, version }
     this.nextHandle = 1;
+    this._sabChecked = false;
+  }
+
+  /** Warn once on first allocate() if SharedArrayBuffer is unavailable */
+  _checkSAB() {
+    if (this._sabChecked) return;
+    this._sabChecked = true;
+    if (typeof SharedArrayBuffer === 'undefined') {
+      console.warn(
+        '[agdelte] SharedArrayBuffer is not available. ' +
+        'Worker/Parallel features require COOP/COEP headers:\n' +
+        '  Cross-Origin-Opener-Policy: same-origin\n' +
+        '  Cross-Origin-Embedder-Policy: require-corp'
+      );
+    }
   }
 
   /**
@@ -34,6 +39,7 @@ class BufferRegistry {
    * @returns {number} - Handle id
    */
   allocate(size, metadata = {}) {
+    this._checkSAB();
     try {
       const buffer = new SharedArrayBuffer(size);
       const id = this.nextHandle++;

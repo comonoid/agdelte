@@ -9,36 +9,18 @@ module Agdelte.Html.Controls.Pagination where
 
 open import Data.String using (String; _≟_)
 open import Data.List using (List; []; _∷_; _++_; map; length)
-open import Data.Nat using (ℕ; zero; suc; _+_; _∸_; _≤ᵇ_; _<ᵇ_; _≡ᵇ_)
+open import Data.Nat using (ℕ; zero; suc; _+_; _≤ᵇ_; _<ᵇ_; _≡ᵇ_)
 open import Data.Bool using (Bool; true; false; if_then_else_; not)
 open import Function using (_∘_)
 open import Relation.Nullary using (yes; no)
 
 open import Agdelte.Reactive.Node
 
-open import Agda.Builtin.String using (primStringFromList)
-open import Data.Char using (fromℕ)
-
-------------------------------------------------------------------------
--- Number to string conversion
-------------------------------------------------------------------------
+open import Agda.Builtin.String using (primShowNat)
 
 private
-  open import Data.Char using (Char)
-  open import Data.Nat using (_/_; _%_)
-
-  -- Digit to character
-  digitChar : ℕ → Char
-  digitChar n = fromℕ (48 + n)
-
-  -- Natural number to string (simple, for page numbers)
   showℕ : ℕ → String
-  showℕ 0 = "0"
-  showℕ n = primStringFromList (go n [])
-    where
-      go : ℕ → List Char → List Char
-      go 0 acc = acc
-      go m acc = go (m / 10) (digitChar (m % 10) ∷ acc)
+  showℕ = primShowNat
 
 ------------------------------------------------------------------------
 -- Simple pagination (prev/next only)
@@ -58,9 +40,8 @@ simplePagination : ∀ {M A}
 simplePagination {M} {A} currentPage totalPages prevMsg nextMsg =
   div ( class "agdelte-pagination" ∷ [] )
     ( button ( class "agdelte-pagination__btn"
-             ∷ attrBind "disabled" (mkBinding
-                 (λ m → if currentPage m ≤ᵇ 1 then "true" else "")
-                 eqStr)
+             ∷ attr "aria-label" "Previous page"
+             ∷ disabledBind (λ m → currentPage m ≤ᵇ 1)
              ∷ onClick prevMsg
              ∷ [] )
         ( text "← Prev" ∷ [] )
@@ -71,18 +52,12 @@ simplePagination {M} {A} currentPage totalPages prevMsg nextMsg =
         ∷ bindF (showℕ ∘ totalPages)
         ∷ [] )
     ∷ button ( class "agdelte-pagination__btn"
-             ∷ attrBind "disabled" (mkBinding
-                 (λ m → if currentPage m <ᵇ totalPages m then "" else "true")
-                 eqStr)
+             ∷ attr "aria-label" "Next page"
+             ∷ disabledBind (λ m → not (currentPage m <ᵇ totalPages m))
              ∷ onClick nextMsg
              ∷ [] )
         ( text "Next →" ∷ [] )
     ∷ [] )
-  where
-    eqStr : String → String → Bool
-    eqStr a b with a ≟ b
-    ... | yes _ = true
-    ... | no _  = false
 
 ------------------------------------------------------------------------
 -- Numbered pagination (static page count)
@@ -100,23 +75,27 @@ numberedPagination : ∀ {M A}
 numberedPagination {M} {A} currentPage goToPage prevMsg nextMsg pages =
   div ( class "agdelte-pagination" ∷ [] )
     ( button ( class "agdelte-pagination__btn"
-             ∷ attrBind "disabled" (mkBinding
-                 (λ m → if currentPage m ≤ᵇ 1 then "true" else "")
-                 eqStr)
+             ∷ attr "aria-label" "Previous page"
+             ∷ disabledBind (λ m → currentPage m ≤ᵇ 1)
              ∷ onClick prevMsg
              ∷ [] )
         ( text "←" ∷ [] )
     ∷ renderPages pages
     ++ ( button ( class "agdelte-pagination__btn"
+                ∷ attr "aria-label" "Next page"
+                ∷ disabledBind (λ m → not (currentPage m <ᵇ lastPage pages))
                 ∷ onClick nextMsg
                 ∷ [] )
            ( text "→" ∷ [] )
        ∷ [] ) )
   where
-    eqStr : String → String → Bool
-    eqStr a b with a ≟ b
-    ... | yes _ = true
-    ... | no _  = false
+    open import Agdelte.Html.Controls.Util using (eqStr)
+    open import Data.String renaming (_++_ to _++ˢ_)
+
+    lastPage : List ℕ → ℕ
+    lastPage []       = 0
+    lastPage (p ∷ []) = p
+    lastPage (_ ∷ ps) = lastPage ps
 
     -- Render a single page button
     pageBtn : ℕ → Node M A
@@ -126,6 +105,7 @@ numberedPagination {M} {A} currentPage goToPage prevMsg nextMsg pages =
                         then "agdelte-pagination__page agdelte-pagination__page--active"
                         else "agdelte-pagination__page")
                  eqStr)
+             ∷ attr "aria-label" ("Page " ++ˢ showℕ page)
              ∷ onClick (goToPage page)
              ∷ [] )
         ( text (showℕ page) ∷ [] )
@@ -148,9 +128,8 @@ compactPagination : ∀ {M A}
 compactPagination {M} {A} currentPage totalPages prevMsg nextMsg =
   div ( class "agdelte-pagination agdelte-pagination--compact" ∷ [] )
     ( button ( class "agdelte-pagination__btn"
-             ∷ attrBind "disabled" (mkBinding
-                 (λ m → if currentPage m ≤ᵇ 1 then "true" else "")
-                 eqStr)
+             ∷ attr "aria-label" "Previous page"
+             ∷ disabledBind (λ m → currentPage m ≤ᵇ 1)
              ∷ onClick prevMsg
              ∷ [] )
         ( text "‹" ∷ [] )
@@ -160,15 +139,9 @@ compactPagination {M} {A} currentPage totalPages prevMsg nextMsg =
         ∷ bindF (showℕ ∘ totalPages)
         ∷ [] )
     ∷ button ( class "agdelte-pagination__btn"
-             ∷ attrBind "disabled" (mkBinding
-                 (λ m → if currentPage m <ᵇ totalPages m then "" else "true")
-                 eqStr)
+             ∷ attr "aria-label" "Next page"
+             ∷ disabledBind (λ m → not (currentPage m <ᵇ totalPages m))
              ∷ onClick nextMsg
              ∷ [] )
         ( text "›" ∷ [] )
     ∷ [] )
-  where
-    eqStr : String → String → Bool
-    eqStr a b with a ≟ b
-    ... | yes _ = true
-    ... | no _  = false

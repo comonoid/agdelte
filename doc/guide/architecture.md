@@ -53,7 +53,7 @@ For optimal runtime performance:
 | Guideline | Reason |
 |-----------|--------|
 | **≤20 fields per record** | Slot detection is O(N) per binding at setup |
-| **≤20 nesting levels** | Deep equality limit (`MAX_DEEP_EQUAL_DEPTH`) |
+| **≤50 nesting levels** | Deep equality limit (`MAX_DEEP_EQUAL_DEPTH`) |
 | **Use nested records** | Separate bindings for sub-models, better change detection |
 | **Flatten when possible** | Simpler models are faster to compare |
 
@@ -132,6 +132,12 @@ data Event (A : Set) : Set where
 ```
 
 Events are AST data. The runtime interprets them, fingerprints them for diffing, auto-cleans on unsubscribe. Stateful combinators (`foldE`, `switchE`) have runtime-managed internal state.
+
+**Fingerprinting**: `worker`/`workerWithProgress` fingerprints include only `url` and `input`, not callback identity. Callbacks must be referentially stable across `subs` calls — fresh closures with the same url/input won't trigger re-subscription.
+
+### Update Worker (opt-in)
+
+`app.initUpdateWorker(modulePath)` moves the `update` function to a Web Worker. After init, `dispatch` sends messages off-thread; the worker applies `update` and posts back the new model. Use for CPU-intensive update functions.
 
 ### Cmd — One-shot effects
 

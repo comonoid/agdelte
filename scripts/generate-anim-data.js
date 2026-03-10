@@ -21,10 +21,36 @@ if (!output) {
 const buildDir = resolve(process.cwd(), '_build');
 const load = name => import(pathToFileURL(`${buildDir}/${name}.mjs`).href).then(m => m.default);
 
-const [Demo, Spring] = await Promise.all([
-  load('jAgda.AnimDemo'),
-  load('jAgda.Agdelte.Anim.Spring'),
-]);
+let Demo, Spring;
+try {
+  [Demo, Spring] = await Promise.all([
+    load('jAgda.AnimDemo'),
+    load('jAgda.Agdelte.Anim.Spring'),
+  ]);
+} catch (e) {
+  console.error('Error: failed to import compiled modules.');
+  console.error(`  ${e.message}`);
+  console.error('  Did you run "npm run build:anim-demo" first?');
+  process.exit(1);
+}
+
+// Validate required exports exist
+const requiredDemo = [
+  'opacityMidValue', 'opacityEndValue', 'opacityDone', 'retargetedFrom',
+  'linearStart', 'dialogPos1', 'dialogSettled', 'dialogFinalPos',
+  'retargetedTarget', 'customSpring', 'tabSpring'
+];
+const missingDemo = requiredDemo.filter(k => Demo[k] === undefined);
+if (missingDemo.length > 0) {
+  console.error(`Error: missing exports from AnimDemo: ${missingDemo.join(', ')}`);
+  console.error('Available exports:', Object.keys(Demo).join(', '));
+  process.exit(1);
+}
+
+if (!Spring['Spring']) {
+  console.error('Error: Spring record not found in Anim.Spring module');
+  process.exit(1);
+}
 
 const data = {
   opacityMidValue:   Demo['opacityMidValue'],
@@ -41,6 +67,12 @@ const data = {
   customStiffness:   Spring['Spring']['stiffness'](Demo['customSpring']),
   tabTarget:         Spring['Spring']['target'](Demo['tabSpring']),
 };
+
+// Validate no undefined values in output
+const undefinedKeys = Object.entries(data).filter(([, v]) => v === undefined).map(([k]) => k);
+if (undefinedKeys.length > 0) {
+  console.warn(`Warning: undefined values for: ${undefinedKeys.join(', ')}`);
+}
 
 mkdirSync(dirname(resolve(output)), { recursive: true });
 writeFileSync(output, JSON.stringify(data, null, 2) + '\n');

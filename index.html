@@ -3,174 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1a2e">
   <title>Agdelte - Reactive UI with Dependent Types</title>
-  <style>
-    :root {
-      --primary: #4a9eff;
-      --bg: #1a1a2e;
-      --card: #16213e;
-      --text: #eee;
-      --accent: #e94560;
-      --success: #4ade80;
-    }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      padding: 2rem;
-      text-align: center;
-    }
-
-    h1 {
-      font-size: 3rem;
-      margin-bottom: 0.5rem;
-      background: linear-gradient(135deg, var(--primary), var(--accent));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-
-    .subtitle {
-      color: #888;
-      margin-bottom: 2rem;
-      font-size: 1.1rem;
-    }
-
-    .features {
-      display: flex;
-      gap: 1rem;
-      margin: 0 auto 2rem;
-      max-width: 900px;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-
-    .feature {
-      background: rgba(74, 158, 255, 0.1);
-      border: 1px solid rgba(74, 158, 255, 0.3);
-      padding: 0.5rem 1rem;
-      border-radius: 20px;
-      font-size: 0.85rem;
-    }
-
-    .examples {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 1.5rem;
-      max-width: 900px;
-      margin: 0 auto 2rem;
-    }
-
-    .example-card {
-      background: var(--card);
-      border-radius: 12px;
-      padding: 1.5rem;
-      text-decoration: none;
-      color: var(--text);
-      text-align: left;
-      transition: transform 0.2s, box-shadow 0.2s;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-    }
-
-    .example-card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 8px 30px rgba(0,0,0,0.3);
-    }
-
-    .example-card h2 {
-      color: var(--primary);
-      margin-bottom: 0.5rem;
-      font-size: 1.3rem;
-    }
-
-    .example-card p {
-      color: #aaa;
-      font-size: 0.9rem;
-      margin-bottom: 1rem;
-    }
-
-    .example-card .status {
-      display: inline-block;
-      padding: 0.25rem 0.75rem;
-      border-radius: 12px;
-      font-size: 0.75rem;
-      font-weight: 600;
-    }
-
-    .status.ready {
-      background: rgba(74, 222, 128, 0.2);
-      color: var(--success);
-    }
-
-    .status.wip {
-      background: rgba(251, 191, 36, 0.2);
-      color: #fbbf24;
-    }
-
-    .example-card code {
-      display: block;
-      margin-top: 0.75rem;
-      padding: 0.5rem;
-      background: rgba(0,0,0,0.3);
-      border-radius: 6px;
-      font-size: 0.8rem;
-      color: #888;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .info {
-      color: #666;
-      font-size: 0.9rem;
-      max-width: 600px;
-      margin: 0 auto;
-    }
-
-    .info a {
-      color: var(--primary);
-      text-decoration: none;
-    }
-
-    .info a:hover {
-      text-decoration: underline;
-    }
-
-    .tech-stack {
-      margin: 2rem auto 0;
-      padding: 1.5rem;
-      background: var(--card);
-      border-radius: 12px;
-      max-width: 600px;
-      text-align: left;
-    }
-
-    .tech-stack h3 {
-      color: var(--primary);
-      margin-bottom: 1rem;
-      font-size: 1rem;
-    }
-
-    .tech-stack ul {
-      list-style: none;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0.5rem;
-    }
-
-    .tech-stack li {
-      color: #aaa;
-      font-size: 0.85rem;
-    }
-
-    .tech-stack li::before {
-      content: "→ ";
-      color: var(--accent);
-    }
-  </style>
+  <link rel="stylesheet" href="examples_html/generated/examples.css">
+  <link rel="stylesheet" href="examples_html/generated/index.css">
+  <link rel="icon" href="data:,">
 </head>
 <body>
   <h1>Agdelte</h1>
@@ -394,7 +231,7 @@
     </a>
   </div>
 
-  <div class="info">
+  <div class="index-info">
     <p>All examples are <strong>real Agda code</strong> compiled to JavaScript via the Agda JS backend.</p>
     <p style="margin-top: 0.5rem">
       Build: <code>npm run build:counter</code> |

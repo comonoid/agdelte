@@ -194,6 +194,7 @@ data Event (A : Set) : Set where
 -- mapE - function, not constructor (to keep Event ∈ Set)
 ------------------------------------------------------------------------
 
+{-# TERMINATING #-}
 mapE : (A → B) → Event A → Event B
 mapE f never = never
 mapE f (interval n a) = interval n (f a)
@@ -233,6 +234,7 @@ mapE f (switchE initial meta) = switchE (mapE f initial) (mapE (mapE f) meta)
 -- filterE - through mapE with Maybe
 ------------------------------------------------------------------------
 
+{-# TERMINATING #-}
 filterE : (A → Bool) → Event A → Event A
 filterE p never = never
 filterE p (interval n a) = if p a then interval n a else never

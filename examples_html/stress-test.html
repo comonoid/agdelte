@@ -3,149 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1a2e">
+  <link rel="icon" href="data:,">
   <title>Stress Test - Agdelte</title>
-  <link rel="stylesheet" href="common.css">
-  <style>
-    .stress-test { max-width: 700px; margin: 0 auto; }
-    .stress-test .subtitle { color: #888; margin-bottom: 1.5rem; }
-    .controls { display: flex; gap: 8px; margin-bottom: 1.5rem; }
-    .controls button {
-      padding: 12px 28px;
-      border: none;
-      border-radius: 6px;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: transform 0.1s;
-    }
-    .controls button:hover { transform: scale(1.05); }
-    .controls button:nth-child(1) { background: #4ade80; color: #1a1a2e; }
-    .controls button:nth-child(2) { background: #e94560; color: white; }
-    .controls button:nth-child(3) { background: #666; color: white; }
-
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 1rem;
-      margin-bottom: 2rem;
-    }
-    .stat {
-      background: rgba(74, 158, 255, 0.08);
-      border: 1px solid rgba(74, 158, 255, 0.2);
-      border-radius: 10px;
-      padding: 1rem;
-      text-align: center;
-    }
-    .stat-main {
-      background: rgba(74, 222, 128, 0.1);
-      border-color: rgba(74, 222, 128, 0.4);
-    }
-    .stat-label { color: #888; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem; }
-    .stat-value { font-size: 1.3rem; font-weight: 700; color: #eee; font-family: monospace; min-height: 2.4rem; display: flex; align-items: center; justify-content: center; }
-    .stat-fps { color: #4a9eff !important; font-size: 2.2rem !important; }
-    .stat-highlight {
-      background: rgba(233, 69, 96, 0.1);
-      border-color: rgba(233, 69, 96, 0.4);
-    }
-    .stat-ops { color: #e94560 !important; font-size: 2.2rem !important; }
-    .stat-peak { color: #fbbf24 !important; }
-
-    .bindings-section { margin-bottom: 2rem; }
-    .bindings-section h2 { font-size: 1rem; color: #888; margin-bottom: 1rem; }
-    .binding-row {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 6px;
-      padding: 6px 12px;
-      background: rgba(255,255,255,0.03);
-      border-radius: 6px;
-      height: 36px;
-    }
-    .binding-label { color: #888; font-size: 0.85rem; width: 60px; font-family: monospace; }
-    .binding-val { color: #4a9eff; font-size: 1.1rem; width: 30px; text-align: right; font-family: monospace; font-weight: 700; }
-    .binding-bar {
-      color: #4a9eff;
-      font-family: monospace;
-      font-size: 1.1rem;
-      letter-spacing: 1px;
-      width: 200px;
-      overflow: hidden;
-      white-space: nowrap;
-    }
-
-    .explanation { color: #555; font-size: 0.85rem; line-height: 1.6; }
-    .explanation p { margin-bottom: 0.3rem; }
-
-    .doc {
-      max-width: 700px;
-      margin: 2rem auto;
-      padding: 2rem;
-      background: rgba(255,255,255,0.03);
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.08);
-      line-height: 1.7;
-      color: #bbb;
-    }
-    .doc h2 {
-      color: #4a9eff;
-      font-size: 1.1rem;
-      margin-top: 1.8rem;
-      margin-bottom: 0.6rem;
-    }
-    .doc h2:first-child { margin-top: 0; }
-    .doc p { margin-bottom: 0.8rem; font-size: 0.9rem; }
-    .doc ol, .doc ul { margin: 0.5rem 0 1rem 1.5rem; font-size: 0.9rem; }
-    .doc li { margin-bottom: 0.4rem; }
-    .doc code {
-      background: rgba(74, 158, 255, 0.12);
-      padding: 1px 5px;
-      border-radius: 3px;
-      font-size: 0.85rem;
-      color: #8cc8ff;
-    }
-    .doc pre {
-      background: rgba(0,0,0,0.4);
-      border-radius: 8px;
-      padding: 1rem 1.2rem;
-      overflow-x: auto;
-      margin: 1rem 0;
-    }
-    .doc pre code {
-      background: none;
-      padding: 0;
-      color: #ccc;
-      font-size: 0.82rem;
-      line-height: 1.5;
-    }
-    .doc table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 1rem 0;
-      font-size: 0.85rem;
-    }
-    .doc th {
-      text-align: left;
-      padding: 8px 12px;
-      background: rgba(74, 158, 255, 0.1);
-      color: #4a9eff;
-      border-bottom: 1px solid rgba(74, 158, 255, 0.2);
-    }
-    .doc td {
-      padding: 8px 12px;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
-    }
-    .doc strong { color: #eee; }
-  </style>
+  <link rel="stylesheet" href="generated/examples.css">
 </head>
 <body>
-  <a href="../index.html" class="back">&larr; Back to examples</a>
+  <header>
+    <a href="../index.html" class="back">&larr; Back to examples</a>
+    <h1>Stress Test</h1>
+    <p class="subtitle">1M pure updates per frame — no Virtual DOM</p>
+  </header>
 
-  <h1>Stress Test</h1>
-  <p class="subtitle">1M pure updates per frame — no Virtual DOM</p>
-
+  <main>
   <div id="app" data-agdelte="StressTest">
     <p class="loading">Loading compiled Agda...</p>
+    <noscript><p>This demo requires JavaScript.</p></noscript>
   </div>
 
   <div class="doc">
@@ -235,12 +108,16 @@ subs m = if running m
 
     <h2>Comparison</h2>
     <table>
-      <tr><th></th><th>Virtual DOM (React/Vue)</th><th>Agdelte (this)</th></tr>
-      <tr><td>Per frame</td><td>Rebuild vdom tree, diff, patch</td><td>19 string comparisons, patch changed</td></tr>
-      <tr><td>Cost</td><td>O(tree size)</td><td>O(changed bindings)</td></tr>
-      <tr><td>GC pressure</td><td>New objects every render</td><td>Zero allocation per frame</td></tr>
-      <tr><td>Template</td><td>Function called each render</td><td>Static data, defined once</td></tr>
-      <tr><td>Headroom</td><td>Limited by diff cost</td><td>1M updates/frame + 19 bindings, uncapped FPS</td></tr>
+      <thead>
+        <tr><th></th><th>Virtual DOM (React/Vue)</th><th>Agdelte (this)</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Per frame</td><td>Rebuild vdom tree, diff, patch</td><td>19 string comparisons, patch changed</td></tr>
+        <tr><td>Cost</td><td>O(tree size)</td><td>O(changed bindings)</td></tr>
+        <tr><td>GC pressure</td><td>New objects every render</td><td>Zero allocation per frame</td></tr>
+        <tr><td>Template</td><td>Function called each render</td><td>Static data, defined once</td></tr>
+        <tr><td>Headroom</td><td>Limited by diff cost</td><td>1M updates/frame + 19 bindings, uncapped FPS</td></tr>
+      </tbody>
     </table>
   </div>
 
@@ -248,6 +125,7 @@ subs m = if running m
     <p>Source: <code>examples/StressTest.agda</code></p>
     <p>Compiled: <code>_build/jAgda.StressTest.mjs</code></p>
   </div>
+  </main>
 
   <script type="module" src="../runtime/reactive-auto.js"></script>
 </body>

@@ -22,7 +22,8 @@ open import Data.String using (String; _++_)
 open import Data.Maybe using (Maybe; just; nothing)
 
 open import Agdelte.Core.Cmd as Cmd using (Cmd; httpGet; httpPost)
-open import Agdelte.FFI.Shared using (Serialize; encode; decode; Result; ok; err)
+open import Agdelte.FFI.Shared using (Serialize; encode; decode)
+open import Agdelte.Core.Result using (Result; ok; err)
 
 private
   variable

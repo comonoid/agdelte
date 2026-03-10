@@ -12,7 +12,7 @@ open import Data.Product using (_×_; _,_)
 open import Data.Bool using (Bool; true; false)
 
 open import Agdelte.Css.Decl using (Decl; Style; _∶_; _<>_; none)
-open import Agdelte.Css.Length using (Length; px; rem; em; pct; vh; vw; zero)
+open import Agdelte.Css.Length using (Length; px; rem; em; pct; vh; vw; zero; auto)
 open import Agdelte.Css.Color using (Color; hex; rgba; rgb; hsl; named; var)
 open import Agdelte.Css.Properties using (padding'; padding2; background'; backgroundColor';
                                            color'; fontSize'; borderRadius';
@@ -44,19 +44,19 @@ open import Agdelte.Css.Stylesheet using (Rule; rule; media; keyframe; rawRule;
 -- Define theme variables (rendered as inline style on :root or container)
 themeVars : Style
 themeVars =
-    cssVar "primary"   "#3b82f6"
-  ∷ cssVar "secondary" "#10b981"
-  ∷ cssVar "radius"    "8px"
-  ∷ cssVar "gap"       "1rem"
+    cssVar "demo-primary"   "#3b82f6"
+  ∷ cssVar "demo-secondary" "#10b981"
+  ∷ cssVar "demo-radius"    "8px"
+  ∷ cssVar "demo-gap"       "1rem"
   ∷ []
 
 -- Reference variables in typed properties
 themedCard : Style
 themedCard =
     color' (named "white")
-  ∷ backgroundColor' (var "primary")
-  ∷ "border-radius" ∶ varRef "radius"
-  ∷ "padding" ∶ varRef "gap"
+  ∷ backgroundColor' (var "demo-primary")
+  ∷ "border-radius" ∶ varRef "demo-radius"
+  ∷ "padding" ∶ varRef "demo-gap"
   ∷ []
 
 ------------------------------------------------------------------------
@@ -81,7 +81,7 @@ tagList = inline (px 8) <> wrap
 
 -- Page layout: centered column, max-width
 page : Style
-page = stack (rem 2.0) <> (maxWidth' (px 960) ∷ margin2 zero (pct 50.0) ∷ [])
+page = stack (rem 2.0) <> (maxWidth' (px 960) ∷ margin2 zero auto ∷ [])
 
 ------------------------------------------------------------------------
 -- Conditional styles
@@ -135,13 +135,6 @@ multiAnim = animations (
   ∷ anim "slideInUp" (ms 500)
   ∷ [])
 
--- Stagger delay for list items
-delay0 : Decl
-delay0 = staggerDelay 0 50
-
-delay3 : Decl
-delay3 = staggerDelay 3 50
-
 ------------------------------------------------------------------------
 -- Full stylesheet using presets
 ------------------------------------------------------------------------
@@ -163,13 +156,13 @@ appCSS =
   ∷ rule ".card-grid" cardGrid
   ∷ rule ".page" page
     -- Card with typed properties
-  ∷ rule ".card" (
+  ∷ rule ".css-full-demo .card" (
         padding' (rem 1.0)
-      ∷ background' (hex "#fff")
+      ∷ backgroundColor' (var "agdelte-bg")
       ∷ borderRadius' (px 8)
       ∷ hoverTransition
       ∷ [])
-  ∷ rule ".card:hover" (
+  ∷ rule ".css-full-demo .card:hover" (
         "box-shadow" ∶ "0 4px 12px rgba(0,0,0,0.15)"
       ∷ "transform" ∶ "translateY(-2px)"
       ∷ [])
@@ -177,7 +170,7 @@ appCSS =
   ∷ rule ".card--themed" themedCard
     -- Responsive
   ∷ media "(max-width: 768px)" (
-        rule ".card" (
+        rule ".css-full-demo .card" (
             padding' (px 8)
           ∷ [])
       ∷ rule ".card-grid" (

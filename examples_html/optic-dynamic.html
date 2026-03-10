@@ -3,27 +3,33 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1a2e">
+  <link rel="icon" href="data:,">
   <title>Dynamic Optics - Agdelte</title>
-  <link rel="stylesheet" href="common.css">
+  <link rel="stylesheet" href="generated/examples.css">
 </head>
 <body>
-  <a href="../index.html" class="back">&larr; Back to examples</a>
+  <header>
+    <a href="../index.html" class="back">&larr; Back to examples</a>
+    <h1>Dynamic Optics</h1>
+    <p class="subtitle">ixList + Traversal: runtime optic composition and batch operations</p>
+  </header>
 
-  <h1>Dynamic Optics</h1>
-  <p class="subtitle">ixList + Traversal: runtime optic composition and batch operations</p>
-
+  <main>
   <div class="instructions">
     <p><strong>How it works:</strong> Click an item to select it. Use <em>+1 Selected</em> / <em>−1 Selected</em> to modify the selected item's value via a runtime-composed optic (<code>ixList n ∘O itemsLens</code>). <em>Reset All</em> sets every item to 0 using a Traversal. <em>+ Add Item</em> prepends a new item. The info panel shows the current selection (via <code>peek</code> — safe, may return nothing if index is out of bounds).</p>
   </div>
 
   <div id="app" data-agdelte="OpticDynamic">
     <p class="loading">Loading compiled Agda...</p>
+    <noscript><p>This demo requires JavaScript.</p></noscript>
   </div>
 
   <div class="info">
     <p>Source: <code>examples/OpticDynamic.agda</code></p>
     <p>Compiled: <code>_build/jAgda.OpticDynamic.mjs</code></p>
   </div>
+  </main>
 
   <script type="module" src="../runtime/reactive-auto.js"></script>
 </body>

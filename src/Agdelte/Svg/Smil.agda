@@ -56,6 +56,8 @@ private
   concat = foldr _++_ ""
 
 showTiming : Timing → String
+showTimingList : List Timing → List String
+
 showTiming (offset d) = showDuration d
 showTiming (onEvent e) = e
 showTiming (syncBegin id') = id' ++ ".begin"
@@ -63,7 +65,10 @@ showTiming (syncBeginD id' d) = id' ++ ".begin+" ++ showDuration d
 showTiming (syncEnd id') = id' ++ ".end"
 showTiming (syncEndD id' d) = id' ++ ".end+" ++ showDuration d
 showTiming (syncRepeat id' n) = id' ++ ".repeat(" ++ showNat n ++ ")"
-showTiming (anyOf ts) = concat (intersperse ";" (map showTiming ts))
+showTiming (anyOf ts) = concat (intersperse ";" (showTimingList ts))
+
+showTimingList [] = []
+showTimingList (t ∷ ts) = showTiming t ∷ showTimingList ts
 
 ------------------------------------------------------------------------
 -- Calc mode and easing

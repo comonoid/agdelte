@@ -3,14 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1a2e">
+  <link rel="icon" href="data:,">
   <title>Animation Demo - Agdelte</title>
-  <link rel="stylesheet" href="common.css">
+  <link rel="stylesheet" href="generated/examples.css">
 </head>
 <body>
-  <a href="../index.html" class="back">&larr; Back to examples</a>
+  <header>
+    <a href="../index.html" class="back">&larr; Back to examples</a>
+    <noscript><p>This demo requires JavaScript.</p></noscript>
+    <h1>Animation Demo</h1>
+    <p class="subtitle">Model-driven animations &mdash; Tween + Spring computed at compile time</p>
+  </header>
 
-  <h1>Animation Demo</h1>
-  <p class="subtitle">Model-driven animations &mdash; Tween + Spring computed at compile time</p>
+  <main>
   <div class="instructions">
     This page shows <strong>compile-time computed values</strong>, not runtime animations.
     The Agda compiler evaluates tween curves and spring physics during build &mdash;
@@ -51,6 +57,7 @@
     <p>Data: <code>examples_html/generated/anim-demo.json</code></p>
     <p>Pipeline: <code>agda --js &rarr; generate-anim-data.js &rarr; .json &rarr; fetch()</code></p>
   </div>
+  </main>
 
   <script>
     function fmt(v) {
@@ -58,16 +65,31 @@
     }
 
     function makeTable(el, rows) {
-      el.innerHTML = '<tr><th>Property</th><th>Value</th><th>Check</th></tr>' +
-        rows.map(([name, val, check]) => {
-          const cls = check ? 'pass' : 'fail';
-          return '<tr><td>' + name + '</td><td class="val">' + fmt(val) + '</td>' +
-            '<td class="' + cls + '">' + (check ? 'OK' : 'FAIL') + '</td></tr>';
-        }).join('');
+      el.textContent = '';
+      const header = document.createElement('tr');
+      for (const h of ['Property', 'Value', 'Check']) {
+        const th = document.createElement('th');
+        th.textContent = h;
+        header.appendChild(th);
+      }
+      el.appendChild(header);
+      for (const [name, val, check] of rows) {
+        const tr = document.createElement('tr');
+        const tdName = document.createElement('td');
+        tdName.textContent = name;
+        const tdVal = document.createElement('td');
+        tdVal.className = 'val';
+        tdVal.textContent = fmt(val);
+        const tdCheck = document.createElement('td');
+        tdCheck.className = check ? 'pass' : 'fail';
+        tdCheck.textContent = check ? 'OK' : 'FAIL';
+        tr.append(tdName, tdVal, tdCheck);
+        el.appendChild(tr);
+      }
     }
 
     fetch('generated/anim-demo.json')
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error(r.status + ' ' + r.statusText); return r.json(); })
       .then(d => {
         // Tween section 1
         makeTable(document.getElementById('tween-table'), [
@@ -110,14 +132,29 @@
           { label: 'Snappy target', value: d.tabTarget, max: 200.0, color: '#fbbf24' },
         ];
 
-        document.getElementById('bars').innerHTML = bars.map(function(b) {
+        var barsEl = document.getElementById('bars');
+        barsEl.textContent = '';
+        bars.forEach(function(b) {
           var pct = Math.min(100, Math.max(0, (b.value / b.max) * 100));
-          return '<div class="bar-row">' +
-            '<span class="bar-label">' + b.label + '</span>' +
-            '<div class="bar" style="width: ' + pct + '%; background: ' + b.color + ';"></div>' +
-            '<span class="bar-value">' + fmt(b.value) + '</span>' +
-            '</div>';
-        }).join('');
+          var row = document.createElement('div');
+          row.className = 'bar-row';
+          var label = document.createElement('span');
+          label.className = 'bar-label';
+          label.textContent = b.label;
+          var bar = document.createElement('div');
+          bar.className = 'bar';
+          bar.style.width = pct + '%';
+          bar.style.background = b.color;
+          var value = document.createElement('span');
+          value.className = 'bar-value';
+          value.textContent = fmt(b.value);
+          row.append(label, bar, value);
+          barsEl.appendChild(row);
+        });
+      })
+      .catch(e => {
+        document.querySelectorAll('table').forEach(t => { t.textContent = 'Failed to load: ' + e.message; });
+        document.getElementById('bars').textContent = 'Failed to load: ' + e.message;
       });
   </script>
 </body>

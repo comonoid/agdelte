@@ -10,8 +10,7 @@
  */
 
 import { interpretEvent, unsubscribe, wsConnections, channelConnections } from './events.js';
-import { deepEqual, countSlots, detectSlots, probeSlots, probeCtor, changedSlotsFromCache } from './scott-utils.js';
-import { listToArray, isTaggedArray } from './agda-values.js';
+import { deepEqual, countSlots, detectSlots, probeSlots, probeCtor, changedSlotsFromCache, listToArray, ensureNumber } from './agda-values.js';
 
 // ─────────────────────────────────────────────────────────────────────
 // SVG/MathML namespace support
@@ -145,14 +144,17 @@ function executeTask(task, onSuccess, onError, _depth = 0) {
 function executeCmd(cmd, dispatch) {
   if (!cmd) return;
 
-  cmd({
+  try { cmd({
     'ε': () => {},
+    // Cmd errors are fire-and-forget: logged but not propagated back to the
+    // Agda model. This is intentional — Cmd is a side-effect channel, not a
+    // result-producing operation. Use Task/attempt for fallible operations.
     '_<>_': (cmd1, cmd2) => {
       try { executeCmd(cmd1, dispatch); } catch (e) { console.error('Cmd error:', e); }
       try { executeCmd(cmd2, dispatch); } catch (e) { console.error('Cmd error:', e); }
     },
     'delay': (ms, msg) => {
-      const msNum = Number(ms);
+      const msNum = ensureNumber(ms);
       setTimeout(() => dispatch(msg), msNum);
     },
     'httpGet': (url, onSuccess, onError) => {
@@ -192,7 +194,7 @@ function executeCmd(cmd, dispatch) {
         console.warn(`Cmd.blur: invalid selector: "${sel}"`, e.message);
       }
     },
-    'scrollTo': (x, y) => window.scrollTo(Number(x), Number(y)),
+    'scrollTo': (x, y) => window.scrollTo(ensureNumber(x), ensureNumber(y)),
     'scrollIntoView': (sel) => {
       try {
         const el = document.querySelector(sel);
@@ -217,26 +219,22 @@ function executeCmd(cmd, dispatch) {
     },
     'setItem': (key, value) => localStorage.setItem(key, value),
     'removeItem': (key) => localStorage.removeItem(key),
-    // Clipboard
-    'clipboard': (text) => {
-      navigator.clipboard.writeText(text).catch(err => console.warn('Clipboard write failed:', err));
-    },
-    'clipboardNotify': (text, onSuccess) => {
-      navigator.clipboard.writeText(text)
-        .then(() => dispatch(onSuccess('Copied!')))
-        .catch(err => console.warn('Clipboard write failed:', err));
-    },
     'wsSend': (url, message) => {
-      const ws = wsConnections.get(url);
-      if (!ws) {
+      const urlConns = wsConnections.get(url);
+      if (!urlConns || urlConns.size === 0) {
         console.warn(`Cmd.wsSend: no WebSocket connection for "${url}"`);
         return;
       }
-      if (ws.readyState !== WebSocket.OPEN) {
-        console.warn(`Cmd.wsSend: WebSocket not open (state: ${ws.readyState})`);
-        return;
+      let sent = false;
+      for (const ws of urlConns.values()) {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(message);
+          sent = true;
+        }
       }
-      ws.send(message);
+      if (!sent) {
+        console.warn(`Cmd.wsSend: no open WebSocket for "${url}"`);
+      }
     },
     'channelSend': (scriptUrl, message) => {
       const worker = channelConnections.get(scriptUrl);
@@ -250,7 +248,7 @@ function executeCmd(cmd, dispatch) {
     'replaceUrl': (url) => history.replaceState(null, '', '#' + url),
     'back': () => history.back(),
     'forward': () => history.forward()
-  });
+  }); } catch (e) { console.error('executeCmd: unknown or failed command:', e.message || e); }
 }
 
 /**
@@ -272,28 +270,23 @@ async function loadNodeModule() {
 
 // ─────────────────────────────────────────────────────────────────────
 // Mutable model wrappers (in-place mutation via lenses)
-// Supports both Scott-encoded functions and future tagged arrays
 // ─────────────────────────────────────────────────────────────────────
 
-/** Get slots from any model format */
+/** Get slots from model */
 function getSlots(model) {
-  if (isTaggedArray(model)) return model.slice(1);
   if (model && model._slots) return model._slots;
   return probeSlots(model);
 }
 
-/** Get constructor name from any model format */
+/** Get constructor name from model */
 function getCtor(model) {
-  if (isTaggedArray(model)) return model[0];
   if (model && model._ctor) return model._ctor;
   return probeCtor(model);
 }
 
 /** Set slot value (mutates in-place) */
 function setSlot(model, idx, value) {
-  if (isTaggedArray(model)) {
-    model[idx + 1] = value;  // +1 because arr[0] is tag
-  } else if (model && model._slots) {
+  if (model && model._slots) {
     model._slots[idx] = value;
   } else {
     throw new Error('Model not mutable — wrap first');
@@ -304,11 +297,9 @@ function setSlot(model, idx, value) {
  * Wrap a Scott-encoded model for in-place mutation.
  * Creates a wrapper with _slots array that can be mutated.
  * Supports both function and object Agda→JS formats.
- * Tagged arrays are already mutable, returned as-is.
  */
 function wrapMutable(model, _visited) {
-  // Already mutable formats
-  if (isTaggedArray(model)) return model;
+  // Already mutable
   if (model && model._slots) return model;
 
   // Primitive or null — return as-is
@@ -350,7 +341,6 @@ function wrapMutable(model, _visited) {
 
 /** Ensure model is mutable (wrap if needed) */
 function ensureMutable(model) {
-  if (isTaggedArray(model)) return model;
   if (model && model._slots) return model;
   return wrapMutable(model);
 }
@@ -386,7 +376,7 @@ function cloneSlot(s) {
 function reconcile(oldModel, newModel) {
   // Can't reconcile if old model not mutable
   if (!oldModel || !oldModel._slots) {
-    return isTaggedArray(newModel) ? newModel : wrapMutable(newModel);
+    return wrapMutable(newModel);
   }
 
   const newSlots = getSlots(newModel);
@@ -409,9 +399,10 @@ function reconcile(oldModel, newModel) {
   for (let i = 0; i < oldSlots.length; i++) {
     if (oldSlots[i] !== newSlots[i]) {
       // Recursively ensure nested structures are mutable
-      oldSlots[i] = typeof newSlots[i] === 'function'
-        ? wrapMutable(newSlots[i])
-        : newSlots[i];
+      const v = newSlots[i];
+      oldSlots[i] = (typeof v === 'function' || (typeof v === 'object' && v !== null))
+        ? wrapMutable(v)
+        : v;
     }
   }
 
@@ -510,9 +501,12 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   let workerMsgId = 0;
 
   /**
-   * Initialize update worker (optional).
-   * Call this for CPU-intensive update functions.
-   * @param {string} modulePath - Path to the Agda module (e.g., '../_build/jAgda.Counter.mjs')
+   * Initialize update worker (optional, explicit opt-in).
+   * Moves the Agda `update` function to a Web Worker for CPU-intensive updates.
+   * After init, `dispatch` sends messages to the worker which applies `update`
+   * off the main thread and posts the new model back.
+   * Usage: `app.initUpdateWorker('../_build/jAgda.MyApp.mjs')`
+   * @param {string} modulePath - Path to the compiled Agda module
    */
   async function initUpdateWorker(modulePath) {
     return new Promise((resolve, reject) => {
@@ -521,13 +515,15 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           type: 'module'
         });
 
+        let initSettled = false;  // guard against double resolve/reject (rec #15)
+
         updateWorker.onmessage = (event) => {
           const { type, model: resultModel, message } = event.data;
 
           switch (type) {
             case 'ready':
               workerReady = true;
-              resolve();
+              if (!initSettled) { initSettled = true; resolve(); }
               break;
 
             case 'result': {
@@ -552,8 +548,8 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
                   pending.resolve(update(pending.msg)(pending.snapshotModel));  // fallback to main thread
                 }
               }
-              // Reject if still initializing
-              if (!workerReady) reject(new Error(message));
+              // Reject if still initializing (only once)
+              if (!workerReady && !initSettled) { initSettled = true; reject(new Error(message)); }
               break;
             }
           }
@@ -567,7 +563,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           }
           workerPendingCallbacks.clear();
           updateWorker = null;
-          if (!workerReady) reject(error);
+          if (!workerReady && !initSettled) { initSettled = true; reject(error); }
         };
 
         // Initialize worker with module path
@@ -576,25 +572,6 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         console.warn('Web Worker not available, falling back to main thread:', error.message);
         resolve();  // Don't fail, just use main thread
       }
-    });
-  }
-
-  /**
-   * Run update in worker (if available) or main thread.
-   * @param {*} msg - Message to process
-   * @param {*} currentModel - Current model state
-   * @returns {Promise<*>} - New model
-   */
-  function runUpdateAsync(msg, currentModel) {
-    if (!updateWorker || !workerReady) {
-      // Fallback to main thread
-      return Promise.resolve(update(msg)(currentModel));
-    }
-
-    return new Promise((resolve) => {
-      const id = workerMsgId++;
-      workerPendingCallbacks.set(id, { resolve, msg, snapshotModel: currentModel });
-      updateWorker.postMessage({ type: 'update', id, msg, model: currentModel });
     });
   }
 
@@ -608,6 +585,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   let p1Queue = [];  // Normal priority (rAF batching)
   let p2Queue = [];  // Background priority (idle callback)
   let p1Scheduled = false;
+  let p1RafId = 0;   // rAF ID for flushP1 — needed for cancellation on destroy
   let p2Scheduled = false;
   let destroyed = false;
   const MAX_BATCH_SIZE = 10000;
@@ -630,6 +608,48 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   let _batchDepth = 0;
   const MAX_BATCH_DEPTH = 100;
 
+  /**
+   * Apply a batch of messages: run cmds, update model, reconcile scope, and
+   * refresh subscriptions. Extracted as a helper to avoid duplication between
+   * the main batch and the deferred-immediate loop (rec #18).
+   */
+  function applyBatch(msgs) {
+    const oldModel = model;
+    const oldSlots = model && model._slots ? model._slots.map(s =>
+      (typeof s === 'function' && s._slots && s._ctor) ? cloneSlot(s) : s
+    ) : null;
+
+    // Snapshot model before the batch so all cmdFunc calls see the
+    // pre-batch state, not the post-update state from a prior message.
+    // NOTE: This is intentional — all commands in a batch see the same
+    // pre-batch model. If msg 1's cmd reads a field that msg 2's update
+    // changes, cmd 2 still sees the old value. This prevents ordering
+    // dependencies within a batch.
+    const preBatchModel = model;
+
+    for (const msg of msgs) {
+      if (cmdFunc) {
+        const cmd = cmdFunc(msg)(preBatchModel);
+        executeCmd(cmd, dispatchImmediate);
+      }
+      const newModel = update(msg)(model);
+      model = reconcile(model, newModel);
+    }
+
+    let effectiveOldModel = oldModel;
+    if (oldSlots && oldModel._slots === model._slots) {
+      effectiveOldModel = Object.create(oldModel);
+      effectiveOldModel._slots = oldSlots;
+    }
+
+    updateScope(rootScope, effectiveOldModel, model);
+    for (const cb of afterUpdateCallbacks) cb(effectiveOldModel, model);
+    for (let i = afterUpdateCallbacks.length - 1; i >= 0; i--) {
+      if (afterUpdateCallbacks[i]._dead) afterUpdateCallbacks.splice(i, 1);
+    }
+    updateSubscriptions();
+  }
+
   function processBatch(msgs) {
     if (msgs.length === 0) return;
     if (_batchDepth >= MAX_BATCH_DEPTH) {
@@ -640,62 +660,26 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     _batchDepth++;
     isUpdating = true;
     try {
-      // Snapshot old slots before batch so reconcile's in-place mutation
-      // doesn't alias oldModel with model
-      const oldModel = model;
-      const oldSlots = model && model._slots ? model._slots.map(s =>
-        (typeof s === 'function' && s._slots && s._ctor) ? cloneSlot(s) : s
-      ) : null;
-
-      // Snapshot model before the batch so all cmdFunc calls see the
-      // pre-batch state, not the post-update state from a prior message.
-      const preBatchModel = model;
-
-      // Apply all messages sequentially
-      for (const msg of msgs) {
-        // Cmd receives the pre-batch model so it can read fields that
-        // update will clear (e.g. inputText read by wsSend, then cleared).
-        // Run cmd BEFORE reconcile, which mutates model in-place.
-        if (cmdFunc) {
-          const cmd = cmdFunc(msg)(preBatchModel);
-          executeCmd(cmd, dispatchImmediate);
-        }
-        const newModel = update(msg)(model);
-        model = reconcile(model, newModel);
-      }
-
-      // Use snapshotted slots for comparison so in-place mutation
-      // doesn't cause oldModel === model
-      let effectiveOldModel = oldModel;
-      if (oldSlots && oldModel._slots === model._slots) {
-        // reconcile mutated in-place — build a comparison proxy
-        effectiveOldModel = Object.create(oldModel);
-        effectiveOldModel._slots = oldSlots;
-      }
-
-      // ONE updateScope for all messages
-      updateScope(rootScope, effectiveOldModel, model);
-
-      // Update GL scopes (use effectiveOldModel so GL bindings see snapshotted slots)
-      for (const cb of afterUpdateCallbacks) cb(effectiveOldModel, model);
-      // Prune callbacks for disconnected canvases
-      for (let i = afterUpdateCallbacks.length - 1; i >= 0; i--) {
-        if (afterUpdateCallbacks[i]._dead) afterUpdateCallbacks.splice(i, 1);
-      }
-
-      // Update subscriptions
-      updateSubscriptions();
+      applyBatch(msgs);
     } finally {
       isUpdating = false;
     }
+    _batchDepth--;
     // Process deferred immediate messages in same frame
     // (messages pushed to p1Queue by dispatchImmediate during isUpdating)
-    if (p1Queue.length > 0) {
+    // Loop instead of recursion to avoid stacking up to MAX_BATCH_DEPTH frames
+    while (p1Queue.length > 0 && _batchDepth < MAX_BATCH_DEPTH) {
       const deferred = p1Queue;
       p1Queue = [];
-      processBatch(deferred);
+      _batchDepth++;
+      isUpdating = true;
+      try {
+        applyBatch(deferred);
+      } finally {
+        isUpdating = false;
+      }
+      _batchDepth--;
     }
-    _batchDepth--;
   }
 
   /**
@@ -714,7 +698,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
     // If more messages arrived during flush, schedule another
     if (p1Queue.length > 0) {
-      requestAnimationFrame(flushP1);
+      p1RafId = requestAnimationFrame(flushP1);
     } else {
       p1Scheduled = false;
     }
@@ -732,7 +716,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     const all = p2Queue;
     p2Queue = [];
     let i = 0;
-    while (i < all.length && deadline.timeRemaining() > 1) {
+    while (i < all.length && !destroyed && deadline.timeRemaining() > 1) {
       processBatch([all[i]]);
       i++;
     }
@@ -800,7 +784,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     p1Queue.push(msg);
     if (!p1Scheduled) {
       p1Scheduled = true;
-      requestAnimationFrame(flushP1);
+      p1RafId = requestAnimationFrame(flushP1);
     }
   }
 
@@ -905,7 +889,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         // Extract transition fields
         const enterClass = NodeModule.Transition.enterClass(transition);
         const leaveClass = NodeModule.Transition.leaveClass(transition);
-        const duration = Number(NodeModule.Transition.duration(transition));
+        const duration = ensureNumber(NodeModule.Transition.duration(transition));
 
         if (shouldShow) {
           const childScope = createScope(currentScope);
@@ -1092,10 +1076,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
             const ctm = svg && svg.getScreenCTM && svg.getScreenCTM();
             if (ctm) {
               try {
-                const pt = svg.createSVGPoint();
-                pt.x = e.clientX;
-                pt.y = e.clientY;
-                const svgPt = pt.matrixTransform(ctm.inverse());
+                const svgPt = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
                 value = svgPt.x + ',' + svgPt.y;
               } catch (err) {
                 // Fallback if matrix transform fails (e.g., singular matrix)
@@ -1136,6 +1117,15 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           }
         }, { signal: currentScope.abortCtrl.signal });
       },
+      // Keyboard event filtered to specific keys; calls preventDefault
+      onKeyFiltered: (keys, handler) => {
+        const keyArray = listToArray(keys).items;
+        el.addEventListener('keydown', (e) => {
+          if (!keyArray.includes(e.key)) return;
+          e.preventDefault();
+          dispatchImmediate(handler(e.key));
+        }, { signal: currentScope.abortCtrl.signal });
+      },
       style: (name, value) => {
         el.style.setProperty(name, value);
       },
@@ -1151,8 +1141,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   /** Create a visible truncation marker for lists that exceed the iteration limit */
   function makeTruncatedMarker() {
     const el = document.createElement('li');
-    el.className = 'agdelte-truncated';
-    el.style.cssText = 'color:#f44;font-style:italic;list-style:none;padding:4px 0;';
+    el.className = 'agdelte-list-truncated';
     el.textContent = '[List truncated — exceeded iteration limit]';
     return el;
   }
@@ -1271,7 +1260,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         el.style.animation = 'none';
         el._pendingAnimationRaf = requestAnimationFrame(() => {
           el._pendingAnimationRaf = null;
-          el.style.animation = val;
+          if (el.isConnected) el.style.animation = val;
         });
       }
     }
@@ -1577,6 +1566,8 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       throttle: (ms, inner) => `throttle(${ms})`,
       wsConnect: (url, handler) => `wsConnect(${url})`,
       onUrlChange: (handler) => 'onUrlChange',
+      // Note: fingerprint uses only url+input, not callback identity.
+      // Callbacks must be referentially stable across subs calls.
       worker: (url, input) => `worker(${url},${input})`,
       workerWithProgress: (url, input) => `workerWithProgress(${url},${input})`,
       parallel: (_typeB, eventList, mapFn) => 'parallel',
@@ -1591,7 +1582,10 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       switchE: (initial, meta) => `switchE(${serializeEvent(initial)},${serializeEvent(meta)})`
     };
     const proxy = new Proxy(cases, {
-      get: (target, prop) => target[prop] || ((...args) => `unknown(${prop})`)
+      get: (target, prop) => target[prop] || ((...args) => {
+        console.warn(`serializeEvent: unhandled Event constructor "${String(prop)}". Add it to serializeEvent cases.`);
+        return `unknown(${String(prop)})`;
+      })
     });
     return event(proxy);
   }
@@ -1641,7 +1635,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   }
 
   // Initial render
-  container.innerHTML = '';
+  container.replaceChildren();
   const dom = renderNode(template);
   if (dom) {
     container.appendChild(dom);
@@ -1660,6 +1654,8 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
   let bigLensWs = null;
   let bigLensClientId = null;
+  let bigLensReconnectDelay = 0;
+  let bigLensReconnectTimer = null;
 
   /**
    * Connect to Big Lens server for peek/over protocol.
@@ -1669,6 +1665,10 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
    *   "over:msgPayload" → dispatch msgPayload as a message
    *   "connected:clientId" → store our client ID
    *   "agentName:value" → agent broadcast (existing behavior)
+   *
+   * SECURITY: BigLens is a local development tool. Any WebSocket peer can
+   * inject arbitrary messages via "over:" and read the full model via "peek:".
+   * Do NOT expose the BigLens WebSocket port to untrusted networks.
    */
   function connectBigLens(wsUrl) {
     const ws = new WebSocket(wsUrl);
@@ -1679,24 +1679,34 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
       if (data.startsWith('connected:')) {
         bigLensClientId = data.slice('connected:'.length);
+        bigLensReconnectDelay = 0;  // reset backoff on successful connect
         return;
       }
 
       if (data.startsWith('peek:')) {
         // Server wants to read our model — respond with serialized model
         // Recursive serialization for Scott-encoded models
-        const serializeModelValue = (m) => {
+        const MAX_DEPTH = 64;
+        const seen = new Set();
+        const serializeModelValue = (m, depth = 0) => {
           if (m === null || m === undefined) return null;
           if (typeof m !== 'function' && typeof m !== 'object') return m;
-          if (m._ctor && m._slots) {
-            return { _ctor: m._ctor, _slots: m._slots.map(serializeModelValue) };
+          if (depth > MAX_DEPTH) return '[max depth]';
+          if (typeof m === 'object' && seen.has(m)) return '[circular]';
+          if (typeof m === 'object') seen.add(m);
+          try {
+            if (m._ctor && m._slots) {
+              return { _ctor: m._ctor, _slots: m._slots.map(s => serializeModelValue(s, depth + 1)) };
+            }
+            const ctor = probeCtor(m);
+            const slots = probeSlots(m);
+            if (ctor && slots) {
+              return { _ctor: ctor, _slots: slots.map(s => serializeModelValue(s, depth + 1)) };
+            }
+            return String(m);
+          } finally {
+            if (typeof m === 'object') seen.delete(m);
           }
-          const ctor = probeCtor(m);
-          const slots = probeSlots(m);
-          if (ctor && slots) {
-            return { _ctor: ctor, _slots: slots.map(serializeModelValue) };
-          }
-          return String(m);
         };
         const serialized = JSON.stringify(serializeModelValue(model));
         ws.send('peek-response:' + serialized);
@@ -1720,9 +1730,21 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       // Otherwise: agent broadcast (existing behavior), ignore
     };
 
+    ws.onerror = (e) => {
+      console.warn('BigLens WebSocket error:', e.message || 'connection error');
+    };
+
     ws.onclose = () => {
       bigLensClientId = null;
       bigLensWs = null;
+      // Auto-reconnect with exponential backoff (cap at 30s)
+      if (!destroyed) {
+        bigLensReconnectDelay = Math.min((bigLensReconnectDelay || 500) * 2, 30000);
+        bigLensReconnectTimer = setTimeout(() => {
+          bigLensReconnectTimer = null;
+          if (!destroyed) connectBigLens(wsUrl);
+        }, bigLensReconnectDelay);
+      }
     };
 
     return ws;
@@ -1741,23 +1763,8 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   let historyFuture = [];    // undone models (oldest first)
   const maxHistory = options.maxHistory || 100;
 
-  // Recursive clone for Scott-encoded models (functions can't be structuredClone'd)
-  function cloneModel(m) {
-    if (!m || typeof m !== 'function') return m;
-    if (!m._slots || !m._ctor) return m;
-    const clonedSlots = m._slots.map(s => {
-      if (typeof s === 'function' && s._slots && s._ctor) return cloneModel(s);
-      if (typeof s === 'object' && s !== null) {
-        try { return structuredClone(s); } catch { return s; }
-      }
-      return s;
-    });
-    const ctor = m._ctor;
-    const w = (cases) => cases[ctor](...clonedSlots);
-    w._slots = clonedSlots;
-    w._ctor = ctor;
-    return w;
-  }
+  // Recursive clone for Scott-encoded models — delegates to cloneSlot
+  const cloneModel = cloneSlot;
 
   function timeTravelDispatch(msg) {
     // Record current state before update
@@ -1769,22 +1776,68 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
   function timeTravel_undo() {
     if (historyPast.length === 0) return;
-    const oldModel = model;
-    historyFuture.unshift(cloneModel(model));
-    model = historyPast.shift();
-    updateScope(rootScope, oldModel, model);
-    for (const cb of afterUpdateCallbacks) cb(oldModel, model);
-    updateSubscriptions();
+    _batchDepth++;
+    isUpdating = true;
+    try {
+      const oldModel = model;
+      historyFuture.unshift(cloneModel(model));
+      model = historyPast.shift();
+      updateScope(rootScope, oldModel, model);
+      for (const cb of afterUpdateCallbacks) cb(oldModel, model);
+      for (let i = afterUpdateCallbacks.length - 1; i >= 0; i--) {
+        if (afterUpdateCallbacks[i]._dead) afterUpdateCallbacks.splice(i, 1);
+      }
+      updateSubscriptions();
+    } finally {
+      isUpdating = false;
+    }
+    _batchDepth--;
+    // Drain deferred immediate messages (same pattern as processBatch)
+    while (p1Queue.length > 0 && _batchDepth < MAX_BATCH_DEPTH) {
+      const deferred = p1Queue;
+      p1Queue = [];
+      _batchDepth++;
+      isUpdating = true;
+      try {
+        applyBatch(deferred);
+      } finally {
+        isUpdating = false;
+      }
+      _batchDepth--;
+    }
   }
 
   function timeTravel_redo() {
     if (historyFuture.length === 0) return;
-    const oldModel = model;
-    historyPast.unshift(cloneModel(model));
-    model = historyFuture.shift();
-    updateScope(rootScope, oldModel, model);
-    for (const cb of afterUpdateCallbacks) cb(oldModel, model);
-    updateSubscriptions();
+    _batchDepth++;
+    isUpdating = true;
+    try {
+      const oldModel = model;
+      historyPast.unshift(cloneModel(model));
+      model = historyFuture.shift();
+      updateScope(rootScope, oldModel, model);
+      for (const cb of afterUpdateCallbacks) cb(oldModel, model);
+      for (let i = afterUpdateCallbacks.length - 1; i >= 0; i--) {
+        if (afterUpdateCallbacks[i]._dead) afterUpdateCallbacks.splice(i, 1);
+      }
+      updateSubscriptions();
+    } finally {
+      isUpdating = false;
+    }
+    _batchDepth--;
+    // Drain deferred immediate messages (same pattern as processBatch)
+    while (p1Queue.length > 0 && _batchDepth < MAX_BATCH_DEPTH) {
+      const deferred = p1Queue;
+      p1Queue = [];
+      _batchDepth++;
+      isUpdating = true;
+      try {
+        applyBatch(deferred);
+      } finally {
+        isUpdating = false;
+      }
+      _batchDepth--;
+    }
   }
 
   function timeTravel_getHistory() {
@@ -1816,17 +1869,45 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       currentEventFingerprint = null;
     }
     destroyScope(rootScope);
-    container.innerHTML = '';
+    container.replaceChildren();
     afterUpdateCallbacks.length = 0;
 
-    // Reset root scope — clear all old properties first
-    for (const key of Object.keys(rootScope)) delete rootScope[key];
-    Object.assign(rootScope, createScope(null));
+    // Reset root scope — explicitly reset known properties to avoid
+    // fragile delete-all-keys pattern that could leak non-enumerable props.
+    const freshScope = createScope(null);
+    rootScope.bindings = freshScope.bindings;
+    rootScope.attrBindings = freshScope.attrBindings;
+    rootScope.styleBindings = freshScope.styleBindings;
+    rootScope.conditionals = freshScope.conditionals;
+    rootScope.lists = freshScope.lists;
+    rootScope.children = freshScope.children;
+    rootScope.parent = freshScope.parent;
+    rootScope.numSlots = freshScope.numSlots;
+    rootScope.abortCtrl = freshScope.abortCtrl;
+    rootScope.cachedArgs = undefined;
+    rootScope.fingerprint = undefined;
+    rootScope.lastFP = undefined;
+    rootScope.project = undefined;
+    rootScope.lastProj = undefined;
+
+    // Terminate stale update worker — it holds a reference to the old module
+    if (updateWorker) {
+      for (const [, pending] of workerPendingCallbacks) {
+        pending.resolve(null);
+      }
+      workerPendingCallbacks.clear();
+      updateWorker.terminate();
+      updateWorker = null;
+      workerReady = false;
+    }
 
     // Re-render with new template, preserving model
     template = newTemplate;
     const dom = renderNode(template);
-    if (dom) container.appendChild(dom);
+    if (dom) {
+      container.appendChild(dom);
+      startSmilAnimations(container);
+    }
 
     // Re-subscribe
     updateSubscriptions();
@@ -1851,12 +1932,18 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     initUpdateWorker,
     destroy: () => {
       destroyed = true;
+      // Cancel pending rAF to prevent flushP1 firing after destroy (rec #17)
+      if (p1Scheduled && p1RafId) cancelAnimationFrame(p1RafId);
       p1Queue = [];
       p2Queue = [];
       p1Scheduled = false;
       p2Scheduled = false;
       if (currentSubscription) {
         unsubscribe(currentSubscription);
+      }
+      if (bigLensReconnectTimer) {
+        clearTimeout(bigLensReconnectTimer);
+        bigLensReconnectTimer = null;
       }
       if (bigLensWs) {
         bigLensWs.close();
@@ -1872,7 +1959,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         updateWorker = null;
       }
       destroyScope(rootScope);
-      container.innerHTML = '';
+      container.replaceChildren();
       afterUpdateCallbacks.length = 0;
     }
   };
@@ -1916,5 +2003,5 @@ export async function mountReactive(moduleName, container, options = {}) {
 
 export { interpretEvent, unsubscribe } from './events.js';
 
-// Re-exported from scott-utils.js for testing and external use
-export { deepEqual, countSlots, detectSlots, probeCtor, probeSlots, changedSlotsFromCache } from './scott-utils.js';
+// Re-exported from agda-values.js for testing and external use
+export { deepEqual, countSlots, detectSlots, probeCtor, probeSlots, changedSlotsFromCache } from './agda-values.js';

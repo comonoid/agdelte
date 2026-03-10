@@ -3,75 +3,83 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1a2e">
+  <link rel="icon" href="data:,">
   <title>Live Agent - Agdelte</title>
-  <link rel="stylesheet" href="common.css">
+  <link rel="stylesheet" href="generated/examples.css">
   <style>
     .agents { display: flex; gap: 2rem; flex-wrap: wrap; margin: 1.5rem 0; }
     .agent-card {
-      border: 2px solid #ccc; border-radius: 8px; padding: 1.5rem;
-      min-width: 220px; text-align: center; background: #fafafa;
+      border: 2px solid var(--border); border-radius: 8px; padding: 1.5rem;
+      min-width: 220px; text-align: center; background: var(--card);
       transition: border-color 0.2s;
     }
-    .agent-card.flash { border-color: #4caf50; }
+    .agent-card.flash { border-color: var(--success); }
     .agent-card h2 { margin: 0 0 0.5rem; font-size: 1.2rem; }
     .agent-state {
       font-size: 2.5rem; font-weight: bold; margin: 1rem 0;
-      font-family: monospace;
+      font-family: monospace; color: var(--primary);
     }
     .agent-card button {
       padding: 0.5rem 1.5rem; font-size: 1rem; cursor: pointer;
-      border: 1px solid #999; border-radius: 4px; background: #fff;
+      border: 1px solid var(--border); border-radius: 4px;
+      background: rgba(255,255,255,0.05); color: var(--text);
     }
-    .agent-card button:hover { background: #eee; }
+    .agent-card button:hover { background: rgba(255,255,255,0.1); }
     .ws-status {
       display: inline-block; padding: 0.2rem 0.6rem; border-radius: 4px;
       font-size: 0.85rem; margin-bottom: 1rem;
     }
-    .ws-status.connected { background: #c8e6c9; color: #2e7d32; }
-    .ws-status.disconnected { background: #ffcdd2; color: #c62828; }
-    .ws-status.connecting { background: #fff9c4; color: #f57f17; }
+    .ws-status.connected { background: rgba(74,222,128,0.2); color: var(--success); }
+    .ws-status.disconnected { background: rgba(150,150,150,0.2); color: var(--muted); }
+    .ws-status.connecting { background: rgba(251,191,36,0.2); color: #fbbf24; }
     .log { font-family: monospace; font-size: 0.85rem; max-height: 200px;
-           overflow-y: auto; background: #222; color: #0f0; padding: 0.75rem;
+           overflow-y: auto; background: rgba(0,0,0,0.3); color: var(--success); padding: 0.75rem;
            border-radius: 4px; margin-top: 1rem; }
     .log div { margin: 2px 0; }
-    .log .ws { color: #0ff; }
-    .log .http { color: #ff0; }
+    .log .ws { color: var(--primary); }
+    .log .http { color: var(--accent); }
     .log .err { color: #f44; }
   </style>
 </head>
 <body>
-  <a href="../index.html" class="back">&larr; Back to examples</a>
+  <header>
+    <a href="../index.html" class="back">&larr; Back to examples</a>
+    <h1>Live Agent Dashboard</h1>
+    <p class="subtitle">Real-time WebSocket + HTTP &harr; Haskell MultiAgent server</p>
+  </header>
 
-  <h1>Live Agent Dashboard</h1>
-  <p class="subtitle">Real-time WebSocket + HTTP &harr; Haskell MultiAgent server</p>
-
-  <span id="ws-status" class="ws-status connecting">connecting...</span>
+  <main>
+  <span id="ws-status" class="ws-status connecting" role="status" aria-live="polite">connecting...</span>
 
   <div class="agents">
     <div class="agent-card" id="card-counter">
       <h2>Counter</h2>
       <div class="agent-state" id="state-counter">-</div>
-      <button onclick="step('counter')">Increment</button>
+      <button id="btn-counter">Increment</button>
     </div>
     <div class="agent-card" id="card-toggle">
       <h2>Toggle</h2>
       <div class="agent-state" id="state-toggle">-</div>
-      <button onclick="step('toggle')">Flip</button>
+      <button id="btn-toggle">Flip</button>
     </div>
   </div>
 
-  <div class="log" id="log"></div>
+  <div class="log" id="log" role="log" aria-live="polite"></div>
 
   <div class="info">
     <p>Server: <code>_build/MultiAgent</code> on port 3000</p>
     <p>HTTP: <code>GET /counter/state</code>, <code>POST /counter/step</code>, etc.</p>
-    <p>WebSocket: <code>ws://localhost:3000/ws</code> broadcasts <code>agent:value</code> on each step</p>
+    <p>WebSocket: <code>ws://&lt;host&gt;:3000/ws</code> broadcasts <code>agent:value</code> on each step</p>
     <p>Source: <code>server/MultiAgent.agda</code></p>
   </div>
+  </main>
 
   <script>
-    const SERVER = 'http://localhost:3000';
-    const WS_URL = 'ws://localhost:3000/ws';
+    const SERVER = document.currentScript?.dataset.server
+      || `${location.protocol}//${location.hostname}:3000`;
+    const WS_URL = document.currentScript?.dataset.ws
+      || `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.hostname}:3000/ws`;
     const logEl = document.getElementById('log');
     const statusEl = document.getElementById('ws-status');
 
@@ -155,6 +163,9 @@
         log(`POST /${name}/step failed: ${e.message}`, 'err');
       }
     }
+
+    document.getElementById('btn-counter').addEventListener('click', () => step('counter'));
+    document.getElementById('btn-toggle').addEventListener('click', () => step('toggle'));
 
     connect();
   </script>

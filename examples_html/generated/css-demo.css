@@ -1,20 +1,20 @@
 @charset "UTF-8";
 
-.card {
+.css-demo .card {
   padding: 16px;
-  background: #fff;
+  background: #16213e;
   border-radius: 8px;
   transition: box-shadow 0.2s, transform 0.2s;
   cursor: pointer;
 }
 
-.card:hover {
+.css-demo .card:hover {
   box-shadow: 0 8px 24px rgba(0,0,0,0.3);
   transform: translateY(-2px);
 }
 
 @media (max-width: 768px) {
-  .card {
+  .css-demo .card {
     padding: 8px;
   }
 }
@@ -27,3 +27,5 @@
     opacity: 1;
   }
 }
+
+/*# sourceAgda=jAgda.CssDemo:appCSS */

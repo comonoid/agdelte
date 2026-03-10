@@ -1,8 +1,8 @@
 :root {
-  --primary: #3b82f6;
-  --secondary: #10b981;
-  --radius: 8px;
-  --gap: 1rem;
+  --demo-primary: #3b82f6;
+  --demo-secondary: #10b981;
+  --demo-radius: 8px;
+  --demo-gap: 1rem;
 }
 
 @keyframes fadeIn {
@@ -83,11 +83,12 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  align-items: center;
 }
 
 .card-grid {
   display: grid;
-  grid-template: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 1rem;
 }
 
@@ -96,36 +97,36 @@
   flex-direction: column;
   gap: 2rem;
   max-width: 960px;
-  margin: 0 50%;
+  margin: 0 auto;
 }
 
-.card {
+.css-full-demo .card {
   padding: 1rem;
-  background: #fff;
+  background-color: var(--agdelte-bg);
   border-radius: 8px;
   transition: opacity 300ms ease, transform 200ms ease-out;
 }
 
-.card:hover {
+.css-full-demo .card:hover {
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   transform: translateY(-2px);
 }
 
 .card--themed {
   color: white;
-  background-color: var(--primary);
-  border-radius: var(--radius);
-  padding: var(--gap);
+  background-color: var(--demo-primary);
+  border-radius: var(--demo-radius);
+  padding: var(--demo-gap);
 }
 
 @media (max-width: 768px) {
-  .card {
+  .css-full-demo .card {
     padding: 8px;
   }
 
   .card-grid {
     display: grid;
-    grid-template: 1fr;
+    grid-template-columns: 1fr;
   }
 }
 
@@ -140,3 +141,5 @@
 .spinner {
   animation: spin 1s ease infinite;
 }
+
+/*# sourceAgda=jAgda.CssFullDemo:appCSS */

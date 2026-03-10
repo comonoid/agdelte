@@ -39,11 +39,7 @@ progressBar {M} {A} getValue =
         []
     ∷ [] )
   where
-    eqStr : String → String → Bool
-    eqStr a b with a ≟ b
-    ... | yes _ = true
-    ... | no _  = false
-
+    open import Agdelte.Html.Controls.Util using (eqStr)
     open import Data.String using (_++_)
 
 -- | Progress bar with label

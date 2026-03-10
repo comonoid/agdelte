@@ -7,15 +7,17 @@
 
 module Agdelte.Html.Controls.Accordion where
 
-open import Data.String using (String; _≟_)
+open import Data.String using (String; _≟_; _++_)
 open import Data.List using (List; []; _∷_; map)
 open import Data.Nat using (ℕ; zero; suc; _≡ᵇ_)
+open import Data.Nat.Show using (show)
 open import Data.Bool using (Bool; true; false; if_then_else_; not)
 open import Data.Maybe using (Maybe; just; nothing)
 open import Function using (_∘_)
 open import Relation.Nullary using (yes; no)
 
 open import Agdelte.Reactive.Node
+open import Agdelte.Html.Controls.Util using (eqStr)
 
 ------------------------------------------------------------------------
 -- Accordion item definition
@@ -30,33 +32,30 @@ record AccordionItem (M : Set) (A : Set) : Set₁ where
 open AccordionItem public
 
 ------------------------------------------------------------------------
--- Helper
-------------------------------------------------------------------------
-
-private
-  eqStr : String → String → Bool
-  eqStr a b with a ≟ b
-  ... | yes _ = true
-  ... | no _  = false
-
-------------------------------------------------------------------------
 -- Single collapsible section
 ------------------------------------------------------------------------
 
 -- | Single collapsible section.
+-- | panelId: unique ID prefix (generates <panelId>-header and <panelId>-panel)
 -- | title: section header
 -- | isOpen: extract open state from model
 -- | toggleMsg: message to toggle open state
 -- | content: section content
 collapsible : ∀ {M A}
+            → String         -- panel ID prefix
             → String         -- title
             → (M → Bool)     -- is open
             → A              -- toggle message
             → Node M A       -- content
             → Node M A
-collapsible {M} {A} title isOpen toggleMsg content =
+collapsible {M} {A} panelId title isOpen toggleMsg content =
+  let headerId = panelId ++ "-header"
+      contentId = panelId ++ "-panel"
+  in
   div ( class "agdelte-accordion__item" ∷ [] )
     ( button ( class "agdelte-accordion__header"
+             ∷ id' headerId
+             ∷ attr "aria-controls" contentId
              ∷ attrBind "aria-expanded" (mkBinding
                  (λ m → if isOpen m then "true" else "false")
                  eqStr)
@@ -69,11 +68,16 @@ collapsible {M} {A} title isOpen toggleMsg content =
                           then "agdelte-accordion__icon agdelte-accordion__icon--open"
                           else "agdelte-accordion__icon")
                    eqStr)
+               ∷ attr "aria-hidden" "true"
                ∷ [] )
             ( text "▼" ∷ [] )
         ∷ [] )
     ∷ when isOpen
-        (div ( class "agdelte-accordion__content" ∷ [] )
+        (div ( class "agdelte-accordion__content"
+             ∷ id' contentId
+             ∷ attr "role" "region"
+             ∷ attr "aria-labelledby" headerId
+             ∷ [] )
           ( content ∷ [] ))
     ∷ [] )
 
@@ -82,15 +86,17 @@ collapsible {M} {A} title isOpen toggleMsg content =
 ------------------------------------------------------------------------
 
 -- | Accordion with only one item open at a time.
+-- | prefix: ID prefix for aria attributes (items get <prefix>-N-header/panel)
 -- | getOpenIndex: extract currently open item index (Nothing = all closed)
 -- | toggleMsg: message to toggle item by index
 -- | items: list of accordion items
 accordion : ∀ {M A}
+          → String                     -- ID prefix
           → (M → Maybe ℕ)            -- open item index
           → (ℕ → A)                  -- toggle message (index)
           → List (AccordionItem M A)
           → Node M A
-accordion {M} {A} getOpenIndex toggleMsg items =
+accordion {M} {A} prefix getOpenIndex toggleMsg items =
   div ( class "agdelte-accordion" ∷ [] )
     (renderItems 0 items)
   where
@@ -101,8 +107,14 @@ accordion {M} {A} getOpenIndex toggleMsg items =
 
     renderItem : ℕ → AccordionItem M A → Node M A
     renderItem idx item =
+      let panelId  = prefix ++ "-" ++ show idx
+          headerId = panelId ++ "-header"
+          contentId = panelId ++ "-panel"
+      in
       div ( class "agdelte-accordion__item" ∷ [] )
         ( button ( class "agdelte-accordion__header"
+                 ∷ id' headerId
+                 ∷ attr "aria-controls" contentId
                  ∷ attrBind "aria-expanded" (mkBinding
                      (λ m → if isOpen idx m then "true" else "false")
                      eqStr)
@@ -115,11 +127,16 @@ accordion {M} {A} getOpenIndex toggleMsg items =
                               then "agdelte-accordion__icon agdelte-accordion__icon--open"
                               else "agdelte-accordion__icon")
                        eqStr)
+                   ∷ attr "aria-hidden" "true"
                    ∷ [] )
                 ( text "▼" ∷ [] )
             ∷ [] )
         ∷ when (isOpen idx)
-            (div ( class "agdelte-accordion__content" ∷ [] )
+            (div ( class "agdelte-accordion__content"
+                 ∷ id' contentId
+                 ∷ attr "role" "region"
+                 ∷ attr "aria-labelledby" headerId
+                 ∷ [] )
               ( itemContent item ∷ [] ))
         ∷ [] )
 
@@ -132,22 +149,30 @@ accordion {M} {A} getOpenIndex toggleMsg items =
 ------------------------------------------------------------------------
 
 -- | Accordion where multiple items can be open simultaneously.
+-- | prefix: ID prefix for aria attributes (items get <prefix>-N-header/panel)
 -- | isItemOpen: check if item at index is open
 -- | toggleMsg: message to toggle item by index
 -- | items: list of accordion items
 accordionMulti : ∀ {M A}
+               → String                   -- ID prefix
                → (ℕ → M → Bool)         -- is item open (by index)
                → (ℕ → A)                -- toggle message (index)
                → List (AccordionItem M A)
                → Node M A
-accordionMulti {M} {A} isItemOpen toggleMsg items =
+accordionMulti {M} {A} prefix isItemOpen toggleMsg items =
   div ( class "agdelte-accordion agdelte-accordion--multi" ∷ [] )
     (renderItems 0 items)
   where
     renderItem : ℕ → AccordionItem M A → Node M A
     renderItem idx item =
+      let panelId  = prefix ++ "-" ++ show idx
+          headerId = panelId ++ "-header"
+          contentId = panelId ++ "-panel"
+      in
       div ( class "agdelte-accordion__item" ∷ [] )
         ( button ( class "agdelte-accordion__header"
+                 ∷ id' headerId
+                 ∷ attr "aria-controls" contentId
                  ∷ attrBind "aria-expanded" (mkBinding
                      (λ m → if isItemOpen idx m then "true" else "false")
                      eqStr)
@@ -160,11 +185,16 @@ accordionMulti {M} {A} isItemOpen toggleMsg items =
                               then "agdelte-accordion__icon agdelte-accordion__icon--open"
                               else "agdelte-accordion__icon")
                        eqStr)
+                   ∷ attr "aria-hidden" "true"
                    ∷ [] )
                 ( text "▼" ∷ [] )
             ∷ [] )
         ∷ when (isItemOpen idx)
-            (div ( class "agdelte-accordion__content" ∷ [] )
+            (div ( class "agdelte-accordion__content"
+                 ∷ id' contentId
+                 ∷ attr "role" "region"
+                 ∷ attr "aria-labelledby" headerId
+                 ∷ [] )
               ( itemContent item ∷ [] ))
         ∷ [] )
 

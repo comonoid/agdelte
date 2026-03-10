@@ -8,6 +8,8 @@
  * - Cancellable tasks
  */
 
+import { ensureNumber } from './agda-values.js';
+
 const POOL_IDLE_TIMEOUT = 30000; // 30s without tasks → cleanup
 const POOL_CHECK_INTERVAL = 5000;
 
@@ -37,7 +39,10 @@ export class WorkerPool {
     this.active = 0;     // count of active tasks
     this.queue = [];     // pending tasks: { input, onMessage, onError, resolve }
     this.lastUsed = Date.now();
-    this._cleanupTimer = setInterval(() => this._cleanup(), POOL_CHECK_INTERVAL);
+    // Error backoff: tracks consecutive creation failures to prevent rapid
+    // create-error-terminate cycles when the worker script is broken.
+    this._consecutiveErrors = 0;
+    this._backoffUntil = 0;
   }
 
   /**
@@ -55,12 +60,23 @@ export class WorkerPool {
 
     const tryRun = () => {
       if (task.cancelled) return;
+
+      // Backoff check: if recent errors caused a backoff, delay this task
+      if (Date.now() < this._backoffUntil) {
+        const delay = this._backoffUntil - Date.now();
+        setTimeout(() => {
+          if (!task.cancelled) tryRun();
+        }, delay);
+        return;
+      }
+
       if (this.idle.length > 0) {
         activeWorker = this.idle.pop();
       } else if (this.active + this.idle.length < this.maxSize) {
         try {
           activeWorker = new Worker(this.scriptUrl, { type: 'module' });
         } catch (e) {
+          this._recordError();
           onError(e.message || 'Failed to create worker');
           return;
         }
@@ -75,6 +91,7 @@ export class WorkerPool {
         if (task.cancelled) return;
         const w = activeWorker;
         activeWorker = null;
+        this._consecutiveErrors = 0;  // reset on success
         onMessage(e);
         this.active--;
         this._returnWorker(w);
@@ -84,6 +101,7 @@ export class WorkerPool {
         if (task.cancelled) return;
         const w = activeWorker;
         activeWorker = null;
+        this._recordError();
         onError(formatWorkerError(e));
         this.active--;
         // Don't reuse errored worker — terminate it
@@ -110,6 +128,16 @@ export class WorkerPool {
         this.queue = this.queue.filter(q => q.task !== task);
       }
     };
+  }
+
+  _recordError() {
+    this._consecutiveErrors++;
+    // Exponential backoff: 500ms, 1s, 2s, 4s, ... up to 30s
+    const backoffMs = Math.min(500 * Math.pow(2, this._consecutiveErrors - 1), 30000);
+    this._backoffUntil = Date.now() + backoffMs;
+    if (this._consecutiveErrors >= 3) {
+      console.warn(`WorkerPool(${this.scriptUrl}): ${this._consecutiveErrors} consecutive errors, backing off ${backoffMs}ms`);
+    }
   }
 
   _returnWorker(w) {
@@ -139,7 +167,6 @@ export class WorkerPool {
   }
 
   destroy() {
-    clearInterval(this._cleanupTimer);
     this.idle.forEach(w => w.terminate());
     this.idle = [];
     for (const entry of this.queue) {
@@ -163,6 +190,7 @@ function ensureGlobalCleanup() {
   if (globalCleanupTimer !== null) return;
   globalCleanupTimer = setInterval(() => {
     for (const [key, pool] of workerPools) {
+      pool._cleanup();
       if (pool._isEmpty) {
         pool.destroy();
         workerPools.delete(key);
@@ -177,10 +205,14 @@ function ensureGlobalCleanup() {
 
 export function getPool(poolSize, scriptUrl) {
   ensureGlobalCleanup();
-  const poolSizeNum = typeof poolSize === 'bigint' ? Number(poolSize) : poolSize;
+  const poolSizeNum = ensureNumber(poolSize);
   const key = `${poolSizeNum}:${scriptUrl}`;
-  if (!workerPools.has(key)) {
-    workerPools.set(key, new WorkerPool(poolSizeNum, scriptUrl));
+  let pool = workerPools.get(key);
+  if (!pool || pool._isEmpty) {
+    // Pool was cleaned up or doesn't exist — create fresh
+    // No need to call destroy() again — _cleanup() already terminated idle workers
+    pool = new WorkerPool(poolSizeNum, scriptUrl);
+    workerPools.set(key, pool);
   }
-  return workerPools.get(key);
+  return pool;
 }
