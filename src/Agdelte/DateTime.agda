@@ -10,6 +10,7 @@ open import Data.Nat using (ℕ; _*_)
 open import Data.Bool using (Bool)
 open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Product using (_×_; _,_)
+open import Data.Unit using (⊤; tt)
 
 open import Agdelte.Core.Task using (Task)
 
@@ -53,16 +54,22 @@ days n = mkDuration (n * 86400000)
 -- Getting current time
 ------------------------------------------------------------------------
 
+-- NOTE: now and nowMillis take a ⊤ argument to ensure the Date/timestamp
+-- is captured at call time, not at module-load time. Without the unit
+-- argument, Task.pure would bake in the value eagerly (JS evaluates
+-- the expression once when the module is first imported).
 postulate
-  -- Current date/time (impure)
-  now : Task Date
+  -- Current date/time (pass tt to evaluate)
+  now : ⊤ → Task Date
 
-  -- Current timestamp in milliseconds since epoch
-  nowMillis : Task ℕ
+  -- Current timestamp in milliseconds since epoch (pass tt to evaluate)
+  nowMillis : ⊤ → Task ℕ
 
-{-# COMPILE JS now = (cases) => cases["pure"](new Date()) #-}
+-- FFI-FRAGILE: pure (Task)
+{-# COMPILE JS now = function(_) { return (cases) => cases["pure"](new Date()); } #-}
 
-{-# COMPILE JS nowMillis = (cases) => cases["pure"](BigInt(Date.now())) #-}
+-- FFI-FRAGILE: pure (Task)
+{-# COMPILE JS nowMillis = function(_) { return (cases) => cases["pure"](BigInt(Date.now())); } #-}
 
 ------------------------------------------------------------------------
 -- Date construction
@@ -78,15 +85,14 @@ postulate
   -- From components (year, month 1-12, day, hour, minute, second)
   fromComponents : ℕ → ℕ → ℕ → ℕ → ℕ → ℕ → Date
 
-  -- Parse date from string
-  -- NOTE: format parameter is currently ignored; uses new Date(s) parsing.
-  -- A full implementation would require a library like date-fns.
-  parse : String → String → Maybe Date
+  -- Parse date from string (uses browser's Date parser)
+  parse : String → Maybe Date
 
 {-# COMPILE JS fromMillis = function(ms) {
   return new Date(Number(ms));
 } #-}
 
+-- FFI-FRAGILE: just (Maybe), nothing (Maybe)
 {-# COMPILE JS fromISOString = function(s) {
   const d = new Date(s);
   if (isNaN(d.getTime())) return (cases) => cases.nothing();
@@ -99,13 +105,12 @@ postulate
   }; }; };
 }; }; } #-}
 
-{-# COMPILE JS parse = function(format) { return function(s) {
-  // Simple parser for common formats
-  // Full implementation would use a library like date-fns
+-- FFI-FRAGILE: just (Maybe), nothing (Maybe)
+{-# COMPILE JS parse = function(s) {
   const d = new Date(s);
   if (isNaN(d.getTime())) return (cases) => cases.nothing();
   return (cases) => cases.just(d);
-}; } #-}
+} #-}
 
 ------------------------------------------------------------------------
 -- Date components (getters)
@@ -171,16 +176,22 @@ postulate
   setMinute : ℕ → Date → Date
   setSecond : ℕ → Date → Date
 
+-- Scott encoding extraction: dur["mkDuration"]({mkDuration: ms => ms})
+-- is the standard pattern for deconstructing a single-field Agda record.
+-- Fragile if the constructor is renamed, but there's no better FFI approach.
+-- FFI-FRAGILE: mkDuration (Duration)
 {-# COMPILE JS addDuration = function(dur) { return function(d) {
   const ms = dur["mkDuration"]({mkDuration: ms => ms});
   return new Date(d.getTime() + Number(ms));
 }; } #-}
 
+-- FFI-FRAGILE: mkDuration (Duration)
 {-# COMPILE JS subDuration = function(dur) { return function(d) {
   const ms = dur["mkDuration"]({mkDuration: ms => ms});
   return new Date(d.getTime() - Number(ms));
 }; } #-}
 
+-- FFI-FRAGILE: mkDuration (Duration)
 {-# COMPILE JS diffDates = function(d1) { return function(d2) {
   const diff = d2.getTime() - d1.getTime();
   const ms = BigInt(Math.abs(diff));
@@ -240,12 +251,12 @@ postulate
 {-# COMPILE JS format = function(pattern) { return function(d) {
   const pad = (n) => String(n).padStart(2, '0');
   return pattern
-    .replace('YYYY', d.getFullYear())
-    .replace('MM', pad(d.getMonth() + 1))
-    .replace('DD', pad(d.getDate()))
-    .replace('HH', pad(d.getHours()))
-    .replace('mm', pad(d.getMinutes()))
-    .replace('ss', pad(d.getSeconds()));
+    .replace(/YYYY/g, d.getFullYear())
+    .replace(/MM/g, pad(d.getMonth() + 1))
+    .replace(/DD/g, pad(d.getDate()))
+    .replace(/HH/g, pad(d.getHours()))
+    .replace(/mm/g, pad(d.getMinutes()))
+    .replace(/ss/g, pad(d.getSeconds()));
 }; } #-}
 
 ------------------------------------------------------------------------
@@ -260,27 +271,42 @@ postulate
   isSameMonth : Date → Date → Bool
   isSameYear : Date → Date → Bool
 
+-- FFI-FRAGILE: true (Bool), false (Bool)
 {-# COMPILE JS isBefore = function(d1) { return function(d2) {
-  return d1.getTime() < d2.getTime();
+  return d1.getTime() < d2.getTime()
+    ? (cases) => cases["true"]()
+    : (cases) => cases["false"]();
 }; } #-}
 
+-- FFI-FRAGILE: true (Bool), false (Bool)
 {-# COMPILE JS isAfter = function(d1) { return function(d2) {
-  return d1.getTime() > d2.getTime();
+  return d1.getTime() > d2.getTime()
+    ? (cases) => cases["true"]()
+    : (cases) => cases["false"]();
 }; } #-}
 
+-- FFI-FRAGILE: true (Bool), false (Bool)
 {-# COMPILE JS isSameDay = function(d1) { return function(d2) {
-  return d1.getFullYear() === d2.getFullYear() &&
-         d1.getMonth() === d2.getMonth() &&
-         d1.getDate() === d2.getDate();
+  return (d1.getFullYear() === d2.getFullYear() &&
+          d1.getMonth() === d2.getMonth() &&
+          d1.getDate() === d2.getDate())
+    ? (cases) => cases["true"]()
+    : (cases) => cases["false"]();
 }; } #-}
 
+-- FFI-FRAGILE: true (Bool), false (Bool)
 {-# COMPILE JS isSameMonth = function(d1) { return function(d2) {
-  return d1.getFullYear() === d2.getFullYear() &&
-         d1.getMonth() === d2.getMonth();
+  return (d1.getFullYear() === d2.getFullYear() &&
+          d1.getMonth() === d2.getMonth())
+    ? (cases) => cases["true"]()
+    : (cases) => cases["false"]();
 }; } #-}
 
+-- FFI-FRAGILE: true (Bool), false (Bool)
 {-# COMPILE JS isSameYear = function(d1) { return function(d2) {
-  return d1.getFullYear() === d2.getFullYear();
+  return d1.getFullYear() === d2.getFullYear()
+    ? (cases) => cases["true"]()
+    : (cases) => cases["false"]();
 }; } #-}
 
 ------------------------------------------------------------------------

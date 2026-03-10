@@ -100,10 +100,13 @@ inspectDiagram d =
   putStrLn "========================="
   where
     showCount : List Slot → String
-    showCount [] = "0"
-    showCount (_ ∷ []) = "1"
-    showCount (_ ∷ _ ∷ []) = "2"
-    showCount (_ ∷ _ ∷ _ ∷ _) = "3+"
+    showCount ss = primShowNat (len ss)
+      where
+        open import Agda.Builtin.String using (primShowNat)
+        open import Agda.Builtin.Nat using (Nat; zero; suc)
+        len : List Slot → Nat
+        len [] = zero
+        len (_ ∷ rest) = suc (len rest)
 
 ------------------------------------------------------------------------
 -- Remote inspection via Unix socket

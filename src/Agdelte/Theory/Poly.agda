@@ -93,8 +93,11 @@ Mono A B = mkPoly A (λ _ → B)
 -- Monoidal structures
 ------------------------------------------------------------------------
 
--- Parallel composition (tensor product): P ⊗ Q
--- (p, q) position, separate directions
+-- Parallel composition (tensor product / Day convolution): P ⊗ Q
+-- Positions multiply (Pos P × Pos Q), directions sum (Dir P p ⊎ Dir Q q).
+-- The ⊎ for directions is mathematically correct: a morphism into P ⊗ Q
+-- provides a direction to *one* of the two components, not both.
+-- For "both simultaneously" see _&_ in Wiring.agda (product, not tensor).
 _⊗_ : Poly → Poly → Poly
 P ⊗ Q = mkPoly
   (Pos P × Pos Q)

@@ -56,6 +56,7 @@ open Envelope public
 -- At JS level: SharedArrayBuffer object passed to/from workers
 -- At Agda level: opaque type, used by Event constructors (allocShared, workerShared)
 postulate SharedBuffer : Set
+{-# COMPILE JS SharedBuffer = function(x) { return x; } #-}
 
 ------------------------------------------------------------------------
 -- Re-export Result for cross-process operations

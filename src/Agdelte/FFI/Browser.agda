@@ -40,6 +40,7 @@ postulate
 postulate
   querySelector : String → Maybe Element
 
+-- FFI-FRAGILE: just (Maybe), nothing (Maybe)
 {-# COMPILE JS querySelector = function(sel) {
   const el = document.querySelector(sel);
   return el ? (cases) => cases.just(el) : (cases) => cases.nothing();
@@ -96,6 +97,7 @@ postulate
   localStorageSet    : String → String → ⊤
   localStorageRemove : String → ⊤
 
+-- FFI-FRAGILE: just (Maybe), nothing (Maybe)
 {-# COMPILE JS localStorageGet = function(key) {
   try {
     const val = localStorage.getItem(key);
@@ -129,11 +131,9 @@ postulate
 ------------------------------------------------------------------------
 
 postulate
-  getPathname  : ⊤  -- returns dummy; runtime reads window.location.pathname
   pushState    : String → ⊤
   replaceState : String → ⊤
 
-{-# COMPILE JS getPathname = null #-}
 {-# COMPILE JS pushState = function(url) {
   window.history.pushState(null, '', url); return null;
 } #-}

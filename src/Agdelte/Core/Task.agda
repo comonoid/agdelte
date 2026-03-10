@@ -59,6 +59,13 @@ data Task (A : Set) : Set where
   -- HTTP POST: url, body, onSuccess continuation, onError continuation
   httpPost : String → String → (String → Task A) → (String → Task A) → Task A
 
+-- httpGet url onOk onErr:
+--   onOk receives the response body as String
+--   onErr receives an error message (network error description or HTTP status text)
+-- httpPost url body onOk onErr:
+--   body is sent as request body (text/plain)
+--   onOk/onErr — same as httpGet
+
 ------------------------------------------------------------------------
 -- Monadic operations
 ------------------------------------------------------------------------
@@ -100,7 +107,11 @@ httpPost′ url body = httpPost url body pure fail
 -- Error handling
 ------------------------------------------------------------------------
 
--- Alternative on error
+-- | Alternative combinator: try first task, on error run second.
+-- WARNING: replaces the error handler of the first task entirely.
+-- The original onErr is discarded — side effects in it (logging,
+-- cleanup) will NOT execute on failure. To preserve side effects,
+-- use `recover` or manual error handling instead.
 _<|>_ : Task A → Task A → Task A
 pure a <|> _ = pure a
 fail _ <|> t₂ = t₂
@@ -109,7 +120,9 @@ httpPost url body onOk onErr <|> t₂ = httpPost url body onOk (λ _ → t₂)
 
 infixl 3 _<|>_
 
--- Recover: turn error into value
+-- | Recover from immediate failures. Converts `fail e` and HTTP
+-- error callbacks to `pure (f e)`. Does NOT affect nested failures
+-- inside onOk continuations — those propagate unchanged.
 recover : Task A → (String → A) → Task A
 recover (pure a) _ = pure a
 recover (fail e) f = pure (f e)
@@ -120,7 +133,10 @@ recover (httpPost url body onOk onErr) f = httpPost url body onOk (λ e → pure
 -- Result conversion
 ------------------------------------------------------------------------
 
--- Get Result instead of fail
+-- | Convert Task to Result-producing Task. Top-level `fail` becomes
+-- `pure (err e)`. HTTP errors become `err`. Nested tasks inside
+-- onOk continuations are also wrapped via recursive call.
+-- Note: this is an AST transformation, not runtime error catching.
 toResult : Task A → Task (Result String A)
 toResult (pure a) = pure (ok a)
 toResult (fail e) = pure (err e)

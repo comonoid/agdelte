@@ -11,6 +11,7 @@
 
 import { interpretEvent, unsubscribe, wsConnections, channelConnections } from './events.js';
 import { deepEqual, countSlots, detectSlots, probeSlots, probeCtor, changedSlotsFromCache, listToArray, ensureNumber } from './agda-values.js';
+import { bufferRegistry, mkBufferHandle, extractBufferHandle } from './buffer-registry.js';
 
 // ─────────────────────────────────────────────────────────────────────
 // SVG/MathML namespace support
@@ -243,6 +244,19 @@ function executeCmd(cmd, dispatch) {
         return;
       }
       worker.postMessage(message);
+    },
+    'freeBuffer': (handle) => {
+      const { id } = extractBufferHandle(handle);
+      bufferRegistry.free(id);
+    },
+    'touchBuffer': (handle, handler) => {
+      const { id, width, height } = extractBufferHandle(handle);
+      const newVersion = bufferRegistry.touch(id);
+      if (newVersion !== -1) {
+        dispatch(handler(mkBufferHandle(id, newVersion, width, height)));
+      } else {
+        console.warn(`Cmd.touchBuffer: buffer ${id} not found`);
+      }
     },
     'pushUrl': (url) => history.pushState(null, '', '#' + url),
     'replaceUrl': (url) => history.replaceState(null, '', '#' + url),
@@ -1558,6 +1572,10 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       },
       onKeyDown: (handler) => 'onKeyDown',
       onKeyUp: (handler) => 'onKeyUp',
+      onMouseDown: (handler) => 'onMouseDown',
+      onMouseUp: (handler) => 'onMouseUp',
+      onMouseMove: (handler) => 'onMouseMove',
+      onClick: (handler) => 'onClick',
       onKeys: (pairs) => 'onKeys',
       httpGet: (url, ok, err) => `httpGet(${url})`,
       httpPost: (url, body, ok, err) => `httpPost(${url})`,
@@ -1577,6 +1595,8 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       workerChannel: (url) => `workerChannel(${url})`,
       allocShared: (n) => `allocShared(${n})`,
       workerShared: (buf, url, input) => `workerShared(${url},${input})`,
+      allocImage: (w, h) => `allocImage(${w},${h})`,
+      allocBuffer: (n) => `allocBuffer(${n})`,
       foldE: (_typeB, init, step, inner) => `foldE(${serializeEvent(inner)})`,
       mapFilterE: (_typeB, f, inner) => `mapFilterE(${serializeEvent(inner)})`,
       switchE: (initial, meta) => `switchE(${serializeEvent(initial)},${serializeEvent(meta)})`

@@ -28,6 +28,18 @@ data ConnectorType : Set where
   Orthogonal : ConnectorType   -- right-angle turns
 
 ------------------------------------------------------------------------
+-- Dash Pattern
+------------------------------------------------------------------------
+
+data DashPattern : Set where
+  solid  : DashPattern
+  dashed : String → DashPattern   -- e.g. "5,5"
+
+showDashPattern : DashPattern → String
+showDashPattern solid      = "none"
+showDashPattern (dashed s) = s
+
+------------------------------------------------------------------------
 -- Connector Style
 ------------------------------------------------------------------------
 
@@ -36,7 +48,7 @@ record ConnectorStyle : Set where
   field
     lineColor     : String
     lineWidth     : Float
-    dashPattern   : String     -- e.g. "5,5" or "" for solid
+    dashPattern   : DashPattern
     arrowSize     : Float      -- 0 for no arrow
     dotRadius     : Float      -- 0 for no endpoint dots
 
@@ -46,7 +58,7 @@ defaultConnectorStyle : ConnectorStyle
 defaultConnectorStyle = mkConnectorStyle
   "#6b7280"    -- gray
   2.0
-  ""           -- solid
+  solid
   8.0          -- arrow
   0.0          -- no dots
 
@@ -54,7 +66,7 @@ dashedConnectorStyle : ConnectorStyle
 dashedConnectorStyle = mkConnectorStyle
   "#6b7280"
   2.0
-  "5,5"        -- dashed
+  (dashed "5,5")
   0.0          -- no arrow
   0.0
 
@@ -62,7 +74,7 @@ arrowConnectorStyle : ConnectorStyle
 arrowConnectorStyle = mkConnectorStyle
   "#3b82f6"    -- blue
   2.0
-  ""
+  solid
   10.0         -- arrow
   0.0
 
@@ -70,7 +82,7 @@ dottedConnectorStyle : ConnectorStyle
 dottedConnectorStyle = mkConnectorStyle
   "#9ca3af"
   2.0
-  ""
+  solid
   0.0
   4.0          -- endpoint dots
 
@@ -114,14 +126,9 @@ svgConnectorStraight x1 y1 x2 y2 sty =
                   ∷ attr "y2" (showFloat y2)
                   ∷ stroke_ (lineColor sty)
                   ∷ strokeWidthF (lineWidth sty)
-                  ∷ attr "stroke-dasharray" (let dp = dashPattern sty
-                                             in if isEmpty dp then "none" else dp)
+                  ∷ attr "stroke-dasharray" (showDashPattern (dashPattern sty))
                   ∷ [] ) []
     ∷ [] )
-  where
-    isEmpty : String → Bool
-    isEmpty "" = true
-    isEmpty _ = false
 
 ------------------------------------------------------------------------
 -- Curved Connector (Bezier)

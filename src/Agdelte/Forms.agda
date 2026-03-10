@@ -39,7 +39,13 @@ Validator A = A → List ValidationError
 validate : ∀ {A : Set} → String → Validator A → A → Result (List ValidationError) A
 validate fieldName v value with v value
 ... | [] = ok value
-... | errors = err (map (λ e → record e { errorField = fieldName }) errors)
+... | errors = err (map setField errors)
+  where
+    open import Agda.Builtin.String using (primStringEquality)
+    setField : ValidationError → ValidationError
+    setField e with primStringEquality (errorField e) ""
+    ... | true  = record e { errorField = fieldName }
+    ... | false = e
 
 ------------------------------------------------------------------------
 -- Primitive validators
@@ -89,6 +95,9 @@ lengthBetween min max s =
 
 ------------------------------------------------------------------------
 -- Pattern validators (via FFI)
+-- NB: FFI code below manually constructs Scott-encoded ValidationError
+-- and List values. It depends on constructor names: mkError, _∷_, [].
+-- If these constructors are renamed, the FFI will silently break.
 ------------------------------------------------------------------------
 
 postulate
@@ -99,7 +108,7 @@ postulate
   url : Validator String
 
   -- Match regex pattern
-  pattern : String → String → Validator String  -- pattern, error message
+  pattern′ : String → String → Validator String  -- pattern, error message
 
   -- Numeric string
   numeric : Validator String
@@ -107,49 +116,54 @@ postulate
   -- Alphanumeric
   alphanumeric : Validator String
 
+-- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
 {-# COMPILE JS email = function(s) {
   const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const nil = (cases) => cases['[]']();
   if (re.test(s)) return nil;
-  const e = {"mkError": cb => cb["mkError"]("", "Invalid email format")};
+  const e = (cb) => cb["mkError"]("", "Invalid email format");
   return (cases) => cases['_∷_'](e, nil);
 } #-}
 
+-- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
 {-# COMPILE JS url = function(s) {
   const nil = (cases) => cases['[]']();
   try {
     new URL(s);
     return nil;
   } catch {
-    const e = {"mkError": cb => cb["mkError"]("", "Invalid URL format")};
+    const e = (cb) => cb["mkError"]("", "Invalid URL format");
     return (cases) => cases['_∷_'](e, nil);
   }
 } #-}
 
-{-# COMPILE JS pattern = function(pat) { return function(errMsg) { return function(s) {
+-- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
+{-# COMPILE JS pattern′ = function(pat) { return function(errMsg) { return function(s) {
   const nil = (cases) => cases['[]']();
   try {
     const re = new RegExp(pat);
     if (re.test(s)) return nil;
-    const e = {"mkError": cb => cb["mkError"]("", errMsg)};
+    const e = (cb) => cb["mkError"]("", errMsg);
     return (cases) => cases['_∷_'](e, nil);
   } catch {
-    const e = {"mkError": cb => cb["mkError"]("", "Invalid pattern")};
+    const e = (cb) => cb["mkError"]("", "Invalid pattern");
     return (cases) => cases['_∷_'](e, nil);
   }
 }; }; } #-}
 
+-- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
 {-# COMPILE JS numeric = function(s) {
   const nil = (cases) => cases['[]']();
   if (/^\d+$/.test(s)) return nil;
-  const e = {"mkError": cb => cb["mkError"]("", "Must contain only digits")};
+  const e = (cb) => cb["mkError"]("", "Must contain only digits");
   return (cases) => cases['_∷_'](e, nil);
 } #-}
 
+-- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
 {-# COMPILE JS alphanumeric = function(s) {
   const nil = (cases) => cases['[]']();
   if (/^[a-zA-Z0-9]+$/.test(s)) return nil;
-  const e = {"mkError": cb => cb["mkError"]("", "Must be alphanumeric")};
+  const e = (cb) => cb["mkError"]("", "Must be alphanumeric");
   return (cases) => cases['_∷_'](e, nil);
 } #-}
 
@@ -212,17 +226,19 @@ postulate
   -- String not equal
   notEquals : String → Validator String
 
+-- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
 {-# COMPILE JS equals = function(expected) { return function(s) {
   const nil = (cases) => cases['[]']();
   if (s === expected) return nil;
-  const e = {"mkError": cb => cb["mkError"]("", "Must equal \"" + expected + "\"")};
+  const e = (cb) => cb["mkError"]("", "Must equal \"" + expected + "\"");
   return (cases) => cases['_∷_'](e, nil);
 }; } #-}
 
+-- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
 {-# COMPILE JS notEquals = function(forbidden) { return function(s) {
   const nil = (cases) => cases['[]']();
   if (s !== forbidden) return nil;
-  const e = {"mkError": cb => cb["mkError"]("", "Must not equal \"" + forbidden + "\"")};
+  const e = (cb) => cb["mkError"]("", "Must not equal \"" + forbidden + "\"");
   return (cases) => cases['_∷_'](e, nil);
 }; } #-}
 
@@ -237,27 +253,29 @@ postulate
   -- Positive number (string)
   positive : Validator String
 
+-- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
 {-# COMPILE JS inRange = function(min) { return function(max) { return function(s) {
   const nil = (cases) => cases['[]']();
   const n = parseInt(s, 10);
   if (isNaN(n)) {
-    const e = {"mkError": cb => cb["mkError"]("", "Must be a number")};
+    const e = (cb) => cb["mkError"]("", "Must be a number");
     return (cases) => cases['_∷_'](e, nil);
   }
   const minN = Number(min);
   const maxN = Number(max);
   if (n < minN || n > maxN) {
-    const e = {"mkError": cb => cb["mkError"]("", "Must be between " + minN + " and " + maxN)};
+    const e = (cb) => cb["mkError"]("", "Must be between " + minN + " and " + maxN);
     return (cases) => cases['_∷_'](e, nil);
   }
   return nil;
 }; }; } #-}
 
+-- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
 {-# COMPILE JS positive = function(s) {
   const nil = (cases) => cases['[]']();
   const n = parseInt(s, 10);
   if (isNaN(n) || n <= 0) {
-    const e = {"mkError": cb => cb["mkError"]("", "Must be a positive number")};
+    const e = (cb) => cb["mkError"]("", "Must be a positive number");
     return (cases) => cases['_∷_'](e, nil);
   }
   return nil;
@@ -307,41 +325,10 @@ getValidValue f = if isFieldValid f then just (fieldValue f) else nothing
 ------------------------------------------------------------------------
 
 -- Check if all fields valid (for form-level validation)
-postulate
-  -- Combine field errors from multiple fields
-  combineErrors : List (List ValidationError) → List ValidationError
-
-{-# COMPILE JS combineErrors = function(lists) {
-  const result = [];
-  // Walk outer Scott-encoded list of lists
-  let outerDone = false;
-  let outer = lists;
-  while (!outerDone) {
-    outer({
-      '[]': () => { outerDone = true; },
-      '_∷_': (errors, tail) => {
-        // Walk inner Scott-encoded list of errors
-        let innerDone = false;
-        let inner = errors;
-        while (!innerDone) {
-          inner({
-            '[]': () => { innerDone = true; },
-            '_∷_': (e, rest) => { result.push(e); inner = rest; }
-          });
-        }
-        outer = tail;
-      }
-    });
-  }
-  // Convert back to Scott-encoded Agda list
-  let agdaList = (cases) => cases['[]']();
-  for (let i = result.length - 1; i >= 0; i--) {
-    const elem = result[i];
-    const tail = agdaList;
-    agdaList = (cases) => cases['_∷_'](elem, tail);
-  }
-  return agdaList;
-} #-}
+-- Combine field errors from multiple fields (flatten list of lists)
+combineErrors : List (List ValidationError) → List ValidationError
+combineErrors = concat
+  where open import Data.List using (concat)
 
 ------------------------------------------------------------------------
 -- Cross-field validation

@@ -45,6 +45,23 @@ postulate
 {-# COMPILE GHC pure  = \_ -> return   #-}
 {-# COMPILE GHC bracket = \_ _ -> Ex.bracket #-}
 
+-- Try an IO action, catching all exceptions as Left String
+open import Data.Maybe using (Maybe; just; nothing)
+
+postulate
+  tryCatch : ∀ {A : Set} → IO A → IO (Maybe A)
+
+{-# FOREIGN GHC
+  tryCatchImpl :: IO a -> IO (Maybe a)
+  tryCatchImpl act = do
+    r <- Ex.try act :: IO (Either Ex.SomeException a)
+    case r of
+      Right a -> return (Just a)
+      Left _  -> return Nothing
+  #-}
+
+{-# COMPILE GHC tryCatch = \_ -> tryCatchImpl #-}
+
 ------------------------------------------------------------------------
 -- STM
 ------------------------------------------------------------------------
@@ -181,21 +198,18 @@ postulate
 
 {-# COMPILE GHC mkAgentDef = mkAgentDefImpl #-}
 
--- Run multi-agent server
+-- Run multi-agent server (arbitrary number of agents)
+open import Agda.Builtin.List using (List; []; _∷_)
+
 postulate
-  runAgentServer1 : Nat → AgentDef → IO ⊤
-  runAgentServer2 : Nat → AgentDef → AgentDef → IO ⊤
+  runAgentServerN : Nat → List AgentDef → IO ⊤
 
 {-# FOREIGN GHC
-  runAgentServer1Impl :: Integer -> AS.AgentDef -> IO ()
-  runAgentServer1Impl port a1 = AS.runAgentServer (fromIntegral port) (Just "*") [a1]
-
-  runAgentServer2Impl :: Integer -> AS.AgentDef -> AS.AgentDef -> IO ()
-  runAgentServer2Impl port a1 a2 = AS.runAgentServer (fromIntegral port) (Just "*") [a1, a2]
+  runAgentServerNImpl :: Integer -> [AS.AgentDef] -> IO ()
+  runAgentServerNImpl port agents = AS.runAgentServer (fromIntegral port) (Just "*") agents
   #-}
 
-{-# COMPILE GHC runAgentServer1 = runAgentServer1Impl #-}
-{-# COMPILE GHC runAgentServer2 = runAgentServer2Impl #-}
+{-# COMPILE GHC runAgentServerN = runAgentServerNImpl #-}
 
 ------------------------------------------------------------------------
 -- Wire pure Agent to AgentDef (bridge coalgebra to mutable server)

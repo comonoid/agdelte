@@ -60,6 +60,22 @@ record KeyboardEvent : Set where
 open KeyboardEvent public
 
 ------------------------------------------------------------------------
+-- MouseEvent
+------------------------------------------------------------------------
+
+record MouseEvent : Set where
+  constructor mkMouseEvent
+  field
+    mouseX   : ℕ      -- clientX
+    mouseY   : ℕ      -- clientY
+    pageX    : ℕ
+    pageY    : ℕ
+    button   : ℕ      -- 0=left, 1=middle, 2=right
+    buttons  : ℕ      -- bit mask
+
+open MouseEvent public
+
+------------------------------------------------------------------------
 -- SharedArrayBuffer (opaque handle)
 ------------------------------------------------------------------------
 
@@ -79,6 +95,20 @@ record SpringConfig : Set where
     damping   : Float
 
 open SpringConfig public
+
+------------------------------------------------------------------------
+-- BufferHandle (lightweight reference to a buffer in the registry)
+------------------------------------------------------------------------
+
+record BufferHandle : Set where
+  constructor bufferHandle
+  field
+    bufferId      : ℕ    -- Registry handle id
+    bufferVersion : ℕ    -- Version (incremented when buffer changes)
+    bufferWidth   : ℕ    -- Width (for images)
+    bufferHeight  : ℕ    -- Height (for images)
+
+open BufferHandle public
 
 ------------------------------------------------------------------------
 -- Event as data type (AST) - stays in Set
@@ -101,6 +131,10 @@ open SpringConfig public
 -- The update function IS foldp: update : Msg → Model → Model.
 -- Adding separate constructors would duplicate what the architecture
 -- already provides, with no runtime benefit.
+-- MAINTENANCE: when adding a new constructor to Event, also update:
+--   • mapE       (below, under TERMINATING)
+--   • filterE    (below, under TERMINATING)
+--   • runtime/events.js  (interpreter)
 {-# NO_POSITIVITY_CHECK #-}
 {-# NO_UNIVERSE_CHECK #-}
 data Event (A : Set) : Set where
@@ -125,7 +159,15 @@ data Event (A : Set) : Set where
   onKeyDown : (KeyboardEvent → Maybe A) → Event A
   onKeyUp   : (KeyboardEvent → Maybe A) → Event A
 
-  -- === HTTP ===
+  -- === Mouse ===
+  -- Handler returns Maybe A (nothing = ignore)
+  onMouseDown  : (MouseEvent → Maybe A) → Event A
+  onMouseUp    : (MouseEvent → Maybe A) → Event A
+  onMouseMove  : (MouseEvent → Maybe A) → Event A
+  onClick      : (MouseEvent → Maybe A) → Event A
+
+  -- === HTTP (subscriptions: persistent, re-fire on each response) ===
+  -- For one-shot requests, use Cmd.httpGet / Cmd.httpPost instead.
   httpGet  : String → (String → A) → (String → A) → Event A
   httpPost : String → String → (String → A) → (String → A) → Event A
 
@@ -172,6 +214,12 @@ data Event (A : Set) : Set where
   -- buffer, scriptUrl, input, onResult, onError
   workerShared : SharedBuffer → String → String → (String → A) → (String → A) → Event A
 
+  -- === Buffer Registry ===
+  -- Allocate RGBA image buffer (4 bytes/pixel), dispatch handle
+  allocImage : ℕ → ℕ → (BufferHandle → A) → Event A
+  -- Allocate generic byte buffer, dispatch handle
+  allocBuffer : ℕ → (BufferHandle → A) → Event A
+
   -- === Combinators ===
   merge    : Event A → Event A → Event A
   debounce : ℕ → Event A → Event A    -- delay after pause
@@ -196,6 +244,8 @@ data Event (A : Set) : Set where
 -- mapE - function, not constructor (to keep Event ∈ Set)
 ------------------------------------------------------------------------
 
+-- TERMINATING: Event uses NO_POSITIVITY_CHECK (for switchE : Event (Event A)),
+-- so Agda can't prove structural recursion. Must cover all Event constructors.
 {-# TERMINATING #-}
 mapE : (A → B) → Event A → Event B
 mapE f never = never
@@ -208,6 +258,14 @@ mapE f (springLoop cfg onTick onSettled) =
 mapE f (onKeyDown h) = onKeyDown (λ e → Data.Maybe.map f (h e))
   where import Data.Maybe
 mapE f (onKeyUp h) = onKeyUp (λ e → Data.Maybe.map f (h e))
+  where import Data.Maybe
+mapE f (onMouseDown h) = onMouseDown (λ e → Data.Maybe.map f (h e))
+  where import Data.Maybe
+mapE f (onMouseUp h) = onMouseUp (λ e → Data.Maybe.map f (h e))
+  where import Data.Maybe
+mapE f (onMouseMove h) = onMouseMove (λ e → Data.Maybe.map f (h e))
+  where import Data.Maybe
+mapE f (onClick h) = onClick (λ e → Data.Maybe.map f (h e))
   where import Data.Maybe
 mapE f (httpGet url onOk onErr) = httpGet url (f ∘ onOk) (f ∘ onErr)
 mapE f (httpPost url body onOk onErr) = httpPost url body (f ∘ onOk) (f ∘ onErr)
@@ -224,13 +282,17 @@ mapE f (poolWorkerWithProgress n url input onProg onRes onErr) =
 mapE f (workerChannel url onMsg onErr) = workerChannel url (f ∘ onMsg) (f ∘ onErr)
 mapE f (allocShared n h) = allocShared n (f ∘ h)
 mapE f (workerShared buf url input onOk onErr) = workerShared buf url input (f ∘ onOk) (f ∘ onErr)
+mapE f (allocImage w h handler) = allocImage w h (f ∘ handler)
+mapE f (allocBuffer n handler) = allocBuffer n (f ∘ handler)
 mapE f (merge e₁ e₂) = merge (mapE f e₁) (mapE f e₂)
 mapE f (debounce n e) = debounce n (mapE f e)
 mapE f (throttle n e) = throttle n (mapE f e)
--- Note: wraps in mapFilterE(just ∘ f) because foldE's accumulator type
--- prevents fusing f into the fold. Correct but creates an extra layer;
--- runtime fusion (mapFilterE(just ∘ f) ∘ mapFilterE g → mapFilterE(map f ∘ g))
--- can optimize this if needed.
+-- Note: wraps in mapFilterE(just ∘ f) because foldE's accumulator type B
+-- prevents fusing f into the fold step (step : B → A → A, but f : A → C).
+-- The extra `just` is harmless: chained mapE calls fuse into one mapFilterE
+-- (see mapE/mapFilterE case below), and the per-event overhead of one Just
+-- allocation is negligible for a UI framework. Adding a foldMapE constructor
+-- would bloat Event (30+ constructors) for no practical gain.
 mapE f (foldE a₀ step inner) = mapFilterE (λ a → just (f a)) (foldE a₀ step inner)
 mapE f (mapFilterE g inner) = mapFilterE (λ x → Data.Maybe.map f (g x)) inner
   where import Data.Maybe
@@ -240,6 +302,7 @@ mapE f (switchE initial meta) = switchE (mapE f initial) (mapE (mapE f) meta)
 -- filterE - through mapE with Maybe
 ------------------------------------------------------------------------
 
+-- TERMINATING: same reason as mapE. Must cover all Event constructors.
 {-# TERMINATING #-}
 filterE : (A → Bool) → Event A → Event A
 filterE p never = never
@@ -253,6 +316,10 @@ filterE p (springLoop cfg onTick onSettled) =
              (springLoop cfg onTick onSettled)
 filterE p (onKeyDown h) = onKeyDown (λ e → filterMaybe p (h e))
 filterE p (onKeyUp h) = onKeyUp (λ e → filterMaybe p (h e))
+filterE p (onMouseDown h) = onMouseDown (λ e → filterMaybe p (h e))
+filterE p (onMouseUp h) = onMouseUp (λ e → filterMaybe p (h e))
+filterE p (onMouseMove h) = onMouseMove (λ e → filterMaybe p (h e))
+filterE p (onClick h) = onClick (λ e → filterMaybe p (h e))
 filterE p (httpGet url onOk onErr) =
   mapFilterE (λ a → if p a then just a else nothing) (httpGet url onOk onErr)
 filterE p (httpPost url body onOk onErr) =
@@ -280,6 +347,10 @@ filterE p (allocShared n h) =
   mapFilterE (λ a → if p a then just a else nothing) (allocShared n h)
 filterE p (workerShared buf url input onOk onErr) =
   mapFilterE (λ a → if p a then just a else nothing) (workerShared buf url input onOk onErr)
+filterE p (allocImage w h handler) =
+  mapFilterE (λ a → if p a then just a else nothing) (allocImage w h handler)
+filterE p (allocBuffer n handler) =
+  mapFilterE (λ a → if p a then just a else nothing) (allocBuffer n handler)
 filterE p (merge e₁ e₂) = merge (filterE p e₁) (filterE p e₂)
 filterE p (debounce n e) = debounce n (filterE p e)
 filterE p (throttle n e) = throttle n (filterE p e)
@@ -363,6 +434,28 @@ onKeysUp pairs = onKeyUp (λ e → lookupKey (KeyboardEvent.key e) pairs)
 -- Flexible subscription to keyUp with predicate
 onKeyUpWhen : (KeyboardEvent → Bool) → A → Event A
 onKeyUpWhen pred msg = onKeyUp (λ e → if pred e then just msg else nothing)
+
+------------------------------------------------------------------------
+-- Convenient constructors for mouse
+------------------------------------------------------------------------
+
+-- Mouse position as (ℕ × ℕ)
+Position : Set
+Position = ℕ × ℕ
+
+-- Left click (button 0)
+onLeftClick : A → Event A
+onLeftClick msg = onClick (λ e → if button e ≡ᵇ 0 then just msg else nothing)
+  where open import Data.Nat using (_≡ᵇ_)
+
+-- Right click (button 2)
+onRightClick : A → Event A
+onRightClick msg = onClick (λ e → if button e ≡ᵇ 2 then just msg else nothing)
+  where open import Data.Nat using (_≡ᵇ_)
+
+-- Mouse position tracking (simplified: just x,y)
+mousePosition : (Position → A) → Event A
+mousePosition f = onMouseMove (λ e → just (f (mouseX e , mouseY e)))
 
 ------------------------------------------------------------------------
 -- Combinators

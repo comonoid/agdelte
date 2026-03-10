@@ -86,8 +86,14 @@ postulate
 
 {-# COMPILE JS length = function(arr) { return BigInt(arr.length); } #-}
 
-{-# COMPILE JS null = function(arr) { return arr.length === 0; } #-}
+-- FFI-FRAGILE: true (Bool), false (Bool)
+{-# COMPILE JS null = function(arr) {
+  return arr.length === 0
+    ? (cases) => cases["true"]()
+    : (cases) => cases["false"]();
+} #-}
 
+-- FFI-FRAGILE: just (Maybe), nothing (Maybe)
 {-# COMPILE JS index = function(i) { return function(arr) {
   const idx = Number(i);
   if (idx < arr.length) {
@@ -181,7 +187,7 @@ postulate
 }; } #-}
 
 {-# COMPILE JS filter = function(p) { return function(arr) {
-  return arr.filter(p);
+  return arr.filter(x => p(x)({"true": () => true, "false": () => false}));
 }; } #-}
 
 {-# COMPILE JS reverse = function(arr) {
@@ -227,11 +233,17 @@ postulate
 } #-}
 
 {-# COMPILE JS all = function(p) { return function(arr) {
-  return arr.every(p);
+  const r = arr.every(x => p(x)({"true": () => true, "false": () => false}));
+  return r
+    ? (cases) => cases["true"]()
+    : (cases) => cases["false"]();
 }; } #-}
 
 {-# COMPILE JS any = function(p) { return function(arr) {
-  return arr.some(p);
+  const r = arr.some(x => p(x)({"true": () => true, "false": () => false}));
+  return r
+    ? (cases) => cases["true"]()
+    : (cases) => cases["false"]();
 }; } #-}
 
 ------------------------------------------------------------------------
@@ -248,22 +260,28 @@ postulate
   -- Check if element exists (needs equality)
   elem : ∀ {A : Set} → (A → A → Bool) → A → Array A → Bool
 
+-- FFI-FRAGILE: just (Maybe), nothing (Maybe), true (Bool), false (Bool)
 {-# COMPILE JS find = function(p) { return function(arr) {
-  const result = arr.find(p);
-  return result !== undefined
-    ? (cases) => cases.just(result)
+  const idx = arr.findIndex(x => p(x)({"true": () => true, "false": () => false}));
+  return idx >= 0
+    ? (cases) => cases.just(arr[idx])
     : (cases) => cases.nothing();
 }; } #-}
 
+-- FFI-FRAGILE: just (Maybe), nothing (Maybe), true (Bool), false (Bool)
 {-# COMPILE JS findIndex = function(p) { return function(arr) {
-  const idx = arr.findIndex(p);
+  const idx = arr.findIndex(x => p(x)({"true": () => true, "false": () => false}));
   return idx >= 0
     ? (cases) => cases.just(BigInt(idx))
     : (cases) => cases.nothing();
 }; } #-}
 
+-- FFI-FRAGILE: true (Bool), false (Bool)
 {-# COMPILE JS elem = function(eq) { return function(x) { return function(arr) {
-  return arr.some(y => eq(x)(y));
+  const r = arr.some(y => eq(x)(y)({"true": () => true, "false": () => false}));
+  return r
+    ? (cases) => cases["true"]()
+    : (cases) => cases["false"]();
 }; }; } #-}
 
 ------------------------------------------------------------------------
@@ -274,6 +292,7 @@ postulate
   -- To list (O(n))
   toList : ∀ {A : Set} → Array A → List A
 
+-- FFI-FRAGILE: [] (List), _∷_ (List)
 {-# COMPILE JS toList = function(arr) {
   let result = (cases) => cases['[]']();
   for (let i = arr.length - 1; i >= 0; i--) {

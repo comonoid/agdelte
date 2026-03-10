@@ -76,17 +76,15 @@ dual done            = done
 -- recv A accumulates into a product; offer/choose use sums.
 --
 -- Note on choose: semantically, choose (internal choice, ⊕) means the
--- server picks the branch, so the client should be ready for both —
--- i.e. SessionI should be (SessionI s₁ × SessionI s₂). We use ⊎ instead
--- because the wiring layer (selectLeft/selectRight) already constrains
--- which branch the server picks, making ×-readiness unnecessary in
--- practice. If choose is ever exposed without wiring, this would need
--- to change to × to enforce that the client handles both branches.
+-- server picks the branch, so the client must be ready for both.
+-- SessionI uses × to enforce that the client provides input for both
+-- branches. The wiring layer (selectLeft/selectRight) projects to the
+-- chosen branch at the point of use.
 SessionI : Session → Set
 SessionI (send A s)     = SessionI s
 SessionI (recv A s)     = A × SessionI s
 SessionI (offer s₁ s₂)  = SessionI s₁ ⊎ SessionI s₂
-SessionI (choose s₁ s₂) = SessionI s₁ ⊎ SessionI s₂
+SessionI (choose s₁ s₂) = SessionI s₁ × SessionI s₂
 SessionI done            = ⊤
 
 -- Compute the output type produced by a session.

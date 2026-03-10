@@ -12,6 +12,7 @@
 
 import { formatWorkerError, getPool } from './worker-pool.js';
 import { listToArray, arrayToList, toBool, fromMaybe, ensureNumber, ensureString } from './agda-values.js';
+import { bufferRegistry, mkBufferHandle } from './buffer-registry.js';
 
 // WebSocket connections pool (shared with commands)
 // Keyed by URL → Map of connectionId → WebSocket
@@ -91,6 +92,62 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       document.addEventListener('keyup', (e) => {
         const keyEvent = mkKeyboardEvent(e);
         const maybeMsg = handler(keyEvent);
+        const msg = fromMaybe(maybeMsg);
+        if (msg !== null) {
+          dispatchImmediate(msg);
+        }
+      }, { signal: ac.signal });
+      return { unsubscribe: () => ac.abort() };
+    },
+
+    // onMouseDown: mouse (mousedown) - P0 (immediate)
+    onMouseDown: (handler) => {
+      const ac = new AbortController();
+      document.addEventListener('mousedown', (e) => {
+        const mouseEvent = mkMouseEvent(e);
+        const maybeMsg = handler(mouseEvent);
+        const msg = fromMaybe(maybeMsg);
+        if (msg !== null) {
+          dispatchImmediate(msg);
+        }
+      }, { signal: ac.signal });
+      return { unsubscribe: () => ac.abort() };
+    },
+
+    // onMouseUp: mouse (mouseup) - P0 (immediate)
+    onMouseUp: (handler) => {
+      const ac = new AbortController();
+      document.addEventListener('mouseup', (e) => {
+        const mouseEvent = mkMouseEvent(e);
+        const maybeMsg = handler(mouseEvent);
+        const msg = fromMaybe(maybeMsg);
+        if (msg !== null) {
+          dispatchImmediate(msg);
+        }
+      }, { signal: ac.signal });
+      return { unsubscribe: () => ac.abort() };
+    },
+
+    // onMouseMove: mouse (mousemove) - P1 (normal, throttled by nature)
+    onMouseMove: (handler) => {
+      const ac = new AbortController();
+      document.addEventListener('mousemove', (e) => {
+        const mouseEvent = mkMouseEvent(e);
+        const maybeMsg = handler(mouseEvent);
+        const msg = fromMaybe(maybeMsg);
+        if (msg !== null) {
+          dispatchNormal(msg);
+        }
+      }, { signal: ac.signal });
+      return { unsubscribe: () => ac.abort() };
+    },
+
+    // onClick: mouse (click) - P0 (immediate)
+    onClick: (handler) => {
+      const ac = new AbortController();
+      document.addEventListener('click', (e) => {
+        const mouseEvent = mkMouseEvent(e);
+        const maybeMsg = handler(mouseEvent);
         const msg = fromMaybe(maybeMsg);
         if (msg !== null) {
           dispatchImmediate(msg);
@@ -666,6 +723,35 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       };
     },
 
+    // allocImage: allocate RGBA image buffer via BufferRegistry (P1 - normal, synchronous)
+    // Scott: allocImage(width, height, handler)
+    allocImage: (width, height, handler) => {
+      const w = ensureNumber(width);
+      const h = ensureNumber(height);
+      const id = bufferRegistry.allocateImage(w, h);
+      if (id !== -1) {
+        const version = bufferRegistry.version(id);
+        dispatchNormal(handler(mkBufferHandle(id, version, w, h)));
+      } else {
+        console.error('allocImage failed (COOP/COEP headers required)');
+      }
+      return { unsubscribe: () => {} };
+    },
+
+    // allocBuffer: allocate generic byte buffer via BufferRegistry (P1 - normal, synchronous)
+    // Scott: allocBuffer(size, handler)
+    allocBuffer: (size, handler) => {
+      const n = ensureNumber(size);
+      const id = bufferRegistry.allocate(n);
+      if (id !== -1) {
+        const version = bufferRegistry.version(id);
+        dispatchNormal(handler(mkBufferHandle(id, version, n, 1)));
+      } else {
+        console.error('allocBuffer failed (COOP/COEP headers required)');
+      }
+      return { unsubscribe: () => {} };
+    },
+
     // workerChannel: long-lived bidirectional worker connection (P2 - background)
     // Scott: workerChannel(scriptUrl, onMessage, onError)
     workerChannel: (scriptUrl, onMessage, onError) => {
@@ -885,6 +971,20 @@ function mkKeyboardEvent(e) {
     toBool(e.metaKey),
     toBool(e.repeat),
     BigInt(e.location)
+  )};
+}
+
+/**
+ * Creates MouseEvent record for Agda (Scott-encoded, object format)
+ */
+function mkMouseEvent(e) {
+  return {"mkMouseEvent": (cb) => cb["mkMouseEvent"](
+    BigInt(e.clientX),
+    BigInt(e.clientY),
+    BigInt(e.pageX),
+    BigInt(e.pageY),
+    BigInt(e.button),
+    BigInt(e.buttons)
   )};
 }
 

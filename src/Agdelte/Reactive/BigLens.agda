@@ -54,26 +54,33 @@ open IOOptic public
 open import Agdelte.FFI.Server using
   ( IpcHandle
   ; connectProcess; queryProcess; stepProcess; closeProcess
+  ; tryCatch
   )
 
 -- AgentOptic via Unix socket (local process, same machine).
 -- Uses the ProcessOptic IPC protocol.
+-- Connection errors are caught: peekIO returns nothing, overIO logs
+-- the error and returns "".
 processAgentOptic : String → IOOptic
 processAgentOptic socketPath = mkIOOptic peekIO overIO
   where
     peekIO : IO (Maybe String)
     peekIO =
-      connectProcess socketPath >>= λ h →
-      queryProcess h            >>= λ result →
-      closeProcess h            >>
-      pure (just result)
+      tryCatch (connectProcess socketPath >>= λ h →
+                queryProcess h            >>= λ result →
+                closeProcess h            >>
+                pure result) >>= λ where
+        (just result) → pure (just result)
+        nothing       → pure nothing
 
     overIO : String → IO String
     overIO input =
-      connectProcess socketPath >>= λ h →
-      stepProcess h input       >>= λ result →
-      closeProcess h            >>
-      pure result
+      tryCatch (connectProcess socketPath >>= λ h →
+                stepProcess h input       >>= λ result →
+                closeProcess h            >>
+                pure result) >>= λ where
+        (just result) → pure result
+        nothing       → pure ""
 
 ------------------------------------------------------------------------
 -- IOOptic composition
@@ -95,8 +102,10 @@ processAgentOptic socketPath = mkIOOptic peekIO overIO
 -- we compose IOOptic with pure Optic:
 
 -- | Compose two IOOptics sequentially.
--- peek: outer peek, then if available, feed outer value as context to inner peek.
--- over: apply inner.ioOver, then feed result to outer.ioOver (pipeline).
+-- peek: outer first → if available, inner peek (outer value discarded because
+--   IOOptic works on serialized strings — "nested peek" is just sequential peek).
+-- over: inner first → feed result to outer (pipeline order).
+-- This asymmetry (peek outer→inner, over inner→outer) is intentional.
 _∘IO_ : IOOptic → IOOptic → IOOptic
 outer ∘IO inner = mkIOOptic
   (ioPeek outer >>= helper)

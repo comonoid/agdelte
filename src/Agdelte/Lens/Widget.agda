@@ -1,7 +1,10 @@
 {-# OPTIONS --without-K #-}
 
+-- EXPERIMENTAL: not integrated with the reactive runtime.
+-- The primary widget API is Agdelte.Reactive.Node.
+--
 -- Widget Lenses: UI without Virtual DOM
--- The core goal of Agdelte: Svelte-style direct updates through lenses
+-- Svelte-style direct updates through lenses (Path/Mutation approach)
 
 module Agdelte.Lens.Widget where
 
@@ -69,7 +72,7 @@ staticText s = mkWidget
 -- showFn converts model to string
 dynamicText : ∀ {Msg} → (ℕ → String) → Widget ℕ Msg
 dynamicText showFn = mkWidget
-  ((text , "") ∷ [])  -- initial empty, will be set
+  ((text , "") ∷ [])  -- initial placeholder; first diff sets actual value
   (λ old new → if old ≡? new then [] else (text , setText (showFn new)) ∷ [])
   []
   where
@@ -90,7 +93,10 @@ element tag attrs inner = mkWidget
   (λ old new → map (λ { (p , m) → (child 0 p , m) }) (diff inner old new))
   (map (λ { (p , e , h) → (child 0 p , e , h) }) (handlers inner))
 
--- Combine widgets side by side
+-- Combine widgets side by side (w1 = child 0, w2 = child 1).
+-- Hardcoded indices are correct: nesting composes naturally
+-- (e.g. beside (beside a b) c → a at child 0/child 0, b at child 0/child 1).
+-- Widget is experimental; the primary API is Reactive/Node.agda.
 beside : ∀ {Model Msg} → Widget Model Msg → Widget Model Msg → Widget Model Msg
 beside w1 w2 = mkWidget
   (map (λ { (p , s) → (child 0 p , s) }) (template w1)

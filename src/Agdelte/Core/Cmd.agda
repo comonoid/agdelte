@@ -13,6 +13,7 @@ open import Data.Bool using (Bool; true; false)
 open import Function using (_∘_)
 
 open import Agdelte.Core.Task as Task using (Task; Result; ok; err)
+open import Agdelte.Core.Event using (BufferHandle)
 
 private
   variable
@@ -32,7 +33,8 @@ data Cmd (A : Set) : Set where
   -- Delayed message (fires after N milliseconds)
   delay : ℕ → A → Cmd A
 
-  -- HTTP requests (simple API)
+  -- HTTP requests (one-shot commands, fire once per dispatch)
+  -- For persistent subscriptions (polling), use Event.httpGet / Event.httpPost.
   httpGet  : String → (String → A) → (String → A) → Cmd A
   httpPost : String → String → (String → A) → (String → A) → Cmd A
 
@@ -59,6 +61,10 @@ data Cmd (A : Set) : Set where
 
   -- === Worker channel ===
   channelSend : String → String → Cmd A         -- scriptUrl, message
+
+  -- === Buffer Registry ===
+  freeBuffer  : BufferHandle → Cmd A
+  touchBuffer : BufferHandle → (BufferHandle → A) → Cmd A
 
   -- === Routing ===
   pushUrl    : String → Cmd A
@@ -95,6 +101,9 @@ mapCmd f (removeItem key) = removeItem key
 mapCmd f (wsSend url msg) = wsSend url msg
 -- Worker channel
 mapCmd f (channelSend url msg) = channelSend url msg
+-- Buffer Registry
+mapCmd f (freeBuffer h) = freeBuffer h
+mapCmd f (touchBuffer h handler) = touchBuffer h (f ∘ handler)
 -- Routing
 mapCmd f (pushUrl url) = pushUrl url
 mapCmd f (replaceUrl url) = replaceUrl url

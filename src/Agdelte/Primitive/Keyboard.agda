@@ -1,149 +1,90 @@
 {-# OPTIONS --without-K --guardedness #-}
 
--- Keyboard: keyboard events
+-- Keyboard: keyboard events (thin wrapper over Core.Event)
+--
+-- For the canonical API, use Core.Event constructors directly.
+-- This module provides a simpler interface where handlers always
+-- produce a value (no Maybe filtering), plus convenience wrappers.
 
 module Agdelte.Primitive.Keyboard where
 
 open import Data.Nat using (ℕ)
 open import Data.String using (String)
 open import Data.Bool using (Bool)
+open import Data.Maybe using (just; nothing)
 open import Data.Product using (_×_)
-open import Agdelte.Core.Event using (Event; KeyboardEvent; mkKeyboardEvent)
+open import Data.List using (List)
+
+open import Agdelte.Core.Event public
+  using ( Event; KeyboardEvent; mkKeyboardEvent
+        ; key; code; ctrl; alt; shift; meta; repeat; location
+        )
+
+import Agdelte.Core.Event as CE
 
 ------------------------------------------------------------------------
--- Keyboard Event Data
+-- Backward compatibility alias
 ------------------------------------------------------------------------
 
--- Re-export KeyboardEvent from Core.Event as the canonical type
--- KeyEvent is kept as an alias for backward compatibility
 KeyEvent : Set
 KeyEvent = KeyboardEvent
 
-open KeyboardEvent public
+------------------------------------------------------------------------
+-- Keyboard Events (always-producing wrappers)
+-- Named with "All" suffix to distinguish from Core.Event's Maybe-based
+-- variants (onKeyDown, onKeyUp) when both modules are in scope.
+------------------------------------------------------------------------
+
+-- Subscribe to all key presses (no filtering)
+onKeyDownAll : ∀ {A : Set} → (KeyEvent → A) → Event A
+onKeyDownAll f = CE.onKeyDown (λ e → just (f e))
+
+-- Subscribe to all key releases (no filtering)
+onKeyUpAll : ∀ {A : Set} → (KeyEvent → A) → Event A
+onKeyUpAll f = CE.onKeyUp (λ e → just (f e))
+
+-- Subscribe to specific key
+onKey : ∀ {A : Set} → String → A → Event A
+onKey = CE.onKey
+
+-- Subscribe to arrow keys (returns event when any arrow is pressed)
+onArrowKeys : ∀ {A : Set} → A → A → A → A → Event A  -- up, down, left, right
+onArrowKeys up down left right =
+  CE.onKeys (("ArrowUp" , up) ∷ ("ArrowDown" , down) ∷ ("ArrowLeft" , left) ∷ ("ArrowRight" , right) ∷ [])
+  where open import Data.List using (_∷_; [])
+
+-- Subscribe to arrow keys + Escape
+onArrowKeysWithEscape : ∀ {A : Set} → A → A → A → A → A → Event A
+onArrowKeysWithEscape up down left right esc =
+  CE.onKeys (("ArrowUp" , up) ∷ ("ArrowDown" , down) ∷ ("ArrowLeft" , left) ∷ ("ArrowRight" , right) ∷ ("Escape" , esc) ∷ [])
+  where open import Data.List using (_∷_; [])
 
 ------------------------------------------------------------------------
--- Keyboard Events
-------------------------------------------------------------------------
-
-postulate
-  -- Subscribe to key presses
-  onKeyDown : ∀ {A : Set} → (KeyEvent → A) → Event A
-
-  -- Subscribe to key releases
-  onKeyUp : ∀ {A : Set} → (KeyEvent → A) → Event A
-
-  -- Subscribe to specific key
-  onKey : ∀ {A : Set} → String → A → Event A
-
-  -- Subscribe to arrow keys (returns event when any arrow is pressed)
-  onArrowKeys : ∀ {A : Set} → A → A → A → A → Event A  -- up, down, left, right
-
-  -- Subscribe to arrow keys + Escape
-  onArrowKeysWithEscape : ∀ {A : Set} → A → A → A → A → A → Event A  -- up, down, left, right, escape
-
-{-# COMPILE JS onKeyDown = _ => handler => ({
-  type: 'keyboard',
-  config: {
-    eventType: 'keydown',
-    handler: (e) => {
-      const b = v => v ? (c => c["true"]()) : (c => c["false"]());
-      return handler({"mkKeyboardEvent": cb => cb["mkKeyboardEvent"](
-        e.key, e.code, b(e.ctrlKey), b(e.altKey), b(e.shiftKey), b(e.metaKey), b(e.repeat), BigInt(e.location)
-      )});
-    }
-  },
-  now: [],
-  get next() { return this; }
-}) #-}
-
-{-# COMPILE JS onKeyUp = _ => handler => ({
-  type: 'keyboard',
-  config: {
-    eventType: 'keyup',
-    handler: (e) => {
-      const b = v => v ? (c => c["true"]()) : (c => c["false"]());
-      return handler({"mkKeyboardEvent": cb => cb["mkKeyboardEvent"](
-        e.key, e.code, b(e.ctrlKey), b(e.altKey), b(e.shiftKey), b(e.metaKey), b(e.repeat), BigInt(e.location)
-      )});
-    }
-  },
-  now: [],
-  get next() { return this; }
-}) #-}
-
-{-# COMPILE JS onKey = _ => key => msg => ({
-  type: 'keyboard',
-  config: {
-    eventType: 'keydown',
-    handler: (e) => e.key === key ? msg : null
-  },
-  now: [],
-  get next() { return this; }
-}) #-}
-
-{-# COMPILE JS onArrowKeys = _ => up => down => left => right => ({
-  type: 'keyboard',
-  config: {
-    eventType: 'keydown',
-    handler: (e) => {
-      switch (e.key) {
-        case 'ArrowUp': return up;
-        case 'ArrowDown': return down;
-        case 'ArrowLeft': return left;
-        case 'ArrowRight': return right;
-        default: return null;
-      }
-    }
-  },
-  now: [],
-  get next() { return this; }
-}) #-}
-
-{-# COMPILE JS onArrowKeysWithEscape = _ => up => down => left => right => esc => ({
-  type: 'keyboard',
-  config: {
-    eventType: 'keydown',
-    handler: (e) => {
-      switch (e.key) {
-        case 'ArrowUp': return up;
-        case 'ArrowDown': return down;
-        case 'ArrowLeft': return left;
-        case 'ArrowRight': return right;
-        case 'Escape': return esc;
-        default: return null;
-      }
-    }
-  },
-  now: [],
-  get next() { return this; }
-}) #-}
-
-------------------------------------------------------------------------
--- Convenient wrappers
+-- Convenient wrappers (re-exported from Core.Event)
 ------------------------------------------------------------------------
 
 -- Arrows
 onArrowUp : ∀ {A : Set} → A → Event A
-onArrowUp = onKey "ArrowUp"
+onArrowUp = CE.onArrowUp
 
 onArrowDown : ∀ {A : Set} → A → Event A
-onArrowDown = onKey "ArrowDown"
+onArrowDown = CE.onArrowDown
 
 onArrowLeft : ∀ {A : Set} → A → Event A
-onArrowLeft = onKey "ArrowLeft"
+onArrowLeft = CE.onArrowLeft
 
 onArrowRight : ∀ {A : Set} → A → Event A
-onArrowRight = onKey "ArrowRight"
+onArrowRight = CE.onArrowRight
 
 -- Special keys
 onEnter : ∀ {A : Set} → A → Event A
-onEnter = onKey "Enter"
+onEnter = CE.onEnter
 
 onEscape : ∀ {A : Set} → A → Event A
-onEscape = onKey "Escape"
+onEscape = CE.onEscape
 
 onSpace : ∀ {A : Set} → A → Event A
-onSpace = onKey " "
+onSpace = CE.onSpace
 
 onTab : ∀ {A : Set} → A → Event A
 onTab = onKey "Tab"

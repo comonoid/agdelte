@@ -35,7 +35,8 @@ dual-injective {s₁} {s₂} p =
 -- SessionI and SessionO respect duality
 ------------------------------------------------------------------------
 
--- NOTE: One might expect SessionI (dual s) ≡ SessionO s, but this does NOT
--- hold for offer/choose because SessionI for choose uses ⊎ while
--- SessionO for offer uses ×. The duality theorem applies at the protocol
--- structure level (dual-involution above), not at the I/O type level.
+-- SessionI (dual s) ≡ SessionO s now holds structurally:
+--   dual swaps send↔recv, offer↔choose
+--   SessionI(choose) = × and SessionO(offer) = ×
+--   SessionI(offer) = ⊎ and SessionO(choose) = ⊎
+-- A formal proof is left for future work.

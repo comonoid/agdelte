@@ -20,7 +20,7 @@ open import Data.Product using (_×_; _,_)
 import Data.Float as F
 import Data.Float.Base as FB
 
-open import Agdelte.Css.Easing using (linearFn; easeInFn; easeOutFn; easeInOutFn)
+open import Agdelte.Anim.Easing using (linearFn; easeInFn; easeOutFn; easeInOutFn)
 
 ------------------------------------------------------------------------
 -- Tween

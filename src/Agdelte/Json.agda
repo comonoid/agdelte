@@ -7,7 +7,7 @@ module Agdelte.Json where
 
 open import Data.String using (String)
 open import Data.Nat using (ℕ)
-open import Data.Int using (ℤ)
+open import Data.Integer using (ℤ)
 open import Data.Bool using (Bool; true; false)
 open import Data.Float using (Float)
 open import Data.Maybe using (Maybe; just; nothing)
@@ -23,10 +23,12 @@ open import Agdelte.Core.Result using (Result; ok; err)
 -- JSON Value type
 ------------------------------------------------------------------------
 
+{-# NO_POSITIVITY_CHECK #-}
 data JsonValue : Set where
   jNull   : JsonValue
   jBool   : Bool → JsonValue
-  jNumber : ℕ → JsonValue      -- simplified: natural numbers
+  jNumber : ℕ → JsonValue      -- natural numbers
+  jFloat  : Float → JsonValue  -- float (covers negative and fractional)
   jString : String → JsonValue
   jArray  : Array JsonValue → JsonValue
   jObject : Array (String × JsonValue) → JsonValue
@@ -83,7 +85,11 @@ postulate
 {-# COMPILE JS int = {
   decode: (json) => {
     if (typeof json === 'number' && Number.isInteger(json)) {
-      return { tag: 'ok', value: BigInt(json) };
+      const n = BigInt(json);
+      const value = n >= 0n
+        ? (cases) => cases["+_"](n)
+        : (cases) => cases["-[1+_]"](-n - 1n);
+      return { tag: 'ok', value };
     }
     return { tag: 'err', error: 'Expected integer, got ' + typeof json };
   }
@@ -100,14 +106,19 @@ postulate
 
 {-# COMPILE JS bool = {
   decode: (json) => {
-    if (typeof json === 'boolean') return { tag: 'ok', value: json };
+    if (typeof json === 'boolean') {
+      const value = json
+        ? (cases) => cases["true"]()
+        : (cases) => cases["false"]();
+      return { tag: 'ok', value };
+    }
     return { tag: 'err', error: 'Expected boolean, got ' + typeof json };
   }
 } #-}
 
 {-# COMPILE JS jnull = {
   decode: (json) => {
-    if (json === null) return { tag: 'ok', value: null };
+    if (json === null) return { tag: 'ok', value: (cases) => cases["tt"]() };
     return { tag: 'err', error: 'Expected null' };
   }
 } #-}
@@ -118,7 +129,7 @@ postulate
 
 postulate
   -- Decode a field from an object
-  field : ∀ {A : Set} → String → Decoder A → Decoder A
+  field′ : ∀ {A : Set} → String → Decoder A → Decoder A
 
   -- Optional field (returns Maybe)
   optionalField : ∀ {A : Set} → String → Decoder A → Decoder (Maybe A)
@@ -138,7 +149,7 @@ postulate
   -- Index into array
   index : ∀ {A : Set} → ℕ → Decoder A → Decoder A
 
-{-# COMPILE JS field = function(name) { return function(decoder) {
+{-# COMPILE JS field′ = function(name) { return function(decoder) {
   return {
     decode: (json) => {
       if (typeof json !== 'object' || json === null) {
@@ -216,7 +227,6 @@ postulate
         }
         results.push(r.value);
       }
-      // Convert JS array to Scott-encoded Agda List
       let agdaList = (cases) => cases['[]']();
       for (let i = results.length - 1; i >= 0; i--) {
         const elem = results[i];
@@ -370,18 +380,20 @@ postulate
   }
 }; } #-}
 
+-- NOTE: toJS assumes Array is backed by native JS arrays (arr.map, pairs.forEach).
+-- This is correct for the current Array postulate. If Array ever becomes
+-- Scott-encoded, toJS will need updating.
 {-# COMPILE JS decodeValue = function(decoder) { return function(json) {
-  // Convert Scott-encoded JsonValue to plain JS value
   function toJS(v) {
     return v({
       jNull: () => null,
-      jBool: (b) => b,
+      jBool: (b) => b({"true": () => true, "false": () => false}),
       jNumber: (n) => Number(n),
+      jFloat: (f) => f,
       jString: (s) => s,
       jArray: (arr) => arr.map(toJS),
       jObject: (pairs) => {
         const obj = {};
-        // pairs is a JS Array (postulated Array type) of Scott-encoded pairs
         pairs.forEach(p => {
           p({ '_,_': (k, v2) => { obj[k] = toJS(v2); } });
         });
@@ -414,6 +426,7 @@ postulate
   encodeString : Encoder String
   encodeNat : Encoder ℕ
   encodeInt : Encoder ℤ
+  encodeFloat : Encoder Float
   encodeBool : Encoder Bool
   encodeNull : Encoder ⊤
 
@@ -431,14 +444,18 @@ postulate
 -- Agda's ℕ/ℤ are BigInt-backed, but JSON has no BigInt type. This is acceptable
 -- for a browser UI framework where such large values are uncommon.
 {-# COMPILE JS encodeNat = { encode: (n) => Number(n) } #-}
-{-# COMPILE JS encodeInt = { encode: (n) => Number(n) } #-}
-{-# COMPILE JS encodeBool = { encode: (b) => b } #-}
+-- FFI-FRAGILE: +_ (ℤ), -[1+_] (ℤ)
+{-# COMPILE JS encodeInt = { encode: (n) => n({"+_": pos => Number(pos), "-[1+_]": neg => -(Number(neg) + 1)}) } #-}
+{-# COMPILE JS encodeFloat = { encode: (f) => f } #-}
+-- FFI-FRAGILE: true (Bool), false (Bool)
+{-# COMPILE JS encodeBool = { encode: (b) => b({"true": () => true, "false": () => false}) } #-}
 {-# COMPILE JS encodeNull = { encode: (_) => null } #-}
 
 {-# COMPILE JS encodeArray = function(encoder) {
   return { encode: (arr) => arr.map(x => encoder.encode(x)) };
 } #-}
 
+-- FFI-FRAGILE: [] (List), _∷_ (List)
 {-# COMPILE JS encodeList = function(encoder) {
   return {
     encode: (list) => {
@@ -456,6 +473,7 @@ postulate
   };
 } #-}
 
+-- FFI-FRAGILE: just (Maybe), nothing (Maybe)
 {-# COMPILE JS encodeMaybe = function(encoder) {
   return {
     encode: (maybe) => {
@@ -482,19 +500,19 @@ postulate
   encodeToString : ∀ {A : Set} → Encoder A → A → String
 
 {-# COMPILE JS object = function(pairs) {
-  const obj = {};
+  const arr = [];
   let current = pairs;
   let done = false;
   while (!done) {
     current({
       '[]': () => { done = true; },
       '_∷_': (head, tail) => {
-        head({ '_,_': (k, v) => { obj[k] = v; } });
+        arr.push(head);
         current = tail;
       }
     });
   }
-  return obj;
+  return (cases) => cases["jObject"](arr);
 } #-}
 
 {-# COMPILE JS encodeWith = function(encoder) { return function(value) {
@@ -570,6 +588,9 @@ postulate
   map3 : ∀ {A B C R : Set} → (A → B → C → R) → Decoder A → Decoder B → Decoder C → Decoder R
   map4 : ∀ {A B C D R : Set} → (A → B → C → D → R) → Decoder A → Decoder B → Decoder C → Decoder D → Decoder R
   map5 : ∀ {A B C D E R : Set} → (A → B → C → D → E → R) → Decoder A → Decoder B → Decoder C → Decoder D → Decoder E → Decoder R
+  map6 : ∀ {A B C D E F R : Set} → (A → B → C → D → E → F → R) → Decoder A → Decoder B → Decoder C → Decoder D → Decoder E → Decoder F → Decoder R
+  map7 : ∀ {A B C D E F G R : Set} → (A → B → C → D → E → F → G → R) → Decoder A → Decoder B → Decoder C → Decoder D → Decoder E → Decoder F → Decoder G → Decoder R
+  map8 : ∀ {A B C D E F G H R : Set} → (A → B → C → D → E → F → G → H → R) → Decoder A → Decoder B → Decoder C → Decoder D → Decoder E → Decoder F → Decoder G → Decoder H → Decoder R
 
 {-# COMPILE JS map2 = function(f) { return function(da) { return function(db) {
   return {
@@ -630,6 +651,72 @@ postulate
     }
   };
 }; }; }; }; }; } #-}
+
+{-# COMPILE JS map6 = function(f) { return function(da) { return function(db) { return function(dc) { return function(dd) { return function(de) { return function(df) {
+  return {
+    decode: (json) => {
+      const ra = da.decode(json);
+      if (ra.tag === 'err') return ra;
+      const rb = db.decode(json);
+      if (rb.tag === 'err') return rb;
+      const rc = dc.decode(json);
+      if (rc.tag === 'err') return rc;
+      const rd = dd.decode(json);
+      if (rd.tag === 'err') return rd;
+      const re = de.decode(json);
+      if (re.tag === 'err') return re;
+      const rf = df.decode(json);
+      if (rf.tag === 'err') return rf;
+      return { tag: 'ok', value: f(ra.value)(rb.value)(rc.value)(rd.value)(re.value)(rf.value) };
+    }
+  };
+}; }; }; }; }; }; } #-}
+
+{-# COMPILE JS map7 = function(f) { return function(da) { return function(db) { return function(dc) { return function(dd) { return function(de) { return function(df) { return function(dg) {
+  return {
+    decode: (json) => {
+      const ra = da.decode(json);
+      if (ra.tag === 'err') return ra;
+      const rb = db.decode(json);
+      if (rb.tag === 'err') return rb;
+      const rc = dc.decode(json);
+      if (rc.tag === 'err') return rc;
+      const rd = dd.decode(json);
+      if (rd.tag === 'err') return rd;
+      const re = de.decode(json);
+      if (re.tag === 'err') return re;
+      const rf = df.decode(json);
+      if (rf.tag === 'err') return rf;
+      const rg = dg.decode(json);
+      if (rg.tag === 'err') return rg;
+      return { tag: 'ok', value: f(ra.value)(rb.value)(rc.value)(rd.value)(re.value)(rf.value)(rg.value) };
+    }
+  };
+}; }; }; }; }; }; }; } #-}
+
+{-# COMPILE JS map8 = function(f) { return function(da) { return function(db) { return function(dc) { return function(dd) { return function(de) { return function(df) { return function(dg) { return function(dh) {
+  return {
+    decode: (json) => {
+      const ra = da.decode(json);
+      if (ra.tag === 'err') return ra;
+      const rb = db.decode(json);
+      if (rb.tag === 'err') return rb;
+      const rc = dc.decode(json);
+      if (rc.tag === 'err') return rc;
+      const rd = dd.decode(json);
+      if (rd.tag === 'err') return rd;
+      const re = de.decode(json);
+      if (re.tag === 'err') return re;
+      const rf = df.decode(json);
+      if (rf.tag === 'err') return rf;
+      const rg = dg.decode(json);
+      if (rg.tag === 'err') return rg;
+      const rh = dh.decode(json);
+      if (rh.tag === 'err') return rh;
+      return { tag: 'ok', value: f(ra.value)(rb.value)(rc.value)(rd.value)(re.value)(rf.value)(rg.value)(rh.value) };
+    }
+  };
+}; }; }; }; }; }; }; }; } #-}
 
 ------------------------------------------------------------------------
 -- Operators

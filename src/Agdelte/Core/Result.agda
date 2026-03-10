@@ -1,18 +1,13 @@
 {-# OPTIONS --without-K #-}
 
--- Result: error handling for events
--- Provides Result E A type and Event combinators for filtering ok/err
+-- Result: error handling type
+-- Pure Result E A type with no external dependencies.
 --
--- NOTE: This module imports Event for the filterOk/filterErr combinators.
--- The Result type itself has no Event dependency. If circular imports arise,
--- split the combinators into a separate module (e.g., Result.Event).
+-- Event combinators (filterOk, filterErr, partitionResult) are in
+-- Agdelte.Core.Result.Event to avoid pulling in Event for code
+-- that only needs the Result type.
 
 module Agdelte.Core.Result where
-
-open import Data.Maybe using (Maybe; just; nothing)
-open import Data.Product using (_×_; _,_)
-
-open import Agdelte.Core.Event using (Event; mapFilterE)
 
 private
   variable
@@ -25,23 +20,3 @@ private
 data Result (E A : Set) : Set where
   ok  : A → Result E A
   err : E → Result E A
-
-------------------------------------------------------------------------
--- Event combinators for Result
-------------------------------------------------------------------------
-
--- Extract only successes
-filterOk : Event (Result E A) → Event A
-filterOk = mapFilterE λ where
-  (ok a)  → just a
-  (err _) → nothing
-
--- Extract only errors
-filterErr : Event (Result E A) → Event E
-filterErr = mapFilterE λ where
-  (ok _)  → nothing
-  (err e) → just e
-
--- Split into (successes, errors)
-partitionResult : Event (Result E A) → Event A × Event E
-partitionResult e = (filterOk e , filterErr e)

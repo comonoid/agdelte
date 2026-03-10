@@ -44,10 +44,10 @@ toggleAgent = mkAgent false showBool flipBool
 -- Main
 ------------------------------------------------------------------------
 
-{-# NON_TERMINATING #-}
 main : IO ⊤
 main =
   wireAgent "counter" "/counter" counterAgent >>= λ counterDef →
   wireAgent "toggle" "/toggle" toggleAgent >>= λ toggleDef →
   putStrLn "Starting Multi-Agent Server..." >>
-  runAgentServer2 3000 counterDef toggleDef
+  runAgentServerN 3000 (counterDef ∷ toggleDef ∷ [])
+  where open import Agda.Builtin.List using (List; []; _∷_)

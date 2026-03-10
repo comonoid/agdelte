@@ -15,8 +15,7 @@ module Agdelte.Css.Easing where
 
 open import Data.Nat using (ℕ)
 open import Data.Nat.Show using (show)
-open import Data.Float using (Float; _+_; _-_; _*_; _<ᵇ_)
-open import Data.Bool using (if_then_else_)
+open import Data.Float using (Float)
 open import Data.String using (String; _++_)
 
 open import Agdelte.Css.Show using (showFloat)
@@ -57,20 +56,6 @@ showDuration (s f)  = showFloat f ++ "s"
 -- Easing as Float → Float (for model-driven animations)
 ------------------------------------------------------------------------
 
--- These are polynomial approximations of common CSS easing curves.
--- The input t is in [0, 1], output is the eased progress.
-
-linearFn : Float → Float
-linearFn t = t
-
-easeInFn : Float → Float
-easeInFn t = t * t * t
-
-easeOutFn : Float → Float
-easeOutFn t = let t' = 1.0 - t in 1.0 - t' * t' * t'
-
-easeInOutFn : Float → Float
-easeInOutFn t =
-  if t <ᵇ 0.5
-  then 4.0 * t * t * t
-  else 1.0 - (let p = (-2.0) * t + 2.0 in p * p * p) * 0.5
+-- Re-exported from Agdelte.Anim.Easing (the canonical location).
+open import Agdelte.Anim.Easing public
+  using (linearFn; easeInFn; easeOutFn; easeInOutFn)

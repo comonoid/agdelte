@@ -11,7 +11,7 @@
 
 module Agdelte.Css.Animation where
 
-open import Data.Nat using (ℕ; zero)
+open import Data.Nat using (ℕ; zero; _*_)
 open import Data.Nat.Show using (show)
 open import Data.List using (List; []; _∷_)
 open import Data.Product using (_×_; _,_)
@@ -59,13 +59,13 @@ keyframeRule kf = keyframe (Keyframes.name kf) (mapStops (Keyframes.stops kf))
 ------------------------------------------------------------------------
 
 data FillMode : Set where
-  fmNone forwards backwards both : FillMode
+  fmNone fmForwards fmBackwards fmBoth : FillMode
 
 showFillMode : FillMode → String
-showFillMode fmNone    = "none"
-showFillMode forwards  = "forwards"
-showFillMode backwards = "backwards"
-showFillMode both      = "both"
+showFillMode fmNone      = "none"
+showFillMode fmForwards  = "forwards"
+showFillMode fmBackwards = "backwards"
+showFillMode fmBoth      = "both"
 
 ------------------------------------------------------------------------
 -- Direction
@@ -159,5 +159,4 @@ animations as = "animation" ∶ renderAnims as
 
 -- Stagger helper: animation-delay for foreach items
 staggerDelay : ℕ → ℕ → Decl
-staggerDelay index stepMs = "animation-delay" ∶ showDuration (ms (index Data.Nat.* stepMs))
-  where open import Data.Nat using (_*_)
+staggerDelay index stepMs = "animation-delay" ∶ showDuration (ms (index * stepMs))

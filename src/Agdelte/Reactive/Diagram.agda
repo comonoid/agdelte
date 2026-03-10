@@ -139,7 +139,7 @@ wire c d = mkDiagram (slots d) (c ∷ connections d) (port d)
 
 open import Agdelte.FFI.Server using
   ( _>>=_; _>>_; pure; putStrLn
-  ; AgentDef; runAgentServer1; runAgentServer2
+  ; AgentDef; runAgentServerN
   ; wireAgent
   )
 
@@ -147,21 +147,18 @@ open import Agdelte.FFI.Server using
 wireSlot : Slot → IO AgentDef
 wireSlot s = wireAgent (name s) (path s) (agent s)
 
--- Run a diagram with 1 agent
-runDiagram1 : Diagram → IO ⊤
-runDiagram1 d with slots d
-... | s ∷ [] =
-  putStrLn "Starting Diagram Server..." >>
-  wireSlot s >>= λ def →
-  runAgentServer1 (port d) def
-... | _ = putStrLn "Error: runDiagram1 expects exactly 1 slot"
+-- Wire all slots sequentially (IO mapM)
+wireSlots : List Slot → IO (List AgentDef)
+wireSlots []       = pure []
+wireSlots (s ∷ ss) =
+  wireSlot s >>= λ d →
+  wireSlots ss >>= λ ds →
+  pure (d ∷ ds)
 
--- Run a diagram with 2 agents
-runDiagram2 : Diagram → IO ⊤
-runDiagram2 d with slots d
-... | s₁ ∷ s₂ ∷ [] =
+-- Run a diagram with any number of agents
+runDiagram : Diagram → IO ⊤
+runDiagram d =
   putStrLn "Starting Diagram Server..." >>
-  wireSlot s₁ >>= λ def₁ →
-  wireSlot s₂ >>= λ def₂ →
-  runAgentServer2 (port d) def₁ def₂
-... | _ = putStrLn "Error: runDiagram2 expects exactly 2 slots"
+  wireSlots (slots d) >>= λ defs →
+  runAgentServerN (port d) defs
+

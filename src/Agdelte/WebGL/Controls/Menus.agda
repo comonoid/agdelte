@@ -12,7 +12,7 @@ open import Data.Float using (Float; _*_; _+_; _-_; -_)
 open import Data.String using (String)
 open import Data.List using (List; []; _∷_; length)
 open import Data.Bool using (Bool; true; false; if_then_else_)
-open import Data.Maybe using (Maybe; just; nothing)
+open import Data.Maybe using (Maybe; just; nothing; fromMaybe)
 open import Relation.Nullary using (yes; no)
 
 open import Agdelte.WebGL.Types
@@ -147,7 +147,7 @@ selectionDropdown : ∀ {M Msg}
                   → SceneNode M Msg
 selectionDropdown {M} {Msg} theme getSelected isOpen toggleOpen selectHandler options t =
   let items = buildItems 0 options
-      getLabel = λ m → getOptionAt (getSelected m) options
+      getLabel = λ m → fromMaybe "" (getOptionAt (getSelected m) options)
   in group t
        ( dynamicLabel theme getLabel
            (mkTransform (vec3 0.0 0.0 0.0) identityQuat (vec3 1.0 1.0 1.0))
@@ -160,9 +160,9 @@ selectionDropdown {M} {Msg} theme getSelected isOpen toggleOpen selectHandler op
     buildItems idx (opt ∷ rest) =
       enabledItem opt (selectHandler idx) ∷ buildItems (suc idx) rest
 
-    getOptionAt : ℕ → List String → String
-    getOptionAt _ [] = ""
-    getOptionAt zero (x ∷ _) = x
+    getOptionAt : ℕ → List String → Maybe String
+    getOptionAt _ [] = nothing
+    getOptionAt zero (x ∷ _) = just x
     getOptionAt (suc n) (_ ∷ rest) = getOptionAt n rest
 
 ------------------------------------------------------------------------

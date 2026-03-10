@@ -28,7 +28,7 @@ open import Agdelte.Css.Transition using (TransSpec; trans; transition')
 open import Agdelte.Css.Animation using (Stop; from; to; at;
                                           Keyframes; mkKeyframes; keyframeRule;
                                           Animation; anim; mkAnim; animation'; animations;
-                                          FillMode; forwards; fmNone;
+                                          FillMode; fmForwards; fmNone;
                                           Direction; normal;
                                           IterCount; infinite; times;
                                           staggerDelay)

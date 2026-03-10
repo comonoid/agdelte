@@ -47,6 +47,8 @@ stringBinding : ∀ {Model} → (Model → String) → Binding Model String
 stringBinding f = mkBinding f eqStr
 
 -- Bool-to-String binding (for disabled, checked, etc.)
+-- "" (not "false") is intentional: HTML boolean attributes are presence-based.
+-- The runtime removes the attribute when the value is "", adds it when "true".
 boolBinding : ∀ {Model} → (Model → Bool) → Binding Model String
 boolBinding f = mkBinding (λ m → if f m then "true" else "") eqStr
 
@@ -67,7 +69,10 @@ open Transition public
 -- Node: Reactive template structure
 ------------------------------------------------------------------------
 
--- Attribute types
+-- Attr and Node are in Set₁ because constructors like foreach/glCanvas
+-- quantify over (A : Set), lifting the data type. This is safe: the JS
+-- backend erases universe levels (Scott encoding). Using NO_UNIVERSE_CHECK
+-- avoids infecting every consumer with level-polymorphism.
 data Attr (Model Msg : Set) : Set₁ where
   -- Static attribute
   attr : String → String → Attr Model Msg

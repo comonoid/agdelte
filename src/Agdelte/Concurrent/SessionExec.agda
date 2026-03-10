@@ -75,28 +75,26 @@ open SessionRunner public
 ------------------------------------------------------------------------
 
 -- Most common pattern: recv → process → send → done
--- Compile to a single Agent with (Phase × S) state.
+-- Compile to a single Agent with Phase state.
 -- Tracks phase transitions only; business logic is in the pipeline
 -- approach below (recvAgent >>> sendAgent f).
 
-reqRespAgent : ∀ {S : Set} →
-               S →                       -- initial state
-               Agent (Phase × S) String String
-reqRespAgent s₀ = record
-  { state   = waiting , s₀
+reqRespAgent : Agent Phase String String
+reqRespAgent = record
+  { state   = waiting
   ; observe = observeF
   ; step    = stepF
   }
   where
-    observeF : Phase × _ → String
-    observeF (waiting , _)    = "waiting"
-    observeF (processing , _) = "processing"
-    observeF (completed , _)  = "completed"
+    observeF : Phase → String
+    observeF waiting    = "waiting"
+    observeF processing = "processing"
+    observeF completed  = "completed"
 
-    stepF : Phase × _ → String → Phase × _
-    stepF (waiting , s) input = processing , s     -- received input, now processing
-    stepF (processing , s) _ = completed , s       -- done processing
-    stepF (completed , s) _  = completed , s       -- stay done
+    stepF : Phase → String → Phase
+    stepF waiting _    = processing
+    stepF processing _ = completed
+    stepF completed _  = completed
 
 ------------------------------------------------------------------------
 -- Pipeline: compile multi-step session via _>>>_
@@ -202,7 +200,8 @@ record Coroutine (S : Set) : Set where
 
 open Coroutine public
 
--- Run a coroutine as an Agent
+-- Run a coroutine as an Agent (fire-and-forget: output from coStep is discarded,
+-- observe always returns ""). Use coroutineAgentObs if you need to observe output.
 coroutineAgent : ∀ {S} → Coroutine S → Agent S String String
 coroutineAgent co = record
   { state   = coState co
@@ -216,8 +215,8 @@ coroutineAgentObs co = record
   { state   = coState co , ""
   ; observe = λ { (_ , out) → out }
   ; step    = λ { (s , _) i →
-      let result = coStep co s i
-      in proj₂ result , proj₁ result }
+      let (out , s') = coStep co s i
+      in s' , out }
   }
 
 ------------------------------------------------------------------------

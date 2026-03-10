@@ -10,6 +10,7 @@ open import Data.Float using (Float)
 open import Data.List using (List; []; _∷_; map; intersperse; foldr) renaming (_++_ to _++L_)
 open import Data.Nat using (ℕ)
 open import Data.Nat.Show renaming (show to showNat)
+open import Data.Maybe using (Maybe; just; nothing; maybe)
 open import Data.String using (String; _++_)
 open import Agdelte.Css.Show using (showFloat)
 open import Agdelte.Reactive.Node using (Node; Attr; attr; elem)
@@ -153,7 +154,7 @@ record SmilAnim : Set where
     additive    : Additive
     calcMode    : CalcMode
     restart     : Restart
-    animId      : String         -- id for synchronization
+    animId      : Maybe String   -- id for synchronization (nothing = no id)
 
 open SmilAnim public
 
@@ -167,7 +168,7 @@ defaultSmil = mkSmilAnim
   replace             -- replace attribute
   linear              -- linear interpolation
   always              -- can restart anytime
-  ""                  -- no id
+  nothing              -- no id
 
 ------------------------------------------------------------------------
 -- Animation elements
@@ -191,7 +192,7 @@ animate attrName from' to' anim = elem "animate"
   ∷ attr "additive" (showAdditive (additive anim))
   ∷ attr "calcMode" (showCalcMode (calcMode anim))
   ∷ attr "restart" (showRestart (restart anim))
-  ∷ (if strEq (animId anim) "" then [] else attr "id" (animId anim) ∷ [])
+  ∷ (maybe [] (λ i → attr "id" i ∷ []) (animId anim))
   ) []
 
 -- Value animation with keyframes: values="v1;v2;v3"
@@ -208,7 +209,7 @@ animateValues attrName vals anim = elem "animate"
   ∷ attr "repeatCount" (showRepeatCount (repeatCount anim))
   ∷ attr "fill" (showFillMode (fill' anim))
   ∷ attr "calcMode" (showCalcMode (calcMode anim))
-  ∷ (if strEq (animId anim) "" then [] else attr "id" (animId anim) ∷ [])
+  ∷ (maybe [] (λ i → attr "id" i ∷ []) (animId anim))
   ) []
 
 -- Transform animation
@@ -238,7 +239,7 @@ animateTransform ttype from' to' anim = elem "animateTransform"
   ∷ attr "repeatCount" (showRepeatCount (repeatCount anim))
   ∷ attr "fill" (showFillMode (fill' anim))
   ∷ attr "additive" (showAdditive (additive anim))
-  ∷ (if strEq (animId anim) "" then [] else attr "id" (animId anim) ∷ [])
+  ∷ (maybe [] (λ i → attr "id" i ∷ []) (animId anim))
   ) []
 
 -- Motion along path
@@ -254,7 +255,7 @@ animateMotion pathData autoRotate anim = elem "animateMotion"
   ∷ attr "repeatCount" (showRepeatCount (repeatCount anim))
   ∷ attr "fill" (showFillMode (fill' anim))
   ∷ (if autoRotate then attr "rotate" "auto" ∷ [] else [])
-  ++L (if strEq (animId anim) "" then [] else attr "id" (animId anim) ∷ [])
+  ++L (maybe [] (λ i → attr "id" i ∷ []) (animId anim))
   ) []
 
 -- Set (discrete state change)
@@ -269,7 +270,7 @@ smilSet attrName to' anim = elem "set"
   ∷ attr "begin" (showTiming (begin' anim))
   ∷ attr "dur" (showDuration (dur anim))
   ∷ attr "fill" (showFillMode (fill' anim))
-  ∷ (if strEq (animId anim) "" then [] else attr "id" (animId anim) ∷ [])
+  ∷ (maybe [] (λ i → attr "id" i ∷ []) (animId anim))
   ) []
 
 ------------------------------------------------------------------------
@@ -298,4 +299,4 @@ freezeEnd anim = record anim { fill' = freeze }
 
 -- Named animation (for synchronization)
 withId : String → SmilAnim → SmilAnim
-withId id' anim = record anim { animId = id' }
+withId id' anim = record anim { animId = just id' }
