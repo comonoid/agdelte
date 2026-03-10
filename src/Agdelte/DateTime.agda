@@ -60,13 +60,9 @@ postulate
   -- Current timestamp in milliseconds since epoch
   nowMillis : Task ℕ
 
-{-# COMPILE JS now = {
-  run: (onOk, onErr) => { onOk(new Date()); return () => {}; }
-} #-}
+{-# COMPILE JS now = (cases) => cases["pure"](new Date()) #-}
 
-{-# COMPILE JS nowMillis = {
-  run: (onOk, onErr) => { onOk(BigInt(Date.now())); return () => {}; }
-} #-}
+{-# COMPILE JS nowMillis = (cases) => cases["pure"](BigInt(Date.now())) #-}
 
 ------------------------------------------------------------------------
 -- Date construction

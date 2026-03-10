@@ -87,10 +87,6 @@ stepDep da i =
 -- When state is inj₂ s₂, input is I₂.
 -- No mismatched-tag no-op needed!
 
-dep⊕-Obs : ∀ {O₁ O₂} → O₁ ⊎ O₂ → Set
-dep⊕-Obs {O₁} (inj₁ _) = O₁
-dep⊕-Obs {O₂ = O₂} (inj₂ _) = O₂
-
 depI : ∀ {O₁ O₂ : Set} → (O₁ → Set) → (O₂ → Set) → O₁ ⊎ O₂ → Set
 depI I₁ I₂ (inj₁ o₁) = I₁ o₁
 depI I₁ I₂ (inj₂ o₂) = I₂ o₂

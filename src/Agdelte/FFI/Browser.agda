@@ -10,6 +10,13 @@
 -- For actual browser apps, use Event/Cmd constructors (src/Agdelte/Core/Event.agda,
 -- src/Agdelte/Core/Cmd.agda) which compile to Scott-encoded ASTs interpreted
 -- by the runtime. Direct FFI calls are for advanced use only.
+--
+-- Purity note: these postulates are declared as pure functions (e.g.
+-- consoleLog : String → ⊤) even though they perform side effects.
+-- Agda's type system permits the compiler to CSE, reorder, or eliminate
+-- pure calls, but the JS backend currently does not optimise, so this is
+-- safe in practice. The primary API (Event/Cmd AST) is already pure and
+-- safe; these exist only as low-level escape hatches.
 
 module Agdelte.FFI.Browser where
 

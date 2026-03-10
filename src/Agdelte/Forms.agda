@@ -215,14 +215,14 @@ postulate
 {-# COMPILE JS equals = function(expected) { return function(s) {
   const nil = (cases) => cases['[]']();
   if (s === expected) return nil;
-  const e = { errorField: "", errorMessage: "Must equal \"" + expected + "\"" };
+  const e = {"mkError": cb => cb["mkError"]("", "Must equal \"" + expected + "\"")};
   return (cases) => cases['_∷_'](e, nil);
 }; } #-}
 
 {-# COMPILE JS notEquals = function(forbidden) { return function(s) {
   const nil = (cases) => cases['[]']();
   if (s !== forbidden) return nil;
-  const e = { errorField: "", errorMessage: "Must not equal \"" + forbidden + "\"" };
+  const e = {"mkError": cb => cb["mkError"]("", "Must not equal \"" + forbidden + "\"")};
   return (cases) => cases['_∷_'](e, nil);
 }; } #-}
 
@@ -241,13 +241,13 @@ postulate
   const nil = (cases) => cases['[]']();
   const n = parseInt(s, 10);
   if (isNaN(n)) {
-    const e = { errorField: "", errorMessage: "Must be a number" };
+    const e = {"mkError": cb => cb["mkError"]("", "Must be a number")};
     return (cases) => cases['_∷_'](e, nil);
   }
   const minN = Number(min);
   const maxN = Number(max);
   if (n < minN || n > maxN) {
-    const e = { errorField: "", errorMessage: "Must be between " + minN + " and " + maxN };
+    const e = {"mkError": cb => cb["mkError"]("", "Must be between " + minN + " and " + maxN)};
     return (cases) => cases['_∷_'](e, nil);
   }
   return nil;
@@ -257,7 +257,7 @@ postulate
   const nil = (cases) => cases['[]']();
   const n = parseInt(s, 10);
   if (isNaN(n) || n <= 0) {
-    const e = { errorField: "", errorMessage: "Must be a positive number" };
+    const e = {"mkError": cb => cb["mkError"]("", "Must be a positive number")};
     return (cases) => cases['_∷_'](e, nil);
   }
   return nil;

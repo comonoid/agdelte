@@ -3,7 +3,7 @@
 -- SessionDual: dual session types — client and server with matching protocols
 --
 -- Shows: Session, dual, SessionI, SessionO, SessionAgent,
---        mkReqResp, mkOffer, peekLens, stepLens, through,
+--        mkReqResp, mkAgent, selectLeft, selectRight, through,
 --        and the duality invariant: dual (dual s) ≡ s
 --
 -- Scenario: a key-value store protocol
@@ -55,23 +55,16 @@ record KVState : Set where
 
 open KVState public
 
--- Get agent: receives key, returns stored value (ignores key for simplicity)
-getAgent : SessionAgent GetProto KVState
-getAgent = mkReqResp
+-- Full server: offers get or put, using a single shared KVState.
+-- Built manually (not via mkOffer) so both branches share state.
+kvServer : SessionAgent KVProto KVState
+kvServer = mkAgent
   (mkKV "" "initial")
-  (λ s → storedVal s)     -- observe: return stored value
-  (λ s _ → s)             -- step: receive key, state unchanged
-
--- Put agent: receives new value, stores it, returns "ok"
-putAgent : SessionAgent PutProto KVState
-putAgent = mkReqResp
-  (mkKV "" "initial")
-  (λ _ → "ok")            -- observe: always "ok"
-  (λ _ val → mkKV "key" val)  -- step: store new value
-
--- Full server: offers get or put
-kvServer : SessionAgent KVProto (KVState × KVState)
-kvServer = mkOffer {GetProto} {PutProto} getAgent putAgent
+  -- observe: produce outputs for both branches simultaneously
+  (λ s → (storedVal s , tt) , ("ok" , tt))
+  -- step: dispatch on which branch the client chose
+  (λ s → λ { (inj₁ (_ , tt)) → s                    -- get: state unchanged
+            ; (inj₂ (val , tt)) → mkKV "key" val })  -- put: store new value
 
 ------------------------------------------------------------------------
 -- 3. Dual protocol: what the client sees
@@ -126,12 +119,12 @@ _ = refl
 ------------------------------------------------------------------------
 
 -- Select just the "get" interface from the server
--- selectLeft/selectRight from Wiring.agda pick one branch of &
-getOnly : Agent (KVState × KVState) (SessionI GetProto) (SessionO GetProto)
+-- selectLeft/selectRight from Wiring.agda pick one branch of offer
+getOnly : Agent KVState (SessionI GetProto) (SessionO GetProto)
 getOnly = through selectLeft kvServer
 
 -- Select just the "put" interface
-putOnly : Agent (KVState × KVState) (SessionI PutProto) (SessionO PutProto)
+putOnly : Agent KVState (SessionI PutProto) (SessionO PutProto)
 putOnly = through selectRight kvServer
 
 ------------------------------------------------------------------------
@@ -161,15 +154,18 @@ private
   _ : proj₁ putResult ≡ "ok"
   _ = refl
 
-  -- After put step, value is stored
-  putStepped : KVState × KVState
+  -- After put, value is stored — get can retrieve it (shared state)
+  putStepped : KVState
   putStepped = step putOnly (state putOnly) putInput
 
-  -- The put agent's state now has the new value
-  putState : KVState
-  putState = proj₂ putStepped
+  _ : storedVal putStepped ≡ "hello"
+  _ = refl
 
-  _ : storedVal putState ≡ "hello"
+  -- Round-trip: put then get retrieves the stored value
+  afterPut : Agent KVState (SessionI GetProto) (SessionO GetProto)
+  afterPut = record getOnly { state = putStepped }
+
+  _ : proj₁ (observe afterPut (state afterPut)) ≡ "hello"
   _ = refl
 
 ------------------------------------------------------------------------
@@ -207,9 +203,9 @@ pingPongServer = mkReqResp
 
 -- This example demonstrates:
 -- 1. Protocol definition with Session (send/recv/offer/choose/done)
--- 2. Server implementation via mkReqResp, mkOffer
+-- 2. Server implementation via mkAgent with manual case-split on offer
 -- 3. Automatic duality: dual flips send↔recv, offer↔choose
 -- 4. Proven involution: dual (dual s) ≡ s (from SessionDualProof)
 -- 5. Type-level guarantee: SessionO server ≡ SessionI client
--- 6. Interface selection via peekLens/stepLens + through
--- 7. Step verification with propositional equality proofs
+-- 6. Interface selection via selectLeft/selectRight + through
+-- 7. Step verification: put then get round-trip with shared state

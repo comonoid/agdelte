@@ -77,7 +77,7 @@ subs' m = if running m
   else never
   where
     classify : ℕ → Maybe Msg
-    classify n = if isBatch n then just (BatchTick n) else nothing
+    classify n = if isBatch n then just (BatchTick n) else just Tick
 
 ------------------------------------------------------------------------
 -- Template

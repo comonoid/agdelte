@@ -35,7 +35,7 @@ dual-injective {s₁} {s₂} p =
 -- SessionI and SessionO respect duality
 ------------------------------------------------------------------------
 
--- For a well-typed session, dual swaps I and O:
--- SessionI (dual s) ≡ SessionO s  (what server sends, client receives)
--- SessionO (dual s) ≡ SessionI s  (what server receives, client sends)
--- These hold definitionally by reduction of SessionI/SessionO/dual.
+-- NOTE: One might expect SessionI (dual s) ≡ SessionO s, but this does NOT
+-- hold for offer/choose because SessionI for choose uses ⊎ while
+-- SessionO for offer uses ×. The duality theorem applies at the protocol
+-- structure level (dual-involution above), not at the I/O type level.

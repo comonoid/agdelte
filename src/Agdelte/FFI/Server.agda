@@ -9,6 +9,7 @@ open import Agda.Builtin.IO using (IO)
 open import Agda.Builtin.Unit using (⊤)
 open import Agda.Builtin.String using (String)
 open import Agda.Builtin.Bool using (Bool)
+open import Data.Product using (_×_)
 
 ------------------------------------------------------------------------
 -- Basic IO
@@ -22,6 +23,7 @@ postulate
 {-# FOREIGN GHC import qualified Data.Text.IO as TIO  #-}
 {-# FOREIGN GHC import qualified Agdelte.Http as Http  #-}
 {-# FOREIGN GHC import qualified Data.IORef as IORef   #-}
+{-# FOREIGN GHC import qualified Control.Exception as Ex #-}
 
 {-# COMPILE GHC putStrLn = TIO.putStrLn #-}
 {-# COMPILE GHC getLine  = TIO.getLine  #-}
@@ -36,10 +38,12 @@ postulate
   _>>=_ : ∀ {A B : Set} → IO A → (A → IO B) → IO B
   _>>_  : ∀ {A B : Set} → IO A → IO B → IO B
   pure  : ∀ {A : Set} → A → IO A
+  bracket : ∀ {A B : Set} → IO A → (A → IO ⊤) → (A → IO B) → IO B
 
 {-# COMPILE GHC _>>=_ = \_ _ -> (>>=) #-}
 {-# COMPILE GHC _>>_  = \_ _ -> (>>)  #-}
 {-# COMPILE GHC pure  = \_ -> return   #-}
+{-# COMPILE GHC bracket = \_ _ -> Ex.bracket #-}
 
 ------------------------------------------------------------------------
 -- STM
@@ -50,14 +54,17 @@ open import Agda.Builtin.Nat using (Nat)
 
 postulate
   IORef : Set → Set
-  newIORef   : ∀ {A : Set} → A → IO (IORef A)
-  readIORef  : ∀ {A : Set} → IORef A → IO A
-  writeIORef : ∀ {A : Set} → IORef A → A → IO ⊤
+  newIORef          : ∀ {A : Set} → A → IO (IORef A)
+  readIORef         : ∀ {A : Set} → IORef A → IO A
+  writeIORef        : ∀ {A : Set} → IORef A → A → IO ⊤
+  atomicModifyIORef : ∀ {A B : Set} → IORef A → (A → A × B) → IO B
 
 {-# COMPILE GHC IORef = type IORef.IORef #-}
-{-# COMPILE GHC newIORef   = \_ -> IORef.newIORef   #-}
-{-# COMPILE GHC readIORef  = \_ -> IORef.readIORef   #-}
-{-# COMPILE GHC writeIORef = \_ -> IORef.writeIORef  #-}
+{-# COMPILE GHC newIORef          = \_ -> IORef.newIORef          #-}
+{-# COMPILE GHC readIORef         = \_ -> IORef.readIORef         #-}
+{-# COMPILE GHC writeIORef        = \_ -> IORef.writeIORef        #-}
+
+{-# COMPILE GHC atomicModifyIORef = \_ _ -> IORef.atomicModifyIORef #-}
 
 ------------------------------------------------------------------------
 -- HTTP Server
@@ -189,3 +196,26 @@ postulate
 
 {-# COMPILE GHC runAgentServer1 = runAgentServer1Impl #-}
 {-# COMPILE GHC runAgentServer2 = runAgentServer2Impl #-}
+
+------------------------------------------------------------------------
+-- Wire pure Agent to AgentDef (bridge coalgebra to mutable server)
+------------------------------------------------------------------------
+
+open import Data.Product using (_,_)
+open import Agdelte.Concurrent.Agent using (Agent; state; observe; stepAgent)
+
+wireAgent : ∀ {S} → String → String → Agent S String String → IO AgentDef
+wireAgent name path agent =
+  newIORef (observe agent (state agent)) >>= λ stateRef →
+  newIORef agent                         >>= λ agentRef →
+  let observeIO : IO String
+      observeIO = readIORef agentRef >>= λ a →
+                  pure (observe a (state a))
+
+      stepIO : String → IO String
+      stepIO input = atomicModifyIORef agentRef
+                       (λ a → stepAgent a input) >>= λ out →
+                     writeIORef stateRef out >>
+                     pure out
+  in
+  pure (mkAgentDef name path stateRef observeIO stepIO)

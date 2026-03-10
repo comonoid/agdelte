@@ -72,10 +72,15 @@ lookupById : ℕ → List Item → Maybe Item
 lookupById _ [] = nothing
 lookupById tid (i ∷ is) = if itemId i ≡ᵇ tid then just i else lookupById tid is
 
--- Find positional index by item ID (for ixList)
-findIndexById : ℕ → List Item → ℕ
-findIndexById _ [] = 0
-findIndexById tid (i ∷ is) = if itemId i ≡ᵇ tid then 0 else suc (findIndexById tid is)
+-- Find positional index by item ID (for ixList).
+-- Returns nothing if the ID is not found.
+findIndexById : ℕ → List Item → Maybe ℕ
+findIndexById _ [] = nothing
+findIndexById tid (i ∷ is) = if itemId i ≡ᵇ tid then just 0 else map? suc (findIndexById tid is)
+  where
+    map? : ∀ {A B : Set} → (A → B) → Maybe A → Maybe B
+    map? f nothing  = nothing
+    map? f (just x) = just (f x)
 
 -- Show item value by ID (for reactive binding inside foreachKeyed)
 showValueById : ℕ → Model → String
@@ -100,9 +105,16 @@ itemsLens = mkLens items (λ is m → record m { items = is })
 nthItemOptic : ℕ → Optic Model Item
 nthItemOptic n = fromAffine (ixList n) ∘O fromLens itemsLens
 
--- Optic to selected item: find position by ID, then use ixList
+-- No-op optic: peek always returns nothing, over is identity
+noOptic : Optic Model Item
+noOptic = mkOptic (λ _ → nothing) (λ _ m → m)
+
+-- Optic to selected item: find position by ID, then use ixList.
+-- Returns a no-op optic if the selected ID is not found.
 selectedOptic : Model → Optic Model Item
-selectedOptic m = nthItemOptic (findIndexById (selected m) (items m))
+selectedOptic m with findIndexById (selected m) (items m)
+... | nothing = noOptic
+... | just n  = nthItemOptic n
 
 -- Traversal over all items for batch operations
 allItemsTraversal : Traversal Model Item
@@ -128,7 +140,7 @@ updateModel (Select tid) m = record m { selected = tid }
 updateModel IncSelected m = over (selectedOptic m) incValue m
 updateModel DecSelected m = over (selectedOptic m) decValue m
 -- ResetAll: traversal modifies ALL items at once
-updateModel ResetAll m = over (fromTraversal allItemsTraversal) resetValue m
+updateModel ResetAll m = overAll allItemsTraversal resetValue m
 -- AddItem: prepend new item, select it by ID
 updateModel AddItem m = mkModel
   (mkItem (nextId m) ("Item-" ++ show (nextId m)) 0 ∷ items m)
@@ -190,7 +202,7 @@ opticDynamicTemplate =
         ( p [] [ text "selectedOptic m = nthItemOptic (findIndexById (selected m) (items m))" ]
         ∷ p [] [ text "nthItemOptic n = fromAffine (ixList n) ∘O fromLens itemsLens" ]
         ∷ p [] [ text "Inc → over (selectedOptic m) incValue m" ]
-        ∷ p [] [ text "ResetAll → over (fromTraversal allItemsTraversal) resetValue m" ]
+        ∷ p [] [ text "ResetAll → overAll allItemsTraversal resetValue m" ]
         ∷ [] )
     ∷ [] )
 

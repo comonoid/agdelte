@@ -140,14 +140,6 @@ fromAffine af = mkOptic (Affine.preview af) overA
     ... | nothing = s
     ... | just x  = Affine.set af (f x) s
 
-fromTraversal : Traversal S A → Optic S A
-fromTraversal t = mkOptic firstOf (overAll t)
-  where
-    firstOf : _ → Maybe _
-    firstOf s with toList t s
-    ... | []     = nothing
-    ... | x ∷ _ = just x
-
 ------------------------------------------------------------------------
 -- routeMsg: automatic message routing via Prism + Lens
 ------------------------------------------------------------------------

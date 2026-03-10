@@ -13,7 +13,6 @@ open import Agda.Builtin.String using (String; primStringEquality)
 open import Agda.Builtin.Nat using (Nat; zero; suc)
 open import Agda.Builtin.Bool using (true; false)
 open import Data.Nat.Show using (show)
-open import Data.Product using (proj₁; proj₂)
 
 open import Agdelte.Concurrent.Agent
 open import Agdelte.FFI.Server
@@ -36,21 +35,15 @@ main =
   putStrLn "Agdelte HTTP Agent on port 3000" >>
   putStrLn "  GET  /state → current count" >>
   putStrLn "  POST /step  → increment counter" >>
-  listen 3000 (λ req →
-    readIORef ref >>= λ agent →
-    handleReq agent req ref)
+  listen 3000 (λ req → handleReq req ref)
   where
-    route : String → Agent Nat String String → HttpRequest → IORef (Agent Nat String String) → IO String
-    route path agent req ref with primStringEquality path "/state"
-    ... | true  = pure (observe agent (state agent))
-    ... | false with primStringEquality path "/step"
-    ...   | true  =
-              let result = stepAgent agent (reqBody req) in
-              let agent' = proj₁ result in
-              let output = proj₂ result in
-              writeIORef ref agent' >>
-              pure output
+    handleReq : HttpRequest → IORef (Agent Nat String String) → IO String
+    handleReq req ref with primStringEquality (reqPath req) "/state"
+    ... | true  = readIORef ref >>= λ agent →
+                  pure (observe agent (state agent))
+    ... | false with primStringEquality (reqPath req) "/step"
+    ...   | true with primStringEquality (reqMethod req) "POST"
+    ...     | true  = atomicModifyIORef ref
+                        (λ agent → stepAgent agent (reqBody req))
+    ...     | false = pure "Method not allowed (use POST)"
     ...   | false = pure "Not found"
-
-    handleReq : Agent Nat String String → HttpRequest → IORef (Agent Nat String String) → IO String
-    handleReq agent req ref = route (reqPath req) agent req ref

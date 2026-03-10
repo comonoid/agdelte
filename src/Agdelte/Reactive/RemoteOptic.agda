@@ -23,7 +23,6 @@ open import Data.Maybe using (Maybe; just; nothing)
 
 open import Agdelte.Core.Cmd as Cmd using (Cmd; httpGet; httpPost)
 open import Agdelte.FFI.Shared using (Serialize; encode; decode)
-open import Agdelte.Core.Result using (Result; ok; err)
 
 private
   variable
@@ -50,34 +49,36 @@ open RemoteOptic public
 
 -- | Peek: read remote agent state via HTTP GET
 -- GET {baseUrl}/state → decode response → Result String A
+-- Decode failures are routed through onError, not onResult.
 queryRemote : RemoteOptic A
-            → (Result String A → Msg) → (String → Msg)
+            → (A → Msg) → (String → Msg)
             → Cmd Msg
 queryRemote ro onResult onError =
   httpGet (baseUrl ro ++ "/state")
-    (λ raw → onResult (decodeResult raw))
+    (λ raw → dispatch raw)
     onError
   where
-    decodeResult : String → Result String _
-    decodeResult raw with decode raw
-    ... | just a  = ok a
-    ... | nothing = err "decode failed"
+    dispatch : String → Msg
+    dispatch raw with decode raw
+    ... | just a  = onResult a
+    ... | nothing = onError ("decode failed: " ++ raw)
 
 -- | Step: modify remote agent state via HTTP POST
 -- POST {baseUrl}/step with input → decode response → Result String A
+-- Decode failures are routed through onError, not onResult.
 stepRemote : RemoteOptic A
            → String
-           → (Result String A → Msg) → (String → Msg)
+           → (A → Msg) → (String → Msg)
            → Cmd Msg
 stepRemote ro input onResult onError =
   httpPost (baseUrl ro ++ "/step") input
-    (λ raw → onResult (decodeResult raw))
+    (λ raw → dispatch raw)
     onError
   where
-    decodeResult : String → Result String _
-    decodeResult raw with decode raw
-    ... | just a  = ok a
-    ... | nothing = err "decode failed"
+    dispatch : String → Msg
+    dispatch raw with decode raw
+    ... | just a  = onResult a
+    ... | nothing = onError ("decode failed: " ++ raw)
 
 ------------------------------------------------------------------------
 -- Simplified API (String-level, no Serialize required)

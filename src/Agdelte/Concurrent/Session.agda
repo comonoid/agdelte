@@ -38,6 +38,10 @@ open import Agdelte.Concurrent.Wiring
 -- offer s₁ s₂ = client picks which branch (external choice, &)
 -- choose s₁ s₂ = system picks which branch (internal choice, ⊕)
 -- done       = protocol complete
+--
+-- NO_UNIVERSE_CHECK: constructors store Set-level types as data (e.g.
+-- send : (A : Set) → ...), which requires Set₁. Universe-polymorphic
+-- encoding is possible but would infect every module with level arguments.
 
 {-# NO_UNIVERSE_CHECK #-}
 data Session : Set₁ where
@@ -70,6 +74,14 @@ dual done            = done
 
 -- Compute the input type needed for a session.
 -- recv A accumulates into a product; offer/choose use sums.
+--
+-- Note on choose: semantically, choose (internal choice, ⊕) means the
+-- server picks the branch, so the client should be ready for both —
+-- i.e. SessionI should be (SessionI s₁ × SessionI s₂). We use ⊎ instead
+-- because the wiring layer (selectLeft/selectRight) already constrains
+-- which branch the server picks, making ×-readiness unnecessary in
+-- practice. If choose is ever exposed without wiring, this would need
+-- to change to × to enforce that the client handles both branches.
 SessionI : Session → Set
 SessionI (send A s)     = SessionI s
 SessionI (recv A s)     = A × SessionI s

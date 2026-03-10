@@ -180,7 +180,9 @@ data Event (A : Set) : Set where
   -- === Stateful combinators ===
   -- foldE: accumulate state across event occurrences
   -- Runtime maintains internal state A; on each B from inner event,
-  -- computes new A = step(B, oldA), dispatches new A
+  -- computes new A = step(B, oldA), dispatches new A.
+  -- The initial value a₀ is NOT emitted — only post-event values are
+  -- dispatched. This is standard fold-event semantics.
   foldE : ∀ {B : Set} → A → (B → A → A) → Event B → Event A
 
   -- mapFilterE: map + filter in one step (Nothing = skip, Just b = dispatch b)
@@ -225,6 +227,10 @@ mapE f (workerShared buf url input onOk onErr) = workerShared buf url input (f �
 mapE f (merge e₁ e₂) = merge (mapE f e₁) (mapE f e₂)
 mapE f (debounce n e) = debounce n (mapE f e)
 mapE f (throttle n e) = throttle n (mapE f e)
+-- Note: wraps in mapFilterE(just ∘ f) because foldE's accumulator type
+-- prevents fusing f into the fold. Correct but creates an extra layer;
+-- runtime fusion (mapFilterE(just ∘ f) ∘ mapFilterE g → mapFilterE(map f ∘ g))
+-- can optimize this if needed.
 mapE f (foldE a₀ step inner) = mapFilterE (λ a → just (f a)) (foldE a₀ step inner)
 mapE f (mapFilterE g inner) = mapFilterE (λ x → Data.Maybe.map f (g x)) inner
   where import Data.Maybe

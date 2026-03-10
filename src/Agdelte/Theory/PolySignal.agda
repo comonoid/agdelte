@@ -78,14 +78,4 @@ next (unfoldSignal {S} {A} obs step s) = unfoldSignal {S} {A} obs step (step s)
 coalgToSignal : ∀ {A} → (c : Coalg (SignalPoly A)) → State c → Signal A
 coalgToSignal {A} c s₀ = unfoldSignal {State c} {A} (observe c) (λ s → update c s tt) s₀
 
-------------------------------------------------------------------------
--- Isomorphism between Signal and Coalg (informally)
-------------------------------------------------------------------------
-
--- Formally, Signal A and Coalg (SignalPoly A) with State = Signal A
--- form equivalent structures. Functions now/next directly
--- correspond to observe/update.
-
--- Signal → Coalg → Signal should give original signal:
--- coalgToSignal signalToCoalg s ≡ s  (requires bisimilarity)
 

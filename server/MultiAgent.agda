@@ -11,12 +11,10 @@ module MultiAgent where
 
 open import Agda.Builtin.IO using (IO)
 open import Agda.Builtin.Unit using (⊤)
-open import Agda.Builtin.String using (String; primStringEquality)
+open import Agda.Builtin.String using (String)
 open import Agda.Builtin.Nat using (Nat; zero; suc)
 open import Agda.Builtin.Bool using (true; false; Bool)
 open import Data.Nat.Show using (show)
-open import Data.Product using (proj₁; proj₂)
-
 open import Agdelte.Concurrent.Agent
 open import Agdelte.FFI.Server
 
@@ -41,31 +39,6 @@ flipBool false _ = true
 
 toggleAgent : Agent Bool String String
 toggleAgent = mkAgent false showBool flipBool
-
-------------------------------------------------------------------------
--- Wire up: make AgentDef from Agent
-------------------------------------------------------------------------
-
--- Create an AgentDef from a pure Agent coalgebra
--- This bridges Agda's pure Agent to the Haskell server runtime
-wireAgent : ∀ {S} → String → String → Agent S String String → IO AgentDef
-wireAgent name path agent =
-  newIORef (observe agent (state agent)) >>= λ stateRef →
-  newIORef agent >>= λ agentRef →
-  let observeIO : IO String
-      observeIO = readIORef agentRef >>= λ a →
-                  pure (observe a (state a))
-
-      stepIO : String → IO String
-      stepIO input = readIORef agentRef >>= λ a →
-                     let result = stepAgent a input in
-                     let a' = proj₁ result in
-                     let out = proj₂ result in
-                     writeIORef agentRef a' >>
-                     writeIORef stateRef out >>
-                     pure out
-  in
-  pure (mkAgentDef name path stateRef observeIO stepIO)
 
 ------------------------------------------------------------------------
 -- Main

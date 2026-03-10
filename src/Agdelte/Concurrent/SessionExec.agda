@@ -113,9 +113,9 @@ recvAgent = mkAgent "" id (λ _ input → input)
 sendAgent : (String → String) → Agent String String String
 sendAgent f = mkAgent "" f (λ _ input → input)
 
--- A "process" step: applies a function to state
+-- A "process" step: applies a function to input, stores result as state
 processAgent : (String → String) → Agent String String String
-processAgent f = mkAgent "" f (λ s input → f input)
+processAgent f = mkAgent "" id (λ _ input → f input)
 
 -- Example: ReqResp pipeline
 -- recv >>> process >>> send

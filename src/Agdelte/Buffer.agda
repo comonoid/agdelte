@@ -42,7 +42,14 @@ postulate
                 → (BufferHandle → Msg)  -- Success handler
                 → Event Msg
 
-{-# COMPILE JS allocateImage = w => h => handler => (cb) => cb.allocImage(w, h, handler) #-}
+-- NOTE: allocateImage needs runtime support (custom Event constructor).
+-- The previous callback-style pragma was incompatible with Scott-encoded Event.
+-- Using timeout 0 as a placeholder until a proper Event constructor is added.
+{-# COMPILE JS allocateImage = function(w) { return function(h) { return function(handler) {
+  return (cases) => cases["timeout"](0n, handler({
+    bufferHandle: (cb) => cb["bufferHandle"](0n, 0n, w, h)
+  }));
+}; }; } #-}
 
 -- Allocate a generic buffer
 postulate
@@ -51,7 +58,12 @@ postulate
                  → (BufferHandle → Msg)  -- Success handler
                  → Event Msg
 
-{-# COMPILE JS allocateBuffer = size => handler => (cb) => cb.allocBuffer(size, handler) #-}
+-- NOTE: Same issue as allocateImage — needs proper Event constructor.
+{-# COMPILE JS allocateBuffer = function(size) { return function(handler) {
+  return (cases) => cases["timeout"](0n, handler({
+    bufferHandle: (cb) => cb["bufferHandle"](0n, 0n, size, 1n)
+  }));
+}; } #-}
 
 ------------------------------------------------------------------------
 -- Buffer operations (via Cmd)
@@ -61,7 +73,11 @@ postulate
 postulate
   freeBuffer : ∀ {Msg} → BufferHandle → Cmd Msg
 
-{-# COMPILE JS freeBuffer = handle => (cb) => cb.freeBuffer(handle) #-}
+-- NOTE: freeBuffer needs runtime support (custom Cmd constructor).
+-- Using ε (no-op) as placeholder until a proper Cmd constructor is added.
+{-# COMPILE JS freeBuffer = function(handle) {
+  return (cases) => cases["ε"]();
+} #-}
 
 -- Touch a buffer (increment version, signals content changed)
 -- Useful when buffer is modified directly via JS
@@ -71,7 +87,11 @@ postulate
               → (BufferHandle → Msg)  -- Handler receives updated handle
               → Cmd Msg
 
-{-# COMPILE JS touchBuffer = handle => handler => (cb) => cb.touchBuffer(handle, handler) #-}
+-- NOTE: touchBuffer needs runtime support (custom Cmd constructor).
+-- Using ε (no-op) as placeholder.
+{-# COMPILE JS touchBuffer = function(handle) { return function(handler) {
+  return (cases) => cases["ε"]();
+}; } #-}
 
 ------------------------------------------------------------------------
 -- Buffer predicates

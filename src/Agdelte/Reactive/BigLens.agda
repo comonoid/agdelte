@@ -95,12 +95,12 @@ processAgentOptic socketPath = mkIOOptic peekIO overIO
 -- we compose IOOptic with pure Optic:
 
 -- | Compose two IOOptics sequentially.
--- peek: outer peek, then if available, inner peek.
--- over: send input directly to outer (each level has its own step protocol).
+-- peek: outer peek, then if available, feed outer value as context to inner peek.
+-- over: apply inner.ioOver, then feed result to outer.ioOver (pipeline).
 _∘IO_ : IOOptic → IOOptic → IOOptic
 outer ∘IO inner = mkIOOptic
   (ioPeek outer >>= helper)
-  (ioOver outer)
+  (λ input → ioOver inner input >>= ioOver outer)
   where
     helper : Maybe String → IO (Maybe String)
     helper nothing  = pure nothing

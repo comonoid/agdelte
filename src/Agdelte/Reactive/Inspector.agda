@@ -26,7 +26,7 @@ open import Agdelte.FFI.Server using
   )
 open import Agdelte.Reactive.BigLens using (IOOptic; mkIOOptic; ioPeek; ioOver)
 open import Agdelte.Reactive.Diagram using (Diagram; Slot; slots; name; path; agent)
-open import Agdelte.Concurrent.Agent using (Agent; state; observe)
+open import Agdelte.Concurrent.Agent using (Agent; state; observe; step)
 
 ------------------------------------------------------------------------
 -- Agent IOOptic from a wired slot's state ref
@@ -68,11 +68,16 @@ inspectAll (p ∷ rest) =
 -- Inspect a Diagram (in-process: read agent state directly)
 ------------------------------------------------------------------------
 
--- Build IOOptic for each slot using its pure Agent's observe
+-- Build IOOptic for each slot using its pure Agent's observe.
+-- NOTE: This reads the *initial* state. For a pure Agent, ioOver steps
+-- the agent and returns the new observation, but cannot persist the
+-- new state (no IORef). For live inspection, use refOptic on the IORef
+-- created by wireSlot, or processAgentOptic for remote agents.
 slotOptic : Slot → IOOptic
 slotOptic s =
   let a = agent s in
-  mkIOOptic (pure (just (observe a (state a)))) (λ _ → pure (observe a (state a)))
+  mkIOOptic (pure (just (observe a (state a))))
+            (λ input → pure (observe a (step a (state a) input)))
 
 -- NOTE: slotOptic reads the *initial* state of the agent.
 -- For live inspection of a running server, use refOptic on the

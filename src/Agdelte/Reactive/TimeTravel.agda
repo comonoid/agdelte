@@ -1,6 +1,6 @@
 {-# OPTIONS --without-K --guardedness #-}
 
--- Time-Travel Debugging
+-- Time-Travel Debugging (Agda-side, pure)
 --
 -- Wraps a ReactiveApp to record state history.
 -- Adds Undo/Redo messages that navigate through past states.
@@ -9,6 +9,12 @@
 -- Time-travel wraps it with a history coalgebra:
 --   History S = List S × S × List S   (past, present, future)
 -- The wrapper adds Undo/Redo as extra messages.
+--
+-- NOTE: The JavaScript runtime also provides time-travel debugging.
+-- This module is the pure Agda counterpart — use it when you want
+-- type-level guarantees on history management, or when building
+-- apps that need time-travel semantics in the update function itself.
+-- For runtime-only time-travel (DevTools-style), use the JS runtime.
 
 module Agdelte.Reactive.TimeTravel where
 

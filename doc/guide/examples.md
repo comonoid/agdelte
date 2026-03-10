@@ -321,7 +321,7 @@ nthItemOptic n = fromAffine (ixList n) ∘O fromLens itemsLens
 updateModel IncSelected m = over (nthItemOptic (selected m)) incValue m
 
 -- Reset ALL items: traversal for batch operation
-updateModel ResetAll m = over (fromTraversal allItemsTraversal) resetValue m
+updateModel ResetAll m = overAll allItemsTraversal resetValue m
 
 -- Safe peek: Affine may fail (index out of bounds)
 selectedText m with peek (nthItemOptic (selected m)) m

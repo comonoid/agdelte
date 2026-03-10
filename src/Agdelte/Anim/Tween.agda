@@ -13,7 +13,7 @@
 
 module Agdelte.Anim.Tween where
 
-open import Data.Nat using (ℕ; _+_; _⊓_)
+open import Data.Nat using (ℕ; zero; suc; _+_; _⊓_)
 open import Data.Bool using (Bool; not)
 open import Data.Product using (_×_; _,_)
 
@@ -41,11 +41,16 @@ record Tween (A : Set) : Set where
 ------------------------------------------------------------------------
 
 tickTween : ∀ {A} → Tween A → ℕ → Tween A × A
-tickTween t dt =
-  let e' = (Tween.elapsed t + dt) ⊓ Tween.duration t
-      progress = Tween.easing t (FB.fromℕ e' F.÷ FB.fromℕ (Tween.duration t))
+tickTween t dt with Tween.duration t
+... | zero =
+  -- duration=0: immediately at target value (avoid division by zero)
+  mkTween 0 0 (Tween.from t) (Tween.to t)
+           (Tween.easing t) (Tween.lerp t) , Tween.to t
+... | dur@(suc _) =
+  let e' = (Tween.elapsed t + dt) ⊓ dur
+      progress = Tween.easing t (FB.fromℕ e' F.÷ FB.fromℕ dur)
       value = Tween.lerp t (Tween.from t) (Tween.to t) progress
-  in mkTween e' (Tween.duration t) (Tween.from t) (Tween.to t)
+  in mkTween e' dur (Tween.from t) (Tween.to t)
              (Tween.easing t) (Tween.lerp t) , value
 
 ------------------------------------------------------------------------
@@ -58,8 +63,10 @@ isComplete t = not (Tween.elapsed t Data.Nat.<ᵇ Tween.duration t)
 
 -- Current value without advancing time
 currentValue : ∀ {A} → Tween A → A
-currentValue t =
-  let progress = Tween.easing t (FB.fromℕ (Tween.elapsed t) F.÷ FB.fromℕ (Tween.duration t))
+currentValue t with Tween.duration t
+... | zero = Tween.to t
+... | dur@(suc _) =
+  let progress = Tween.easing t (FB.fromℕ (Tween.elapsed t) F.÷ FB.fromℕ dur)
   in Tween.lerp t (Tween.from t) (Tween.to t) progress
 
 ------------------------------------------------------------------------

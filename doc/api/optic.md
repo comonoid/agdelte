@@ -48,7 +48,6 @@ _∘O_ : Optic B C → Optic A B → Optic A C
 fromLens : Lens S A → Optic S A
 fromPrism : Prism S A → Optic S A
 fromAffine : Affine S A → Optic S A
-fromTraversal : Traversal S A → Optic S A
 ```
 
 ## Message Routing
@@ -101,8 +100,8 @@ record RemoteOptic (A : Set) : Set where
 
 | Function | Type | Description |
 |----------|------|-------------|
-| `queryRemote` | `RemoteOptic A → (TransportResult A → Msg) → (String → Msg) → Cmd Msg` | GET /state |
-| `stepRemote` | `RemoteOptic A → String → (TransportResult A → Msg) → (String → Msg) → Cmd Msg` | POST /step |
+| `queryRemote` | `RemoteOptic A → (A → Msg) → (String → Msg) → Cmd Msg` | GET /state, decode failures routed to onError |
+| `stepRemote` | `RemoteOptic A → String → (A → Msg) → (String → Msg) → Cmd Msg` | POST /step, decode failures routed to onError |
 | `queryRemoteRaw` | `String → (String → Msg) → (String → Msg) → Cmd Msg` | Raw string query |
 | `stepRemoteRaw` | `String → String → (String → Msg) → (String → Msg) → Cmd Msg` | Raw string step |
 

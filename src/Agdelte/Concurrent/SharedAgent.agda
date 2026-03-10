@@ -26,14 +26,6 @@ open import Function using (id; const)
 open import Agdelte.Concurrent.Agent
 
 ------------------------------------------------------------------------
--- Multiplicity: how many times an agent can be used
-------------------------------------------------------------------------
-
-data Multiplicity : Set where
-  linear    : Multiplicity    -- exactly once (one-shot worker)
-  shareable : Multiplicity    -- unlimited (persistent server)
-
-------------------------------------------------------------------------
 -- SharedAgent: existentially quantified, marked shareable
 ------------------------------------------------------------------------
 

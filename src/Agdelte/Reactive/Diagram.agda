@@ -23,9 +23,9 @@ open import Agda.Builtin.Unit using (⊤)
 open import Agda.Builtin.String using (String)
 open import Agda.Builtin.Nat using (Nat)
 open import Data.List using (List; []; _∷_)
-open import Data.Product using (_×_; _,_; proj₁; proj₂)
+open import Data.Product using (_×_; _,_)
 
-open import Agdelte.Concurrent.Agent using (Agent; state; observe; step; stepAgent)
+open import Agdelte.Concurrent.Agent using (Agent; state; observe; step)
 
 ------------------------------------------------------------------------
 -- Connection: where agent output goes
@@ -139,29 +139,13 @@ wire c d = mkDiagram (slots d) (c ∷ connections d) (port d)
 
 open import Agdelte.FFI.Server using
   ( _>>=_; _>>_; pure; putStrLn
-  ; AgentDef; mkAgentDef; runAgentServer1; runAgentServer2
-  ; IORef; newIORef; readIORef; writeIORef
+  ; AgentDef; runAgentServer1; runAgentServer2
+  ; wireAgent
   )
--- Wire a single slot to an AgentDef (bridge pure Agent to mutable server)
-wireSlot : Slot → IO AgentDef
-wireSlot s =
-  let a = agent s in
-  newIORef (observe a (state a)) >>= λ stateRef →
-  newIORef a                     >>= λ agentRef →
-  let observeIO : IO String
-      observeIO = readIORef agentRef >>= λ ag →
-                  pure (observe ag (state ag))
 
-      stepIO : String → IO String
-      stepIO input = readIORef agentRef >>= λ ag →
-                     let result = stepAgent ag input in
-                     let ag'    = proj₁ result in
-                     let out    = proj₂ result in
-                     writeIORef agentRef ag' >>
-                     writeIORef stateRef out >>
-                     pure out
-  in
-  pure (mkAgentDef (name s) (path s) stateRef observeIO stepIO)
+-- Wire a Slot to AgentDef using shared wireAgent
+wireSlot : Slot → IO AgentDef
+wireSlot s = wireAgent (name s) (path s) (agent s)
 
 -- Run a diagram with 1 agent
 runDiagram1 : Diagram → IO ⊤

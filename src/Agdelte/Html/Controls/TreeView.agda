@@ -11,7 +11,6 @@ open import Data.String using (String)
 open import Data.List using (List; []; _∷_; map)
 open import Data.Nat using (ℕ; zero; suc; _≡ᵇ_)
 open import Data.Bool using (Bool; true; false; if_then_else_; not)
-open import Data.Maybe using (Maybe; just; nothing)
 open import Function using (_∘_)
 
 open import Agdelte.Reactive.Node
@@ -29,7 +28,6 @@ record TreeNode (A : Set) : Set where
     nodeId       : String
     nodeLabel    : String
     nodeChildren : List (TreeNode A)
-    nodeData     : Maybe A    -- optional associated data
 
 open TreeNode public
 
@@ -157,12 +155,8 @@ collapsibleTree {M} {A} isExpanded toggleNode onNodeClick roots =
 
 -- | Create leaf node (no children)
 leaf : ∀ {A} → String → String → TreeNode A
-leaf id lbl = mkTreeNode id lbl [] nothing
-
--- | Create leaf node with data
-leafWithData : ∀ {A} → String → String → A → TreeNode A
-leafWithData id lbl dat = mkTreeNode id lbl [] (just dat)
+leaf id lbl = mkTreeNode id lbl []
 
 -- | Create branch node (has children)
 branch : ∀ {A} → String → String → List (TreeNode A) → TreeNode A
-branch id lbl children = mkTreeNode id lbl children nothing
+branch id lbl children = mkTreeNode id lbl children

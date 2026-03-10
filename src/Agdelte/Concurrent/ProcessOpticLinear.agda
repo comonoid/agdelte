@@ -34,8 +34,10 @@ data ConnState : Set where
 
 -- A handle that is known to be in state `s`.
 -- Only `Connected` handles can be queried/stepped/closed.
+-- `closedHandle` serves as proof that a connection was properly closed.
 data IpcHandleL : ConnState → Set where
-  mkHandle : IpcHandle → IpcHandleL Connected
+  mkHandle    : IpcHandle → IpcHandleL Connected
+  closedHandle : IpcHandleL Disconnected
 
 ------------------------------------------------------------------------
 -- Operations with state transitions
@@ -54,10 +56,9 @@ step : IpcHandleL Connected → String → IO String
 step (mkHandle h) input = stepProcess h input
 
 -- Close: Connected → Disconnected
--- Returns unit; the Disconnected handle is not useful
--- but exists as proof the protocol was followed.
-close : IpcHandleL Connected → IO ⊤
-close (mkHandle h) = closeProcess h
+-- Returns a Disconnected handle as proof the protocol was followed.
+close : IpcHandleL Connected → IO (IpcHandleL Disconnected)
+close (mkHandle h) = closeProcess h >> pure closedHandle
 
 ------------------------------------------------------------------------
 -- Example: safe interaction pattern

@@ -101,7 +101,7 @@ emailAgent = mkAgent "" (const "Enter email:") (λ _ input → input)
 summaryAgent : Agent (String × String) String String
 summaryAgent = mkAgent ("" , "")
   (λ { (n , e) → "Summary: " ++ n ++ " <" ++ e ++ ">" })
-  (λ { (_ , e) input → input , e })  -- receives name from pipeline
+  (λ { (_ , _) input → input , input })  -- stores latest input in both slots
 
 -- Pipeline: name >>> email >>> summary
 formPipeline : Agent (String × (String × (String × String))) String String

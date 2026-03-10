@@ -73,8 +73,13 @@ _∘AL_ = _∘L_
 -- Layer 2: Simple combinators
 ------------------------------------------------------------------------
 
--- Pipeline: output of first feeds input of second
+-- Pipeline: output of first feeds input of second (cascade semantics)
 -- Type error if O₁ ≠ I₂ — message: "Cannot unify O₁ with I₂"
+--
+-- Cascade: on step, a is stepped first, then b receives observe(a) of
+-- the *new* state (post-step). This means b sees a's output *after* the
+-- current input, not before. For synchronous (pre-step) semantics where
+-- b sees a's output *before* the step, use a separate combinator.
 infixr 6 _>>>_
 _>>>_ : Agent S₁ I M → Agent S₂ M O → Agent (S₁ × S₂) I O
 a >>> b = record
@@ -131,10 +136,23 @@ a & b = record
 -- Coproduct in Poly: positions sum, directions inherited per side
 -- Use case: system switches between two modes (e.g., editing vs viewing)
 -- Note: input tag must match state tag; mismatched input is no-op (safe)
+-- Starts in the left branch by default; use ⊕ᵣ to start in the right branch.
 infixr 5 _⊕_
 _⊕_ : Agent S₁ I₁ O₁ → Agent S₂ I₂ O₂ → Agent (S₁ ⊎ S₂) (I₁ ⊎ I₂) (O₁ ⊎ O₂)
 a ⊕ b = record
   { state   = inj₁ (state a)
+  ; observe = λ { (inj₁ s₁) → inj₁ (observe a s₁)
+                ; (inj₂ s₂) → inj₂ (observe b s₂) }
+  ; step    = λ { (inj₁ s₁) (inj₁ i₁) → inj₁ (step a s₁ i₁)
+                ; (inj₂ s₂) (inj₂ i₂) → inj₂ (step b s₂ i₂)
+                ; s _                    → s }   -- mismatched tag: no-op
+  }
+
+-- ⊕ starting in the right branch
+infixr 5 _⊕ᵣ_
+_⊕ᵣ_ : Agent S₁ I₁ O₁ → Agent S₂ I₂ O₂ → Agent (S₁ ⊎ S₂) (I₁ ⊎ I₂) (O₁ ⊎ O₂)
+a ⊕ᵣ b = record
+  { state   = inj₂ (state b)
   ; observe = λ { (inj₁ s₁) → inj₁ (observe a s₁)
                 ; (inj₂ s₂) → inj₂ (observe b s₂) }
   ; step    = λ { (inj₁ s₁) (inj₁ i₁) → inj₁ (step a s₁ i₁)
@@ -215,3 +233,6 @@ someAgent a &ₛ someAgent b = someAgent (a & b)
 
 _⊕ₛ_ : SomeAgent I₁ O₁ → SomeAgent I₂ O₂ → SomeAgent (I₁ ⊎ I₂) (O₁ ⊎ O₂)
 someAgent a ⊕ₛ someAgent b = someAgent (a ⊕ b)
+
+_⊕ᵣₛ_ : SomeAgent I₁ O₁ → SomeAgent I₂ O₂ → SomeAgent (I₁ ⊎ I₂) (O₁ ⊎ O₂)
+someAgent a ⊕ᵣₛ someAgent b = someAgent (a ⊕ᵣ b)

@@ -6,7 +6,12 @@
 
 module Composition where
 
-open import Data.Nat using (ℕ; zero; suc; pred; _+_)
+open import Data.Nat using (ℕ; zero; suc; _+_)
+
+private
+  pred : ℕ → ℕ
+  pred zero    = zero
+  pred (suc n) = n
 open import Data.Nat.Show using (show)
 open import Data.String using (String; _++_)
 open import Data.List using (List; []; _∷_; [_])

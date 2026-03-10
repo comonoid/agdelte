@@ -20,7 +20,7 @@ open import Agda.Builtin.String using (String)
 open import Agdelte.Concurrent.ProcessOpticLinear
   using (ConnState; Connected; Disconnected; IpcHandleL; mkHandle;
          connect; query; step; close)
-open import Agdelte.FFI.Server using (_>>=_; _>>_; pure)
+open import Agdelte.FFI.Server using (_>>=_; _>>_; pure; bracket)
 
 ------------------------------------------------------------------------
 -- SafeIO: resource-safe IO computation (obligation-free by construction)
@@ -48,10 +48,7 @@ run (pureS a)          = pure a
 run (bindS m f)        = run m >>= λ b → run (f b)
 run (liftS io)         = io
 run (withIpcS path f)  =
-  connect path >>= λ h →
-  run (f h)    >>= λ result →
-  close h      >>
-  pure result
+  bracket (connect path) close (λ h → run (f h))
 
 ------------------------------------------------------------------------
 -- SafeIO monad operations
@@ -104,6 +101,12 @@ safePeekStep path input = withIpc path λ h →
 --
 -- With SafeIO, this is impossible: no constructor returns a handle.
 -- Every handle is created and destroyed within `withIpc`.
+--
+-- CAVEAT: Agda lacks linear types, so the callback COULD store the handle
+-- in a closure (e.g., via pureS or liftS). This module prevents forgetting
+-- to close (via bracket), but cannot prevent aliasing or use-after-close
+-- at the type level. For stronger guarantees, use ProcessOpticLinear.agda's
+-- indexed IpcHandleL which tracks connection state in the type.
 
 ------------------------------------------------------------------------
 -- Multiple resources

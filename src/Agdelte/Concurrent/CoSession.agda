@@ -31,6 +31,9 @@ data SessionStep : Set₁ where
   chooseStep : SessionStep
   doneStep   : SessionStep
 
+-- NO_UNIVERSE_CHECK: SessionStep stores Set-level types, so CoSession
+-- would need Set₂. Same trade-off as Session.agda — universe polymorphism
+-- is possible but adds boilerplate with no practical benefit.
 {-# NO_UNIVERSE_CHECK #-}
 record CoSession : Set₁ where
   coinductive
@@ -130,8 +133,8 @@ repeatN (suc n) s  = step s n
   where
     step : CoSession → Nat → CoSession
     head (step s n) = head s
-    left (step s n) = repeatN n s    -- decrement counter on continuation
-    right (step s n) = right s
+    left (step s n) = repeatN n s    -- decrement counter on left continuation
+    right (step s n) = repeatN n s   -- decrement counter on right continuation too
 
 ------------------------------------------------------------------------
 -- Embedding finite Session into CoSession

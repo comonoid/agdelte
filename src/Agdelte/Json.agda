@@ -371,8 +371,26 @@ postulate
 }; } #-}
 
 {-# COMPILE JS decodeValue = function(decoder) { return function(json) {
-  // JsonValue is already a JS value
-  const result = decoder.decode(json);
+  // Convert Scott-encoded JsonValue to plain JS value
+  function toJS(v) {
+    return v({
+      jNull: () => null,
+      jBool: (b) => b,
+      jNumber: (n) => Number(n),
+      jString: (s) => s,
+      jArray: (arr) => arr.map(toJS),
+      jObject: (pairs) => {
+        const obj = {};
+        // pairs is a JS Array (postulated Array type) of Scott-encoded pairs
+        pairs.forEach(p => {
+          p({ '_,_': (k, v2) => { obj[k] = toJS(v2); } });
+        });
+        return obj;
+      }
+    });
+  }
+  const jsValue = toJS(json);
+  const result = decoder.decode(jsValue);
   if (result.tag === 'ok') {
     return b => b["ok"](result.value);
   }
@@ -409,6 +427,9 @@ postulate
   encodeMaybe : ∀ {A : Set} → Encoder A → Encoder (Maybe A)
 
 {-# COMPILE JS encodeString = { encode: (s) => s } #-}
+-- Note: Number(n) loses precision for values > 2^53 (Number.MAX_SAFE_INTEGER).
+-- Agda's ℕ/ℤ are BigInt-backed, but JSON has no BigInt type. This is acceptable
+-- for a browser UI framework where such large values are uncommon.
 {-# COMPILE JS encodeNat = { encode: (n) => Number(n) } #-}
 {-# COMPILE JS encodeInt = { encode: (n) => Number(n) } #-}
 {-# COMPILE JS encodeBool = { encode: (b) => b } #-}

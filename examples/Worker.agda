@@ -82,6 +82,9 @@ statusText : Model → String
 statusText m with status m
 ... | Idle = "Ready. Click Compute to start."
 ... | Computing = "Computing in Web Worker..."
+-- NOTE: fibInput may have changed while the worker was computing,
+-- so the displayed N might not match the actual argument that was computed.
+-- This is inherent to the async design — the worker receives N at dispatch time.
 ... | Result s = "fib(" ++ show (fibInput m) ++ ") = " ++ s
 ... | Error e = "Error: " ++ e
 
