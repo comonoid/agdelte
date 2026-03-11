@@ -24,11 +24,6 @@ private
   variable
     A B C : Set
 
-  -- Filter Maybe by predicate (used by filterE)
-  filterMaybe : {A : Set} → (A → Bool) → Maybe A → Maybe A
-  filterMaybe p nothing  = nothing
-  filterMaybe p (just a) = if p a then just a else nothing
-
   -- Lookup key in association list (used by onKeys, onKeysUp)
   lookupKey : {A : Set} → String → List (String × A) → Maybe A
   lookupKey _ []              = nothing
@@ -126,54 +121,62 @@ open BufferHandle public
 --
 -- MAINTENANCE: when adding a new constructor to Sub, also update:
 --   • runtime/events.js  (interpretSub handler)
-data Sub (A : Set) : Set where
-  -- === Time primitives ===
-  interval : ℕ → A → Sub A
-  timeout  : ℕ → A → Sub A
+--
+-- Sub is defined inside module SubDef so its constructors don't clash
+-- with the backward-compatible smart constructors at the Event level
+-- (Agda 2.9.0+ rejects same-name definitions in the same scope).
+-- Sub type is re-exported; constructors are accessed as Sub.interval etc.
+module SubDef where
+  data Sub (A : Set) : Set where
+    -- === Time primitives ===
+    interval : ℕ → A → Sub A
+    timeout  : ℕ → A → Sub A
 
-  -- === Animation ===
-  animationFrame : A → Sub A
-  animationFrameWithTime : (Float → A) → Sub A
-  springLoop : SpringConfig → (Float → A) → A → Sub A
+    -- === Animation ===
+    animationFrame : A → Sub A
+    animationFrameWithTime : (Float → A) → Sub A
+    springLoop : SpringConfig → (Float → A) → A → Sub A
 
-  -- === Keyboard ===
-  onKeyDown : (KeyboardEvent → Maybe A) → Sub A
-  onKeyUp   : (KeyboardEvent → Maybe A) → Sub A
+    -- === Keyboard ===
+    onKeyDown : (KeyboardEvent → Maybe A) → Sub A
+    onKeyUp   : (KeyboardEvent → Maybe A) → Sub A
 
-  -- === Mouse ===
-  onMouseDown  : (MouseEvent → Maybe A) → Sub A
-  onMouseUp    : (MouseEvent → Maybe A) → Sub A
-  onMouseMove  : (MouseEvent → Maybe A) → Sub A
-  onClick      : (MouseEvent → Maybe A) → Sub A
+    -- === Mouse ===
+    onMouseDown  : (MouseEvent → Maybe A) → Sub A
+    onMouseUp    : (MouseEvent → Maybe A) → Sub A
+    onMouseMove  : (MouseEvent → Maybe A) → Sub A
+    onClick      : (MouseEvent → Maybe A) → Sub A
 
-  -- === HTTP ===
-  httpGet  : String → (String → A) → (String → A) → Sub A
-  httpPost : String → String → (String → A) → (String → A) → Sub A
+    -- === HTTP ===
+    httpGet  : String → (String → A) → (String → A) → Sub A
+    httpPost : String → String → (String → A) → (String → A) → Sub A
 
-  -- === WebSocket ===
-  wsConnect : String → (WsMsg → A) → Sub A
+    -- === WebSocket ===
+    wsConnect : String → (WsMsg → A) → Sub A
 
-  -- === Routing ===
-  onUrlChange : (String → A) → Sub A
+    -- === Routing ===
+    onUrlChange : (String → A) → Sub A
 
-  -- === Web Worker ===
-  worker : String → String → (String → A) → (String → A) → Sub A
-  workerWithProgress : String → String → (String → A) → (String → A) → (String → A) → Sub A
+    -- === Web Worker ===
+    worker : String → String → (String → A) → (String → A) → Sub A
+    workerWithProgress : String → String → (String → A) → (String → A) → (String → A) → Sub A
 
-  -- === Pool workers ===
-  poolWorker : ℕ → String → String → (String → A) → (String → A) → Sub A
-  poolWorkerWithProgress : ℕ → String → String → (String → A) → (String → A) → (String → A) → Sub A
+    -- === Pool workers ===
+    poolWorker : ℕ → String → String → (String → A) → (String → A) → Sub A
+    poolWorkerWithProgress : ℕ → String → String → (String → A) → (String → A) → (String → A) → Sub A
 
-  -- === Worker channel ===
-  workerChannel : String → (String → A) → (String → A) → Sub A
+    -- === Worker channel ===
+    workerChannel : String → (String → A) → (String → A) → Sub A
 
-  -- === SharedArrayBuffer ===
-  allocShared : ℕ → (SharedBuffer → A) → Sub A
-  workerShared : SharedBuffer → String → String → (String → A) → (String → A) → Sub A
+    -- === SharedArrayBuffer ===
+    allocShared : ℕ → (SharedBuffer → A) → Sub A
+    workerShared : SharedBuffer → String → String → (String → A) → (String → A) → Sub A
 
-  -- === Buffer Registry ===
-  allocImage : ℕ → ℕ → (BufferHandle → A) → Sub A
-  allocBuffer : ℕ → (BufferHandle → A) → Sub A
+    -- === Buffer Registry ===
+    allocImage : ℕ → ℕ → (BufferHandle → A) → Sub A
+    allocBuffer : ℕ → (BufferHandle → A) → Sub A
+
+open SubDef public using (Sub)
 
 ------------------------------------------------------------------------
 -- Event: structural combinators (AST) - stays in Set
@@ -299,47 +302,24 @@ allocBuffer : ℕ → (BufferHandle → A) → Event A
 allocBuffer n handler = sub (Sub.allocBuffer n handler)
 
 ------------------------------------------------------------------------
--- mapE - only handles structural constructors
+-- mapE - wraps in mapFilterE (no recursion needed)
 ------------------------------------------------------------------------
 
--- Leaf events (sub) are wrapped in mapFilterE, so adding new Sub
--- constructors never requires updating mapE.
-{-# TERMINATING #-}
+-- mapFilterE is an Event constructor, so the runtime handles it wrapping
+-- any inner event. No need to push the map through structural combinators.
+-- This avoids TERMINATING and produces a smaller AST (one wrapper vs one per leaf).
 mapE : (A → B) → Event A → Event B
 mapE f never = never
-mapE f (sub s) = mapFilterE (λ a → just (f a)) (sub s)
-mapE f (merge e₁ e₂) = merge (mapE f e₁) (mapE f e₂)
-mapE f (debounce n e) = debounce n (mapE f e)
-mapE f (throttle n e) = throttle n (mapE f e)
-mapE f (foldE a₀ step inner) = mapFilterE (λ a → just (f a)) (foldE a₀ step inner)
-mapE f (mapFilterE g inner) = mapFilterE (λ x → Data.Maybe.map f (g x)) inner
-  where import Data.Maybe
-mapE f (switchE initial meta) = switchE (mapE f initial) (mapE (mapE f) meta)
-mapE f (parallel es g) = parallel es (f ∘ g)
-mapE f (race es) = race (map (mapE f) es)
+mapE f e     = mapFilterE (λ a → just (f a)) e
 
 ------------------------------------------------------------------------
--- filterE - only handles structural constructors
+-- filterE - wraps in mapFilterE (no recursion needed)
 ------------------------------------------------------------------------
 
--- Leaf events (sub) are wrapped in mapFilterE, so adding new Sub
--- constructors never requires updating filterE.
-{-# TERMINATING #-}
+-- Same approach as mapE: single mapFilterE wrapper, no recursion.
 filterE : (A → Bool) → Event A → Event A
 filterE p never = never
-filterE p (sub s) = mapFilterE (λ a → if p a then just a else nothing) (sub s)
-filterE p (merge e₁ e₂) = merge (filterE p e₁) (filterE p e₂)
-filterE p (debounce n e) = debounce n (filterE p e)
-filterE p (throttle n e) = throttle n (filterE p e)
-filterE p (foldE a₀ step inner) =
-  mapFilterE (λ a → if p a then just a else nothing) (foldE a₀ step inner)
-filterE p (mapFilterE g inner) =
-  mapFilterE (λ x → filterMaybe p (g x)) inner
-filterE p (switchE initial meta) =
-  switchE (filterE p initial) (mapE (filterE p) meta)
-filterE p (parallel es g) =
-  mapFilterE (λ a → if p a then just a else nothing) (parallel es g)
-filterE p (race es) = race (map (filterE p) es)
+filterE p e     = mapFilterE (λ a → if p a then just a else nothing) e
 
 ------------------------------------------------------------------------
 -- Convenient constructors for keyboard

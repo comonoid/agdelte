@@ -253,9 +253,9 @@ postulate
 -- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
 {-# COMPILE JS inRange = function(min) { return function(max) { return function(s) {
   const nil = (cases) => cases['[]']();
-  const n = parseInt(s, 10);
-  if (isNaN(n)) {
-    const e = (cb) => cb["mkError"]("", "Must be a number");
+  const n = Number(s);
+  if (!Number.isFinite(n) || !Number.isInteger(n)) {
+    const e = (cb) => cb["mkError"]("", "Must be a whole number");
     return (cases) => cases['_∷_'](e, nil);
   }
   const minN = Number(min);
@@ -270,8 +270,8 @@ postulate
 -- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
 {-# COMPILE JS positive = function(s) {
   const nil = (cases) => cases['[]']();
-  const n = parseInt(s, 10);
-  if (isNaN(n) || n <= 0) {
+  const n = Number(s);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) {
     const e = (cb) => cb["mkError"]("", "Must be a positive number");
     return (cases) => cases['_∷_'](e, nil);
   }
@@ -297,23 +297,32 @@ open FormField public
 newField : ∀ {A : Set} → String → A → Validator A → FormField A
 newField name value validator = mkField name value validator false []
 
+-- Fill empty errorField with the given name
+private
+  open import Agda.Builtin.String using (primStringEquality)
+  setName : String → ValidationError → ValidationError
+  setName n e with primStringEquality (errorField e) ""
+  ... | true  = record e { errorField = n }
+  ... | false = e
+
 -- Update field value and revalidate
 updateField : ∀ {A : Set} → A → FormField A → FormField A
 updateField value f =
-  let errors = fieldValidator f value
+  let errors = map (setName (fieldName f)) (fieldValidator f value)
   in record f { fieldValue = value ; fieldErrors = errors ; fieldTouched = true }
 
 -- Touch field (show errors without changing value)
 touchField : ∀ {A : Set} → FormField A → FormField A
 touchField f =
-  let errors = fieldValidator f (fieldValue f)
+  let errors = map (setName (fieldName f)) (fieldValidator f (fieldValue f))
   in record f { fieldTouched = true ; fieldErrors = errors }
 
--- Check if field is valid
+-- Check if field is valid (must be touched first — untouched fields have
+-- no errors yet, so an untouched invalid field would return true).
 isFieldValid : ∀ {A : Set} → FormField A → Bool
-isFieldValid f = null (fieldErrors f)
+isFieldValid f = fieldTouched f ∧ null (fieldErrors f)
 
--- Get field value if valid
+-- Get field value if valid and touched
 getValidValue : ∀ {A : Set} → FormField A → Maybe A
 getValidValue f = if isFieldValid f then just (fieldValue f) else nothing
 

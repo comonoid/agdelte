@@ -117,7 +117,7 @@ processAgent : (String → String) → Agent String String String
 processAgent f = mkAgent "" id (λ _ input → f input)
 
 -- Example: ReqResp pipeline
--- recv >>> process >>> send
+-- recv >>> send (send applies f to transform input to output)
 reqRespPipeline : (String → String) → Agent (String × String) String String
 reqRespPipeline f = recvAgent >>> sendAgent f
 

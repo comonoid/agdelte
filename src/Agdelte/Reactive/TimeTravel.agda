@@ -21,6 +21,7 @@ module Agdelte.Reactive.TimeTravel where
 open import Agda.Builtin.String using (String)
 open import Agda.Builtin.Nat using (Nat; zero; suc)
 open import Data.List using (List; []; _∷_; length)
+open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Product using (_×_; _,_; proj₁; proj₂)
 
 ------------------------------------------------------------------------
@@ -35,7 +36,7 @@ record History (S : Set) : Set where
     past    : List S     -- previous states (newest first)
     present : S          -- current state
     future  : List S     -- undone states (oldest first)
-    maxSize : Nat        -- max history length (0 = unlimited)
+    maxSize : Maybe Nat  -- max history length (nothing = unlimited)
 
 open History public
 
@@ -46,15 +47,15 @@ open History public
 -- Push current state into history (on every normal update)
 pushState : ∀ {S} → History S → S → History S
 pushState h newState = mkHistory
-  (present h ∷ trimPast (past h))
+  (trimPast (present h ∷ past h))
   newState
   []           -- any new action clears redo stack
   (maxSize h)
   where
     trimPast : ∀ {S} → List S → List S
     trimPast {S} xs with maxSize h
-    ... | zero = xs  -- unlimited
-    ... | suc n = take n xs
+    ... | nothing = xs
+    ... | just n  = take n xs
       where
         take : Nat → List S → List S
         take zero    _        = []
@@ -73,8 +74,8 @@ redo h with future h
 ... | []       = h  -- nothing to redo
 ... | (f ∷ fs) = mkHistory (present h ∷ past h) f fs (maxSize h)
 
--- Create initial history
-initHistory : ∀ {S} → S → Nat → History S
+-- Create initial history (nothing = unlimited, just n = keep at most n)
+initHistory : ∀ {S} → S → Maybe Nat → History S
 initHistory s maxSz = mkHistory [] s [] maxSz
 
 -- Get history depth

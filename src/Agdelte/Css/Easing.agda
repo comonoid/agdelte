@@ -37,8 +37,8 @@ showEasing easeIn     = "ease-in"
 showEasing easeOut    = "ease-out"
 showEasing easeInOut  = "ease-in-out"
 showEasing (cubicBezier a b c d) =
-  "cubic-bezier(" ++ showFloat a ++ "," ++ showFloat b ++ ","
-                  ++ showFloat c ++ "," ++ showFloat d ++ ")"
+  "cubic-bezier(" ++ showFloat a ++ ", " ++ showFloat b ++ ", "
+                  ++ showFloat c ++ ", " ++ showFloat d ++ ")"
 showEasing (raw s) = s
 
 ------------------------------------------------------------------------

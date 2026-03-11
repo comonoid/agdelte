@@ -176,30 +176,9 @@ a ⊕ᵣ b = record
                 ; s _                    → s }   -- mismatched tag: no-op
   }
 
--- ⊕ with debug trap: crashes on mismatched state/input tags.
--- Use during development to detect routing bugs.
--- Replace with _⊕_ for production.
+-- ⊕ with debug trap: moved to Wiring.Debug to keep this module safe.
+-- Import Agdelte.Concurrent.Wiring.Debug for _⊕!_ (development only).
 open import Data.String using (String)
-
--- NOTE: debugTrap inhabits every type, making this module --unsafe.
-postulate
-  debugTrap : ∀ {A : Set} → String → A
-
-{-# COMPILE JS debugTrap = function(msg) {
-  return function() { throw new Error("⊕! mismatch: " + msg); };
-} #-}
-
-infixr 5 _⊕!_
-_⊕!_ : Agent S₁ I₁ O₁ → Agent S₂ I₂ O₂ → Agent (S₁ ⊎ S₂) (I₁ ⊎ I₂) (O₁ ⊎ O₂)
-a ⊕! b = record
-  { state   = inj₁ (state a)
-  ; observe = λ { (inj₁ s₁) → inj₁ (observe a s₁)
-                ; (inj₂ s₂) → inj₂ (observe b s₂) }
-  ; step    = λ { (inj₁ s₁) (inj₁ i₁) → inj₁ (step a s₁ i₁)
-                ; (inj₂ s₂) (inj₂ i₂) → inj₂ (step b s₂ i₂)
-                ; (inj₁ _)  (inj₂ _)   → debugTrap "left state, right input"
-                ; (inj₂ _)  (inj₁ _)   → debugTrap "right state, left input" }
-  }
 
 -- Lenses for accessing & components
 -- Selecting left service of a & b:
@@ -278,5 +257,4 @@ someAgent a ⊕ₛ someAgent b = someAgent (a ⊕ b)
 _⊕ᵣₛ_ : SomeAgent I₁ O₁ → SomeAgent I₂ O₂ → SomeAgent (I₁ ⊎ I₂) (O₁ ⊎ O₂)
 someAgent a ⊕ᵣₛ someAgent b = someAgent (a ⊕ᵣ b)
 
-_⊕!ₛ_ : SomeAgent I₁ O₁ → SomeAgent I₂ O₂ → SomeAgent (I₁ ⊎ I₂) (O₁ ⊎ O₂)
-someAgent a ⊕!ₛ someAgent b = someAgent (a ⊕! b)
+-- _⊕!ₛ_ moved to Wiring.Debug

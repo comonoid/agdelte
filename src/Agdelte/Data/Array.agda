@@ -52,6 +52,7 @@ postulate
 
 {-# COMPILE JS singleton = function(x) { return [x]; } #-}
 
+-- FFI-FRAGILE: [] (List), _∷_ (List)
 {-# COMPILE JS fromList = function(list) {
   const arr = [];
   let current = list;
@@ -65,8 +66,9 @@ postulate
   return arr;
 } #-}
 
+-- FFI-FRAGILE: uses globalThis.Array to avoid shadowing by the Agda Array postulate
 {-# COMPILE JS replicate = function(n) { return function(x) {
-  return Array(Number(n)).fill(x);
+  return globalThis.Array(Number(n)).fill(x);
 }; } #-}
 
 ------------------------------------------------------------------------
@@ -320,8 +322,9 @@ postulate
   return arr.map((x, i) => f(BigInt(i))(x));
 }; } #-}
 
+-- FFI-FRAGILE: uses globalThis.Array to avoid shadowing by the Agda Array postulate
 {-# COMPILE JS generate = function(n) { return function(f) {
-  return Array.from({ length: Number(n) }, (_, i) => f(BigInt(i)));
+  return globalThis.Array.from({ length: Number(n) }, (_, i) => f(BigInt(i)));
 }; } #-}
 
 ------------------------------------------------------------------------

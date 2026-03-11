@@ -71,13 +71,15 @@ data Task (A : Set) : Set where
 ------------------------------------------------------------------------
 
 -- bind (>>=)
--- Errors are terminal: onErr produces a final value, not a continuation.
+-- Errors are terminal: onErr is replaced by `fail` so the error message
+-- propagates but the error handler's continuation is not threaded through f.
+-- This allows type-changing binds (Task A >>= (A → Task B) → Task B).
 -- For errors as recovery paths (flowing downstream), use _>>=ₑ_ instead.
 _>>=_ : Task A → (A → Task B) → Task B
 pure a >>= f = f a
 fail e >>= f = fail e
-httpGet url onOk onErr >>= f = httpGet url (λ s → onOk s >>= f) onErr
-httpPost url body onOk onErr >>= f = httpPost url body (λ s → onOk s >>= f) onErr
+httpGet url onOk onErr >>= f = httpGet url (λ s → onOk s >>= f) (λ e → fail e)
+httpPost url body onOk onErr >>= f = httpPost url body (λ s → onOk s >>= f) (λ e → fail e)
 
 infixl 1 _>>=_ _>>=ₑ_
 

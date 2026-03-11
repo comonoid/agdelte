@@ -38,7 +38,7 @@ record IOOptic : Set where
   constructor mkIOOptic
   field
     ioPeek : IO (Maybe String)
-    ioOver : String → IO String
+    ioOver : String → IO (Maybe String)
 
 open IOOptic public
 
@@ -58,8 +58,7 @@ open import Agdelte.FFI.Server using
 
 -- AgentOptic via Unix socket (local process, same machine).
 -- Uses the ProcessOptic IPC protocol.
--- Connection errors are caught: peekIO returns nothing, overIO logs
--- the error and returns "".
+-- Connection errors are caught: both peekIO and overIO return nothing.
 processAgentOptic : String → IOOptic
 processAgentOptic socketPath = mkIOOptic peekIO overIO
   where
@@ -68,18 +67,14 @@ processAgentOptic socketPath = mkIOOptic peekIO overIO
       tryCatch (connectProcess socketPath >>= λ h →
                 queryProcess h            >>= λ result →
                 closeProcess h            >>
-                pure result) >>= λ where
-        (just result) → pure (just result)
-        nothing       → pure nothing
+                pure result)
 
-    overIO : String → IO String
+    overIO : String → IO (Maybe String)
     overIO input =
       tryCatch (connectProcess socketPath >>= λ h →
                 stepProcess h input       >>= λ result →
                 closeProcess h            >>
-                pure result) >>= λ where
-        (just result) → pure result
-        nothing       → pure ""
+                pure result)
 
 ------------------------------------------------------------------------
 -- Convenience constructors
@@ -87,12 +82,14 @@ processAgentOptic socketPath = mkIOOptic peekIO overIO
 
 -- | IOOptic that always returns a fixed value (for testing)
 constIOOptic : String → IOOptic
-constIOOptic s = mkIOOptic (pure (just s)) (λ _ → pure s)
+constIOOptic s = mkIOOptic (pure (just s)) (λ _ → pure (just s))
 
--- | IOOptic from a local IORef (for testing — local mutable state)
+-- | IOOptic from a local IORef (for testing — local mutable state).
+-- ioOver treats input as the new state verbatim (no agent transformation).
+-- For testing agents that transform input, use processAgentOptic.
 open import Agdelte.FFI.Server using (IORef; readIORef; writeIORef)
 
 refOptic : IORef String → IOOptic
 refOptic ref = mkIOOptic
   (readIORef ref >>= λ s → pure (just s))
-  (λ input → writeIORef ref input >> pure input)
+  (λ input → writeIORef ref input >> pure (just input))

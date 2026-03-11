@@ -22,7 +22,7 @@ open import Data.Maybe using (Maybe; just; nothing)
 open import Data.String using (_++_)
 open import Agdelte.FFI.Server using
   ( _>>=_; _>>_; pure; putStrLn
-  ; IORef; readIORef
+  ; IORef; newIORef; readIORef; writeIORef
   )
 open import Agdelte.Reactive.BigLens using (IOOptic; mkIOOptic; ioPeek; ioOver)
 open import Agdelte.Reactive.Diagram using (Diagram; Slot; slots; name; path; agent)
@@ -68,14 +68,27 @@ inspectAll (p ∷ rest) =
 -- Inspect a Diagram (pure / initial state)
 ------------------------------------------------------------------------
 
--- Build IOOptic for each slot using its pure Agent's observe.
--- Reads the *initial* state only — ioOver steps from initial state
--- each time and cannot persist updates. Use inspectLive for running servers.
-slotInitialOptic : Slot → IOOptic
-slotInitialOptic s =
+-- Pure snapshot: peeks initial state, ioOver steps from init each time
+-- (no persistence). For stateful inspection of running agents, use inspectLive.
+slotSnapshotOptic : Slot → IOOptic
+slotSnapshotOptic s =
   let a = agent s in
   mkIOOptic (pure (just (observe a (state a))))
-            (λ input → pure (observe a (step a (state a) input)))
+            (λ input → pure (just (observe a (step a (state a) input))))
+
+-- Stateful optic: tracks agent state across steps via IORef.
+-- Unlike slotSnapshotOptic (which always steps from initial state),
+-- this persists state: each ioOver mutates the IORef.
+slotStatefulOptic : Slot → IO IOOptic
+slotStatefulOptic s =
+  let a = agent s in
+  newIORef (state a) >>= λ ref →
+  pure (mkIOOptic
+    (readIORef ref >>= λ st → pure (just (observe a st)))
+    (λ input → readIORef ref >>= λ st →
+      let newSt = step a st input
+      in writeIORef ref newSt >>
+         pure (just (observe a newSt))))
 
 -- Collect all slot optics from a diagram (initial state)
 diagramInitialOptics : Diagram → List (String × IOOptic)
@@ -83,7 +96,7 @@ diagramInitialOptics d = go (slots (Diagram.spec d))
   where
     go : List Slot → List (String × IOOptic)
     go [] = []
-    go (s ∷ rest) = (name s , slotInitialOptic s) ∷ go rest
+    go (s ∷ rest) = (name s , slotSnapshotOptic s) ∷ go rest
 
 -- Print diagram inspection from initial state (pure, no IORef needed)
 inspectInitial : Diagram → IO ⊤
@@ -134,12 +147,15 @@ inspectRemote label socketPath =
 -- Send command to agent (over)
 ------------------------------------------------------------------------
 
-sendCommand : IOOptic → String → IO String
+sendCommand : IOOptic → String → IO (Maybe String)
 sendCommand optic input = ioOver optic input
 
 -- Send command and print result
 sendAndPrint : String → IOOptic → String → IO ⊤
 sendAndPrint label optic input =
   putStrLn ("Sending to " ++ label ++ ": " ++ input) >>
-  sendCommand optic input >>= λ result →
-  putStrLn ("  Result: " ++ result)
+  sendCommand optic input >>= printResult
+  where
+    printResult : Maybe String → IO ⊤
+    printResult (just result) = putStrLn ("  Result: " ++ result)
+    printResult nothing       = putStrLn ("  Result: <error>")

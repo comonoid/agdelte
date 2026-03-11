@@ -33,8 +33,8 @@ _++L_ : ∀ {A : Set} → List A → List A → List A
 postulate
   _<F_ : Float → Float → Bool
   _>F_ : Float → Float → Bool
-{-# COMPILE JS _<F_ = x => y => x < y #-}
-{-# COMPILE JS _>F_ = x => y => x > y #-}
+{-# COMPILE JS _<F_ = x => y => x < y ? (cases) => cases["true"]() : (cases) => cases["false"]() #-}
+{-# COMPILE JS _>F_ = x => y => x > y ? (cases) => cases["true"]() : (cases) => cases["false"]() #-}
 
 ------------------------------------------------------------------------
 -- Selection style

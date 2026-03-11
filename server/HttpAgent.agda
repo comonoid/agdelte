@@ -14,6 +14,7 @@ open import Agda.Builtin.Nat using (Nat; zero; suc)
 open import Agda.Builtin.Bool using (true; false)
 open import Data.Nat.Show using (show)
 
+open import Data.Product using (proj₁; proj₂)
 open import Agdelte.Concurrent.Agent
 open import Agdelte.FFI.Server
 
@@ -43,7 +44,9 @@ main =
                   pure (observe agent (state agent))
     ... | false with primStringEquality (reqPath req) "/step"
     ...   | true with primStringEquality (reqMethod req) "POST"
-    ...     | true  = atomicModifyIORef ref
-                        (λ agent → stepAgent agent (reqBody req))
+    ...     | true  = readIORef ref >>= λ agent →
+                      let result = stepAgent agent (reqBody req)
+                      in writeIORef ref (proj₁ result) >>
+                         pure (proj₂ result)
     ...     | false = pure "Method not allowed (use POST)"
     ...   | false = pure "Not found"

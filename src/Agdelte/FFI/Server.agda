@@ -9,7 +9,6 @@ open import Agda.Builtin.IO using (IO)
 open import Agda.Builtin.Unit using (⊤)
 open import Agda.Builtin.String using (String)
 open import Agda.Builtin.Bool using (Bool)
-open import Data.Product using (_×_)
 
 ------------------------------------------------------------------------
 -- Basic IO
@@ -74,14 +73,32 @@ postulate
   newIORef          : ∀ {A : Set} → A → IO (IORef A)
   readIORef         : ∀ {A : Set} → IORef A → IO A
   writeIORef        : ∀ {A : Set} → IORef A → A → IO ⊤
-  atomicModifyIORef : ∀ {A B : Set} → IORef A → (A → A × B) → IO B
+  -- NOTE: atomicModifyIORef omitted — Haskell's IORef.atomicModifyIORef
+  -- expects native (,) tuples, but Agda's _×_ compiles to MAlonzo's Σ
+  -- record (not Haskell tuples). wireAgent uses readIORef+writeIORef
+  -- instead (see below); true atomicity requires an MVar or TVar.
 
 {-# COMPILE GHC IORef = type IORef.IORef #-}
 {-# COMPILE GHC newIORef          = \_ -> IORef.newIORef          #-}
 {-# COMPILE GHC readIORef         = \_ -> IORef.readIORef         #-}
 {-# COMPILE GHC writeIORef        = \_ -> IORef.writeIORef        #-}
 
-{-# COMPILE GHC atomicModifyIORef = \_ _ -> IORef.atomicModifyIORef #-}
+------------------------------------------------------------------------
+-- MVar (mutual exclusion for wireAgent)
+------------------------------------------------------------------------
+
+{-# FOREIGN GHC import qualified Control.Concurrent.MVar as MVar #-}
+
+postulate
+  MVar : Set → Set
+  newMVar   : ∀ {A : Set} → A → IO (MVar A)
+  takeMVar  : ∀ {A : Set} → MVar A → IO A
+  putMVar   : ∀ {A : Set} → MVar A → A → IO ⊤
+
+{-# COMPILE GHC MVar     = type MVar.MVar #-}
+{-# COMPILE GHC newMVar  = \_ -> MVar.newMVar  #-}
+{-# COMPILE GHC takeMVar = \_ -> MVar.takeMVar #-}
+{-# COMPILE GHC putMVar  = \_ -> MVar.putMVar  #-}
 
 ------------------------------------------------------------------------
 -- HTTP Server
@@ -212,23 +229,65 @@ postulate
 {-# COMPILE GHC runAgentServerN = runAgentServerNImpl #-}
 
 ------------------------------------------------------------------------
+-- Connection types (for Diagram routing)
+------------------------------------------------------------------------
+
+postulate
+  ConnectionDef    : Set
+  mkBroadcastDef   : String → ConnectionDef
+  mkAgentPipeDef   : String → String → ConnectionDef
+  mkClientRouteDef : String → ConnectionDef
+
+{-# FOREIGN GHC
+  data ConnectionDef_
+    = BroadcastDef_   T.Text
+    | AgentPipeDef_   T.Text T.Text
+    | ClientRouteDef_ T.Text
+  #-}
+
+{-# COMPILE GHC ConnectionDef    = type ConnectionDef_ #-}
+{-# COMPILE GHC mkBroadcastDef   = BroadcastDef_       #-}
+{-# COMPILE GHC mkAgentPipeDef   = AgentPipeDef_       #-}
+{-# COMPILE GHC mkClientRouteDef = ClientRouteDef_     #-}
+
+-- Run multi-agent server with connection routing
+postulate
+  runAgentServerNWithConns : Nat → List AgentDef → List ConnectionDef → IO ⊤
+
+{-# FOREIGN GHC
+  runAgentServerNWithConnsImpl :: Integer -> [AS.AgentDef] -> [ConnectionDef_] -> IO ()
+  runAgentServerNWithConnsImpl port agents _conns =
+    -- TODO: implement connection routing (agentPipe, broadcast, clientRoute)
+    -- in AgentServer.hs. The connection data is available here; currently
+    -- delegates to runAgentServer which only wires HTTP endpoints.
+    AS.runAgentServer (fromIntegral port) (Just "*") agents
+  #-}
+
+{-# COMPILE GHC runAgentServerNWithConns = runAgentServerNWithConnsImpl #-}
+
+------------------------------------------------------------------------
 -- Wire pure Agent to AgentDef (bridge coalgebra to mutable server)
 ------------------------------------------------------------------------
 
-open import Data.Product using (_,_)
+open import Data.Product using (_×_; _,_; proj₁; proj₂)
 open import Agdelte.Concurrent.Agent using (Agent; state; observe; stepAgent)
 
 wireAgent : ∀ {S} → String → String → Agent S String String → IO AgentDef
 wireAgent name path agent =
   newIORef (observe agent (state agent)) >>= λ stateRef →
-  newIORef agent                         >>= λ agentRef →
+  newMVar agent                          >>= λ agentMVar →
   let observeIO : IO String
       observeIO = readIORef stateRef
 
+      -- MVar guarantees mutual exclusion: only one step runs at a time.
+      -- stateRef is written while the MVar is held (between takeMVar and
+      -- putMVar), so observe sees a consistent snapshot.
       stepIO : String → IO String
-      stepIO input = atomicModifyIORef agentRef
-                       (λ a → stepAgent a input) >>= λ out →
-                     writeIORef stateRef out >>
-                     pure out
+      stepIO input =
+        takeMVar agentMVar >>= λ a →
+        let result = stepAgent a input
+        in writeIORef stateRef (proj₂ result) >>
+           putMVar agentMVar (proj₁ result)   >>
+           pure (proj₂ result)
   in
   pure (mkAgentDef name path stateRef observeIO stepIO)

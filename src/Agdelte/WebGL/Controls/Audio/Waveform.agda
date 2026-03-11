@@ -34,7 +34,7 @@ postulate
 {-# COMPILE JS cosF = x => Math.cos(x) #-}
 {-# COMPILE JS clamp = min => max => x => Math.min(max, Math.max(min, x)) #-}
 {-# COMPILE JS absFloat = x => Math.abs(x) #-}
-{-# COMPILE JS _<F_ = x => y => x < y #-}
+{-# COMPILE JS _<F_ = x => y => x < y ? (cases) => cases["true"]() : (cases) => cases["false"]() #-}
 
 -- Helper for natural number comparison
 ltNat : ℕ → ℕ → Bool

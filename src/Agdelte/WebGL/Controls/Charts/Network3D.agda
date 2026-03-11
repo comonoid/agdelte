@@ -30,7 +30,7 @@ postulate
 
 {-# COMPILE JS natToFloat = n => Number(n) #-}
 {-# COMPILE JS sqrtF = x => Math.sqrt(x) #-}
-{-# COMPILE JS stringEq = a => b => a === b #-}
+{-# COMPILE JS stringEq = a => b => a === b ? (cases) => cases["true"]() : (cases) => cases["false"]() #-}
 
 ------------------------------------------------------------------------
 -- Module-level helpers

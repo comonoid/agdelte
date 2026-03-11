@@ -22,7 +22,8 @@ open import Agda.Builtin.IO using (IO)
 open import Agda.Builtin.Unit using (⊤)
 open import Agda.Builtin.String using (String)
 open import Agda.Builtin.Nat using (Nat)
-open import Data.List using (List; []; _∷_)
+open import Data.Bool using (Bool; true; false; not; _∨_)
+open import Data.List using (List; []; _∷_; any)
 open import Data.Product using (_×_; _,_)
 
 open import Agdelte.Concurrent.Agent using (Agent; state; observe; step)
@@ -127,12 +128,30 @@ deploy ds pt = mkDiagram ds pt
 -- DiagramSpec combinators
 ------------------------------------------------------------------------
 
--- Merge two diagram specs (union of slots and connections)
+-- Check if a slot name exists in a diagram spec (for connection validation)
+private
+  open import Agda.Builtin.String using (primStringEquality)
+
+hasSlot : String → DiagramSpec → Bool
+hasSlot n d = any (λ s → primStringEquality n (name s)) (slots d)
+
+-- Bool-based filter (Data.List.filter requires Dec in stdlib v2.x)
+boolFilter : ∀ {a} {A : Set a} → (A → Bool) → List A → List A
+boolFilter _ []       = []
+boolFilter p (x ∷ xs) with p x
+... | true  = x ∷ boolFilter p xs
+... | false = boolFilter p xs
+
+-- Merge two diagram specs (union of slots and connections).
+-- Slots from d₂ whose names already exist in d₁ are dropped
+-- to prevent duplicate slot names causing ambiguous routing.
 _⊕D_ : DiagramSpec → DiagramSpec → DiagramSpec
 d₁ ⊕D d₂ = mkDiagramSpec
-  (slots d₁ ++ slots d₂)
+  (slots d₁ ++ uniqueSlots)
   (connections d₁ ++ connections d₂)
-  where open Data.List using (_++_)
+  where
+    open Data.List using (_++_)
+    uniqueSlots = boolFilter (λ s → not (hasSlot (name s) d₁)) (slots d₂)
 
 -- Add a connection to a diagram spec
 wireSpec : Connection → DiagramSpec → DiagramSpec
@@ -140,7 +159,7 @@ wireSpec c d = mkDiagramSpec (slots d) (c ∷ connections d)
 
 -- Add a connection to a deployed diagram
 wire : Connection → Diagram → Diagram
-wire c d = mkDiagram (mkDiagramSpec (slots (Diagram.spec d)) (c ∷ connections (Diagram.spec d))) (port d)
+wire c d = mkDiagram (wireSpec c (Diagram.spec d)) (port d)
 
 ------------------------------------------------------------------------
 -- IO: interpret diagram into running server
@@ -155,7 +174,8 @@ wire c d = mkDiagram (mkDiagramSpec (slots (Diagram.spec d)) (c ∷ connections 
 
 open import Agdelte.FFI.Server using
   ( _>>=_; _>>_; pure; putStrLn
-  ; AgentDef; runAgentServerN
+  ; AgentDef; runAgentServerNWithConns
+  ; ConnectionDef; mkBroadcastDef; mkAgentPipeDef; mkClientRouteDef
   ; wireAgent
   )
 
@@ -171,12 +191,23 @@ wireSlots (s ∷ ss) =
   wireSlots ss >>= λ ds →
   pure (d ∷ ds)
 
--- Run a diagram with any number of agents
+-- Compile Connection to FFI ConnectionDef
+compileConnection : Connection → ConnectionDef
+compileConnection (broadcast n)     = mkBroadcastDef n
+compileConnection (agentPipe s t)   = mkAgentPipeDef s t
+compileConnection (clientRoute n)   = mkClientRouteDef n
+
+compileConnections : List Connection → List ConnectionDef
+compileConnections []       = []
+compileConnections (c ∷ cs) = compileConnection c ∷ compileConnections cs
+
+-- Run a diagram with any number of agents and connections
 runDiagram : Diagram → IO ⊤
 runDiagram d =
   putStrLn "Starting Diagram Server..." >>
   wireSlots (slots (Diagram.spec d)) >>= λ defs →
-  runAgentServerN (port d) defs
+  runAgentServerNWithConns (port d) defs
+    (compileConnections (connections (Diagram.spec d)))
 
 -- Run a DiagramSpec directly on a given port
 runDiagramSpec : Nat → DiagramSpec → IO ⊤

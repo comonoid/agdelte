@@ -44,16 +44,16 @@ open import Data.Unit using (⊤)
 --   SessionI(choose) = × and SessionO(offer) = ×
 --   SessionI(offer) = ⊎ and SessionO(choose) = ⊎
 dual-IO : (s : Session) → SessionI (dual s) ≡ SessionO s
-dual-IO (send A s)     = dual-IO s
-dual-IO (recv A s)     = cong (A ×_) (dual-IO s)
+dual-IO (send A s)     = cong (A ×_) (dual-IO s)
+dual-IO (recv A s)     = dual-IO s
 dual-IO (offer s₁ s₂)  = cong₂ _×_ (dual-IO s₁) (dual-IO s₂)
 dual-IO (choose s₁ s₂) = cong₂ _⊎_ (dual-IO s₁) (dual-IO s₂)
 dual-IO done            = refl
 
 -- Symmetric: SessionO (dual s) ≡ SessionI s
 dual-OI : (s : Session) → SessionO (dual s) ≡ SessionI s
-dual-OI (send A s)     = cong (A ×_) (dual-OI s)
-dual-OI (recv A s)     = dual-OI s
+dual-OI (send A s)     = dual-OI s
+dual-OI (recv A s)     = cong (A ×_) (dual-OI s)
 dual-OI (offer s₁ s₂)  = cong₂ _⊎_ (dual-OI s₁) (dual-OI s₂)
 dual-OI (choose s₁ s₂) = cong₂ _×_ (dual-OI s₁) (dual-OI s₂)
 dual-OI done            = refl

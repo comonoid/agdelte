@@ -327,7 +327,7 @@ postulate
 {-# COMPILE JS relativeTime = function(from) { return function(to) {
   const diff = to.getTime() - from.getTime();
   const abs = Math.abs(diff);
-  const past = diff < 0;
+  const past = diff > 0;
 
   const seconds = Math.floor(abs / 1000);
   const minutes = Math.floor(seconds / 60);

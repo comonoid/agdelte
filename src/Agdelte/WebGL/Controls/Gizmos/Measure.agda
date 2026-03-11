@@ -36,8 +36,8 @@ postulate
 {-# COMPILE JS acosF = x => Math.acos(x) #-}
 {-# COMPILE JS showFloat = x => x.toFixed(2) #-}
 {-# COMPILE JS piF = Math.PI #-}
-{-# COMPILE JS _<F_ = x => y => x < y #-}
-{-# COMPILE JS _>F_ = x => y => x > y #-}
+{-# COMPILE JS _<F_ = x => y => x < y ? (cases) => cases["true"]() : (cases) => cases["false"]() #-}
+{-# COMPILE JS _>F_ = x => y => x > y ? (cases) => cases["true"]() : (cases) => cases["false"]() #-}
 
 -- Helper for natural number comparison
 ltNat : ℕ → ℕ → Bool

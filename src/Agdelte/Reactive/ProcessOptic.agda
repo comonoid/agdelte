@@ -89,18 +89,12 @@ peekProcess handle =
     ... | nothing = err "decode failed"
 
 -- | Step: modify remote agent state.
--- Empty response is treated as an error (protocol violation).
+-- Returns the raw response from the IPC step (empty string is valid —
+-- an agent may legitimately observe as "").
 stepProcessOptic : IpcHandle → String → IO (Result String String)
 stepProcessOptic handle input =
   stepProcess handle input >>= λ raw →
-  pure (checkResult raw)
-  where
-    open import Agda.Builtin.String using (primStringEquality)
-    open import Agda.Builtin.Bool using (true; false)
-    checkResult : String → Result String String
-    checkResult s with primStringEquality s ""
-    ... | true  = err "empty response from process step"
-    ... | false = ok s
+  pure (ok raw)
 
 -- | Close the connection
 disconnectProcess : IpcHandle → IO ⊤

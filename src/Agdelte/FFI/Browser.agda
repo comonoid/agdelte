@@ -11,12 +11,17 @@
 -- src/Agdelte/Core/Cmd.agda) which compile to Scott-encoded ASTs interpreted
 -- by the runtime. Direct FFI calls are for advanced use only.
 --
--- Purity note: these postulates are declared as pure functions (e.g.
+-- SAFETY ASSUMPTION: these postulates are declared as pure functions (e.g.
 -- consoleLog : String → ⊤) even though they perform side effects.
--- Agda's type system permits the compiler to CSE, reorder, or eliminate
--- pure calls, but the JS backend currently does not optimise, so this is
--- safe in practice. The primary API (Event/Cmd AST) is already pure and
--- safe; these exist only as low-level escape hatches.
+-- This is ONLY safe because the Agda JS backend currently does not optimise
+-- (no CSE, no dead-code elimination, no reordering). If the backend ever
+-- adds optimisations, these calls could be duplicated, reordered, or dropped.
+-- The primary API (Event/Cmd AST) is already pure and safe; these exist
+-- only as low-level escape hatches.
+--
+-- Additionally, ⊤-returning functions return raw `null` instead of the
+-- Scott-encoded `(cases) => cases["tt"]()`. This works because the result
+-- is always discarded (⊤ is never pattern-matched in practice).
 
 module Agdelte.FFI.Browser where
 

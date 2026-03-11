@@ -828,6 +828,11 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   const dispatch = dispatchNormal;
   const dispatchSync = dispatchImmediate;
 
+  // Message wrapping for zoomRT scopes.
+  // When rendering inside a zoomRT, dispatched messages are wrapped
+  // through the composed wrap function chain.
+  let currentMsgWrap = null;
+
   /**
    * Render a Node to DOM
    */
@@ -976,6 +981,30 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         return withScope(childScope, () => renderNode(innerNode));
       },
 
+      // zoomRT: runtime-deferred zoom (model projection + message wrapping).
+      // Inner node's bindings expect the projected model type, so we
+      // temporarily swap model and currentMsgWrap during rendering.
+      zoomRT: (_typeM, _typeMsg, get, wrap, innerNode) => {
+        const childScope = createScope(currentScope);
+        childScope.modelTransform = get;
+        childScope.project = get;
+        childScope.lastProj = get(model);
+
+        const savedModel = model;
+        const savedWrap = currentMsgWrap;
+
+        model = get(model);
+        currentMsgWrap = savedWrap ? (msg) => savedWrap(wrap(msg)) : wrap;
+        childScope.composedMsgWrap = currentMsgWrap;
+
+        const result = withScope(childScope, () => renderNode(innerNode));
+
+        model = savedModel;
+        currentMsgWrap = savedWrap;
+
+        return result;
+      },
+
       foreachKeyed: (_typeA, getList, keyFn, render) => {
         const container = document.createDocumentFragment();
         const marker = document.createComment('foreachKeyed');
@@ -1053,6 +1082,16 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
    * Apply attribute to element
    */
   function applyAttr(el, attr) {
+    // Capture current message wrap for zoomRT support.
+    // Event handlers registered here will apply this wrap at dispatch time.
+    const capturedWrap = currentMsgWrap;
+    const sendNormal = capturedWrap
+      ? (msg) => dispatchNormal(capturedWrap(msg))
+      : dispatchNormal;
+    const sendImmediate = capturedWrap
+      ? (msg) => dispatchImmediate(capturedWrap(msg))
+      : dispatchImmediate;
+
     attr({
       attr: (name, value) => {
         setAttr(el, name, value);
@@ -1070,9 +1109,9 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           }
           // Keyboard/focus events: P0 (immediate), clicks: P1 (normal)
           if (event === 'keydown' || event === 'keyup' || event === 'focus' || event === 'blur') {
-            dispatchImmediate(msg);
+            sendImmediate(msg);
           } else {
-            dispatchNormal(msg);
+            sendNormal(msg);
           }
         }, { signal: currentScope.abortCtrl.signal });
       },
@@ -1106,9 +1145,9 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           }
           // Keyboard events: P0 (immediate), others: P1 (normal)
           if (event === 'keydown' || event === 'keyup') {
-            dispatchImmediate(handler(value));
+            sendImmediate(handler(value));
           } else {
-            dispatchNormal(handler(value));
+            sendNormal(handler(value));
           }
         }, event === 'wheel'
           ? { signal: currentScope.abortCtrl.signal, passive: false }
@@ -1125,9 +1164,9 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           }
           // Use priority dispatch for keyboard events
           if (event === 'keydown' || event === 'keyup') {
-            dispatchImmediate(handler(value));
+            sendImmediate(handler(value));
           } else {
-            dispatchNormal(handler(value));
+            sendNormal(handler(value));
           }
         }, { signal: currentScope.abortCtrl.signal });
       },
@@ -1137,7 +1176,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         el.addEventListener('keydown', (e) => {
           if (!keyArray.includes(e.key)) return;
           e.preventDefault();
-          dispatchImmediate(handler(e.key));
+          sendImmediate(handler(e.key));
         }, { signal: currentScope.abortCtrl.signal });
       },
       style: (name, value) => {
@@ -1192,6 +1231,17 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
    * @param {*} newModel - New model value
    */
   function updateScopeImmediate(scope, oldModel, newModel) {
+    // zoomRT: apply model transformation and set up dispatch wrapping
+    // for any renderNode calls during this scope's update (conditional show, list items)
+    const savedModel = model;
+    const savedWrap = currentMsgWrap;
+    if (scope.modelTransform) {
+      oldModel = scope.modelTransform(oldModel);
+      newModel = scope.modelTransform(newModel);
+      model = newModel;
+      if (scope.composedMsgWrap) currentMsgWrap = scope.composedMsgWrap;
+    }
+
     // Scope cutoff: string fingerprint only (scopeProj skipped if slot tracking active)
     if (scope.fingerprint) {
       const newFP = scope.fingerprint(newModel);
@@ -1376,6 +1426,12 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       if (!ownedScopes.has(child)) {
         updateScopeImmediate(child, oldModel, newModel);
       }
+    }
+
+    // Restore model/dispatch state after zoomRT scope update
+    if (scope.modelTransform) {
+      model = savedModel;
+      currentMsgWrap = savedWrap;
     }
   }
 

@@ -29,9 +29,9 @@ data Color : Set where
 
 showColor : Color → String
 showColor (hex s)        = s
-showColor (rgb r g b)    = "rgb(" ++ show r ++ "," ++ show g ++ "," ++ show b ++ ")"
-showColor (rgba r g b a) = "rgba(" ++ show r ++ "," ++ show g ++ "," ++ show b ++ "," ++ showFloat a ++ ")"
-showColor (hsl h s l)    = "hsl(" ++ show h ++ "," ++ show s ++ "%," ++ show l ++ "%)"
+showColor (rgb r g b)    = "rgb(" ++ show r ++ ", " ++ show g ++ ", " ++ show b ++ ")"
+showColor (rgba r g b a) = "rgba(" ++ show r ++ ", " ++ show g ++ ", " ++ show b ++ ", " ++ showFloat a ++ ")"
+showColor (hsl h s l)    = "hsl(" ++ show h ++ ", " ++ show s ++ "%, " ++ show l ++ "%)"
 showColor (named s)      = s
 showColor (var s)        = "var(--" ++ s ++ ")"
 showColor (raw s)        = s

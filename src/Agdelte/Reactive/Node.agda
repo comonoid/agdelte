@@ -131,6 +131,12 @@ data Node (Model Msg : Set) : Set where
   -- Used automatically by zoomNode — no manual fingerprint needed.
   scopeProj : ∀ {M' : Set} → (Model → M') → Node Model Msg → Node Model Msg
 
+  -- Runtime-deferred zoom: stores model/message transformation for the runtime.
+  -- Used by zoomNode' for foreach/foreachKeyed where structural recursion
+  -- can't be proven (render functions produce dynamic subtrees).
+  -- The runtime applies get to the model and wrap to dispatched messages.
+  zoomRT : ∀ {M' Msg' : Set} → (Model → M') → (Msg' → Msg) → Node M' Msg' → Node Model Msg
+
   -- WebGL canvas: DOM attributes + opaque scene data.
   -- Scene type (S) is defined in the WebGL module; Node.agda doesn't import it.
   -- Runtime creates <canvas>, stores scene for reactive-gl.js to initialize.
@@ -331,11 +337,10 @@ zoomAttr get wrap (style name val) = style name val
 zoomAttr get wrap (styleBind name b) = styleBind name (focusBinding get b)
 
 -- Internal: remap node without adding scope wrapper (used by zoomNode)
--- TERMINATING: structurally recursive on the Node argument. The foreach/
--- foreachKeyed cases apply the recursive call to `render a i`, which is not
--- a syntactic subterm but always produces a smaller Node (the render function
--- returns a subtree, not a self-referential node). Agda's termination checker
--- cannot verify this because `render` is an opaque function.
+-- Morally structurally recursive on the Node argument:
+--   • foreach/foreachKeyed use zoomRT to defer (no recursion into render)
+--   • elem recurses via map over children (structural, but Agda can't
+--     see through map — hence TERMINATING is still needed)
 {-# TERMINATING #-}
 zoomNode' : ∀ {M M' Msg Msg'} → (M → M') → (Msg' → Msg) → Node M' Msg' → Node M Msg
 zoomNode' get wrap (text s) = text s
@@ -345,15 +350,17 @@ zoomNode' get wrap (elem tag attrs children) =
 zoomNode' get wrap empty = empty
 zoomNode' get wrap (when cond node) = when (cond ∘ get) (zoomNode' get wrap node)
 zoomNode' get wrap (foreach {A} getList render) =
-  foreach (getList ∘ get) (λ a i → zoomNode' get wrap (render a i))
+  foreach (getList ∘ get) (λ a i → zoomRT get wrap (render a i))
 zoomNode' get wrap (foreachKeyed {A} getList keyFn render) =
-  foreachKeyed (getList ∘ get) keyFn (λ a i → zoomNode' get wrap (render a i))
+  foreachKeyed (getList ∘ get) keyFn (λ a i → zoomRT get wrap (render a i))
 zoomNode' get wrap (whenT cond trans node) =
   whenT (cond ∘ get) trans (zoomNode' get wrap node)
 zoomNode' get wrap (scope fp node) =
   scope (fp ∘ get) (zoomNode' get wrap node)
 zoomNode' get wrap (scopeProj proj node) =
   scopeProj (proj ∘ get) (zoomNode' get wrap node)
+zoomNode' get wrap (zoomRT get' wrap' inner) =
+  zoomRT (get' ∘ get) (wrap ∘ wrap') inner
 zoomNode' get wrap (glCanvas attrs scene) =
   glCanvas (map (zoomAttr get wrap) attrs) scene
 

@@ -130,7 +130,7 @@ main =
   ioPeek (refOptic ref) >>= λ peeked →
   printMaybe "  refOptic.peek" peeked >>
   ioOver (refOptic ref) "updated-value" >>= λ overResult →
-  putStrLn ("  refOptic.over(\"updated-value\") → " ++s overResult) >>
+  printMaybe "  refOptic.over(\"updated-value\")" overResult >>
   ioPeek (refOptic ref) >>= λ peeked2 →
   printMaybe "  refOptic.peek (after over)" peeked2 >>
   putStrLn "" >>

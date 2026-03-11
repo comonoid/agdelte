@@ -125,6 +125,11 @@ formPipeline = nameAgent >>> (emailAgent >>> summaryAgent)
 
 -- The form follows FormProtocol exactly.
 -- We can type-check this by building a SessionAgent:
+--
+-- NOTE: SessionAgent is a single-shot batch interface — all inputs are
+-- provided at once as SessionI (= String × (String × ⊤)). This is NOT
+-- a multi-step state machine; for that, use formAgent above.
+-- The Session type compiles protocols to flat I/O pairs via SessionI/SessionO.
 
 formSessionAgent : SessionAgent FormProtocol FormState
 formSessionAgent = record

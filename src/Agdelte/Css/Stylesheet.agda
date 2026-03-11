@@ -83,10 +83,12 @@ mutual
     ++ ind ++ varSel ++ " {\n"
     ++ renderDecls (ind ++ "  ") overrides ++ "\n"
     ++ ind ++ "}"
+  renderRuleAt ind (media _ []) = ""
   renderRuleAt ind (media query rules) =
     ind ++ "@media " ++ query ++ " {\n"
     ++ renderRulesAt (ind ++ "  ") rules ++ "\n"
     ++ ind ++ "}"
+  renderRuleAt ind (keyframe _ []) = ""
   renderRuleAt ind (keyframe name stops) =
     ind ++ "@keyframes " ++ name ++ " {\n"
     ++ renderStops (ind ++ "  ") stops ++ "\n"

@@ -33,8 +33,8 @@ postulate
 {-# COMPILE JS sinF = x => Math.sin(x) #-}
 {-# COMPILE JS cosF = x => Math.cos(x) #-}
 {-# COMPILE JS absFloat = x => Math.abs(x) #-}
-{-# COMPILE JS _<F_ = x => y => x < y #-}
-{-# COMPILE JS _>F_ = x => y => x > y #-}
+{-# COMPILE JS _<F_ = x => y => x < y ? (cases) => cases["true"]() : (cases) => cases["false"]() #-}
+{-# COMPILE JS _>F_ = x => y => x > y ? (cases) => cases["true"]() : (cases) => cases["false"]() #-}
 
 ------------------------------------------------------------------------
 -- Surface configuration

@@ -8,6 +8,7 @@
 
 module Agdelte.Primitive.Mouse where
 
+open import Data.Bool using (if_then_else_)
 open import Data.Nat using (ℕ; _≡ᵇ_)
 open import Data.Maybe using (just; nothing)
 open import Data.Product using (_×_; _,_)
