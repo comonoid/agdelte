@@ -142,8 +142,8 @@ postulate
     if (re.test(s)) return nil;
     const e = (cb) => cb["mkError"]("", errMsg);
     return (cases) => cases['_∷_'](e, nil);
-  } catch {
-    const e = (cb) => cb["mkError"]("", "Invalid pattern");
+  } catch (ex) {
+    const e = (cb) => cb["mkError"]("", "Invalid pattern: " + ex.message);
     return (cases) => cases['_∷_'](e, nil);
   }
 }; }; } #-}
@@ -321,6 +321,11 @@ touchField f =
 -- no errors yet, so an untouched invalid field would return true).
 isFieldValid : ∀ {A : Set} → FormField A → Bool
 isFieldValid f = fieldTouched f ∧ null (fieldErrors f)
+
+-- Check if field value is valid regardless of touched state.
+-- Useful for edit forms with pre-filled values where touchField hasn't been called.
+isFieldValueValid : ∀ {A : Set} → FormField A → Bool
+isFieldValueValid f = null (fieldValidator f (fieldValue f))
 
 -- Get field value if valid and touched
 getValidValue : ∀ {A : Set} → FormField A → Maybe A

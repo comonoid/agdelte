@@ -38,11 +38,13 @@ postulate
   _>>_  : ∀ {A B : Set} → IO A → IO B → IO B
   pure  : ∀ {A : Set} → A → IO A
   bracket : ∀ {A B : Set} → IO A → (A → IO ⊤) → (A → IO B) → IO B
+  onException : ∀ {A B : Set} → IO A → IO B → IO A
 
 {-# COMPILE GHC _>>=_ = \_ _ -> (>>=) #-}
 {-# COMPILE GHC _>>_  = \_ _ -> (>>)  #-}
 {-# COMPILE GHC pure  = \_ -> return   #-}
 {-# COMPILE GHC bracket = \_ _ -> Ex.bracket #-}
+{-# COMPILE GHC onException = \_ _ -> Ex.onException #-}
 
 -- Try an IO action, catching all exceptions as Left String
 open import Data.Maybe using (Maybe; just; nothing)
@@ -116,16 +118,28 @@ postulate
 {-# COMPILE GHC reqPath   = Http.reqPath   #-}
 {-# COMPILE GHC reqBody   = Http.reqBody   #-}
 
--- Listen on port with request handler
--- Handler receives request, returns response body
+-- HTTP Response (status + body)
 postulate
-  listen : Nat → (HttpRequest → IO String) → IO ⊤
+  HttpResponse : Set
+  mkResponse   : Nat → String → HttpResponse
 
 {-# FOREIGN GHC
-  listenImpl :: Integer -> (Http.Request -> IO T.Text) -> IO ()
+  data AgdaResponse = AgdaResponse Integer T.Text
+  #-}
+
+{-# COMPILE GHC HttpResponse = type AgdaResponse #-}
+{-# COMPILE GHC mkResponse   = AgdaResponse      #-}
+
+-- Listen on port with request handler
+-- Handler receives request, returns HttpResponse with status code
+postulate
+  listen : Nat → (HttpRequest → IO HttpResponse) → IO ⊤
+
+{-# FOREIGN GHC
+  listenImpl :: Integer -> (Http.Request -> IO AgdaResponse) -> IO ()
   listenImpl port handler = Http.serve (fromIntegral port) $ \req -> do
-    body <- handler req
-    return (Http.Response 200 body [])
+    AgdaResponse status body <- handler req
+    return (Http.Response (fromIntegral status) body [])
   #-}
 
 {-# COMPILE GHC listen = listenImpl #-}
@@ -238,29 +252,19 @@ postulate
   mkAgentPipeDef   : String → String → ConnectionDef
   mkClientRouteDef : String → ConnectionDef
 
-{-# FOREIGN GHC
-  data ConnectionDef_
-    = BroadcastDef_   T.Text
-    | AgentPipeDef_   T.Text T.Text
-    | ClientRouteDef_ T.Text
-  #-}
-
-{-# COMPILE GHC ConnectionDef    = type ConnectionDef_ #-}
-{-# COMPILE GHC mkBroadcastDef   = BroadcastDef_       #-}
-{-# COMPILE GHC mkAgentPipeDef   = AgentPipeDef_       #-}
-{-# COMPILE GHC mkClientRouteDef = ClientRouteDef_     #-}
+{-# COMPILE GHC ConnectionDef    = type AS.ConnectionDef #-}
+{-# COMPILE GHC mkBroadcastDef   = AS.BroadcastDef      #-}
+{-# COMPILE GHC mkAgentPipeDef   = AS.AgentPipeDef      #-}
+{-# COMPILE GHC mkClientRouteDef = AS.ClientRouteDef    #-}
 
 -- Run multi-agent server with connection routing
 postulate
   runAgentServerNWithConns : Nat → List AgentDef → List ConnectionDef → IO ⊤
 
 {-# FOREIGN GHC
-  runAgentServerNWithConnsImpl :: Integer -> [AS.AgentDef] -> [ConnectionDef_] -> IO ()
-  runAgentServerNWithConnsImpl port agents _conns =
-    -- TODO: implement connection routing (agentPipe, broadcast, clientRoute)
-    -- in AgentServer.hs. The connection data is available here; currently
-    -- delegates to runAgentServer which only wires HTTP endpoints.
-    AS.runAgentServer (fromIntegral port) (Just "*") agents
+  runAgentServerNWithConnsImpl :: Integer -> [AS.AgentDef] -> [AS.ConnectionDef] -> IO ()
+  runAgentServerNWithConnsImpl port agents conns =
+    AS.runAgentServerWithConns (fromIntegral port) (Just "*") agents conns
   #-}
 
 {-# COMPILE GHC runAgentServerNWithConns = runAgentServerNWithConnsImpl #-}
@@ -276,18 +280,25 @@ wireAgent : ∀ {S} → String → String → Agent S String String → IO Agent
 wireAgent name path agent =
   newIORef (observe agent (state agent)) >>= λ stateRef →
   newMVar agent                          >>= λ agentMVar →
-  let observeIO : IO String
-      observeIO = readIORef stateRef
-
-      -- MVar guarantees mutual exclusion: only one step runs at a time.
-      -- stateRef is written while the MVar is held (between takeMVar and
-      -- putMVar), so observe sees a consistent snapshot.
+  let -- Observe under MVar lock: bracket ensures stateRef is read while
+      -- the mutex is held, so observe always sees a post-step snapshot.
+      -- bracket releases the MVar even if readIORef throws.
+      observeIO : IO String
+      observeIO = bracket (takeMVar agentMVar) (putMVar agentMVar)
+                          (λ _ → readIORef stateRef)
+      -- stepIO: take MVar, compute step, store new agent + observation.
+      -- onException restores the old agent if stepAgent throws (e.g. debugTrap,
+      -- stack overflow). Without this, the MVar stays empty → deadlock.
       stepIO : String → IO String
       stepIO input =
         takeMVar agentMVar >>= λ a →
-        let result = stepAgent a input
-        in writeIORef stateRef (proj₂ result) >>
-           putMVar agentMVar (proj₁ result)   >>
-           pure (proj₂ result)
+        onException
+          (let result   = stepAgent a input
+               newAgent = proj₁ result
+               output   = proj₂ result
+           in writeIORef stateRef output >>
+              putMVar agentMVar newAgent >>
+              pure output)
+          (putMVar agentMVar a)
   in
   pure (mkAgentDef name path stateRef observeIO stepIO)

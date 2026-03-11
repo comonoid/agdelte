@@ -25,3 +25,10 @@ showFloat : Float → String
 showFloat = showFloat′
 
 {-# COMPILE JS showFloat = f => { const s = String(f); return s.includes('e') ? f.toFixed(6).replace(/\.?0+$/, '') : s; } #-}
+
+-- GHC backend: use showFFloat to avoid scientific notation in CSS output.
+-- Haskell's `show` produces "1.0e-7" which is invalid CSS; showFFloat
+-- produces "0.0000001". For sub-pixel values < 1e-6, rounds to "0".
+{-# FOREIGN GHC import Numeric (showFFloat) #-}
+{-# FOREIGN GHC import qualified Data.Text #-}
+{-# COMPILE GHC showFloat = \f -> Data.Text.pack (showFFloat Nothing f "") #-}

@@ -12,6 +12,9 @@ open import Data.Nat.Show using (show)
 open import Data.Float using (Float)
 open import Data.String using (String; _++_)
 
+open import Data.Maybe using (Maybe; just; nothing)
+open import Data.Bool using (Bool; true; false; if_then_else_)
+
 open import Agdelte.Css.Show using (showFloat)
 
 ------------------------------------------------------------------------
@@ -26,6 +29,19 @@ data Color : Set where
   named : String → Color              -- "red", "transparent"
   var   : String → Color              -- CSS custom property
   raw   : String → Color              -- escape hatch
+
+-- Validated hex color constructor: checks format (#RGB, #RRGGBB, #RRGGBBAA)
+postulate
+  isHexColor : String → Bool
+
+{-# COMPILE JS isHexColor = function(s) {
+  return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(s)
+    ? (cases) => cases["true"]()
+    : (cases) => cases["false"]();
+} #-}
+
+hexValid : String → Maybe Color
+hexValid s = if isHexColor s then just (hex s) else nothing
 
 showColor : Color → String
 showColor (hex s)        = s

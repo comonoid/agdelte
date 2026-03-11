@@ -146,7 +146,7 @@ postulate
   -- Get timestamp in milliseconds since epoch
   getTime : Date → ℕ
 
-{-# COMPILE JS getYear = function(d) { return BigInt(d.getFullYear()); } #-}
+{-# COMPILE JS getYear = function(d) { return BigInt(Math.max(0, d.getFullYear())); } #-}
 {-# COMPILE JS getMonth = function(d) { return BigInt(d.getMonth() + 1); } #-}
 {-# COMPILE JS getDay = function(d) { return BigInt(d.getDate()); } #-}
 {-# COMPILE JS getDayOfWeek = function(d) { return BigInt(d.getDay()); } #-}
@@ -154,7 +154,7 @@ postulate
 {-# COMPILE JS getMinute = function(d) { return BigInt(d.getMinutes()); } #-}
 {-# COMPILE JS getSecond = function(d) { return BigInt(d.getSeconds()); } #-}
 {-# COMPILE JS getMillisecond = function(d) { return BigInt(d.getMilliseconds()); } #-}
-{-# COMPILE JS getTime = function(d) { return BigInt(d.getTime()); } #-}
+{-# COMPILE JS getTime = function(d) { return BigInt(Math.max(0, d.getTime())); } #-}
 
 ------------------------------------------------------------------------
 -- Date arithmetic

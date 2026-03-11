@@ -24,7 +24,7 @@ open import Agda.Builtin.IO using (IO)
 open import Agda.Builtin.Unit using (⊤)
 
 open import Agdelte.FFI.Server using
-  ( _>>=_; _>>_; pure
+  ( _>>=_; _>>_; pure; bracket
   ; IpcHandle
   ; serveAgentProcess; connectProcess
   ; queryProcess; stepProcess; closeProcess
@@ -89,8 +89,9 @@ peekProcess handle =
     ... | nothing = err "decode failed"
 
 -- | Step: modify remote agent state.
--- Returns the raw response from the IPC step (empty string is valid —
--- an agent may legitimately observe as "").
+-- Returns the raw response. Empty string is valid (agent may observe as "").
+-- Errors from the IPC transport are signaled by exceptions in stepProcess
+-- (caught by bracket in stepOnce), not by response content.
 stepProcessOptic : IpcHandle → String → IO (Result String String)
 stepProcessOptic handle input =
   stepProcess handle input >>= λ raw →
@@ -107,15 +108,13 @@ disconnectProcess = closeProcess
 -- | One-shot peek: connect, read state, close
 peekOnce : ProcessOptic A → IO (Result String A)
 peekOnce po =
-  connectProcessOptic po >>= λ handle →
-  peekProcess handle     >>= λ result →
-  closeProcess handle    >>
-  pure result
+  bracket (connectProcessOptic po)
+          closeProcess
+          peekProcess
 
 -- | One-shot step: connect, step, close
 stepOnce : ProcessOptic A → String → IO (Result String String)
 stepOnce po input =
-  connectProcessOptic po >>= λ handle →
-  stepProcessOptic handle input >>= λ result →
-  closeProcess handle           >>
-  pure result
+  bracket (connectProcessOptic po)
+          closeProcess
+          (λ handle → stepProcessOptic handle input)

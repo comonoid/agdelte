@@ -20,7 +20,7 @@ open import Agda.Builtin.String using (String)
 open import Agdelte.Concurrent.ProcessOpticLinear
   using (ConnState; Connected; Disconnected; IpcHandleL; mkHandle;
          connect; query; step; close)
-open import Agdelte.FFI.Server using (_>>=_; _>>_; pure; bracket)
+open import Agdelte.FFI.Server using (_>>=_; _>>_; pure; bracket; tryCatch)
 
 ------------------------------------------------------------------------
 -- SafeIO: resource-safe IO computation (obligation-free by construction)
@@ -48,7 +48,9 @@ run (pureS a)          = pure a
 run (bindS m f)        = run m >>= λ b → run (f b)
 run (liftS io)         = io
 run (withIpcS path f)  =
-  bracket (connect path) (λ h → close h >> pure tt) (λ h → run (f h))
+  bracket (connect path)
+          (λ h → tryCatch (close h) >> pure tt)
+          (λ h → run (f h))
 
 ------------------------------------------------------------------------
 -- SafeIO monad operations

@@ -144,11 +144,36 @@ repeatN (suc n) s  = splice s (repeatN n s)
     left (splice s k) with head s
     ... | doneStep = left k
     ... | _        = splice (left s) k
+    -- INVARIANT: sendStep/recvStep nodes have right=coDone (enforced by coSend/coRecv).
+    -- Directly constructed CoSession values with non-trivial right branches
+    -- will have those branches silently dropped by splice.
     right (splice s k) with head s
     ... | doneStep    = right k
     ... | sendStep _  = coDone
     ... | recvStep _  = coDone
     ... | _           = splice (right s) k
+
+------------------------------------------------------------------------
+-- Well-formedness check (N steps)
+------------------------------------------------------------------------
+
+-- Check that sendStep/recvStep nodes have right=coDone (the invariant
+-- assumed by splice). Inspects up to N levels of the coinductive tree.
+open import Data.Bool using (Bool; true; false; _∧_)
+
+private
+  isDone : SessionStep → Bool
+  isDone doneStep = true
+  isDone _        = false
+
+wellFormedN : Nat → CoSession → Bool
+wellFormedN zero    _ = true
+wellFormedN (suc n) s with head s
+... | doneStep   = true
+... | sendStep _ = isDone (head (right s)) ∧ wellFormedN n (left s)
+... | recvStep _ = isDone (head (right s)) ∧ wellFormedN n (left s)
+... | offerStep  = wellFormedN n (left s) ∧ wellFormedN n (right s)
+... | chooseStep = wellFormedN n (left s) ∧ wellFormedN n (right s)
 
 ------------------------------------------------------------------------
 -- Embedding finite Session into CoSession

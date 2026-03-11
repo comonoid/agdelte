@@ -158,9 +158,9 @@ recvStepAgent = sendStepAgent
 -- Compile a session into a pipeline (for linear sessions)
 -- We compile inductively, building nested (S₁ × S₂) state types.
 
--- Base case: done → identity agent
+-- Base case: done → pass-through agent (accepts cascade input)
 doneAgent : Agent String String String
-doneAgent = mkAgent "" id (λ s _ → s)
+doneAgent = mkAgent "" id (λ _ input → input)
 
 -- Recursive: send/recv → step >>> compile rest
 compileSend : ∀ {S} → Agent S String String → Agent (String × S) String String

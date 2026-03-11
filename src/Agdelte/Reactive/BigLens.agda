@@ -20,7 +20,7 @@ open import Agda.Builtin.Unit using (⊤)
 open import Agda.Builtin.String using (String)
 open import Data.Maybe using (Maybe; just; nothing)
 
-open import Agdelte.FFI.Server using (_>>=_; _>>_; pure)
+open import Agdelte.FFI.Server using (_>>=_; _>>_; pure; bracket)
 
 ------------------------------------------------------------------------
 -- IOOptic: effectful optic over a transport
@@ -64,17 +64,15 @@ processAgentOptic socketPath = mkIOOptic peekIO overIO
   where
     peekIO : IO (Maybe String)
     peekIO =
-      tryCatch (connectProcess socketPath >>= λ h →
-                queryProcess h            >>= λ result →
-                closeProcess h            >>
-                pure result)
+      tryCatch (bracket (connectProcess socketPath)
+                        closeProcess
+                        queryProcess)
 
     overIO : String → IO (Maybe String)
     overIO input =
-      tryCatch (connectProcess socketPath >>= λ h →
-                stepProcess h input       >>= λ result →
-                closeProcess h            >>
-                pure result)
+      tryCatch (bracket (connectProcess socketPath)
+                        closeProcess
+                        (λ h → stepProcess h input))
 
 ------------------------------------------------------------------------
 -- Convenience constructors

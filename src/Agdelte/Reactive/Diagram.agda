@@ -112,7 +112,10 @@ dualAgent n₁ p₁ a₁ n₂ p₂ a₂ = mkDiagramSpec
   (mkSlot n₁ p₁ a₁ ∷ mkSlot n₂ p₂ a₂ ∷ [])
   (broadcast n₁ ∷ broadcast n₂ ∷ clientRoute n₁ ∷ clientRoute n₂ ∷ [])
 
--- Pipeline: output of first agent feeds input of second
+-- Pipeline: output of first agent feeds input of second.
+-- Only the first agent has a clientRoute (WS clients send to n₁).
+-- The second agent receives input exclusively via the pipe from n₁.
+-- Both agents are accessible via HTTP through their respective paths.
 pipeline : String → String → ∀ {S₁} → Agent S₁ String String →
            String → String → ∀ {S₂} → Agent S₂ String String →
            DiagramSpec
@@ -145,13 +148,25 @@ boolFilter p (x ∷ xs) with p x
 -- Merge two diagram specs (union of slots and connections).
 -- Slots from d₂ whose names already exist in d₁ are dropped
 -- to prevent duplicate slot names causing ambiguous routing.
+-- Connections from d₂ that reference dropped slots are also removed,
+-- since they would silently target d₁'s agent instead of d₂'s.
 _⊕D_ : DiagramSpec → DiagramSpec → DiagramSpec
 d₁ ⊕D d₂ = mkDiagramSpec
   (slots d₁ ++ uniqueSlots)
-  (connections d₁ ++ connections d₂)
+  (connections d₁ ++ validConns)
   where
     open Data.List using (_++_)
     uniqueSlots = boolFilter (λ s → not (hasSlot (name s) d₁)) (slots d₂)
+    -- A slot from d₂ was "dropped" if d₁ already has that name
+    wasDropped : String → Bool
+    wasDropped n = hasSlot n d₁
+    -- A connection from d₂ is invalid if it references a dropped slot
+    connRefsDropped : Connection → Bool
+    connRefsDropped (broadcast n)     = wasDropped n
+    connRefsDropped (agentPipe s t)   = wasDropped s ∨ wasDropped t
+    connRefsDropped (clientRoute n)   = wasDropped n
+    validConns = boolFilter (λ c → not (connRefsDropped c)) (connections d₂)
+    open import Data.Bool using (_∨_)
 
 -- Add a connection to a diagram spec
 wireSpec : Connection → DiagramSpec → DiagramSpec

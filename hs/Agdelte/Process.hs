@@ -27,7 +27,7 @@ module Agdelte.Process
   , stepProcess
   ) where
 
-import Control.Concurrent (forkIO)
+import Control.Concurrent (forkIO, threadDelay)
 import Control.Exception (catch, SomeException, bracket, IOException)
 import GHC.IO.Exception (IOErrorType(..), ioe_type)
 import qualified Data.Text as T
@@ -39,6 +39,7 @@ import Data.Word (Word32)
 import Network.Socket
 import Network.Socket.ByteString (recv, sendAll)
 import System.Directory (removeFile, doesFileExist)
+import Control.Monad (when)
 import System.IO (hPutStrLn, stderr)
 import System.Posix.Signals (installHandler, Handler(..), sigTERM, sigINT)
 
@@ -63,10 +64,11 @@ listenUnix path handler = do
   sock <- socket AF_UNIX Stream defaultProtocol
   bind sock (SockAddrUnix path)
   listen sock 5
-  -- Clean up socket file on SIGTERM/SIGINT
+  -- Clean up socket + file on SIGTERM/SIGINT
   let cleanup = do
+        close sock `catch` \(_ :: SomeException) -> return ()
         exists' <- doesFileExist path
-        if exists' then removeFile path else return ()
+        when exists' $ removeFile path
   _ <- installHandler sigTERM (Catch cleanup) Nothing
   _ <- installHandler sigINT  (Catch cleanup) Nothing
   _ <- forkIO $ acceptLoop sock handler
@@ -82,8 +84,12 @@ acceptLoop sock handler = do
     Left e -> do
       hPutStrLn stderr $ "acceptLoop: accept failed: " ++ show e
       if isFatalSocketError e
-        then hPutStrLn stderr "acceptLoop: fatal error, exiting accept loop"
-        else acceptLoop sock handler  -- retry on transient errors
+        then do
+          hPutStrLn stderr "acceptLoop: fatal error, closing socket"
+          close sock `catch` \(_ :: SomeException) -> return ()
+        else do
+          threadDelay 100000  -- 100ms backoff on transient errors
+          acceptLoop sock handler
     Right (conn, _) -> do
       _ <- forkIO $ handleClient conn handler
       acceptLoop sock handler
@@ -103,8 +109,8 @@ handleClient conn handler = do
     Left e -> do
       -- Connection error (not a clean close)
       hPutStrLn stderr $ "handleClient: recv error: " ++ show e
-      close conn
-    Right Nothing -> close conn  -- clean close by peer
+      safeClose conn
+    Right Nothing -> safeClose conn  -- clean close by peer
     Right (Just msg) -> do
       let request = TE.decodeUtf8With lenientDecode msg
       response <- handler request `catch` \(e :: SomeException) ->
@@ -129,11 +135,20 @@ encodeLenSafe n
       , fromIntegral (         n  .&. 0xFF)
       ]
 
--- | Decode a 4-byte big-endian length header
-decodeLen :: BS.ByteString -> Int
+-- | Decode a 4-byte big-endian length header (total function)
+decodeLen :: BS.ByteString -> Maybe Int
 decodeLen bs = case map fromIntegral (BS.unpack bs) of
-  [a, b, c, d] -> shiftL (a :: Int) 24 + shiftL b 16 + shiftL c 8 + d
-  _             -> error "decodeLen: expected exactly 4 bytes"
+  [a, b, c, d] -> Just (shiftL (a :: Int) 24 + shiftL b 16 + shiftL c 8 + d)
+  _             -> Nothing
+
+-- | Maximum allowed frame size (16 MB). Frames larger than this are rejected
+-- to prevent OOM from malicious or corrupted length headers.
+maxFrameSize :: Int
+maxFrameSize = 16 * 1024 * 1024
+
+-- | Safe close: ignores exceptions from already-closed sockets
+safeClose :: Socket -> IO ()
+safeClose s = close s `catch` \(_ :: SomeException) -> return ()
 
 -- | Receive exactly n bytes from a socket
 recvExact :: Socket -> Int -> IO (Maybe BS.ByteString)
@@ -158,17 +173,20 @@ sendFramed sock payload = case encodeLenSafe (BS.length payload) of
     sendAll sock payload
 
 -- | Receive a length-prefixed message.
--- Returns Nothing if the peer closed the connection.
+-- Returns Nothing if the peer closed the connection or frame is invalid/too large.
 recvFramed :: Socket -> IO (Maybe BS.ByteString)
 recvFramed sock = do
   mHeader <- recvExact sock 4
   case mHeader of
     Nothing -> return Nothing
-    Just header -> do
-          let len = decodeLen header
-          if len == 0
-            then return (Just BS.empty)
-            else recvExact sock len
+    Just header -> case decodeLen header of
+      Nothing -> return Nothing  -- malformed header
+      Just len
+        | len == 0 -> return (Just BS.empty)
+        | len > maxFrameSize -> do
+            hPutStrLn stderr $ "recvFramed: frame too large (" ++ show len ++ " bytes), dropping connection"
+            return Nothing
+        | otherwise -> recvExact sock len
 
 ------------------------------------------------------------------------
 -- IPC Client (optic user side)

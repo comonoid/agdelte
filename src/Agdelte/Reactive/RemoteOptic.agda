@@ -28,6 +28,10 @@ private
   variable
     A Msg : Set
 
+  -- Truncate long strings for error diagnostics (avoids multi-MB error messages)
+  postulate truncStr : String → String
+  {-# COMPILE JS truncStr = s => s.length <= 200 ? s : s.slice(0, 200) + "…" #-}
+
 ------------------------------------------------------------------------
 -- RemoteOptic: typed remote access over HTTP
 ------------------------------------------------------------------------
@@ -61,7 +65,7 @@ queryRemote ro onResult onError =
     dispatch : String → Msg
     dispatch raw with decode raw
     ... | just a  = onResult a
-    ... | nothing = onError ("decode failed: " ++ raw)
+    ... | nothing = onError ("decode failed: " ++ truncStr raw)
 
 -- | Step: modify remote agent state via HTTP POST
 -- POST {baseUrl}/step with input → decode response → Result String A
@@ -78,7 +82,7 @@ stepRemote ro input onResult onError =
     dispatch : String → Msg
     dispatch raw with decode raw
     ... | just a  = onResult a
-    ... | nothing = onError ("decode failed: " ++ raw)
+    ... | nothing = onError ("decode failed: " ++ truncStr raw)
 
 ------------------------------------------------------------------------
 -- Simplified API (String-level, no Serialize required)

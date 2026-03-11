@@ -10,7 +10,7 @@
 module Agdelte.Core.Event where
 
 open import Data.Nat using (ℕ)
-open import Data.Bool using (Bool; if_then_else_; not)
+open import Data.Bool using (Bool; if_then_else_; not; _∧_)
 open import Data.String using (String)
 open import Agda.Builtin.String using (primStringEquality)
 open import Data.Maybe using (Maybe; just; nothing)
@@ -199,6 +199,9 @@ open SubDef public using (Sub)
 -- The update function IS foldp: update : Msg → Model → Model.
 -- Adding separate constructors would duplicate what the architecture
 -- already provides, with no runtime benefit.
+-- KNOWN LIMITATION: NO_POSITIVITY_CHECK allows constructing non-terminating terms
+-- via switchE. Event is a runtime-interpreted AST, not evaluated in Agda.
+-- For safe subsets, avoid switchE when Event (Event A) recursion is not needed.
 {-# NO_POSITIVITY_CHECK #-}
 {-# NO_UNIVERSE_CHECK #-}
 data Event (A : Set) : Set where
@@ -342,19 +345,15 @@ onKeyWhen pred msg = onKeyDown (λ e → if pred e then just msg else nothing)
 -- Combinations with modifiers
 onCtrlKey : String → A → Event A
 onCtrlKey k msg = onKeyWhen (λ e → ctrl e ∧ primStringEquality k (key e)) msg
-  where open import Data.Bool using (_∧_)
 
 onAltKey : String → A → Event A
 onAltKey k msg = onKeyWhen (λ e → alt e ∧ primStringEquality k (key e)) msg
-  where open import Data.Bool using (_∧_)
 
 onShiftKey : String → A → Event A
 onShiftKey k msg = onKeyWhen (λ e → shift e ∧ primStringEquality k (key e)) msg
-  where open import Data.Bool using (_∧_)
 
 onMetaKey : String → A → Event A
 onMetaKey k msg = onKeyWhen (λ e → meta e ∧ primStringEquality k (key e)) msg
-  where open import Data.Bool using (_∧_)
 
 -- Arrows (for convenience, but better to use onKeys for multiple)
 onArrowUp : A → Event A
@@ -521,6 +520,9 @@ e >>=E f = switchE never (mapE f e)
 -- worker). For repeated events (interval, onKeyDown), each new firing of an
 -- earlier event DISCARDS all progress from subsequent events via switchE.
 -- Use `parallel` for collecting results from repeated event sources.
+-- WARNING: sequenceE with repeated events (interval, onKeyDown) silently loses
+-- progress of subsequent events when the first re-fires (switchE semantics).
+-- Use only with one-shot events (timeout, httpGet).
 sequenceE : List (Event A) → Event (List A)
 sequenceE []       = occur []
 sequenceE (e ∷ es) = e >>=E λ a → mapE (a ∷_) (sequenceE es)

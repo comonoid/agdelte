@@ -63,10 +63,11 @@ touchBufferCmd = touchBuffer
 ------------------------------------------------------------------------
 
 -- Check if buffer content changed (for reactive updates)
--- Compares both buffer ID (same buffer) and version (content changed)
+-- Compares both buffer ID (same buffer) and version strictly increased
 bufferChanged : BufferHandle → BufferHandle → Bool
 bufferChanged old new =
-  (bufferId old ≡ᵇ bufferId new) ∧ not (bufferVersion old ≡ᵇ bufferVersion new)
+  (bufferId old ≡ᵇ bufferId new) ∧ (bufferVersion old <ᵇ bufferVersion new)
+  where open import Data.Nat using (_<ᵇ_)
 
 -- Get image buffer size in bytes (RGBA, 4 bytes per pixel)
 imageBufferSize : BufferHandle → ℕ

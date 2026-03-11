@@ -19,6 +19,10 @@
 -- The primary API (Event/Cmd AST) is already pure and safe; these exist
 -- only as low-level escape hatches.
 --
+-- KNOWN LIMITATION: consoleLog etc. are pure postulates with side effects.
+-- A future JS backend with CSE/DCE could deduplicate or eliminate calls.
+-- For safety, use IO-wrapped versions in production.
+--
 -- Additionally, ⊤-returning functions return raw `null` instead of the
 -- Scott-encoded `(cases) => cases["tt"]()`. This works because the result
 -- is always discarded (⊤ is never pattern-matched in practice).

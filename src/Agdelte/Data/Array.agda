@@ -126,6 +126,7 @@ postulate
   append : ∀ {A : Set} → Array A → Array A → Array A
 
   -- Update at index (O(n) copy)
+  -- NOTE: out-of-bounds index is a silent no-op (returns array unchanged).
   update : ∀ {A : Set} → ℕ → A → Array A → Array A
 
   -- Slice: subarray from start to end (exclusive)

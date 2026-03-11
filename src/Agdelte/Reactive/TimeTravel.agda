@@ -52,27 +52,38 @@ pushState h newState = mkHistory
   []           -- any new action clears redo stack
   (maxSize h)
   where
-    trimPast : ∀ {S} → List S → List S
-    trimPast {S} xs with maxSize h
+    trimPast : List _ → List _
+    trimPast xs with maxSize h
     ... | nothing = xs
     ... | just n  = take n xs
       where
-        take : Nat → List S → List S
+        take : Nat → List _ → List _
         take zero    _        = []
         take (suc _) []       = []
         take (suc m) (x ∷ rest) = x ∷ take m rest
+
+-- Trim a list to at most n elements (shared by past and future)
+private
+  trimList : ∀ {S : Set} → Maybe Nat → List S → List S
+  trimList nothing  xs = xs
+  trimList (just n) xs = take' n xs
+    where
+      take' : Nat → List _ → List _
+      take' zero    _          = []
+      take' (suc _) []         = []
+      take' (suc m) (x ∷ rest) = x ∷ take' m rest
 
 -- Undo: move present to future, pop past
 undo : ∀ {S} → History S → History S
 undo h with past h
 ... | []       = h  -- nothing to undo
-... | (p ∷ ps) = mkHistory ps p (present h ∷ future h) (maxSize h)
+... | (p ∷ ps) = mkHistory ps p (trimList (maxSize h) (present h ∷ future h)) (maxSize h)
 
 -- Redo: move present to past, pop future
 redo : ∀ {S} → History S → History S
 redo h with future h
 ... | []       = h  -- nothing to redo
-... | (f ∷ fs) = mkHistory (present h ∷ past h) f fs (maxSize h)
+... | (f ∷ fs) = mkHistory (trimList (maxSize h) (present h ∷ past h)) f fs (maxSize h)
 
 -- Create initial history (nothing = unlimited, just n = keep at most n)
 initHistory : ∀ {S} → S → Maybe Nat → History S
@@ -118,3 +129,18 @@ ttUpdate : ∀ {Model Msg : Set} →
 ttUpdate update (appMsg msg) h = pushState h (update msg (present h))
 ttUpdate _      ttUndo       h = undo h
 ttUpdate _      ttRedo       h = redo h
+
+------------------------------------------------------------------------
+-- Time-travel Cmd wrapper
+------------------------------------------------------------------------
+
+open import Agdelte.Core.Cmd as Cmd using (Cmd; mapCmd)
+
+-- Wrap cmd to handle TTMsg: app messages delegate to the wrapped cmd,
+-- undo/redo produce no side effects (Cmd.ε).
+ttCmd : ∀ {Model Msg : Set} →
+        (Msg → Model → Cmd Msg) →
+        TTMsg Msg → History Model → Cmd (TTMsg Msg)
+ttCmd cmd (appMsg msg) h = mapCmd appMsg (cmd msg (present h))
+ttCmd _   ttUndo       _ = Cmd.ε
+ttCmd _   ttRedo       _ = Cmd.ε

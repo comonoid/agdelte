@@ -21,8 +21,9 @@ open import Data.Maybe using (Maybe; just; nothing)
 
 open import Data.String using (_++_)
 open import Agdelte.FFI.Server using
-  ( _>>=_; _>>_; pure; putStrLn
+  ( _>>=_; _>>_; pure; putStrLn; bracket; onException
   ; IORef; newIORef; readIORef; writeIORef
+  ; MVar; newMVar; takeMVar; putMVar
   )
 open import Agdelte.Reactive.BigLens using (IOOptic; mkIOOptic; ioPeek; ioOver)
 open import Agdelte.Reactive.Diagram using (Diagram; Slot; slots; name; path; agent)
@@ -76,19 +77,24 @@ slotSnapshotOptic s =
   mkIOOptic (pure (just (observe a (state a))))
             (λ input → pure (just (observe a (step a (state a) input))))
 
--- Stateful optic: tracks agent state across steps via IORef.
+-- Stateful optic: tracks agent state across steps via MVar.
 -- Unlike slotSnapshotOptic (which always steps from initial state),
--- this persists state: each ioOver mutates the IORef.
+-- this persists state: each ioOver mutates the state under MVar lock.
+-- MVar prevents data races when multiple threads peek/step concurrently.
 slotStatefulOptic : Slot → IO IOOptic
 slotStatefulOptic s =
   let a = agent s in
-  newIORef (state a) >>= λ ref →
+  newMVar (state a) >>= λ mv →
   pure (mkIOOptic
-    (readIORef ref >>= λ st → pure (just (observe a st)))
-    (λ input → readIORef ref >>= λ st →
-      let newSt = step a st input
-      in writeIORef ref newSt >>
-         pure (just (observe a newSt))))
+    (bracket (takeMVar mv) (putMVar mv)
+             (λ st → pure (just (observe a st))))
+    (λ input →
+      takeMVar mv >>= λ st →
+      onException
+        (let newSt = step a st input
+         in putMVar mv newSt >>
+            pure (just (observe a newSt)))
+        (putMVar mv st)))
 
 -- Collect all slot optics from a diagram (initial state)
 diagramInitialOptics : Diagram → List (String × IOOptic)

@@ -10,6 +10,7 @@ module Agdelte.WebSocket
 
 import Control.Exception (SomeException, catch)
 import Data.Text (Text)
+import System.IO (hPutStrLn, stderr)
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Encoding as TLE
 import qualified Network.WebSockets as WS
@@ -37,7 +38,9 @@ wsReceive conn = wsReceive' conn (100 :: Int)
 
 wsReceive' :: WsConn -> Int -> IO (Maybe WsMessage)
 wsReceive' (WsConn conn) remaining
-  | remaining <= 0 = return (Just WsClose)  -- too many binary frames, treat as close
+  | remaining <= 0 = do
+      hPutStrLn stderr "wsReceive: 100 consecutive binary frames skipped, resetting"
+      wsReceive' (WsConn conn) (100 :: Int)  -- reset counter, keep connection alive
   | otherwise =
       (do dm <- WS.receiveDataMessage conn
           case dm of

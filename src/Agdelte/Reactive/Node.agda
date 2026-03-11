@@ -305,7 +305,7 @@ record ReactiveApp (Model Msg : Set) : Set where
     init     : Model
     update   : Msg → Model → Model
     template : Node Model Msg        -- NOT a function! Structure with bindings
-    cmd      : Msg → Model → Cmd Msg -- Side effects; receives PRE-update model
+    cmd      : Msg → Model → Cmd Msg -- Side effects; receives POST-update model
     subs     : Model → Event Msg     -- Subscriptions (timers, keyboard, etc.)
 
 open ReactiveApp public
@@ -337,32 +337,38 @@ zoomAttr get wrap (style name val) = style name val
 zoomAttr get wrap (styleBind name b) = styleBind name (focusBinding get b)
 
 -- Internal: remap node without adding scope wrapper (used by zoomNode)
--- Morally structurally recursive on the Node argument:
---   • foreach/foreachKeyed use zoomRT to defer (no recursion into render)
---   • elem recurses via map over children (structural, but Agda can't
---     see through map — hence TERMINATING is still needed)
-{-# TERMINATING #-}
-zoomNode' : ∀ {M M' Msg Msg'} → (M → M') → (Msg' → Msg) → Node M' Msg' → Node M Msg
-zoomNode' get wrap (text s) = text s
-zoomNode' get wrap (bind b) = bind (focusBinding get b)
-zoomNode' get wrap (elem tag attrs children) =
-  elem tag (map (zoomAttr get wrap) attrs) (map (zoomNode' get wrap) children)
-zoomNode' get wrap empty = empty
-zoomNode' get wrap (when cond node) = when (cond ∘ get) (zoomNode' get wrap node)
-zoomNode' get wrap (foreach {A} getList render) =
-  foreach (getList ∘ get) (λ a i → zoomRT get wrap (render a i))
-zoomNode' get wrap (foreachKeyed {A} getList keyFn render) =
-  foreachKeyed (getList ∘ get) keyFn (λ a i → zoomRT get wrap (render a i))
-zoomNode' get wrap (whenT cond trans node) =
-  whenT (cond ∘ get) trans (zoomNode' get wrap node)
-zoomNode' get wrap (scope fp node) =
-  scope (fp ∘ get) (zoomNode' get wrap node)
-zoomNode' get wrap (scopeProj proj node) =
-  scopeProj (proj ∘ get) (zoomNode' get wrap node)
-zoomNode' get wrap (zoomRT get' wrap' inner) =
-  zoomRT (get' ∘ get) (wrap ∘ wrap') inner
-zoomNode' get wrap (glCanvas attrs scene) =
-  glCanvas (map (zoomAttr get wrap) attrs) scene
+-- Uses mutual recursion (zoomNode'/zoomNodes'/zoomAttrs') so Agda can see
+-- structural recursion through list traversals, avoiding TERMINATING.
+mutual
+  zoomNode' : ∀ {M M' Msg Msg'} → (M → M') → (Msg' → Msg) → Node M' Msg' → Node M Msg
+  zoomNode' get wrap (text s) = text s
+  zoomNode' get wrap (bind b) = bind (focusBinding get b)
+  zoomNode' get wrap (elem tag attrs children) =
+    elem tag (zoomAttrs' get wrap attrs) (zoomNodes' get wrap children)
+  zoomNode' get wrap empty = empty
+  zoomNode' get wrap (when cond node) = when (cond ∘ get) (zoomNode' get wrap node)
+  zoomNode' get wrap (foreach {A} getList render) =
+    foreach (getList ∘ get) (λ a i → zoomRT get wrap (render a i))
+  zoomNode' get wrap (foreachKeyed {A} getList keyFn render) =
+    foreachKeyed (getList ∘ get) keyFn (λ a i → zoomRT get wrap (render a i))
+  zoomNode' get wrap (whenT cond trans node) =
+    whenT (cond ∘ get) trans (zoomNode' get wrap node)
+  zoomNode' get wrap (scope fp node) =
+    scope (fp ∘ get) (zoomNode' get wrap node)
+  zoomNode' get wrap (scopeProj proj node) =
+    scopeProj (proj ∘ get) (zoomNode' get wrap node)
+  zoomNode' get wrap (zoomRT get' wrap' inner) =
+    zoomRT (get' ∘ get) (wrap ∘ wrap') inner
+  zoomNode' get wrap (glCanvas attrs scene) =
+    glCanvas (zoomAttrs' get wrap attrs) scene
+
+  zoomNodes' : ∀ {M M' Msg Msg'} → (M → M') → (Msg' → Msg) → List (Node M' Msg') → List (Node M Msg)
+  zoomNodes' get wrap [] = []
+  zoomNodes' get wrap (n ∷ ns) = zoomNode' get wrap n ∷ zoomNodes' get wrap ns
+
+  zoomAttrs' : ∀ {M M' Msg Msg'} → (M → M') → (Msg' → Msg) → List (Attr M' Msg') → List (Attr M Msg)
+  zoomAttrs' get wrap [] = []
+  zoomAttrs' get wrap (a ∷ as) = zoomAttr get wrap a ∷ zoomAttrs' get wrap as
 
 -- Transform node: remap model/message AND wrap in automatic scopeProj cutoff.
 -- Every zoomNode call gets free subtree-skipping via deepEqual.

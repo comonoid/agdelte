@@ -71,26 +71,25 @@ data Task (A : Set) : Set where
 ------------------------------------------------------------------------
 
 -- bind (>>=)
--- Errors are terminal: onErr is replaced by `fail` so the error message
--- propagates but the error handler's continuation is not threaded through f.
--- This allows type-changing binds (Task A >>= (A → Task B) → Task B).
--- For errors as recovery paths (flowing downstream), use _>>=ₑ_ instead.
+-- Error-terminal: on HTTP failure, the error handler does NOT continue through f.
+-- This is the expected default — errors stop the pipeline.
 _>>=_ : Task A → (A → Task B) → Task B
 pure a >>= f = f a
 fail e >>= f = fail e
 httpGet url onOk onErr >>= f = httpGet url (λ s → onOk s >>= f) (λ e → fail e)
 httpPost url body onOk onErr >>= f = httpPost url body (λ s → onOk s >>= f) (λ e → fail e)
 
-infixl 1 _>>=_ _>>=ₑ_
+infixl 1 _>>=_ _>>=+_
 
--- bind with error-as-recovery (errors flow downstream into f).
--- Use this when error handlers should produce intermediate values
--- that continue the computation rather than terminating.
-_>>=ₑ_ : Task A → (A → Task B) → Task B
-pure a >>=ₑ f = f a
-fail e >>=ₑ f = fail e
-httpGet url onOk onErr >>=ₑ f = httpGet url (λ s → onOk s >>=ₑ f) (λ e → onErr e >>=ₑ f)
-httpPost url body onOk onErr >>=ₑ f = httpPost url body (λ s → onOk s >>=ₑ f) (λ e → onErr e >>=ₑ f)
+-- bind with error-preserving semantics: onErr is threaded through f, so
+-- side effects in error handlers (logging, cleanup) execute on failure
+-- and the result continues through the pipeline.
+-- Use when you need error recovery with continuation.
+_>>=+_ : Task A → (A → Task B) → Task B
+pure a >>=+ f = f a
+fail e >>=+ f = fail e
+httpGet url onOk onErr >>=+ f = httpGet url (λ s → onOk s >>=+ f) (λ e → onErr e >>=+ f)
+httpPost url body onOk onErr >>=+ f = httpPost url body (λ s → onOk s >>=+ f) (λ e → onErr e >>=+ f)
 
 -- fmap (<$>)
 _<$>_ : (A → B) → Task A → Task B
@@ -120,35 +119,26 @@ httpPost′ url body = httpPost url body pure fail
 -- Error handling
 ------------------------------------------------------------------------
 
--- | Alternative combinator: try first task, on error run second.
--- WARNING: replaces the error handler of the first task entirely.
--- The original onErr is discarded — side effects in it (logging,
--- cleanup) will NOT execute on failure. To preserve side effects,
--- use `recover` or manual error handling instead.
-_<|>_ : Task A → Task A → Task A
-pure a <|> _ = pure a
-fail _ <|> t₂ = t₂
-httpGet url onOk onErr <|> t₂ = httpGet url onOk (λ _ → t₂)
-httpPost url body onOk onErr <|> t₂ = httpPost url body onOk (λ _ → t₂)
-
-infixl 3 _<|>_ _<|>!_
-
--- | Error-propagating sequence: run first task for its effects,
--- then continue with second regardless of success/failure.
-_>>ₑ_ : Task A → Task B → Task B
-ta >>ₑ tb = ta >>=ₑ λ _ → tb
-
-infixl 1 _>>ₑ_
-
 -- | Alternative with side-effect preservation: on error, run original
 -- onErr for its effects, THEN continue with the fallback task.
 -- The result of onErr is discarded (only t₂'s result matters).
--- Note: if onErr itself returns `fail`, t₂ still runs (via >>ₑ).
+-- Uses _>>=+_ so error handler side effects propagate through to t₂.
+_<|>_ : Task A → Task A → Task A
+pure a <|> _ = pure a
+fail _ <|> t₂ = t₂
+httpGet url onOk onErr <|> t₂ = httpGet url onOk (λ e → onErr e >>=+ λ _ → t₂)
+httpPost url body onOk onErr <|> t₂ = httpPost url body onOk (λ e → onErr e >>=+ λ _ → t₂)
+
+infixl 3 _<|>_ _<|>!_
+
+-- | Error-dropping alternative: replaces onErr entirely with fallback.
+-- Side effects in the original error handler will NOT execute.
+-- Use the default _<|>_ if you need error handler preservation.
 _<|>!_ : Task A → Task A → Task A
 pure a <|>! _ = pure a
 fail _ <|>! t₂ = t₂
-httpGet url onOk onErr <|>! t₂ = httpGet url onOk (λ e → onErr e >>ₑ t₂)
-httpPost url body onOk onErr <|>! t₂ = httpPost url body onOk (λ e → onErr e >>ₑ t₂)
+httpGet url onOk onErr <|>! t₂ = httpGet url onOk (λ _ → t₂)
+httpPost url body onOk onErr <|>! t₂ = httpPost url body onOk (λ _ → t₂)
 
 -- | Recover from immediate failures. Converts `fail e` and HTTP
 -- error callbacks to `pure (f e)`. Does NOT affect nested failures

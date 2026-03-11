@@ -18,7 +18,7 @@ open import Agda.Builtin.String using (String)
 
 open import Agdelte.FFI.Server as Raw
   using (IpcHandle; connectProcess; queryProcess; stepProcess; closeProcess)
-open import Agdelte.FFI.Server using (_>>=_; _>>_; pure)
+open import Agdelte.FFI.Server using (_>>=_; _>>_; pure; bracket)
 
 ------------------------------------------------------------------------
 -- Connection state
@@ -65,18 +65,19 @@ close (mkHandle h) = closeProcess h >> pure closedHandle
 ------------------------------------------------------------------------
 
 -- A safe query-then-close sequence.
--- Type-level guarantee: handle is closed exactly once.
+-- bracket ensures handle is closed even if query throws.
 queryAndClose : String → IO String
 queryAndClose path =
-  connect path >>= λ h →
-  query h      >>= λ result →
-  close h      >>
-  pure result
+  bracket (connect path)
+          (λ h → close h >> pure tt)
+          query
+  where open import Agda.Builtin.Unit using (tt)
 
 -- A safe step-then-close sequence.
+-- bracket ensures handle is closed even if step throws.
 stepAndClose : String → String → IO String
 stepAndClose path input =
-  connect path    >>= λ h →
-  step h input    >>= λ result →
-  close h         >>
-  pure result
+  bracket (connect path)
+          (λ h → close h >> pure tt)
+          (λ h → step h input)
+  where open import Agda.Builtin.Unit using (tt)
