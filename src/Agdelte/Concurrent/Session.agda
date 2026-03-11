@@ -43,7 +43,6 @@ open import Agdelte.Concurrent.Wiring
 -- send : (A : Set) → ...), which requires Set₁. Universe-polymorphic
 -- encoding is possible but would infect every module with level arguments.
 
-{-# NO_UNIVERSE_CHECK #-}
 data Session : Set₁ where
   send   : (A : Set) → Session → Session
   recv   : (A : Set) → Session → Session

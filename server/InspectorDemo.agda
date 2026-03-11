@@ -56,26 +56,30 @@ bangAgent = mkAgent "" (λ s → s) (λ _ i → i ++s "!")
 ------------------------------------------------------------------------
 
 -- 1. Single-agent
+counterSpec : DiagramSpec
+counterSpec = singleAgent "counter" "/counter" counterAgent
+
 counterDiagram : Diagram
-counterDiagram = singleAgent "counter" "/counter" counterAgent 3001
+counterDiagram = deploy counterSpec 3001
 
 -- 2. Dual-agent
 dualDiagram : Diagram
-dualDiagram = dualAgent
+dualDiagram = deploy (dualAgent
   "counter" "/counter" counterAgent
-  "echo"    "/echo"    echoAgent
-  3002
+  "echo"    "/echo"    echoAgent) 3002
 
 -- 3. Pipeline: echo output feeds into bang
-pipelineDiagram : Diagram
-pipelineDiagram = pipeline
+pipelineSpec : DiagramSpec
+pipelineSpec = pipeline
   "echo" "/echo" echoAgent
   "bang" "/bang" bangAgent
-  3003
+
+pipelineDiagram : Diagram
+pipelineDiagram = deploy pipelineSpec 3003
 
 -- 4. Merged: counter ⊕ pipeline
 mergedDiagram : Diagram
-mergedDiagram = (counterDiagram ⊕D pipelineDiagram) 3004
+mergedDiagram = deploy (counterSpec ⊕D pipelineSpec) 3004
 
 ------------------------------------------------------------------------
 -- Helpers

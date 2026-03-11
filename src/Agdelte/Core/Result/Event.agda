@@ -33,5 +33,10 @@ filterErr = mapFilterE λ where
 -- Acceptable for httpGet/httpPost results (low-frequency), but could be
 -- an issue for high-frequency events. A native partition constructor
 -- with a single runtime subscription would eliminate the duplication.
+--
+-- For high-frequency events, prefer using mapFilterE with a single handler:
+--   handleResult : Event (Result E A) → Event Msg
+--   handleResult e = mapFilterE (λ { (ok a) → just (GotOk a)
+--                                   ; (err e) → just (GotErr e) }) e
 partitionResult : Event (Result E A) → Event A × Event E
 partitionResult e = (filterOk e , filterErr e)

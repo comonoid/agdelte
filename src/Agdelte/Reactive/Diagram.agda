@@ -72,59 +72,75 @@ open Slot public
 --   1. Wire each slot's Agent to the HTTP server
 --   2. Set up connection routing on each step
 --   3. Register client routes for incoming WS messages
-record Diagram : Set₁ where
-  constructor mkDiagram
+-- DiagramSpec: topology without deployment details (port).
+-- This is the composable unit — combinators work on DiagramSpec.
+record DiagramSpec : Set₁ where
+  constructor mkDiagramSpec
   field
     slots       : List Slot
     connections : List Connection
-    port        : Nat
 
-open Diagram public
+open DiagramSpec public
+
+-- Diagram: topology + deployment config (port).
+-- Created from DiagramSpec at deployment time.
+record Diagram : Set₁ where
+  constructor mkDiagram
+  field
+    spec : DiagramSpec
+    port : Nat
+
+-- spec is hidden to avoid clash with DiagramSpec fields; use Diagram.spec d
+open Diagram public hiding (spec)
 
 ------------------------------------------------------------------------
 -- Smart constructors
 ------------------------------------------------------------------------
 
 -- Single agent, broadcast to all clients (most common pattern)
-singleAgent : String → String → ∀ {S} → Agent S String String → Nat → Diagram
-singleAgent n p a pt = mkDiagram
+singleAgent : String → String → ∀ {S} → Agent S String String → DiagramSpec
+singleAgent n p a = mkDiagramSpec
   (mkSlot n p a ∷ [])
   (broadcast n ∷ clientRoute n ∷ [])
-  pt
 
 -- Two independent agents, both broadcast, clients route to either
 dualAgent : String → String → ∀ {S₁} → Agent S₁ String String →
             String → String → ∀ {S₂} → Agent S₂ String String →
-            Nat → Diagram
-dualAgent n₁ p₁ a₁ n₂ p₂ a₂ pt = mkDiagram
+            DiagramSpec
+dualAgent n₁ p₁ a₁ n₂ p₂ a₂ = mkDiagramSpec
   (mkSlot n₁ p₁ a₁ ∷ mkSlot n₂ p₂ a₂ ∷ [])
   (broadcast n₁ ∷ broadcast n₂ ∷ clientRoute n₁ ∷ clientRoute n₂ ∷ [])
-  pt
 
 -- Pipeline: output of first agent feeds input of second
 pipeline : String → String → ∀ {S₁} → Agent S₁ String String →
            String → String → ∀ {S₂} → Agent S₂ String String →
-           Nat → Diagram
-pipeline n₁ p₁ a₁ n₂ p₂ a₂ pt = mkDiagram
+           DiagramSpec
+pipeline n₁ p₁ a₁ n₂ p₂ a₂ = mkDiagramSpec
   (mkSlot n₁ p₁ a₁ ∷ mkSlot n₂ p₂ a₂ ∷ [])
   (agentPipe n₁ n₂ ∷ broadcast n₂ ∷ clientRoute n₁ ∷ [])
-  pt
+
+-- Deploy a DiagramSpec on a specific port
+deploy : DiagramSpec → Nat → Diagram
+deploy ds pt = mkDiagram ds pt
 
 ------------------------------------------------------------------------
--- Diagram combinators
+-- DiagramSpec combinators
 ------------------------------------------------------------------------
 
--- Merge two diagrams (union of slots and connections)
-_⊕D_ : Diagram → Diagram → Nat → Diagram
-(d₁ ⊕D d₂) pt = mkDiagram
+-- Merge two diagram specs (union of slots and connections)
+_⊕D_ : DiagramSpec → DiagramSpec → DiagramSpec
+d₁ ⊕D d₂ = mkDiagramSpec
   (slots d₁ ++ slots d₂)
   (connections d₁ ++ connections d₂)
-  pt
   where open Data.List using (_++_)
 
--- Add a connection to a diagram
+-- Add a connection to a diagram spec
+wireSpec : Connection → DiagramSpec → DiagramSpec
+wireSpec c d = mkDiagramSpec (slots d) (c ∷ connections d)
+
+-- Add a connection to a deployed diagram
 wire : Connection → Diagram → Diagram
-wire c d = mkDiagram (slots d) (c ∷ connections d) (port d)
+wire c d = mkDiagram (mkDiagramSpec (slots (Diagram.spec d)) (c ∷ connections (Diagram.spec d))) (port d)
 
 ------------------------------------------------------------------------
 -- IO: interpret diagram into running server
@@ -159,6 +175,10 @@ wireSlots (s ∷ ss) =
 runDiagram : Diagram → IO ⊤
 runDiagram d =
   putStrLn "Starting Diagram Server..." >>
-  wireSlots (slots d) >>= λ defs →
+  wireSlots (slots (Diagram.spec d)) >>= λ defs →
   runAgentServerN (port d) defs
+
+-- Run a DiagramSpec directly on a given port
+runDiagramSpec : Nat → DiagramSpec → IO ⊤
+runDiagramSpec pt ds = runDiagram (deploy ds pt)
 

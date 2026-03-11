@@ -23,7 +23,7 @@ open import Agdelte.Html.Controls.Util using (eqStr)
 -- Accordion item definition
 ------------------------------------------------------------------------
 
-record AccordionItem (M : Set) (A : Set) : Set₁ where
+record AccordionItem (M : Set) (A : Set) : Set where
   constructor mkAccordionItem
   field
     itemTitle   : String

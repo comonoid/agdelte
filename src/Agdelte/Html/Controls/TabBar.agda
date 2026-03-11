@@ -19,7 +19,7 @@ open import Agdelte.Html.Controls.Util using (eqStr)
 -- Tab record: label + content
 ------------------------------------------------------------------------
 
-record Tab (M : Set) (A : Set) : Set₁ where
+record Tab (M : Set) (A : Set) : Set where
   constructor mkTab
   field
     tabLabel   : String

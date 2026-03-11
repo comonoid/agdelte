@@ -535,8 +535,12 @@ infixl 1 _>>=E_
 _>>=E_ : Event A → (A → Event B) → Event B
 e >>=E f = switchE never (mapE f e)
 
--- Sequential execution of one-shot events, collecting results in order
+-- | Sequential execution of ONE-SHOT events, collecting results in order.
 -- sequence [e₁, e₂, e₃] fires e₁, then e₂, then e₃, dispatches [r₁, r₂, r₃]
+-- IMPORTANT: Only correct for events that fire exactly once (timeout, httpGet,
+-- worker). For repeated events (interval, onKeyDown), each new firing of an
+-- earlier event DISCARDS all progress from subsequent events via switchE.
+-- Use `parallel` for collecting results from repeated event sources.
 sequenceE : List (Event A) → Event (List A)
 sequenceE []       = occur []
 sequenceE (e ∷ es) = e >>=E λ a → mapE (a ∷_) (sequenceE es)

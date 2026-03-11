@@ -21,7 +21,7 @@ open import Agdelte.Html.Controls.Util using (case_of_)
 -- Column definition
 ------------------------------------------------------------------------
 
-record Column (R : Set) (M : Set) (A : Set) : Set₁ where
+record Column (R : Set) (M : Set) (A : Set) : Set where
   constructor mkColumn
   field
     colHeader : String
@@ -34,7 +34,7 @@ open Column public
 -- Grid configuration
 ------------------------------------------------------------------------
 
-record GridConfig (R : Set) (M : Set) (A : Set) : Set₁ where
+record GridConfig (R : Set) (M : Set) (A : Set) : Set where
   constructor mkGridConfig
   field
     columns    : List (Column R M A)

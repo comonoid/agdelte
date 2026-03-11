@@ -31,13 +31,13 @@ data HttpError : Set where
   parseError   : String → HttpError
 
 showHttpError : HttpError → String
-showHttpError (networkError msg) = "Network error: " Data.String.++ msg
-  where open import Data.String
-showHttpError (httpStatus code msg) = "HTTP " Data.String.++ code Data.String.++ ": " Data.String.++ msg
-  where open import Data.String
+showHttpError (networkError msg) = "Network error: " ++ msg
+  where open import Data.String using (_++_)
+showHttpError (httpStatus code msg) = "HTTP " ++ code ++ ": " ++ msg
+  where open import Data.String using (_++_)
 showHttpError timeout = "Request timeout"
-showHttpError (parseError msg) = "Parse error: " Data.String.++ msg
-  where open import Data.String
+showHttpError (parseError msg) = "Parse error: " ++ msg
+  where open import Data.String using (_++_)
 
 ------------------------------------------------------------------------
 -- Task — monad of asynchronous operations (CPS-style)
@@ -129,7 +129,24 @@ fail _ <|> t₂ = t₂
 httpGet url onOk onErr <|> t₂ = httpGet url onOk (λ _ → t₂)
 httpPost url body onOk onErr <|> t₂ = httpPost url body onOk (λ _ → t₂)
 
-infixl 3 _<|>_
+infixl 3 _<|>_ _<|>!_
+
+-- | Error-propagating sequence: run first task for its effects,
+-- then continue with second regardless of success/failure.
+_>>ₑ_ : Task A → Task B → Task B
+ta >>ₑ tb = ta >>=ₑ λ _ → tb
+
+infixl 1 _>>ₑ_
+
+-- | Alternative with side-effect preservation: on error, run original
+-- onErr for its effects, THEN continue with the fallback task.
+-- The result of onErr is discarded (only t₂'s result matters).
+-- Note: if onErr itself returns `fail`, t₂ still runs (via >>ₑ).
+_<|>!_ : Task A → Task A → Task A
+pure a <|>! _ = pure a
+fail _ <|>! t₂ = t₂
+httpGet url onOk onErr <|>! t₂ = httpGet url onOk (λ e → onErr e >>ₑ t₂)
+httpPost url body onOk onErr <|>! t₂ = httpPost url body onOk (λ e → onErr e >>ₑ t₂)
 
 -- | Recover from immediate failures. Converts `fail e` and HTTP
 -- error callbacks to `pure (f e)`. Does NOT affect nested failures

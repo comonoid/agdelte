@@ -12,7 +12,7 @@ open import Data.Nat using (ℕ; _*_; _≡ᵇ_)
 open import Data.Bool using (Bool; not; _∧_)
 open import Data.String using (String)
 
-open import Agdelte.Core.Event using (Event; BufferHandle; bufferHandle; allocImage; allocBuffer)
+open import Agdelte.Core.Event using (Event; allocImage; allocBuffer)
 open import Agdelte.Core.Cmd using (Cmd; freeBuffer; touchBuffer)
 
 ------------------------------------------------------------------------

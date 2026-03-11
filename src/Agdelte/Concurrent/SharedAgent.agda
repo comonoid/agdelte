@@ -51,6 +51,7 @@ open SharedAgent public
 -- linear types, so nothing prevents calling useLinear multiple times
 -- on the same value. The restricted API (useLinear returns O, not
 -- LinearAgent × O) discourages reuse, but does not prevent it.
+-- TODO: Revisit when/if Agda gets linearity support.
 record LinearAgent (I O : Set) : Set₁ where
   constructor mkLinear
   field

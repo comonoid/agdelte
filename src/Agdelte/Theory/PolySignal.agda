@@ -77,5 +77,3 @@ next (unfoldSignal {S} {A} obs step s) = unfoldSignal {S} {A} obs step (step s)
 -- Any coalgebra SignalPoly A unfolds into Signal A
 coalgToSignal : ∀ {A} → (c : Coalg (SignalPoly A)) → State c → Signal A
 coalgToSignal {A} c s₀ = unfoldSignal {State c} {A} (observe c) (λ s → update c s tt) s₀
-
-

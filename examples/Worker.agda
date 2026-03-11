@@ -24,8 +24,8 @@ open import Agdelte.Reactive.Node
 
 data Status : Set where
   Idle       : Status
-  Computing  : Status
-  Result     : String → Status
+  Computing  : ℕ → Status       -- stores N being computed
+  Result     : ℕ → String → Status  -- stores N that was computed + result
   Error      : String → Status
 
 record Model : Set where
@@ -63,10 +63,15 @@ updateModel Decrement m = record m { fibInput = pred (fibInput m) }
     pred zero    = zero
     pred (suc n) = n
 updateModel Compute m = record m
-  { status = Computing
+  { status = Computing (fibInput m)
   ; computeCount = suc (computeCount m)
   }
-updateModel (GotResult s) m = record m { status = Result s }
+updateModel (GotResult s) m = record m { status = Result (computedN m) s }
+  where
+    computedN : Model → ℕ
+    computedN m' with status m'
+    ... | Computing n = n
+    ... | _           = fibInput m'
 updateModel (GotError e) m = record m { status = Error e }
 
 ------------------------------------------------------------------------
@@ -75,17 +80,14 @@ updateModel (GotError e) m = record m { status = Error e }
 
 isComputing : Model → Bool
 isComputing m with status m
-... | Computing = true
+... | Computing _ = true
 ... | _ = false
 
 statusText : Model → String
 statusText m with status m
 ... | Idle = "Ready. Click Compute to start."
-... | Computing = "Computing in Web Worker..."
--- NOTE: fibInput may have changed while the worker was computing,
--- so the displayed N might not match the actual argument that was computed.
--- This is inherent to the async design — the worker receives N at dispatch time.
-... | Result s = "fib(" ++ show (fibInput m) ++ ") = " ++ s
+... | Computing n = "Computing fib(" ++ show n ++ ") in Web Worker..."
+... | Result n s = "fib(" ++ show n ++ ") = " ++ s
 ... | Error e = "Error: " ++ e
 
 inputText : Model → String
@@ -124,9 +126,9 @@ workerTemplate =
 
 subs' : Model → Event Msg
 subs' m with status m
-... | Computing = worker
+... | Computing n = worker
     "/runtime/workers/fibonacci.js"
-    (show (fibInput m))
+    (show n)
     GotResult
     GotError
 ... | _ = never

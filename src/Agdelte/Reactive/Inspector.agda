@@ -79,7 +79,7 @@ slotInitialOptic s =
 
 -- Collect all slot optics from a diagram (initial state)
 diagramInitialOptics : Diagram → List (String × IOOptic)
-diagramInitialOptics d = go (slots d)
+diagramInitialOptics d = go (slots (Diagram.spec d))
   where
     go : List Slot → List (String × IOOptic)
     go [] = []
@@ -89,7 +89,7 @@ diagramInitialOptics d = go (slots d)
 inspectInitial : Diagram → IO ⊤
 inspectInitial d =
   putStrLn "=== Network Inspector (initial state) ===" >>
-  putStrLn ("Agents: " ++ showCount (slots d)) >>
+  putStrLn ("Agents: " ++ showCount (slots (Diagram.spec d))) >>
   inspectAll (diagramInitialOptics d) >>
   putStrLn "========================="
   where
@@ -105,8 +105,6 @@ inspectInitial d =
 ------------------------------------------------------------------------
 -- Inspect live state via IORef (for running servers)
 ------------------------------------------------------------------------
-
-open import Agdelte.FFI.Server using (IORef)
 
 -- Build IOOptic from a live IORef (created by wireSlot/wireAgent)
 slotRefOptic : String → IORef String → String × IOOptic

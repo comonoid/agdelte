@@ -151,7 +151,7 @@ postulate
 -- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
 {-# COMPILE JS numeric = function(s) {
   const nil = (cases) => cases['[]']();
-  if (/^\d*$/.test(s)) return nil;
+  if (/^\d+$/.test(s)) return nil;
   const e = (cb) => cb["mkError"]("", "Must contain only digits");
   return (cases) => cases['_∷_'](e, nil);
 } #-}
@@ -159,7 +159,7 @@ postulate
 -- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
 {-# COMPILE JS alphanumeric = function(s) {
   const nil = (cases) => cases['[]']();
-  if (/^[a-zA-Z0-9]*$/.test(s)) return nil;
+  if (/^[a-zA-Z0-9]+$/.test(s)) return nil;
   const e = (cb) => cb["mkError"]("", "Must be alphanumeric");
   return (cases) => cases['_∷_'](e, nil);
 } #-}
@@ -293,9 +293,9 @@ record FormField (A : Set) : Set where
 
 open FormField public
 
--- Create new field (runs validator on initial value)
+-- Create new field (errors are empty until touched)
 newField : ∀ {A : Set} → String → A → Validator A → FormField A
-newField name value validator = mkField name value validator false (validator value)
+newField name value validator = mkField name value validator false []
 
 -- Update field value and revalidate
 updateField : ∀ {A : Set} → A → FormField A → FormField A

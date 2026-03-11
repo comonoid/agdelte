@@ -69,13 +69,12 @@ open Transition public
 -- Node: Reactive template structure
 ------------------------------------------------------------------------
 
--- Attr and Node are in Set₁ because constructors like foreach/glCanvas
--- quantify over (A : Set), lifting the data type. This is intentional:
--- we avoid NO_UNIVERSE_CHECK here (unlike Event) to keep universe
--- consistency. The trade-off: ReactiveApp is also Set₁, which may
--- complicate use in level-polymorphic contexts. For the JS backend
--- this is irrelevant (Scott encoding erases levels).
-data Attr (Model Msg : Set) : Set₁ where
+-- NO_UNIVERSE_CHECK: constructors like foreach/foreachKeyed/glCanvas quantify
+-- over (A : Set), which would lift Attr/Node to Set₁. We use NO_UNIVERSE_CHECK
+-- to keep them in Set, consistent with Event's approach. Safe for the JS backend
+-- (Scott encoding erases universe levels).
+{-# NO_UNIVERSE_CHECK #-}
+data Attr (Model Msg : Set) : Set where
   -- Static attribute
   attr : String → String → Attr Model Msg
   -- Dynamic attribute (bound to model)
@@ -94,7 +93,8 @@ data Attr (Model Msg : Set) : Set₁ where
   styleBind : String → Binding Model String → Attr Model Msg
 
 -- Node: the reactive template
-data Node (Model Msg : Set) : Set₁ where
+{-# NO_UNIVERSE_CHECK #-}
+data Node (Model Msg : Set) : Set where
   -- Static text (never changes)
   text : String → Node Model Msg
 
@@ -293,13 +293,13 @@ vmodel get msg = valueBind get ∷ onInput msg ∷ []
 ------------------------------------------------------------------------
 
 -- Full application with commands and subscriptions (The Elm Architecture)
-record ReactiveApp (Model Msg : Set) : Set₁ where
+record ReactiveApp (Model Msg : Set) : Set where
   constructor mkReactiveApp
   field
     init     : Model
     update   : Msg → Model → Model
     template : Node Model Msg        -- NOT a function! Structure with bindings
-    cmd      : Msg → Model → Cmd Msg -- Side effects (HTTP, WebSocket send, etc.)
+    cmd      : Msg → Model → Cmd Msg -- Side effects; receives PRE-update model
     subs     : Model → Event Msg     -- Subscriptions (timers, keyboard, etc.)
 
 open ReactiveApp public

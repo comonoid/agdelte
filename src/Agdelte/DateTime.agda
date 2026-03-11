@@ -254,7 +254,7 @@ postulate
 {-# COMPILE JS format = function(pattern) { return function(d) {
   const pad = (n) => String(n).padStart(2, '0');
   return pattern
-    .replace(/YYYY/g, d.getFullYear())
+    .replace(/YYYY/g, String(d.getFullYear()).padStart(4, '0'))
     .replace(/MM/g, pad(d.getMonth() + 1))
     .replace(/DD/g, pad(d.getDate()))
     .replace(/HH/g, pad(d.getHours()))

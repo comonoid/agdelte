@@ -109,6 +109,31 @@ safePeekStep path input = withIpc path λ h →
 -- indexed IpcHandleL which tracks connection state in the type.
 
 ------------------------------------------------------------------------
+-- SafeQuery: restricted callback that prevents handle aliasing
+------------------------------------------------------------------------
+
+-- SafeQuery restricts what the callback can do: only query and step.
+-- No liftS, no pureS-with-handle — the handle cannot escape the block.
+-- For callbacks that need arbitrary IO, use withIpc instead.
+data SafeQuery (A : Set) : Set where
+  sqQuery : SafeQuery String
+  sqStep  : String → SafeQuery String
+  sqBind  : ∀ {B} → SafeQuery B → (B → SafeQuery A) → SafeQuery A
+  sqPure  : A → SafeQuery A
+
+-- Interpret SafeQuery using a connected handle
+runSafeQuery : ∀ {A} → IpcHandleL Connected → SafeQuery A → IO A
+runSafeQuery h sqQuery       = query h
+runSafeQuery h (sqStep inp)  = step h inp
+runSafeQuery h (sqBind m f)  = runSafeQuery h m >>= λ b → runSafeQuery h (f b)
+runSafeQuery _ (sqPure a)    = pure a
+
+-- withIpc variant that prevents handle aliasing.
+-- The callback can only query/step, not stash the handle via liftS/pureS.
+withIpc' : ∀ {A} → String → (IpcHandleL Connected → SafeQuery A) → SafeIO A
+withIpc' path f = withIpcS path (λ h → liftS (runSafeQuery h (f h)))
+
+------------------------------------------------------------------------
 -- Multiple resources
 ------------------------------------------------------------------------
 

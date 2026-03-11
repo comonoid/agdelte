@@ -830,6 +830,8 @@ view =
 
 cmdHandler : Msg → Model → Cmd Msg
 cmdHandler (AddToast _ _) m =
+  -- INVARIANT: cmd receives PRE-update model (see ReactiveApp.cmd).
+  -- nextToastId m here is the ID just assigned in update, not yet incremented.
   -- Schedule auto-dismiss for the toast we just added
   -- Use user-configured timeout from model
   let timeout = parseℕ (toastTimeoutStr m)

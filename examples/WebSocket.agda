@@ -39,13 +39,12 @@ record Model : Set where
     connStatus    : ConnectionStatus  -- current connection status
     messages      : List ChatMsg
     inputText     : String
-    pendingSend   : String            -- text to send (preserved for cmd after update)
     msgCount      : ℕ
 
 open Model public
 
 initialModel : Model
-initialModel = mkModel false Disconnected [] "" "" zero
+initialModel = mkModel false Disconnected [] "" zero
 
 postulate wsUrl : String
 {-# COMPILE JS wsUrl =
@@ -83,15 +82,12 @@ updateModel (UpdateInput s) m = record m { inputText = s }
 updateModel SendMessage m = record m
   { messages = messages m ++L [ Sent (inputText m) ]
   ; inputText = ""
-  ; pendingSend = inputText m
   }
 
 ------------------------------------------------------------------------
 -- Command
 ------------------------------------------------------------------------
 
--- NOTE: cmd receives the PRE-update model, so pendingSend is stale.
--- Use inputText directly (it hasn't been cleared yet in the pre-update model).
 cmd' : Msg → Model → Cmd Msg
 cmd' SendMessage m with connStatus m
 ... | Connected = wsSend wsUrl (inputText m)

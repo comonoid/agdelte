@@ -10,8 +10,9 @@ module Agdelte.Css.Layout where
 open import Data.List using ([]; _∷_)
 open import Data.String using (String)
 
-open import Agdelte.Css.Decl using (Style; Decl; _∶_; _<>_; singleton)
-open import Agdelte.Css.Length using (Length; showLength)
+open import Agdelte.Css.Decl using (Style; Decl; _∶_; _<>_)
+open import Agdelte.Css.Length using (Length)
+open import Agdelte.Css.Properties using (gap')
 
 ------------------------------------------------------------------------
 -- Flexbox
@@ -23,13 +24,13 @@ row = "display" ∶ "flex" ∷ "flex-direction" ∶ "row" ∷ []
 col : Style
 col = "display" ∶ "flex" ∷ "flex-direction" ∶ "column" ∷ []
 
--- Requires row or col (sets justify-content + align-items without display: flex)
+-- Flex centering (includes display: flex; idempotent when combined with row/col)
 center : Style
-center = "justify-content" ∶ "center" ∷ "align-items" ∶ "center" ∷ []
+center = "display" ∶ "flex" ∷ "justify-content" ∶ "center" ∷ "align-items" ∶ "center" ∷ []
 
--- Requires row or col (sets justify-content + align-items without display: flex)
+-- Flex space-between (includes display: flex; idempotent when combined with row/col)
 spaceBetween : Style
-spaceBetween = "justify-content" ∶ "space-between" ∷ "align-items" ∶ "center" ∷ []
+spaceBetween = "display" ∶ "flex" ∷ "justify-content" ∶ "space-between" ∷ "align-items" ∶ "center" ∷ []
 
 wrap : Style
 wrap = "flex-wrap" ∶ "wrap" ∷ []
@@ -47,8 +48,8 @@ grid cols = "display" ∶ "grid" ∷ "grid-template-columns" ∶ cols ∷ []
 
 -- Vertical stack with gap
 stack : Length → Style
-stack g = col <> ("gap" ∶ showLength g ∷ [])
+stack g = col <> (gap' g ∷ [])
 
 -- Horizontal row with gap
 inline : Length → Style
-inline g = row <> ("gap" ∶ showLength g ∷ [])
+inline g = row <> (gap' g ∷ [])
