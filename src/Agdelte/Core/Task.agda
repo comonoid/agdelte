@@ -143,6 +143,8 @@ httpPost url body onOk onErr <|>! t₂ = httpPost url body onOk (λ _ → t₂)
 -- | Recover from immediate failures. Converts `fail e` and HTTP
 -- error callbacks to `pure (f e)`. Does NOT affect nested failures
 -- inside onOk continuations — those propagate unchanged.
+-- WARNING: `recover task handler` still fails if `onOk` internally
+-- calls `fail`. Only the direct `onErr` is intercepted.
 recover : Task A → (String → A) → Task A
 recover (pure a) _ = pure a
 recover (fail e) f = pure (f e)

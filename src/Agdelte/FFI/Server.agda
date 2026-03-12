@@ -289,6 +289,8 @@ wireAgent name path agent =
       -- stepIO: take MVar, compute step, store new agent + observation.
       -- onException restores the old agent if stepAgent throws (e.g. debugTrap,
       -- stack overflow). Without this, the MVar stays empty → deadlock.
+      -- putMVar BEFORE writeIORef: if an async exception arrives between
+      -- the two, we must not leave stateRef out of sync with the MVar agent.
       stepIO : String → IO String
       stepIO input =
         takeMVar agentMVar >>= λ a →
@@ -296,8 +298,8 @@ wireAgent name path agent =
           (let result   = stepAgent a input
                newAgent = proj₁ result
                output   = proj₂ result
-           in writeIORef stateRef output >>
-              putMVar agentMVar newAgent >>
+           in putMVar agentMVar newAgent >>
+              writeIORef stateRef output >>
               pure output)
           (putMVar agentMVar a)
   in

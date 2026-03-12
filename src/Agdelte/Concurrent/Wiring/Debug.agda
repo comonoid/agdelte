@@ -32,6 +32,9 @@ postulate
   throw new Error("⊕! mismatch: " + msg);
 } #-}
 
+{-# FOREIGN GHC import qualified Data.Text as T #-}
+{-# COMPILE GHC debugTrap = \_ msg -> error ("⊕! mismatch: " ++ T.unpack msg) #-}
+
 ------------------------------------------------------------------------
 -- ⊕! : coproduct agent with crash on mismatched state/input tags
 ------------------------------------------------------------------------

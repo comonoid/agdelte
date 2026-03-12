@@ -18,7 +18,7 @@ private
 
 record Serialize (A : Set) : Set where
   field
-    encode : A → String        -- to wire format (JSON)
+    encode : A → String        -- to wire format (plain text; identity for String)
     decode : String → Maybe A   -- from wire format (may fail)
 
 open Serialize {{...}} public

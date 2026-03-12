@@ -47,6 +47,9 @@ run : ∀ {A} → SafeIO A → IO A
 run (pureS a)          = pure a
 run (bindS m f)        = run m >>= λ b → run (f b)
 run (liftS io)         = io
+-- NOTE: tryCatch in cleanup silently swallows close errors (broken pipe,
+-- double-close). This prevents exceptions from masking the main result,
+-- but also hides resource cleanup failures. Consider logging on error.
 run (withIpcS path f)  =
   bracket (connect path)
           (λ h → tryCatch (close h) >> pure tt)
@@ -115,7 +118,8 @@ safePeekStep path input = withIpc path λ h →
 ------------------------------------------------------------------------
 
 -- SafeQuery restricts what the callback can do: only query and step.
--- No liftS, no pureS-with-handle — the handle cannot escape the block.
+-- CAVEAT: sqPure allows `sqPure h` which extracts the handle through the
+-- return type. This prevents accidental leaks but not deliberate ones.
 -- For callbacks that need arbitrary IO, use withIpc instead.
 data SafeQuery (A : Set) : Set where
   sqQuery : SafeQuery String

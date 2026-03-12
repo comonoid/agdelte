@@ -98,10 +98,10 @@ postulate
 } #-}
 
 -- FFI-FRAGILE: just (Maybe), nothing (Maybe)
+-- Uses BigInt comparison to avoid Number(i) precision loss for i > 2^53.
 {-# COMPILE JS index = function(i) { return function(arr) {
-  const idx = Number(i);
-  if (idx < arr.length) {
-    return (cases) => cases.just(arr[idx]);
+  if (i < BigInt(arr.length)) {
+    return (cases) => cases.just(arr[Number(i)]);
   } else {
     return (cases) => cases.nothing();
   }
@@ -151,10 +151,9 @@ postulate
 }; } #-}
 
 {-# COMPILE JS update = function(i) { return function(x) { return function(arr) {
-  const idx = Number(i);
-  if (idx >= arr.length) return arr;
+  if (i >= BigInt(arr.length)) return arr;
   const result = [...arr];
-  result[idx] = x;
+  result[Number(i)] = x;
   return result;
 }; }; } #-}
 

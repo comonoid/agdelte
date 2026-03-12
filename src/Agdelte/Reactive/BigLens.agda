@@ -59,6 +59,9 @@ open import Agdelte.FFI.Server using
 -- AgentOptic via Unix socket (local process, same machine).
 -- Uses the ProcessOptic IPC protocol.
 -- Connection errors are caught: both peekIO and overIO return nothing.
+-- NOTE: Creates a new socket connection per operation (connect/use/close).
+-- Suitable for low-frequency inspection. For high-frequency polling,
+-- consider a persistent-connection variant to avoid socket churn.
 processAgentOptic : String → IOOptic
 processAgentOptic socketPath = mkIOOptic peekIO overIO
   where
@@ -73,6 +76,14 @@ processAgentOptic socketPath = mkIOOptic peekIO overIO
       tryCatch (bracket (connectProcess socketPath)
                         closeProcess
                         (λ h → stepProcess h input))
+
+-- Persistent-connection variant: reuses an existing IPC handle.
+-- Caller manages connect/close lifecycle (e.g. via bracket).
+-- Suitable for high-frequency polling (no per-operation socket churn).
+handleAgentOptic : IpcHandle → IOOptic
+handleAgentOptic h = mkIOOptic
+  (tryCatch (queryProcess h))
+  (λ input → tryCatch (stepProcess h input))
 
 ------------------------------------------------------------------------
 -- Convenience constructors

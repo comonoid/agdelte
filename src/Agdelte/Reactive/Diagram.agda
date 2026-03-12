@@ -146,8 +146,10 @@ boolFilter p (x ∷ xs) with p x
 ... | false = boolFilter p xs
 
 -- Merge two diagram specs (union of slots and connections).
--- Slots from d₂ whose names already exist in d₁ are dropped
+-- Slots from d₂ whose names already exist in d₁ are SILENTLY dropped
 -- to prevent duplicate slot names causing ambiguous routing.
+-- WARNING: a typo giving two slots the same name will cause one to be
+-- silently discarded with no error. Consider validating names at use site.
 -- Connections from d₂ that reference dropped slots are also removed,
 -- since they would silently target d₁'s agent instead of d₂'s.
 _⊕D_ : DiagramSpec → DiagramSpec → DiagramSpec

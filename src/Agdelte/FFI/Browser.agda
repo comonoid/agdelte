@@ -11,21 +11,9 @@
 -- src/Agdelte/Core/Cmd.agda) which compile to Scott-encoded ASTs interpreted
 -- by the runtime. Direct FFI calls are for advanced use only.
 --
--- SAFETY ASSUMPTION: these postulates are declared as pure functions (e.g.
--- consoleLog : String → ⊤) even though they perform side effects.
--- This is ONLY safe because the Agda JS backend currently does not optimise
--- (no CSE, no dead-code elimination, no reordering). If the backend ever
--- adds optimisations, these calls could be duplicated, reordered, or dropped.
--- The primary API (Event/Cmd AST) is already pure and safe; these exist
--- only as low-level escape hatches.
---
--- KNOWN LIMITATION: consoleLog etc. are pure postulates with side effects.
--- A future JS backend with CSE/DCE could deduplicate or eliminate calls.
--- For safety, use IO-wrapped versions in production.
---
--- Additionally, ⊤-returning functions return raw `null` instead of the
--- Scott-encoded `(cases) => cases["tt"]()`. This works because the result
--- is always discarded (⊤ is never pattern-matched in practice).
+-- IO-typed postulates use thunk-wrapping in JS pragmas: the COMPILE JS returns
+-- a function `() => { ... }` which the runtime calls to produce the IO action.
+-- This matches Agda's IO representation in the JS backend (thunked effects).
 
 module Agdelte.FFI.Browser where
 
@@ -34,6 +22,7 @@ open import Data.Nat using (ℕ)
 open import Data.Maybe using (Maybe)
 open import Data.Bool using (Bool)
 open import Agda.Builtin.Unit using (⊤)
+open import Agda.Builtin.IO using (IO)
 
 ------------------------------------------------------------------------
 -- DOM primitives (for direct FFI use, not normally needed)
@@ -45,28 +34,28 @@ postulate
 
 {-# COMPILE JS Element = function(x) { return x; } #-}
 
--- Query selector
+-- Query selector (IO — accesses live, mutable DOM)
 postulate
-  querySelector : String → Maybe Element
+  querySelector : String → IO (Maybe Element)
 
 -- FFI-FRAGILE: just (Maybe), nothing (Maybe)
-{-# COMPILE JS querySelector = function(sel) {
+{-# COMPILE JS querySelector = function(sel) { return () => {
   const el = document.querySelector(sel);
   return el ? (cases) => cases.just(el) : (cases) => cases.nothing();
-} #-}
+}; } #-}
 
 ------------------------------------------------------------------------
 -- Console
 ------------------------------------------------------------------------
 
 postulate
-  consoleLog   : String → ⊤
-  consoleWarn  : String → ⊤
-  consoleError : String → ⊤
+  consoleLog   : String → IO ⊤
+  consoleWarn  : String → IO ⊤
+  consoleError : String → IO ⊤
 
-{-# COMPILE JS consoleLog = function(s) { console.log(s); return null; } #-}
-{-# COMPILE JS consoleWarn = function(s) { console.warn(s); return null; } #-}
-{-# COMPILE JS consoleError = function(s) { console.error(s); return null; } #-}
+{-# COMPILE JS consoleLog = function(s) { return () => { console.log(s); return null; }; } #-}
+{-# COMPILE JS consoleWarn = function(s) { return () => { console.warn(s); return null; }; } #-}
+{-# COMPILE JS consoleError = function(s) { return () => { console.error(s); return null; }; } #-}
 
 ------------------------------------------------------------------------
 -- Timing (low-level, prefer Event.interval/timeout)

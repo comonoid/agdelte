@@ -44,25 +44,7 @@ open History public
 -- History operations
 ------------------------------------------------------------------------
 
--- Push current state into history (on every normal update)
-pushState : ∀ {S} → History S → S → History S
-pushState h newState = mkHistory
-  (trimPast (present h ∷ past h))
-  newState
-  []           -- any new action clears redo stack
-  (maxSize h)
-  where
-    trimPast : List _ → List _
-    trimPast xs with maxSize h
-    ... | nothing = xs
-    ... | just n  = take n xs
-      where
-        take : Nat → List _ → List _
-        take zero    _        = []
-        take (suc _) []       = []
-        take (suc m) (x ∷ rest) = x ∷ take m rest
-
--- Trim a list to at most n elements (shared by past and future)
+-- Trim a list to at most n elements (shared by pushState, undo, redo)
 private
   trimList : ∀ {S : Set} → Maybe Nat → List S → List S
   trimList nothing  xs = xs
@@ -72,6 +54,14 @@ private
       take' zero    _          = []
       take' (suc _) []         = []
       take' (suc m) (x ∷ rest) = x ∷ take' m rest
+
+-- Push current state into history (on every normal update)
+pushState : ∀ {S} → History S → S → History S
+pushState h newState = mkHistory
+  (trimList (maxSize h) (present h ∷ past h))
+  newState
+  []           -- any new action clears redo stack
+  (maxSize h)
 
 -- Undo: move present to future, pop past
 undo : ∀ {S} → History S → History S
@@ -144,3 +134,16 @@ ttCmd : ∀ {Model Msg : Set} →
 ttCmd cmd (appMsg msg) h = mapCmd appMsg (cmd msg (present h))
 ttCmd _   ttUndo       _ = Cmd.ε
 ttCmd _   ttRedo       _ = Cmd.ε
+
+------------------------------------------------------------------------
+-- Time-travel Subs wrapper
+------------------------------------------------------------------------
+
+open import Agdelte.Core.Event as Event using (Event; mapE)
+
+-- Wrap subs to lift Msg events into TTMsg appMsg.
+-- Completes the ReactiveApp wrapper alongside ttUpdate and ttCmd.
+ttSubs : ∀ {Model Msg : Set} →
+         (Model → Event Msg) →
+         History Model → Event (TTMsg Msg)
+ttSubs subs h = mapE appMsg (subs (present h))

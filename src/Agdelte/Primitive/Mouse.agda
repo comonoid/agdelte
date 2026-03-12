@@ -10,6 +10,7 @@ module Agdelte.Primitive.Mouse where
 
 open import Data.Bool using (if_then_else_)
 open import Data.Nat using (ℕ; _≡ᵇ_)
+open import Data.Float using (Float)
 open import Data.Maybe using (just; nothing)
 open import Data.Product using (_×_; _,_)
 
@@ -26,7 +27,7 @@ import Agdelte.Core.Event as CE
 ------------------------------------------------------------------------
 
 Position : Set
-Position = ℕ × ℕ
+Position = Float × Float
 
 ------------------------------------------------------------------------
 -- Mouse Events (always-producing wrappers)

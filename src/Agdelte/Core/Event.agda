@@ -62,13 +62,16 @@ open KeyboardEvent public
 -- MouseEvent
 ------------------------------------------------------------------------
 
+-- Mouse coordinates use Float to faithfully represent DOM values:
+-- clientX/clientY/pageX/pageY are floating-point and can be negative
+-- (mouse outside viewport, CSS transforms).
 record MouseEvent : Set where
   constructor mkMouseEvent
   field
-    mouseX   : ℕ      -- clientX
-    mouseY   : ℕ      -- clientY
-    pageX    : ℕ
-    pageY    : ℕ
+    mouseX   : Float   -- clientX
+    mouseY   : Float   -- clientY
+    pageX    : Float
+    pageY    : Float
     button   : ℕ      -- 0=left, 1=middle, 2=right
     buttons  : ℕ      -- bit mask
 
@@ -398,9 +401,9 @@ onKeyUpWhen pred msg = onKeyUp (λ e → if pred e then just msg else nothing)
 -- Convenient constructors for mouse
 ------------------------------------------------------------------------
 
--- Mouse position as (ℕ × ℕ)
+-- Mouse position as (Float × Float)
 Position : Set
-Position = ℕ × ℕ
+Position = Float × Float
 
 -- Left click (button 0)
 onLeftClick : A → Event A
@@ -509,6 +512,8 @@ delay ms = timeout ms tt
 -- Event bind: on each value from e, switch to f(value)
 -- For one-shot events (timeout, worker, httpGet): sequential composition
 -- For repeated events (interval): switches to latest f(a), canceling previous
+-- WARNING: in-flight async work from the previous f(a) (e.g. HTTP request)
+-- is silently canceled when e fires again — no error or notification.
 infixl 1 _>>=E_
 
 _>>=E_ : Event A → (A → Event B) → Event B

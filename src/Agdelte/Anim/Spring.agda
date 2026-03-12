@@ -40,6 +40,10 @@ record Spring : Set where
 -- Tick (Euler integration)
 ------------------------------------------------------------------------
 
+-- WARNING: Forward Euler is unstable when stiffness * (dt/1000)² > 2.
+-- For stiffness=10000 and dt=16: 10000 * 0.016² = 2.56 → DIVERGES.
+-- Use tickSpringStable for user-configurable or high stiffness values.
+-- Presets (gentle/snappy/bouncy) are safe with tickSpringStable's 4ms steps.
 tickSpring : Spring → ℕ → Spring
 tickSpring s dt =
   let dtSec = FB.fromℕ dt F.÷ 1000.0

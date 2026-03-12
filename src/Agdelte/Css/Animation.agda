@@ -11,7 +11,7 @@
 
 module Agdelte.Css.Animation where
 
-open import Data.Nat using (ℕ; _*_)
+open import Data.Nat using (ℕ; _*_; _⊓_)
 open import Data.Nat.Show using (show)
 open import Data.List using (List; []; _∷_)
 open import Data.Product using (_×_; _,_)
@@ -30,8 +30,9 @@ data Stop : Set where
   from : Stop
   to   : Stop
 
+-- `at` values are clamped to 0-100 (valid CSS @keyframes range).
 showStop : Stop → String
-showStop (at n) = show n ++ "%"
+showStop (at n) = show (n ⊓ 100) ++ "%"
 showStop from   = "from"
 showStop to     = "to"
 
@@ -128,15 +129,19 @@ private
   renderFill fmNone = ""
   renderFill f      = " " ++ showFillMode f
 
+  -- CSS animation shorthand: name LAST to avoid keyword collision.
+  -- If name appears first and matches a CSS keyword (e.g. "reverse", "ease",
+  -- "none", "infinite"), the browser parses it as a property value, not a name.
+  -- CSS spec recommends <custom-ident> last in the shorthand.
   renderAnim : Animation → String
   renderAnim a =
-    Animation.animName a ++ " "
-    ++ showDuration (Animation.dur a) ++ " "
+    showDuration (Animation.dur a) ++ " "
     ++ showEasing (Animation.easing a)
     ++ renderDelay (Animation.delay a)
     ++ renderCount (Animation.count a)
     ++ renderDir (Animation.direction a)
     ++ renderFill (Animation.fillMode a)
+    ++ " " ++ Animation.animName a
 
   renderAnims : List Animation → String
   renderAnims []       = "none"

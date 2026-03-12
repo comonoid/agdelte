@@ -167,7 +167,9 @@ private
   isDone _        = false
 
 wellFormedN : Nat → CoSession → Bool
-wellFormedN zero    _ = true
+wellFormedN zero    s with head s
+... | doneStep = true    -- terminal: trivially well-formed
+... | _        = false   -- ran out of depth before reaching done
 wellFormedN (suc n) s with head s
 ... | doneStep   = true
 ... | sendStep _ = isDone (head (right s)) ∧ wellFormedN n (left s)

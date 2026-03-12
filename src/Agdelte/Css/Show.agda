@@ -24,7 +24,7 @@ open import Data.String using (String)
 showFloat : Float → String
 showFloat = showFloat′
 
-{-# COMPILE JS showFloat = f => { const s = String(f); return s.includes('e') ? f.toFixed(6).replace(/\.?0+$/, '') : s; } #-}
+{-# COMPILE JS showFloat = f => { if (!isFinite(f)) return "0"; const s = String(f); return s.includes('e') ? f.toFixed(6).replace(/\.?0+$/, '') : s; } #-}
 
 -- GHC backend: use showFFloat to avoid scientific notation in CSS output.
 -- Haskell's `show` produces "1.0e-7" which is invalid CSS; showFFloat

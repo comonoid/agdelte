@@ -9,7 +9,7 @@
 module Agdelte.Buffer where
 
 open import Data.Nat using (ℕ; _*_; _≡ᵇ_)
-open import Data.Bool using (Bool; not; _∧_)
+open import Data.Bool using (Bool; _∧_)
 open import Data.String using (String)
 
 open import Agdelte.Core.Event using (Event; allocImage; allocBuffer)
@@ -69,12 +69,15 @@ bufferChanged old new =
   (bufferId old ≡ᵇ bufferId new) ∧ (bufferVersion old <ᵇ bufferVersion new)
   where open import Data.Nat using (_<ᵇ_)
 
--- Get image buffer size in bytes (RGBA, 4 bytes per pixel)
+-- Get image buffer size in bytes (RGBA, 4 bytes per pixel).
+-- Only meaningful for handles from allocateImage.
 imageBufferSize : BufferHandle → ℕ
 imageBufferSize h = bufferWidth h * bufferHeight h * 4
 
--- Get generic buffer size in bytes
--- For allocateBuffer(n), runtime sets width=n, height=1
-bufferSize : BufferHandle → ℕ
-bufferSize h = bufferWidth h * bufferHeight h
+-- Get pixel count (width × height).
+-- For generic buffers (allocateBuffer n), runtime sets width=n, height=1,
+-- so this returns n (the byte size). For image buffers, returns pixel count
+-- (NOT byte size — use imageBufferSize for bytes).
+bufferPixelCount : BufferHandle → ℕ
+bufferPixelCount h = bufferWidth h * bufferHeight h
 

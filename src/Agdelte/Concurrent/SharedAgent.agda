@@ -89,7 +89,11 @@ forgetLinear (mkLinear a) = someAgent a
 peekShared : ∀ {I O} → SharedAgent I O → O
 peekShared sa = observe (agent sa) (state (agent sa))
 
--- Step shared agent (mutates shared state — all clients see update)
+-- Step shared agent — pure function returning a new SharedAgent value.
+-- NOTE: "shared" refers to the type-level CAPABILITY of serving multiple
+-- clients, not runtime concurrency. Two concurrent callers stepping the
+-- same SharedAgent get independent copies. For actual concurrent sharing,
+-- wrap with MVar at the IO level (see wireAgent in FFI/Server.agda).
 stepShared : ∀ {I O} → SharedAgent I O → I → SharedAgent I O × O
 stepShared sa i =
   let result = stepAgent (agent sa) i

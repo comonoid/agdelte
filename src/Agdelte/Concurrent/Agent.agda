@@ -21,7 +21,10 @@ open Agent public
 mkAgent : ∀ {S I O} → S → (S → O) → (S → I → S) → Agent S I O
 mkAgent s obs stp = record { state = s ; observe = obs ; step = stp }
 
--- Run one step: apply input, return new agent and output
+-- Run one step: apply input, return new agent and output.
+-- Convention: Moore machine — output reflects POST-step state (observe s').
+-- Callers expecting Mealy semantics (output depends on old state + input)
+-- should call `observe a (state a)` before stepping instead.
 stepAgent : ∀ {S I O} → Agent S I O → I → Agent S I O × O
 stepAgent a i =
   let s' = step a (state a) i

@@ -21,6 +21,12 @@ open import Agdelte.Css.Show using (showFloat)
 -- Color
 ------------------------------------------------------------------------
 
+-- NOTE: No range-checking on constructor arguments. Out-of-range values
+-- produce technically invalid CSS that browsers clamp silently:
+--   rgba alpha: should be [0,1]; NaN/Infinity produce broken CSS (see Show.agda guard)
+--   hsl h: [0,360], s/l: [0,100]; out-of-range values are browser-clamped
+--   rgb r/g/b: [0,255]
+-- Use hexValid for validated hex colors.
 data Color : Set where
   hex   : String → Color              -- "#ff0000"
   rgb   : ℕ → ℕ → ℕ → Color
