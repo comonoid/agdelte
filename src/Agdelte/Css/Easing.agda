@@ -58,9 +58,10 @@ showDuration (s f)  = showFloat f ++ "s"
 -- NB: Float._≡ᵇ_ treats -0.0 ≡ᵇ 0.0 = true in JS (Object.is is not used),
 -- and NaN ≡ᵇ NaN = false. CSS delays are non-negative and finite, so this is safe.
 renderDelay : Duration → String
-renderDelay (ms zero)  = ""
-renderDelay (s f)      = if f ≡ᵇ 0.0 then "" else " " ++ showDuration (s f)
-renderDelay d          = " " ++ showDuration d
+renderDelay (ms zero)       = ""
+renderDelay (ms n@(suc _))  = " " ++ showDuration (ms n)
+  where open import Data.Nat using (suc)
+renderDelay (s f)           = if f ≡ᵇ 0.0 then "" else " " ++ showDuration (s f)
 
 ------------------------------------------------------------------------
 -- Easing as Float → Float (for model-driven animations)

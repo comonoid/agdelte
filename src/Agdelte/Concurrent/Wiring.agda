@@ -149,9 +149,9 @@ a & b = record
 -- ⊕ (plus / internal choice): one agent active, picked by state tag
 -- Coproduct in Poly: positions sum, directions inherited per side
 -- Use case: system switches between two modes (e.g., editing vs viewing)
--- Note: input tag must match state tag; mismatched input is no-op (safe).
--- This can mask routing bugs in complex agent networks. For a strict
--- alternative where mismatched input is a type error, use DepAgent.dep⊕.
+-- WARNING: mismatched state/input tags (inj₁ state + inj₂ input or vice versa)
+-- are silently ignored (no-op). This can mask routing bugs in complex networks.
+-- For a strict alternative where mismatched input is a type error, use DepAgent.dep⊕.
 -- Starts in the left branch by default; use ⊕ᵣ to start in the right branch.
 infixr 5 _⊕_
 _⊕_ : Agent S₁ I₁ O₁ → Agent S₂ I₂ O₂ → Agent (S₁ ⊎ S₂) (I₁ ⊎ I₂) (O₁ ⊎ O₂)
@@ -161,8 +161,12 @@ a ⊕ b = record
                 ; (inj₂ s₂) → inj₂ (observe b s₂) }
   ; step    = λ { (inj₁ s₁) (inj₁ i₁) → inj₁ (step a s₁ i₁)
                 ; (inj₂ s₂) (inj₂ i₂) → inj₂ (step b s₂ i₂)
-                ; s _                    → s }   -- mismatched tag: no-op
+                -- Mismatched tag: state=left, input=right (or vice versa) → no-op.
+                -- This silently drops the input. Use dep⊕ for strict checking.
+                ; (inj₁ s₁) (inj₂ _)  → inj₁ s₁
+                ; (inj₂ s₂) (inj₁ _)  → inj₂ s₂ }
   }
+{-# WARNING_ON_USAGE _⊕_ "Agent._⊕_ silently drops mismatched-tag inputs. Consider DepAgent.dep⊕ for strict checking." #-}
 
 -- ⊕ starting in the right branch
 infixr 5 _⊕ᵣ_
@@ -173,7 +177,8 @@ a ⊕ᵣ b = record
                 ; (inj₂ s₂) → inj₂ (observe b s₂) }
   ; step    = λ { (inj₁ s₁) (inj₁ i₁) → inj₁ (step a s₁ i₁)
                 ; (inj₂ s₂) (inj₂ i₂) → inj₂ (step b s₂ i₂)
-                ; s _                    → s }   -- mismatched tag: no-op
+                ; (inj₁ s₁) (inj₂ _)  → inj₁ s₁
+                ; (inj₂ s₂) (inj₁ _)  → inj₂ s₂ }
   }
 
 -- ⊕ with debug trap: moved to Wiring.Debug to keep this module safe.

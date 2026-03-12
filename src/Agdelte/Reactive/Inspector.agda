@@ -70,12 +70,14 @@ inspectAll (p ∷ rest) =
 ------------------------------------------------------------------------
 
 -- Pure snapshot: peeks initial state, ioOver steps from init each time
--- (no persistence). For stateful inspection of running agents, use inspectLive.
+-- (no persistence). For stateful inspection of running agents, use
+-- slotStatefulOptic or inspectLive.
 slotSnapshotOptic : Slot → IOOptic
 slotSnapshotOptic s =
   let a = agent s in
   mkIOOptic (pure (just (observe a (state a))))
             (λ input → pure (just (observe a (step a (state a) input))))
+{-# WARNING_ON_USAGE slotSnapshotOptic "slotSnapshotOptic is stateless — ioOver always steps from initial state. Use slotStatefulOptic for persistent state." #-}
 
 -- Stateful optic: tracks agent state across steps via MVar.
 -- Unlike slotSnapshotOptic (which always steps from initial state),

@@ -181,6 +181,38 @@ module SubDef where
 
 open SubDef public using (Sub)
 
+-- Map over Sub (covariant functor)
+private
+  mapMaybe : ∀ {X Y : Set} → (X → Y) → Maybe X → Maybe Y
+  mapMaybe g (just x) = just (g x)
+  mapMaybe _ nothing  = nothing
+
+mapSub : (A → B) → Sub A → Sub B
+mapSub f (Sub.interval n a) = Sub.interval n (f a)
+mapSub f (Sub.timeout n a) = Sub.timeout n (f a)
+mapSub f (Sub.animationFrame a) = Sub.animationFrame (f a)
+mapSub f (Sub.animationFrameWithTime h) = Sub.animationFrameWithTime (f ∘ h)
+mapSub f (Sub.springLoop cfg onTick onSettled) = Sub.springLoop cfg (f ∘ onTick) (f onSettled)
+mapSub f (Sub.onKeyDown h) = Sub.onKeyDown (λ e → mapMaybe f (h e))
+mapSub f (Sub.onKeyUp h) = Sub.onKeyUp (λ e → mapMaybe f (h e))
+mapSub f (Sub.onMouseDown h) = Sub.onMouseDown (λ e → mapMaybe f (h e))
+mapSub f (Sub.onMouseUp h) = Sub.onMouseUp (λ e → mapMaybe f (h e))
+mapSub f (Sub.onMouseMove h) = Sub.onMouseMove (λ e → mapMaybe f (h e))
+mapSub f (Sub.onClick h) = Sub.onClick (λ e → mapMaybe f (h e))
+mapSub f (Sub.httpGet url onOk onErr) = Sub.httpGet url (f ∘ onOk) (f ∘ onErr)
+mapSub f (Sub.httpPost url body onOk onErr) = Sub.httpPost url body (f ∘ onOk) (f ∘ onErr)
+mapSub f (Sub.wsConnect url h) = Sub.wsConnect url (f ∘ h)
+mapSub f (Sub.onUrlChange h) = Sub.onUrlChange (f ∘ h)
+mapSub f (Sub.worker url input onOk onErr) = Sub.worker url input (f ∘ onOk) (f ∘ onErr)
+mapSub f (Sub.workerWithProgress url input onProg onRes onErr) = Sub.workerWithProgress url input (f ∘ onProg) (f ∘ onRes) (f ∘ onErr)
+mapSub f (Sub.poolWorker n url input onOk onErr) = Sub.poolWorker n url input (f ∘ onOk) (f ∘ onErr)
+mapSub f (Sub.poolWorkerWithProgress n url input onProg onRes onErr) = Sub.poolWorkerWithProgress n url input (f ∘ onProg) (f ∘ onRes) (f ∘ onErr)
+mapSub f (Sub.workerChannel url onMsg onErr) = Sub.workerChannel url (f ∘ onMsg) (f ∘ onErr)
+mapSub f (Sub.allocShared n h) = Sub.allocShared n (f ∘ h)
+mapSub f (Sub.workerShared buf url input onOk onErr) = Sub.workerShared buf url input (f ∘ onOk) (f ∘ onErr)
+mapSub f (Sub.allocImage w h handler) = Sub.allocImage w h (f ∘ handler)
+mapSub f (Sub.allocBuffer n handler) = Sub.allocBuffer n (f ∘ handler)
+
 ------------------------------------------------------------------------
 -- Event: structural combinators (AST) - stays in Set
 ------------------------------------------------------------------------

@@ -218,10 +218,31 @@ compileConnections : List Connection → List ConnectionDef
 compileConnections []       = []
 compileConnections (c ∷ cs) = compileConnection c ∷ compileConnections cs
 
+-- Detect duplicate slot names and print warnings
+private
+  warnDuplicates : List Slot → IO ⊤
+  warnDuplicates []       = pure tt
+    where open import Agda.Builtin.Unit using (tt)
+  warnDuplicates (s ∷ ss) =
+    (if hasDup (name s) ss
+     then putStrLn ("WARNING: duplicate slot name \"" ++ name s ++ "\" — later definition will be shadowed")
+     else pure tt) >>
+      warnDuplicates ss
+    where
+      open import Data.String using (_++_)
+      open import Data.Bool using (if_then_else_)
+      open import Agda.Builtin.Unit using (tt)
+      hasDup : String → List Slot → Bool
+      hasDup _ []       = false
+      hasDup n (x ∷ xs) with primStringEquality n (name x)
+      ... | true  = true
+      ... | false = hasDup n xs
+
 -- Run a diagram with any number of agents and connections
 runDiagram : Diagram → IO ⊤
 runDiagram d =
   putStrLn "Starting Diagram Server..." >>
+  warnDuplicates (slots (Diagram.spec d)) >>
   wireSlots (slots (Diagram.spec d)) >>= λ defs →
   runAgentServerNWithConns (port d) defs
     (compileConnections (connections (Diagram.spec d)))

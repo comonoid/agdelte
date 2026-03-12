@@ -61,6 +61,10 @@ forget dec da = mkAgent
   (observe da)
   (λ s oi → stepChecked dec da s oi)
   where
+    -- WARNING: if o ≠ observe da s (tag mismatch), the input is silently
+    -- dropped and the old state is returned. This is correct for runtime
+    -- (the input is ill-typed for the current state), but can mask bugs
+    -- in calling code that provides incorrectly tagged inputs.
     stepChecked : ∀ {S O I} → ((x y : O) → Dec (x ≡ y)) → DepAgent S O I → S → Σ O I → S
     stepChecked dec da s (o , i) with dec o (observe da s)
     ... | yes refl = step da s i

@@ -39,8 +39,8 @@ wsReceive conn = wsReceive' conn (100 :: Int)
 wsReceive' :: WsConn -> Int -> IO (Maybe WsMessage)
 wsReceive' (WsConn conn) remaining
   | remaining <= 0 = do
-      hPutStrLn stderr "wsReceive: 100 consecutive binary frames skipped, resetting"
-      wsReceive' (WsConn conn) (100 :: Int)  -- reset counter, keep connection alive
+      hPutStrLn stderr "wsReceive: 100 consecutive binary frames, treating as disconnect"
+      return (Just WsClose)
   | otherwise =
       (do dm <- WS.receiveDataMessage conn
           case dm of

@@ -14,6 +14,7 @@ module Agdelte.AgentServer
   , addCorsHeaders
   , ConnectionDef(..)
   , runAgentServerWithConns
+  , mkAgentAppWithConns
   ) where
 
 import Control.Concurrent.Async (race_)
@@ -58,73 +59,26 @@ type BroadcastChan = TChan Text
 data WsClient = WsClient
   { clientId   :: Text
   , clientConn :: WS.WsConn
-  , clientPendingPeek :: MVar Text  -- response slot for peek requests
+  , clientPendingPeek :: MVar Text    -- response slot for peek requests
+  , clientPeekNonce   :: IORef.IORef Int  -- nonce counter to match peek request/response
   }
 
 -- | Client registry: clientId -> WsClient
 type ClientRegistry = TVar (Map.Map Text WsClient)
 
--- | Build a WAI Application from agents and CORS config.
--- Allocates broadcast channel, client registry, and counter internally.
--- Useful for testing (Warp.testWithApplication) without starting a server.
+-- | Build a WAI Application (no connection routing).
+-- Auto-generates BroadcastDef for each agent so WS clients receive
+-- state updates on every step (matching pre-deduplication behavior).
 mkAgentApp :: Maybe Text -> [AgentDef] -> IO Wai.Application
-mkAgentApp corsOrigin agents = do
-  broadcast <- newBroadcastTChanIO
-  registry  <- newTVarIO Map.empty
-  clientCounter <- IORef.newIORef (0 :: Int)
-  let routeMap = Map.fromList [(agentPath a, a) | a <- agents]
-  return $ Http.mkApp
-    (httpHandler corsOrigin routeMap registry broadcast)
-    (Just ("/ws", wsHandler broadcast registry clientCounter))
+mkAgentApp corsOrigin agents =
+  mkAgentAppWithConns corsOrigin agents
+    [BroadcastDef (agentName a) | a <- agents]
 
--- | Run multi-agent server
+-- | Run multi-agent server (no connection routing)
 runAgentServer :: Int -> Maybe Text -> [AgentDef] -> IO ()
-runAgentServer port corsOrigin agents = do
-  putStrLn $ "Agdelte Agent Server on port " ++ show port
-  putStrLn $ "  Agents: " ++ show [T.unpack (agentName a) ++ " at " ++ T.unpack (agentPath a) | a <- agents]
-  putStrLn "  WebSocket: /ws (broadcasts + peek/over protocol)"
-
-  app <- mkAgentApp corsOrigin agents
-  Warp.runSettings settings app
-  where
-    settings = Warp.setPort port $ Warp.setHost "*" $ Warp.defaultSettings
-
-httpHandler :: Maybe Text -> Map.Map Text AgentDef -> ClientRegistry -> BroadcastChan -> Http.Request -> IO Http.Response
-httpHandler corsOrigin routes registry broadcast req
-  | Http.reqMethod req == "OPTIONS" = return $ addCorsHeaders corsOrigin (Http.Response 200 T.empty [])
-  | otherwise = do
-      let method = Http.reqMethod req
-          path = Http.reqPath req
-          body = Http.reqBody req
-      resp <- routeRequest routes registry broadcast method path body
-      return $ addCorsHeaders corsOrigin resp
-
-routeRequest :: Map.Map Text AgentDef -> ClientRegistry -> BroadcastChan -> Text -> Text -> Text -> IO Http.Response
-routeRequest routes registry broadcast method path body = do
-  -- Parse path: /agent-path/action or /client/clientId/action
-  let (agentPath', action) = splitPath path
-
-  -- Client peek/over via HTTP
-  case T.stripPrefix "/client/" path of
-    Just rest -> handleClientRequest registry rest body
-    Nothing ->
-      case Map.lookup agentPath' routes of
-        Nothing -> return $ Http.Response 404 "Agent not found" []
-        Just agent -> case action of
-          "state"
-            | method == "POST" -> return $ Http.Response 405 "Use GET for /state" []
-            | otherwise -> do
-                output <- agentObserve agent
-                return $ Http.Response 200 output []
-          "step"
-            | method == "GET" -> return $ Http.Response 405 "Use POST for /step" []
-            | otherwise -> do
-                output <- agentStep agent body
-                -- Broadcast to WebSocket clients
-                let msg = agentName agent <> ":" <> output
-                atomically $ writeTChan broadcast msg
-                return $ Http.Response 200 output []
-          _ -> return $ Http.Response 404 "Unknown action (use /state or /step)" []
+runAgentServer port corsOrigin agents =
+  runAgentServerWithConns port corsOrigin agents
+    [BroadcastDef (agentName a) | a <- agents]
 
 addCorsHeaders :: Maybe Text -> Http.Response -> Http.Response
 addCorsHeaders Nothing resp = resp
@@ -147,19 +101,27 @@ handleClientRequest registry rest body = do
     Nothing -> return $ Http.Response 404 ("Client not found: " <> clientId') []
     Just client -> case action of
       "peek" -> do
-        -- Drain any stale peek response left from a previous timed-out request.
-        -- NOTE: small race window remains — if the client sends a stale response
-        -- between this drain and the new peek, we may return outdated data.
-        -- Full fix: add nonce to peek protocol (peek:clientId:nonce → peek-response:nonce:value).
+        -- Nonce-based peek protocol: prevents stale responses from being
+        -- accepted as answers to a new peek request.
+        -- Protocol: peek:clientId:nonce → peek-response:nonce:value
+        nonce <- IORef.atomicModifyIORef' (clientPeekNonce client) (\n -> (n + 1, n + 1))
+        let nonceText = T.pack (show nonce)
         _ <- tryTakeMVar (clientPendingPeek client)
-        result <- try $ WS.wsSend (clientConn client) ("peek:" <> clientId')
+        result <- try $ WS.wsSend (clientConn client) ("peek:" <> clientId' <> ":" <> nonceText)
         case result of
           Left (_ :: SomeException) ->
             return $ Http.Response 502 "Client disconnected" []
           Right () -> do
             mResponse <- timeout 5000000 $ takeMVar (clientPendingPeek client)
             case mResponse of
-              Just response -> return $ Http.Response 200 response []
+              Just response ->
+                -- Response format: "nonce:value" — validate nonce matches
+                case T.breakOn ":" response of
+                  (respNonce, rest) | not (T.null rest) && respNonce == nonceText ->
+                    return $ Http.Response 200 (T.drop 1 rest) []
+                  _ ->
+                    -- Stale or malformed response — treat as timeout
+                    return $ Http.Response 504 "Client peek: nonce mismatch (stale response)" []
               Nothing       -> return $ Http.Response 504 "Client peek timeout" []
       "over" -> do
         result <- try $ WS.wsSend (clientConn client) ("over:" <> body)
@@ -170,7 +132,10 @@ handleClientRequest registry rest body = do
             return $ Http.Response 200 "ok" []
       _ -> return $ Http.Response 404 "Unknown client action (use /peek or /over)" []
 
--- | Split "/counter/step" into ("/counter", "step")
+-- | Split "/counter/step" into ("/counter", "step").
+-- Only the first two path segments are used; extra segments (e.g.
+-- "/counter/step/extra") are silently ignored. The protocol only
+-- supports /{agent}/{action} where action is "state" or "step".
 splitPath :: Text -> (Text, Text)
 splitPath path =
   let parts = filter (not . T.null) (T.splitOn "/" path)
@@ -179,32 +144,9 @@ splitPath path =
     [p]    -> ("/" <> p, "state")  -- default to state
     (p:a:_) -> ("/" <> p, a)
 
-wsHandler :: BroadcastChan -> ClientRegistry -> IORef.IORef Int -> NWS.PendingConnection -> IO ()
-wsHandler broadcast registry counter pending = do
-  result <- try $ NWS.acceptRequest pending
-  case result of
-    Left (_ :: SomeException) -> return ()  -- bad handshake, ignore
-    Right conn -> do
-      cid <- IORef.atomicModifyIORef' counter (\n -> (n + 1, n))
-      let clientId' = "client-" <> T.pack (show cid)
-      wsHandlerBody broadcast registry clientId' (WS.WsConn conn)
-
-wsHandlerBody :: BroadcastChan -> ClientRegistry -> Text -> WS.WsConn -> IO ()
-wsHandlerBody broadcast registry clientId' conn = do
-  peekMVar <- newEmptyMVar
-  let client = WsClient clientId' conn peekMVar
-  ch <- atomically $ dupTChan broadcast
-  bracket_
-    (atomically $ modifyTVar' registry (Map.insert clientId' client))
-    (do atomically $ modifyTVar' registry (Map.delete clientId')
-        _ <- try $ WS.wsClose conn :: IO (Either SomeException ())
-        return ())
-    (do WS.wsSend conn ("connected:" <> clientId')
-        race_ (broadcastLoop conn ch) (clientLoop client))
-
 -- | Forward broadcasts to this client.
 -- Catches send exceptions silently — if the connection is gone, the loop
--- exits and race_ cancels clientLoop (rec #16, #19).
+-- exits and race_ cancels the client loop.
 broadcastLoop :: WS.WsConn -> TChan Text -> IO ()
 broadcastLoop conn ch = do
   msg <- atomically $ readTChan ch
@@ -212,22 +154,6 @@ broadcastLoop conn ch = do
   case result of
     Left (_ :: SomeException) -> return ()  -- connection gone, exit cleanly
     Right () -> broadcastLoop conn ch
-
--- | Read from WS client
-clientLoop :: WsClient -> IO ()
-clientLoop client = do
-  mmsg <- WS.wsReceive (clientConn client)
-  case mmsg of
-    Just (WS.WsText msg) -> do
-      case T.stripPrefix "peek-response:" msg of
-        Just value -> do
-          ok <- tryPutMVar (clientPendingPeek client) value
-          if ok then return ()
-                else hPutStrLn stderr $ "AgentServer: peek response dropped for "
-                       ++ T.unpack (clientId client) ++ " (previous response not consumed)"
-        Nothing -> return ()
-      clientLoop client
-    _ -> return ()  -- WsClose or connection error — bracket_ cleanup handles unregister + close
 
 ------------------------------------------------------------------------
 -- Connection-aware server (Diagram routing)
@@ -261,6 +187,24 @@ applyConnections nameMap conns broadcast visited source output
     isBroadcastFor (BroadcastDef n) = n == source
     isBroadcastFor _                = False
 
+-- | Build a WAI Application with connection routing.
+-- Allocates broadcast channel, client registry, and counter internally.
+-- Useful for testing (Warp.testWithApplication) without starting a server.
+mkAgentAppWithConns :: Maybe Text -> [AgentDef] -> [ConnectionDef] -> IO Wai.Application
+mkAgentAppWithConns corsOrigin agents conns = do
+  broadcast <- newBroadcastTChanIO
+  registry  <- newTVarIO Map.empty
+  clientCounter <- IORef.newIORef (0 :: Int)
+  let routeMap = Map.fromList [(agentPath a, a) | a <- agents]
+      nameMap  = Map.fromList [(agentName a, a) | a <- agents]
+  when (Map.size routeMap /= length agents) $
+    hPutStrLn stderr "WARNING: duplicate agent paths detected — some agents will be shadowed"
+  when (Map.size nameMap /= length agents) $
+    hPutStrLn stderr "WARNING: duplicate agent names detected — some agents will be shadowed"
+  return $ Http.mkApp
+    (connHttpHandler corsOrigin routeMap nameMap conns registry broadcast)
+    (Just ("/ws", connWsHandler broadcast registry clientCounter nameMap conns))
+
 -- | Run multi-agent server with connection routing
 runAgentServerWithConns :: Int -> Maybe Text -> [AgentDef] -> [ConnectionDef] -> IO ()
 runAgentServerWithConns port corsOrigin agents conns = do
@@ -268,15 +212,7 @@ runAgentServerWithConns port corsOrigin agents conns = do
   putStrLn $ "  Agents: " ++ show [T.unpack (agentName a) ++ " at " ++ T.unpack (agentPath a) | a <- agents]
   putStrLn $ "  Connections: " ++ show (length conns)
   putStrLn "  WebSocket: /ws (connection routing active)"
-
-  broadcast <- newBroadcastTChanIO
-  registry  <- newTVarIO Map.empty
-  clientCounter <- IORef.newIORef (0 :: Int)
-  let routeMap = Map.fromList [(agentPath a, a) | a <- agents]
-      nameMap  = Map.fromList [(agentName a, a) | a <- agents]
-      app = Http.mkApp
-        (connHttpHandler corsOrigin routeMap nameMap conns registry broadcast)
-        (Just ("/ws", connWsHandler broadcast registry clientCounter nameMap conns))
+  app <- mkAgentAppWithConns corsOrigin agents conns
   Warp.runSettings settings app
   where
     settings = Warp.setPort port $ Warp.setHost "*" $ Warp.defaultSettings
@@ -334,7 +270,8 @@ connWsHandlerBody :: BroadcastChan -> ClientRegistry -> Text -> WS.WsConn
                  -> Map.Map Text AgentDef -> [ConnectionDef] -> IO ()
 connWsHandlerBody broadcast registry clientId' conn nameMap conns = do
   peekMVar <- newEmptyMVar
-  let client = WsClient clientId' conn peekMVar
+  nonceRef <- IORef.newIORef (0 :: Int)
+  let client = WsClient clientId' conn peekMVar nonceRef
   ch <- atomically $ dupTChan broadcast
   bracket_
     (atomically $ modifyTVar' registry (Map.insert clientId' client))
@@ -359,25 +296,30 @@ connClientLoop client nameMap conns broadcast = do
         Nothing ->
           -- Route client message to agents via ClientRouteDef.
           -- Message format: "agentName:payload" routes to specific agent.
-          -- Untagged messages (no colon) fan-out to all ClientRouteDef agents.
+          -- Untagged messages fan-out to all targets if only one route exists;
+          -- with multiple routes, untagged messages are dropped with a warning.
           let (targetName, payload) = case T.breakOn ":" msg of
                 (name, rest) | not (T.null rest) ->
                   (Just name, T.drop 1 rest)
                 _ -> (Nothing, msg)
               routeTargets = [n | ClientRouteDef n <- conns]
-          in forM_ routeTargets $ \target ->
-            case targetName of
-              Just tn | tn /= target -> return ()  -- skip non-matching agents
-              _ ->
-                case Map.lookup target nameMap of
-                  Nothing -> return ()
-                  Just agent -> do
-                    result <- try $ agentStep agent payload
-                    case result of
-                      Left (e :: SomeException) ->
-                        hPutStrLn stderr $ "AgentServer: client route step failed for "
-                          ++ T.unpack target ++ ": " ++ show e
-                      Right output ->
-                        applyConnections nameMap conns broadcast Set.empty target output
+          in case targetName of
+            Nothing | length routeTargets > 1 ->
+              hPutStrLn stderr $ "AgentServer: untagged WS message in multi-route setup, dropping: "
+                ++ T.unpack (T.take 80 msg)
+            _ -> forM_ routeTargets $ \target ->
+              case targetName of
+                Just tn | tn /= target -> return ()  -- skip non-matching agents
+                _ ->
+                  case Map.lookup target nameMap of
+                    Nothing -> return ()
+                    Just agent -> do
+                      result <- try $ agentStep agent payload
+                      case result of
+                        Left (e :: SomeException) ->
+                          hPutStrLn stderr $ "AgentServer: client route step failed for "
+                            ++ T.unpack target ++ ": " ++ show e
+                        Right output ->
+                          applyConnections nameMap conns broadcast Set.empty target output
       connClientLoop client nameMap conns broadcast
     _ -> return ()

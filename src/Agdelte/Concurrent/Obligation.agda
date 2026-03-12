@@ -20,7 +20,7 @@ open import Agda.Builtin.String using (String)
 open import Agdelte.Concurrent.ProcessOpticLinear
   using (ConnState; Connected; Disconnected; IpcHandleL; mkHandle;
          connect; query; step; close)
-open import Agdelte.FFI.Server using (_>>=_; _>>_; pure; bracket; tryCatch)
+open import Agdelte.FFI.Server using (_>>=_; _>>_; pure; putStrLn; bracket; tryCatch)
 
 ------------------------------------------------------------------------
 -- SafeIO: resource-safe IO computation (obligation-free by construction)
@@ -47,13 +47,19 @@ run : ∀ {A} → SafeIO A → IO A
 run (pureS a)          = pure a
 run (bindS m f)        = run m >>= λ b → run (f b)
 run (liftS io)         = io
--- NOTE: tryCatch in cleanup silently swallows close errors (broken pipe,
--- double-close). This prevents exceptions from masking the main result,
--- but also hides resource cleanup failures. Consider logging on error.
+-- tryCatch in cleanup catches close errors (broken pipe, double-close)
+-- and logs them via putStrLn. This prevents exceptions from masking the
+-- main result while still surfacing resource cleanup failures.
 run (withIpcS path f)  =
   bracket (connect path)
-          (λ h → tryCatch (close h) >> pure tt)
+          (λ h → tryCatch (close h) >>= λ
+            { (just _) → pure tt
+            ; nothing  → putStrLn ("WARNING: close failed for " ++ path) >> pure tt
+            })
           (λ h → run (f h))
+  where
+    open import Data.Maybe using (just; nothing)
+    open import Data.String using (_++_)
 
 ------------------------------------------------------------------------
 -- SafeIO monad operations

@@ -108,6 +108,14 @@ stepShared sa i =
 useLinear : ∀ {I O} → LinearAgent I O → I → O
 useLinear la i = proj₂ (stepAgent (LinearAgent.agent la) i)
 
+-- CPS-style linear use: the callback receives a step function (I → O),
+-- not the agent itself, so the LinearAgent handle cannot be aliased.
+-- NOTE: the step function itself is a first-class value and CAN be called
+-- multiple times — CPS hides the agent, but does not enforce single-use.
+-- True linearity would require linear types (not available in Agda).
+withLinear : ∀ {I O A : Set} → LinearAgent I O → ((I → O) → A) → A
+withLinear la f = f (useLinear la)
+
 ------------------------------------------------------------------------
 -- Composition: SharedAgent combinators
 ------------------------------------------------------------------------

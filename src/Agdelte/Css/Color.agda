@@ -46,6 +46,16 @@ postulate
     : (cases) => cases["false"]();
 } #-}
 
+{-# FOREIGN GHC import qualified Data.Text as T #-}
+{-# FOREIGN GHC import Data.Char (isHexDigit) #-}
+{-# COMPILE GHC isHexColor = \s ->
+  let t = T.unpack s
+      validLen xs = let n = length xs in n == 3 || n == 6 || n == 8
+  in case t of
+       '#':rest -> if validLen rest && all isHexDigit rest
+                   then True else False
+       _ -> False #-}
+
 hexValid : String → Maybe Color
 hexValid s = if isHexColor s then just (hex s) else nothing
 

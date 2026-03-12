@@ -347,6 +347,10 @@ mutual
     elem tag (zoomAttrs' get wrap attrs) (zoomNodes' get wrap children)
   zoomNode' get wrap empty = empty
   zoomNode' get wrap (when cond node) = when (cond ∘ get) (zoomNode' get wrap node)
+  -- NOTE: foreach/foreachKeyed use zoomRT (runtime-deferred zoom) instead
+  -- of recursive zoomNode'. The outer zoomNode wraps in scopeProj for
+  -- scope-cutoff optimization, but these inner zoomRT nodes do NOT get
+  -- that optimization — the runtime must handle zoomRT diffing separately.
   zoomNode' get wrap (foreach {A} getList render) =
     foreach (getList ∘ get) (λ a i → zoomRT get wrap (render a i))
   zoomNode' get wrap (foreachKeyed {A} getList keyFn render) =

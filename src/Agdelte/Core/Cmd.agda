@@ -119,16 +119,20 @@ batch : List (Cmd A) → Cmd A
 batch [] = ε
 batch (c ∷ cs) = c <> batch cs
 
--- Propositional emptiness predicate
+-- Propositional emptiness predicate (recursive through _<>_)
 IsEmpty : Cmd A → Set
 IsEmpty ε = ⊤
   where open import Data.Unit using (⊤)
+IsEmpty (c₁ <> c₂) = IsEmpty c₁ × IsEmpty c₂
+  where open import Data.Product using (_×_)
 IsEmpty _ = ⊥
   where open import Data.Empty using (⊥)
 
--- Boolean emptiness check (for runtime optimization)
+-- Boolean emptiness check (for runtime optimization, recursive through _<>_)
 isEmpty : Cmd A → Bool
 isEmpty ε = true
+isEmpty (c₁ <> c₂) = isEmpty c₁ ∧ isEmpty c₂
+  where open import Data.Bool using (_∧_)
 isEmpty _ = false
 
 ------------------------------------------------------------------------

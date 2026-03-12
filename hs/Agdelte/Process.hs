@@ -28,7 +28,7 @@ module Agdelte.Process
   ) where
 
 import Control.Concurrent (forkIO, threadDelay)
-import Control.Exception (catch, SomeException, bracket, IOException)
+import Control.Exception (catch, onException, SomeException, bracket, IOException)
 import GHC.IO.Exception (IOErrorType(..), ioe_type)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -62,17 +62,18 @@ listenUnix path handler = do
   exists <- doesFileExist path
   if exists then removeFile path else return ()
   sock <- socket AF_UNIX Stream defaultProtocol
-  bind sock (SockAddrUnix path)
-  listen sock 5
-  -- Clean up socket + file on SIGTERM/SIGINT
-  let cleanup = do
-        close sock `catch` \(_ :: SomeException) -> return ()
-        exists' <- doesFileExist path
-        when exists' $ removeFile path
-  _ <- installHandler sigTERM (Catch cleanup) Nothing
-  _ <- installHandler sigINT  (Catch cleanup) Nothing
-  _ <- forkIO $ acceptLoop sock handler
-  return (IpcServer sock path)
+  (do bind sock (SockAddrUnix path)
+      listen sock 5
+      -- Clean up socket + file on SIGTERM/SIGINT
+      let cleanup = do
+            close sock `catch` \(_ :: SomeException) -> return ()
+            exists' <- doesFileExist path
+            when exists' $ removeFile path
+      _ <- installHandler sigTERM (Catch cleanup) Nothing
+      _ <- installHandler sigINT  (Catch cleanup) Nothing
+      _ <- forkIO $ acceptLoop sock handler
+      return (IpcServer sock path)
+   ) `onException` close sock
 
 -- | Accept loop with exception handling.
 -- On transient errors (e.g. EMFILE), logs and retries.
@@ -103,20 +104,20 @@ isFatalSocketError e = case ioe_type e of
   _                   -> False  -- EMFILE, ENFILE, etc. are transient
 
 handleClient :: Socket -> (T.Text -> IO T.Text) -> IO ()
-handleClient conn handler = do
-  result <- (Right <$> recvFramed conn) `catch` \(e :: SomeException) -> return (Left e)
-  case result of
-    Left e -> do
-      -- Connection error (not a clean close)
-      hPutStrLn stderr $ "handleClient: recv error: " ++ show e
-      safeClose conn
-    Right Nothing -> safeClose conn  -- clean close by peer
-    Right (Just msg) -> do
-      let request = TE.decodeUtf8With lenientDecode msg
-      response <- handler request `catch` \(e :: SomeException) ->
-        return (T.pack $ "error:" ++ show e)
-      sendFramed conn (TE.encodeUtf8 response)
-      handleClient conn handler
+handleClient conn handler =
+  go `catch` (\(_ :: SomeException) -> return ()) >> safeClose conn
+  where
+    go = do
+      result <- (Right <$> recvFramed conn) `catch` \(e :: SomeException) -> return (Left e)
+      case result of
+        Left e -> hPutStrLn stderr $ "handleClient: recv error: " ++ show e
+        Right Nothing -> return ()  -- clean close by peer
+        Right (Just msg) -> do
+          let request = TE.decodeUtf8With lenientDecode msg
+          response <- handler request `catch` \(e :: SomeException) ->
+            return (T.pack $ "error:" ++ show e)
+          sendFramed conn (TE.encodeUtf8 response)
+          go
 
 ------------------------------------------------------------------------
 -- Length-prefix framing: 4-byte big-endian length header + payload
@@ -201,7 +202,7 @@ data IpcClient = IpcClient
 connectUnix :: FilePath -> IO IpcClient
 connectUnix path = do
   sock <- socket AF_UNIX Stream defaultProtocol
-  connect sock (SockAddrUnix path)
+  connect sock (SockAddrUnix path) `onException` close sock
   return (IpcClient sock)
 
 -- | Send a request and receive response (length-prefixed framing)

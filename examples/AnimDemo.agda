@@ -70,7 +70,7 @@ dialogSpring = gentle 0.0 1.0
 
 -- After one 16ms frame
 dialogFrame1 : Spring
-dialogFrame1 = tickSpring dialogSpring 16
+dialogFrame1 = tickSpringRaw dialogSpring 16
 
 dialogPos1 : F.Float
 dialogPos1 = Spring.position dialogFrame1
@@ -81,7 +81,7 @@ dialogAfter1s = simulate 80 dialogSpring
   where
     simulate : ℕ → Spring → Spring
     simulate ℕ.zero    s = s
-    simulate (ℕ.suc n) s = simulate n (tickSpringStable s 16)
+    simulate (ℕ.suc n) s = simulate n (tickSpring s 16)
 
 dialogSettled : Bool
 dialogSettled = isSettled dialogAfter1s
@@ -95,7 +95,7 @@ badgeSpring = bouncy 0.0 1.0
 
 -- Retarget: user clicks again before spring settles
 retargetedSpring : Spring
-retargetedSpring = retarget 2.0 (tickSpring badgeSpring 50)
+retargetedSpring = retarget 2.0 (tickSpringRaw badgeSpring 50)
 
 retargetedTarget : F.Float
 retargetedTarget = Spring.target retargetedSpring

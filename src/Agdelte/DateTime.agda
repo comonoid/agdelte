@@ -183,12 +183,15 @@ postulate
 -- To extract ms, call dur as a function with a cases object.
 -- Fragile if the constructor is renamed, but there's no better FFI approach.
 -- FFI-FRAGILE: mkDuration (Duration)
+-- NOTE: Number(ms) loses precision for BigInt values > 2^53 (≈285 million
+-- years in milliseconds). Safe for all practical UI durations.
 {-# COMPILE JS addDuration = function(dur) { return function(d) {
   const ms = dur({mkDuration: ms => ms});
   return new Date(d.getTime() + Number(ms));
 }; } #-}
 
 -- FFI-FRAGILE: mkDuration (Duration)
+-- NOTE: same precision caveat as addDuration above.
 {-# COMPILE JS subDuration = function(dur) { return function(d) {
   const ms = dur({mkDuration: ms => ms});
   return new Date(d.getTime() - Number(ms));
@@ -243,7 +246,10 @@ postulate
   toLocaleString : Date → String
 
   -- Format with pattern (simplified)
-  -- Supports: YYYY, MM, DD, HH, mm, ss
+  -- Supported tokens: YYYY, MM, DD, HH, mm, ss
+  -- Unrecognized characters are preserved as-is (e.g. "-", " ", "T").
+  -- WARNING: non-token alphabetic sequences (e.g. "Month") are NOT
+  -- detected or warned about — they pass through unchanged.
   format : String → Date → String
 
 {-# COMPILE JS toISOString = function(d) { return d.toISOString(); } #-}

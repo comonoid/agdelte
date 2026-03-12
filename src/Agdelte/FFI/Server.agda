@@ -63,6 +63,13 @@ postulate
 
 {-# COMPILE GHC tryCatch = \_ -> tryCatchImpl #-}
 
+-- | Run IO action with async exceptions masked.
+-- Prevents async exceptions from interrupting a critical section.
+postulate
+  mask : ∀ {A : Set} → IO A → IO A
+
+{-# COMPILE GHC mask = \_ act -> Ex.uninterruptibleMask_ act #-}
+
 ------------------------------------------------------------------------
 -- STM
 ------------------------------------------------------------------------
@@ -289,8 +296,8 @@ wireAgent name path agent =
       -- stepIO: take MVar, compute step, store new agent + observation.
       -- onException restores the old agent if stepAgent throws (e.g. debugTrap,
       -- stack overflow). Without this, the MVar stays empty → deadlock.
-      -- putMVar BEFORE writeIORef: if an async exception arrives between
-      -- the two, we must not leave stateRef out of sync with the MVar agent.
+      -- mask ensures putMVar + writeIORef are atomic w.r.t. async exceptions,
+      -- preventing stateRef from going stale relative to the MVar agent.
       stepIO : String → IO String
       stepIO input =
         takeMVar agentMVar >>= λ a →
@@ -298,8 +305,8 @@ wireAgent name path agent =
           (let result   = stepAgent a input
                newAgent = proj₁ result
                output   = proj₂ result
-           in putMVar agentMVar newAgent >>
-              writeIORef stateRef output >>
+           in mask (putMVar agentMVar newAgent >>
+                    writeIORef stateRef output) >>
               pure output)
           (putMVar agentMVar a)
   in

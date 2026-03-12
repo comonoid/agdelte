@@ -40,12 +40,12 @@ record Spring : Set where
 -- Tick (Euler integration)
 ------------------------------------------------------------------------
 
--- WARNING: Forward Euler is unstable when stiffness * (dt/1000)² > 2.
+-- Raw Euler step — INTERNAL, use tickSpring (stable) instead.
+-- Forward Euler is unstable when stiffness * (dt/1000)² > 2.
 -- For stiffness=10000 and dt=16: 10000 * 0.016² = 2.56 → DIVERGES.
--- Use tickSpringStable for user-configurable or high stiffness values.
--- Presets (gentle/snappy/bouncy) are safe with tickSpringStable's 4ms steps.
-tickSpring : Spring → ℕ → Spring
-tickSpring s dt =
+-- Only use directly when dt is guaranteed ≤ 4ms.
+tickSpringRaw : Spring → ℕ → Spring
+tickSpringRaw s dt =
   let dtSec = FB.fromℕ dt F.÷ 1000.0
       force = Spring.stiffness s F.* (Spring.target s F.- Spring.position s)
               F.- Spring.damping s F.* Spring.velocity s
@@ -64,13 +64,16 @@ tickSpring s dt =
 private
   steps : ℕ → Spring → Spring
   steps zero    s = s
-  steps (suc n) s = steps n (tickSpring s 4)
+  steps (suc n) s = steps n (tickSpringRaw s 4)
 
-tickSpringStable : Spring → ℕ → Spring
-tickSpringStable s dt =
+-- | Stable spring tick: subdivides dt into ≤4ms Euler steps.
+-- Safe for any stiffness value and large dt (e.g. after tab-backgrounding).
+-- This is the primary API — use this instead of tickSpringRaw.
+tickSpring : Spring → ℕ → Spring
+tickSpring s dt =
   let full = dt / 4
       rem  = dt % 4
-  in tickSpring (steps full s) rem
+  in tickSpringRaw (steps full s) rem
 
 ------------------------------------------------------------------------
 -- Query

@@ -66,18 +66,22 @@ close (mkHandle h) = closeProcess h >> pure closedHandle
 
 -- A safe query-then-close sequence.
 -- bracket ensures handle is closed even if query throws.
+-- DEPRECATED: prefer Obligation.safePeek for resource-safe alternative.
 queryAndClose : String → IO String
 queryAndClose path =
   bracket (connect path)
           (λ h → close h >> pure tt)
           query
   where open import Agda.Builtin.Unit using (tt)
+{-# WARNING_ON_USAGE queryAndClose "Deprecated: use Obligation.safePeek for resource-safe bracket with error logging." #-}
 
 -- A safe step-then-close sequence.
 -- bracket ensures handle is closed even if step throws.
+-- DEPRECATED: prefer Obligation.safeStep for resource-safe alternative.
 stepAndClose : String → String → IO String
 stepAndClose path input =
   bracket (connect path)
           (λ h → close h >> pure tt)
           (λ h → step h input)
   where open import Agda.Builtin.Unit using (tt)
+{-# WARNING_ON_USAGE stepAndClose "Deprecated: use Obligation.safeStep for resource-safe bracket with error logging." #-}

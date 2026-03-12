@@ -130,6 +130,12 @@ chatB = coDual chatA
 -- Walks through one cycle of the session, replacing the terminal doneStep
 -- with the next repetition. For multi-step sessions (e.g. send → recv → done),
 -- the entire cycle is preserved in each repetition.
+--
+-- WARNING: splice assumes sendStep/recvStep nodes have right=coDone
+-- (the invariant enforced by coSend/coRecv smart constructors).
+-- Directly constructed CoSession values with non-trivial right branches
+-- will have those branches silently dropped. Use coSend/coRecv to build
+-- sessions, or validate with wellFormedN before calling repeatN.
 repeatN : Nat → CoSession → CoSession
 repeatN zero    _  = coDone
 repeatN (suc n) s  = splice s (repeatN n s)
@@ -139,11 +145,17 @@ repeatN (suc n) s  = splice s (repeatN n s)
     -- right is always coDone by invariant and must stay that way.
     splice : CoSession → CoSession → CoSession
     head (splice s k) with head s
-    ... | doneStep = head k
-    ... | other    = other
+    ... | doneStep   = head k
+    ... | sendStep A = sendStep A
+    ... | recvStep A = recvStep A
+    ... | offerStep  = offerStep
+    ... | chooseStep = chooseStep
     left (splice s k) with head s
-    ... | doneStep = left k
-    ... | _        = splice (left s) k
+    ... | doneStep   = left k
+    ... | sendStep _ = splice (left s) k
+    ... | recvStep _ = splice (left s) k
+    ... | offerStep  = splice (left s) k
+    ... | chooseStep = splice (left s) k
     -- INVARIANT: sendStep/recvStep nodes have right=coDone (enforced by coSend/coRecv).
     -- Directly constructed CoSession values with non-trivial right branches
     -- will have those branches silently dropped by splice.
@@ -151,7 +163,8 @@ repeatN (suc n) s  = splice s (repeatN n s)
     ... | doneStep    = right k
     ... | sendStep _  = coDone
     ... | recvStep _  = coDone
-    ... | _           = splice (right s) k
+    ... | offerStep   = splice (right s) k
+    ... | chooseStep  = splice (right s) k
 
 ------------------------------------------------------------------------
 -- Well-formedness check (N steps)

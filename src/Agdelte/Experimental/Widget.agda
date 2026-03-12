@@ -68,13 +68,17 @@ staticText s = mkWidget
   (λ _ _ → [])  -- no updates ever
   []
 
--- Dynamic text that shows model (for simple cases)
--- showFn converts model to string, init is the initial model value
-dynamicText : ∀ {Msg} → (ℕ → String) → ℕ → Widget ℕ Msg
-dynamicText showFn init = mkWidget
+-- Dynamic text that shows model (generic version)
+-- showFn converts model to string, eq checks equality, init is the initial model
+dynamicText : ∀ {Model Msg} → (Model → String) → (Model → Model → Bool) → Model → Widget Model Msg
+dynamicText showFn eq init = mkWidget
   ((text , showFn init) ∷ [])
-  (λ old new → if old ≡? new then [] else (text , setText (showFn new)) ∷ [])
+  (λ old new → if eq old new then [] else (text , setText (showFn new)) ∷ [])
   []
+
+-- Convenience: dynamicText specialized to ℕ
+dynamicNat : ∀ {Msg} → (ℕ → String) → ℕ → Widget ℕ Msg
+dynamicNat showFn = dynamicText showFn _≡?_
   where
     _≡?_ : ℕ → ℕ → Bool
     zero ≡? zero = true

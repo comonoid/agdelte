@@ -85,8 +85,10 @@ postulate
   -- Safe index (O(1))
   index : ∀ {A : Set} → ℕ → Array A → Maybe A
 
-  -- Unsafe index (O(1)) - returns undefined if out of bounds
+  -- Unsafe index (O(1)) - DEPRECATED: prefer `index` (returns Maybe).
+  -- Returns undefined if out of bounds (silent JS bug, GHC crash).
   unsafeIndex : ∀ {A : Set} → ℕ → Array A → A
+{-# WARNING_ON_USAGE unsafeIndex "unsafeIndex may return undefined on out-of-bounds — use `index` instead" #-}
 
 {-# COMPILE JS length = function(arr) { return BigInt(arr.length); } #-}
 
