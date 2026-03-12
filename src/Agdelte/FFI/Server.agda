@@ -68,7 +68,7 @@ postulate
 postulate
   mask : ∀ {A : Set} → IO A → IO A
 
-{-# COMPILE GHC mask = \_ act -> Ex.uninterruptibleMask_ act #-}
+{-# COMPILE GHC mask = \_ act -> Ex.mask_ act #-}
 
 ------------------------------------------------------------------------
 -- STM
@@ -152,10 +152,6 @@ postulate
 {-# COMPILE GHC listen = listenImpl #-}
 
 ------------------------------------------------------------------------
--- Multi-Agent Server with WebSocket
-------------------------------------------------------------------------
-
-------------------------------------------------------------------------
 -- Unix Socket IPC (ProcessOptic)
 ------------------------------------------------------------------------
 
@@ -210,25 +206,23 @@ postulate
 {-# COMPILE GHC closeProcess = Proc.ipcClose #-}
 
 ------------------------------------------------------------------------
--- Multi-Agent Server with WebSocket
+-- Multi-Agent Server with WebSocket (AgentServer)
 ------------------------------------------------------------------------
 
 {-# FOREIGN GHC import qualified Agdelte.AgentServer as AS #-}
-{-# FOREIGN GHC import qualified Agdelte.WebSocket as WS #-}
 
 -- AgentDef: definition of one agent for the server
 postulate
   AgentDef : Set
-  mkAgentDef : String → String → IORef String → IO String → (String → IO String) → AgentDef
+  mkAgentDef : String → String → IO String → (String → IO String) → AgentDef
 
 {-# COMPILE GHC AgentDef = type AS.AgentDef #-}
 
 {-# FOREIGN GHC
-  mkAgentDefImpl :: T.Text -> T.Text -> IORef.IORef T.Text -> IO T.Text -> (T.Text -> IO T.Text) -> AS.AgentDef
-  mkAgentDefImpl name path stateRef observe step = AS.AgentDef
+  mkAgentDefImpl :: T.Text -> T.Text -> IO T.Text -> (T.Text -> IO T.Text) -> AS.AgentDef
+  mkAgentDefImpl name path observe step = AS.AgentDef
     { AS.agentName = name
     , AS.agentPath = path
-    , AS.agentState = stateRef
     , AS.agentObserve = observe
     , AS.agentStep = step
     }
@@ -310,4 +304,4 @@ wireAgent name path agent =
               pure output)
           (putMVar agentMVar a)
   in
-  pure (mkAgentDef name path stateRef observeIO stepIO)
+  pure (mkAgentDef name path observeIO stepIO)

@@ -14,13 +14,13 @@
 -- (FFI/Shared.agda) handles encoding/decoding of typed values.
 
 module Agdelte.STM
-  ( Channel(..)
+  ( Channel
   , newChannel
   , sendChannel
   , recvChannel
   , tryRecvChannel
   , dupChannel
-  , Mailbox(..)
+  , Mailbox
   , newMailbox
   , putMailbox
   , takeMailbox

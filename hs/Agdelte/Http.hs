@@ -4,7 +4,6 @@ module Agdelte.Http
   ) where
 
 import Data.Text (Text)
-import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Data.Text.Encoding.Error (lenientDecode)
 import qualified Data.ByteString as BS
@@ -55,24 +54,49 @@ mkApp httpHandler mWsHandler =
                 else WS.rejectRequest pending "Wrong path"
       in WaiWS.websocketsOr WS.defaultConnectionOptions filteredWsApp httpApp
 
+-- | Maximum request body size (16 MB). Requests with bodies larger than this
+-- are rejected with 413 before the full body is read into memory.
+maxBodySize :: Int
+maxBodySize = 16 * 1024 * 1024
+
+-- | Read request body with size limit. Reads chunks incrementally;
+-- returns Left if the limit is exceeded (without reading the rest).
+readBodyLimited :: Wai.Request -> Int -> IO (Either () BS.ByteString)
+readBodyLimited req limit = go [] 0
+  where
+    go chunks total = do
+      chunk <- Wai.getRequestBodyChunk req
+      if BS.null chunk
+        then return (Right (BS.concat (reverse chunks)))
+        else let total' = total + BS.length chunk
+             in if total' > limit
+                then return (Left ())
+                else go (chunk : chunks) total'
+
 toWaiApp :: (Request -> IO Response) -> Wai.Application
 toWaiApp handler waiReq respond = do
-  body <- Wai.strictRequestBody waiReq
-  let req = Request
-        { reqMethod = TE.decodeUtf8With lenientDecode (Wai.requestMethod waiReq)
-        , reqPath   = TE.decodeUtf8With lenientDecode (Wai.rawPathInfo waiReq)
-        , reqBody   = TE.decodeUtf8With lenientDecode (LBS.toStrict body)
-        }
-  resp <- handler req
-  let userHdrs = map (\(k,v) -> (CI.mk (TE.encodeUtf8 k), TE.encodeUtf8 v)) (resHeaders resp)
-      hasContentType = any (\(k,_) -> CI.foldedCase k == "content-type") userHdrs
-      defaultHdrs = [("Content-Type", "application/json") | not hasContentType]
-                 ++ [ ("Cross-Origin-Opener-Policy", "same-origin")
-                    , ("Cross-Origin-Embedder-Policy", "require-corp") ]
-      hdrs = userHdrs ++ defaultHdrs
-      bodyBS = LBS.fromStrict (TE.encodeUtf8 (resBody resp))
-      status = toStatus (resStatus resp)
-  respond $ Wai.responseLBS status hdrs bodyBS
+  bodyResult <- readBodyLimited waiReq maxBodySize
+  case bodyResult of
+    Left () -> respond $ Wai.responseLBS H.status413 [] "Payload too large"
+    Right reqBodyBS -> do
+      let req = Request
+            { reqMethod = TE.decodeUtf8With lenientDecode (Wai.requestMethod waiReq)
+            , reqPath   = TE.decodeUtf8With lenientDecode (Wai.rawPathInfo waiReq)
+            , reqBody   = TE.decodeUtf8With lenientDecode reqBodyBS
+            }
+      resp <- handler req
+      let userHdrs = map (\(k,v) -> (CI.mk (TE.encodeUtf8 k), TE.encodeUtf8 v)) (resHeaders resp)
+          hasContentType = any (\(k,_) -> CI.foldedCase k == "content-type") userHdrs
+          isOptions = Wai.requestMethod waiReq == "OPTIONS"
+          coopCoep = if isOptions then []
+                     else [ ("Cross-Origin-Opener-Policy", "same-origin")
+                          , ("Cross-Origin-Embedder-Policy", "require-corp") ]
+          defaultHdrs = [("Content-Type", "application/json") | not hasContentType]
+                     ++ coopCoep
+          hdrs = userHdrs ++ defaultHdrs
+          respBodyBS = LBS.fromStrict (TE.encodeUtf8 (resBody resp))
+          status = toStatus (resStatus resp)
+      respond $ Wai.responseLBS status hdrs respBodyBS
 
 -- | Convert Int status code to http-types Status
 toStatus :: Int -> H.Status
@@ -92,4 +116,4 @@ toStatus 500 = H.status500
 toStatus 502 = H.status502
 toStatus 503 = H.status503
 toStatus 504 = H.status504
-toStatus n   = H.mkStatus n "Unknown"
+toStatus n   = H.mkStatus n ""

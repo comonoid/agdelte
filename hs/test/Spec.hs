@@ -4,7 +4,6 @@ module Main where
 
 import Test.Hspec
 
-import Control.Concurrent (threadDelay)
 import qualified Numeric
 import Control.Concurrent.Async (async, cancel)
 import Control.Concurrent.MVar
@@ -31,20 +30,23 @@ withApp app = Warp.testWithApplication (return app)
 connectRaw :: Int -> IO NS.Socket
 connectRaw port = do
   let hints = NS.defaultHints { NS.addrSocketType = NS.Stream }
-  addr:_ <- NS.getAddrInfo (Just hints) (Just "127.0.0.1") (Just (show port))
+  addrs <- NS.getAddrInfo (Just hints) (Just "127.0.0.1") (Just (show port))
+  addr <- case addrs of
+    (a:_) -> return a
+    []    -> fail $ "getAddrInfo returned no results for port " ++ show port
   sock <- NS.openSocket addr
   NS.connect sock (NS.addrAddress addr)
   return sock
 
 -- Helper: receive all data until connection closes
 recvAllBS :: NS.Socket -> IO BS.ByteString
-recvAllBS sock = go BS.empty
+recvAllBS sock = go []
   where
-    go acc = do
+    go chunks = do
       chunk <- NSB.recv sock 65536
       if BS.null chunk
-        then return acc
-        else go (acc <> chunk)
+        then return (BS.concat (reverse chunks))
+        else go (chunk : chunks)
 
 -- Parse raw HTTP response into (status, body, headers)
 parseHttpResponse :: BS.ByteString -> (Int, BS.ByteString, [(BS.ByteString, BS.ByteString)])
@@ -78,23 +80,19 @@ parseHttpResponse raw =
 
 -- Decode chunked transfer-encoding body
 dechunk :: BS.ByteString -> BS.ByteString
-dechunk bs = go bs BS.empty
+dechunk bs = BS.concat (reverse (go bs []))
   where
-    go remaining acc =
+    go remaining chunks =
       let (sizeLine, rest) = BS.breakSubstring "\r\n" remaining
           rest' = BS.drop 2 rest  -- skip \r\n after size
-      in case readHex (map (toEnum . fromIntegral) (BS.unpack sizeLine)) of
-          [(0, _)] -> acc
+      in case Numeric.readHex (map (toEnum . fromIntegral) (BS.unpack sizeLine)) of
+          [(0, _)] -> chunks
           [(n, _)] ->
             let chunk = BS.take n rest'
                 rest'' = BS.drop (n + 2) rest'  -- skip chunk + \r\n
-            in go rest'' (acc <> chunk)
-          _ -> acc
+            in go rest'' (chunk : chunks)
+          _ -> chunks
 
-readHex :: String -> [(Int, String)]
-readHex s = case Numeric.readHex s of
-  [] -> []
-  xs -> xs
 
 -- Helper: simple HTTP GET via raw sockets
 httpGet :: Int -> String -> IO (Int, BS.ByteString, [(BS.ByteString, BS.ByteString)])
@@ -209,20 +207,18 @@ wsTests = do
         T.length msg `shouldBe` 70000
 
   it "close frame results in clean shutdown" $ do
-    closedRef <- newIORef False
+    closedMVar <- newEmptyMVar
     let wsApp pending = do
           conn <- WS.acceptRequest pending
           result <- try $ WS.receiveDataMessage conn :: IO (Either WS.ConnectionException WS.DataMessage)
           case result of
-            Left _ -> writeIORef closedRef True
-            Right _ -> return ()
+            Left _ -> putMVar closedMVar True
+            Right _ -> putMVar closedMVar False
         app = Http.mkApp testHttpHandler (Just ("/ws", wsApp))
     withApp app $ \port -> do
-      WS.runClient "127.0.0.1" port "/ws" $ \conn -> do
+      WS.runClient "127.0.0.1" port "/ws" $ \conn ->
         WS.sendClose conn ("bye" :: Text)
-        threadDelay 100000
-      threadDelay 100000
-      closed <- readIORef closedRef
+      closed <- takeMVar closedMVar
       closed `shouldBe` True
 
   it "disconnect without close frame does not crash server" $ do
@@ -232,7 +228,7 @@ wsTests = do
           return ()
         app = Http.mkApp testHttpHandler (Just ("/ws", wsApp))
     withApp app $ \port -> do
-      -- Connect via raw socket, send upgrade, then close abruptly
+      -- Connect via raw socket, send upgrade, wait for response, then close abruptly
       bracket (connectRaw port) NS.close $ \sock -> do
         let req = BS.concat
               [ "GET /ws HTTP/1.1\r\n"
@@ -244,9 +240,10 @@ wsTests = do
               , "\r\n"
               ]
         NSB.sendAll sock req
-        threadDelay 50000
-      -- Server should still work
-      threadDelay 100000
+        -- Wait for upgrade response before closing abruptly
+        _ <- NSB.recv sock 4096
+        return ()
+      -- Server should still work after abrupt disconnect
       (status, _, _) <- httpGet port "/state"
       status `shouldBe` 200
 
@@ -282,7 +279,6 @@ agentTests = do
       tag1 `shouldBe` ("welcome" :: Text)
       welcomeMsg `shouldSatisfy` T.isPrefixOf "connected:"
 
-      threadDelay 50000
       (status, _, _) <- httpPost port "/counter/step" ""
       status `shouldBe` 200
 
@@ -305,19 +301,15 @@ withAgentServer = withAgentServerCors Nothing
 withAgentServerCors :: Maybe Text -> (Int -> IO a) -> IO a
 withAgentServerCors corsOrigin action = do
   stateRef <- newIORef (0 :: Int)
-  agentStateRef <- newIORef "0"
-  let observe = do
+  let observe = do  -- readIORef is atomic for single-word reads on GHC
         n <- readIORef stateRef
         return (T.pack (show n))
       step _ = do
         n <- atomicModifyIORef' stateRef (\n' -> (n' + 1, n' + 1))
-        let output = T.pack (show n)
-        writeIORef agentStateRef output
-        return output
+        return (T.pack (show n))
   let agent = Agent.AgentDef
         { Agent.agentName = "counter"
         , Agent.agentPath = "/counter"
-        , Agent.agentState = agentStateRef
         , Agent.agentObserve = observe
         , Agent.agentStep = step
         }

@@ -10,13 +10,14 @@
 --   Process B (client) connects and sends optic operations
 --   Same Agda types on both sides, serialized via Serialize record
 --
--- Protocol:
---   Request:  { "op": "peek" | "over", "path": "...", "payload": "..." }
---   Response: { "status": "ok" | "error", "value": "..." }
+-- Protocol (length-prefixed text frames):
+--   Request:  "peek"         → returns current observation
+--             "step:INPUT"   → steps agent with INPUT, returns new observation
+--   Response: plain text (observation or "error:..." on failure)
 
 module Agdelte.Process
-  ( IpcServer(..)
-  , IpcClient(..)
+  ( IpcServer
+  , IpcClient
   , listenUnix
   , connectUnix
   , ipcRequest
@@ -28,7 +29,8 @@ module Agdelte.Process
   ) where
 
 import Control.Concurrent (forkIO, threadDelay)
-import Control.Exception (catch, onException, SomeException, bracket, IOException)
+import Control.Exception (catch, finally, onException, SomeException, IOException)
+import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import GHC.IO.Exception (IOErrorType(..), ioe_type)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -38,8 +40,7 @@ import Data.Bits (shiftL, shiftR, (.&.))
 import Data.Word (Word32)
 import Network.Socket
 import Network.Socket.ByteString (recv, sendAll)
-import System.Directory (removeFile, doesFileExist)
-import Control.Monad (when)
+import System.Directory (removeFile)
 import System.IO (hPutStrLn, stderr)
 import System.Posix.Signals (installHandler, Handler(..), sigTERM, sigINT)
 
@@ -59,21 +60,31 @@ data IpcServer = IpcServer
 -- Installs signal handlers (SIGTERM, SIGINT) to clean up socket file on exit.
 listenUnix :: FilePath -> (T.Text -> IO T.Text) -> IO IpcServer
 listenUnix path handler = do
-  exists <- doesFileExist path
-  if exists then removeFile path else return ()
+  removeFile path `catch` (\(_ :: IOException) -> return ())
   sock <- socket AF_UNIX Stream defaultProtocol
   (do bind sock (SockAddrUnix path)
       listen sock 5
-      -- Clean up socket + file on SIGTERM/SIGINT
+      -- Clean up socket + file on SIGTERM/SIGINT, chaining previous handlers
       let cleanup = do
             close sock `catch` \(_ :: SomeException) -> return ()
-            exists' <- doesFileExist path
-            when exists' $ removeFile path
-      _ <- installHandler sigTERM (Catch cleanup) Nothing
-      _ <- installHandler sigINT  (Catch cleanup) Nothing
+            removeFile path `catch` \(_ :: IOException) -> return ()
+      prevTermRef <- newIORef (Catch (return ()))
+      prevIntRef  <- newIORef (Catch (return ()))
+      oldTerm <- installHandler sigTERM (Catch (cleanup >> chainHandler prevTermRef)) Nothing
+      writeIORef prevTermRef oldTerm
+      oldInt  <- installHandler sigINT  (Catch (cleanup >> chainHandler prevIntRef))  Nothing
+      writeIORef prevIntRef oldInt
       _ <- forkIO $ acceptLoop sock handler
       return (IpcServer sock path)
    ) `onException` close sock
+
+-- | Invoke a previously-saved signal handler (via IORef).
+chainHandler :: IORef Handler -> IO ()
+chainHandler ref = do
+  h <- readIORef ref
+  case h of
+    Catch action -> action
+    _            -> return ()  -- Default/Ignore: nothing to chain
 
 -- | Accept loop with exception handling.
 -- On transient errors (e.g. EMFILE), logs and retries.
@@ -105,10 +116,10 @@ isFatalSocketError e = case ioe_type e of
 
 handleClient :: Socket -> (T.Text -> IO T.Text) -> IO ()
 handleClient conn handler =
-  go `catch` (\(_ :: SomeException) -> return ()) >> safeClose conn
+  (go `catch` (\(_ :: IOException) -> return ())) `finally` safeClose conn
   where
     go = do
-      result <- (Right <$> recvFramed conn) `catch` \(e :: SomeException) -> return (Left e)
+      result <- (Right <$> recvFramed conn) `catch` \(e :: IOException) -> return (Left e)
       case result of
         Left e -> hPutStrLn stderr $ "handleClient: recv error: " ++ show e
         Right Nothing -> return ()  -- clean close by peer
@@ -154,24 +165,23 @@ safeClose s = close s `catch` \(_ :: SomeException) -> return ()
 -- | Receive exactly n bytes from a socket
 recvExact :: Socket -> Int -> IO (Maybe BS.ByteString)
 recvExact _ 0 = return (Just BS.empty)
-recvExact sock n = go BS.empty n
+recvExact sock n = go [] n
   where
-    go acc remaining
-      | remaining <= 0 = return (Just acc)
+    go chunks remaining
+      | remaining <= 0 = return (Just (BS.concat (reverse chunks)))
       | otherwise = do
           chunk <- recv sock (min remaining 65536)
           if BS.null chunk
             then return Nothing  -- peer closed
-            else go (acc <> chunk) (remaining - BS.length chunk)
+            else go (chunk : chunks) (remaining - BS.length chunk)
 
 -- | Send a length-prefixed message.
 -- Logs and drops the message if the payload exceeds the 4 GB frame limit.
 sendFramed :: Socket -> BS.ByteString -> IO ()
 sendFramed sock payload = case encodeLenSafe (BS.length payload) of
   Nothing -> hPutStrLn stderr $ "sendFramed: payload too large (" ++ show (BS.length payload) ++ " bytes), dropping"
-  Just header -> do
-    sendAll sock header
-    sendAll sock payload
+  Just header ->
+    sendAll sock (header <> payload)
 
 -- | Receive a length-prefixed message.
 -- Returns Nothing if the peer closed the connection or frame is invalid/too large.
@@ -205,18 +215,19 @@ connectUnix path = do
   connect sock (SockAddrUnix path) `onException` close sock
   return (IpcClient sock)
 
--- | Send a request and receive response (length-prefixed framing)
+-- | Send a request and receive response (length-prefixed framing).
+-- Throws IOError if the connection is closed by the peer.
 ipcRequest :: IpcClient -> T.Text -> IO T.Text
 ipcRequest client request = do
   sendFramed (icSocket client) (TE.encodeUtf8 request)
   mResponse <- recvFramed (icSocket client)
   case mResponse of
     Just response -> return (TE.decodeUtf8With lenientDecode response)
-    Nothing       -> return "error:connection closed"
+    Nothing       -> ioError (userError "IPC connection closed by peer")
 
--- | Close IPC connection
+-- | Close IPC connection (safe to call on already-closed connections)
 ipcClose :: IpcClient -> IO ()
-ipcClose client = close (icSocket client)
+ipcClose client = close (icSocket client) `catch` \(_ :: IOException) -> return ()
 
 ------------------------------------------------------------------------
 -- Agent-specific IPC (ProcessOptic protocol)
