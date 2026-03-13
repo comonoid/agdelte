@@ -20,7 +20,7 @@ module Agdelte.AgentServer
 import Control.Concurrent.Async (race_)
 import Control.Concurrent.STM
 import Control.Concurrent.MVar
-import Control.Exception (IOException, SomeException, bracket_, try)
+import Control.Exception (SomeException, bracket_, try)
 import System.IO (hPutStrLn, stderr)
 import qualified Data.IORef as IORef
 import Data.Text (Text)
@@ -99,8 +99,8 @@ addCorsHeaders (Just origin) resp = resp { Http.resHeaders = Http.resHeaders res
 -- | Handle /client/{clientId}/{action} requests
 -- GET /client/{clientId}/peek -> peek client model via WS
 -- POST /client/{clientId}/over -> send msg to client via WS
-handleClientRequest :: ClientRegistry -> Text -> Text -> IO Http.Response
-handleClientRequest registry rest body = do
+handleClientRequest :: ClientRegistry -> Text -> Text -> Text -> IO Http.Response
+handleClientRequest registry method rest body = do
   let (clientId', action) = case T.breakOn "/" rest of
         (cid, rest') | not (T.null rest') -> (cid, T.drop 1 rest')
         (cid, _) -> (cid, "peek")
@@ -108,7 +108,9 @@ handleClientRequest registry rest body = do
   case Map.lookup clientId' clients of
     Nothing -> return $ Http.Response 404 ("Client not found: " <> clientId') []
     Just client -> case action of
-      "peek" -> do
+      "peek"
+        | method /= "GET" -> return $ Http.Response 405 "Use GET for /client/{id}/peek" []
+        | otherwise -> do
         -- Per-request MVar peek protocol: each peek gets a fresh MVar keyed by
         -- nonce, so stale/concurrent responses cannot interfere.
         -- Protocol: peek:clientId:nonce → peek-response:nonce:value
@@ -129,7 +131,9 @@ handleClientRequest registry rest body = do
               Just value ->
                 return $ Http.Response 200 value []
               Nothing -> return $ Http.Response 504 "Client peek timeout" []
-      "over" -> do
+      "over"
+        | method /= "POST" -> return $ Http.Response 405 "Use POST for /client/{id}/over" []
+        | otherwise -> do
         result <- try $ WS.wsSend (clientConn client) ("over:" <> body)
         case result of
           Left (_ :: SomeException) ->
@@ -201,7 +205,7 @@ applyConnections routing broadcast visited source output
           Just targetAgent -> do
             result <- try $ agentStep targetAgent output
             case result of
-              Left (e :: IOException) ->
+              Left (e :: SomeException) ->
                 hPutStrLn stderr $ "AgentServer: pipe step failed for "
                   ++ T.unpack target ++ ": " ++ show e
               Right targetOutput ->
@@ -223,6 +227,10 @@ mkAgentAppWithConns corsOrigin agents conns = do
     hPutStrLn stderr "WARNING: duplicate agent paths detected — some agents will be shadowed"
   when (Map.size nameMap /= length agents) $
     hPutStrLn stderr "WARNING: duplicate agent names detected — some agents will be shadowed"
+  forM_ agents $ \a ->
+    when (T.isInfixOf ":" (agentName a)) $
+      hPutStrLn stderr $ "WARNING: agent name contains ':' which breaks WS protocol: "
+        ++ T.unpack (agentName a)
   return $ Http.mkApp
     (connHttpHandler corsOrigin routeMap routing registry broadcast)
     (Just ("/ws", connWsHandler broadcast registry clientCounter sessionId routing))
@@ -254,38 +262,40 @@ connHttpHandler corsOrigin routes routing registry broadcast req
 connRouteRequest :: Map.Map Text AgentDef -> ConnRouting
                 -> ClientRegistry -> BroadcastChan
                 -> Text -> Text -> Text -> IO Http.Response
-connRouteRequest routes routing registry broadcast method path body = do
-  let (agentPath', action) = splitPath path
-  case Map.lookup agentPath' routes of
-    Just agent -> case action of
-          "state"
-            | method == "POST" -> return $ Http.Response 405 "Use GET for /state" []
-            | otherwise -> do
-                result <- try $ agentObserve agent
-                case result of
-                  Left (e :: IOException) -> do
-                    hPutStrLn stderr $ "AgentServer: observe failed for "
-                      ++ T.unpack (agentName agent) ++ ": " ++ show e
-                    return $ Http.Response 500 "Internal server error" []
-                  Right output ->
-                    return $ Http.Response 200 output []
-          "step"
-            | method == "GET" -> return $ Http.Response 405 "Use POST for /step" []
-            | otherwise -> do
-                result <- try $ agentStep agent body
-                case result of
-                  Left (e :: IOException) -> do
-                    hPutStrLn stderr $ "AgentServer: step failed for "
-                      ++ T.unpack (agentName agent) ++ ": " ++ show e
-                    return $ Http.Response 500 "Internal server error" []
-                  Right output -> do
-                    -- Apply connection routing (broadcast + pipes)
-                    applyConnections routing broadcast Set.empty (agentName agent) output
-                    return $ Http.Response 200 output []
-          _ -> return $ Http.Response 404 "Unknown action (use /state or /step)" []
-    Nothing -> case T.stripPrefix "/client/" path of
-      Just rest -> handleClientRequest registry rest body
-      Nothing -> return $ Http.Response 404 "Agent not found" []
+connRouteRequest routes routing registry broadcast method path body =
+  -- Check /client/ prefix FIRST so agent paths cannot shadow the client API
+  case T.stripPrefix "/client/" path of
+    Just rest -> handleClientRequest registry method rest body
+    Nothing -> do
+      let (agentPath', action) = splitPath path
+      case Map.lookup agentPath' routes of
+        Just agent -> case action of
+              "state"
+                | method /= "GET" -> return $ Http.Response 405 "Use GET for /state" []
+                | otherwise -> do
+                    result <- try $ agentObserve agent
+                    case result of
+                      Left (e :: SomeException) -> do
+                        hPutStrLn stderr $ "AgentServer: observe failed for "
+                          ++ T.unpack (agentName agent) ++ ": " ++ show e
+                        return $ Http.Response 500 "Internal server error" []
+                      Right output ->
+                        return $ Http.Response 200 output []
+              "step"
+                | method /= "POST" -> return $ Http.Response 405 "Use POST for /step" []
+                | otherwise -> do
+                    result <- try $ agentStep agent body
+                    case result of
+                      Left (e :: SomeException) -> do
+                        hPutStrLn stderr $ "AgentServer: step failed for "
+                          ++ T.unpack (agentName agent) ++ ": " ++ show e
+                        return $ Http.Response 500 "Internal server error" []
+                      Right output -> do
+                        -- Apply connection routing (broadcast + pipes)
+                        applyConnections routing broadcast Set.empty (agentName agent) output
+                        return $ Http.Response 200 output []
+              _ -> return $ Http.Response 404 "Unknown action (use /state or /step)" []
+        Nothing -> return $ Http.Response 404 "Agent not found" []
 
 connWsHandler :: BroadcastChan -> ClientRegistry -> IORef.IORef Int -> Text
              -> ConnRouting
@@ -305,15 +315,19 @@ connWsHandlerBody broadcast registry clientId' conn routing = do
   nonceRef <- IORef.newIORef (0 :: Int)
   slotsVar <- newTVarIO Map.empty
   let client = WsClient clientId' conn nonceRef slotsVar
-  ch <- atomically $ dupTChan broadcast
-  bracket_
-    (atomically $ modifyTVar' registry (Map.insert clientId' client))
-    (do atomically $ modifyTVar' registry (Map.delete clientId')
-        WS.wsClose conn)
-    (do result <- try $ WS.wsSend conn ("connected:" <> clientId')
-        case result of
-          Left (_ :: SomeException) -> return ()  -- client disconnected before welcome
-          Right () ->
+  -- Send "connected:" BEFORE registering in registry, so the client is
+  -- never visible to peek/over requests until it's actually ready.
+  result <- try $ WS.wsSend conn ("connected:" <> clientId')
+  case result of
+    Left (_ :: SomeException) -> WS.wsClose conn  -- client disconnected before welcome
+    Right () ->
+      bracket_
+        (atomically $ modifyTVar' registry (Map.insert clientId' client))
+        (do atomically $ modifyTVar' registry (Map.delete clientId')
+            WS.wsClose conn)
+        (do -- Subscribe to broadcast AFTER sending "connected:" so the client
+            -- doesn't receive broadcast messages before it knows its clientId.
+            ch <- atomically $ dupTChan broadcast
             race_ (broadcastLoop conn ch) (connClientLoop client routing broadcast))
 
 -- | Connection-aware client loop: routes WS messages via ClientRouteDef
@@ -371,7 +385,7 @@ connClientLoop client routing broadcast = do
                     Just agent -> do
                       result <- try $ agentStep agent payload
                       case result of
-                        Left (e :: IOException) ->
+                        Left (e :: SomeException) ->
                           hPutStrLn stderr $ "AgentServer: client route step failed for "
                             ++ T.unpack target ++ ": " ++ show e
                         Right output ->

@@ -29,8 +29,8 @@ module Agdelte.Process
   ) where
 
 import Control.Concurrent (forkIO, threadDelay)
+import Control.Concurrent.MVar (MVar, newEmptyMVar, newMVar, putMVar, tryReadMVar, withMVar)
 import Control.Exception (catch, finally, onException, SomeException, IOException)
-import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import GHC.IO.Exception (IOErrorType(..), ioe_type)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -64,27 +64,31 @@ listenUnix path handler = do
   sock <- socket AF_UNIX Stream defaultProtocol
   (do bind sock (SockAddrUnix path)
       listen sock 5
-      -- Clean up socket + file on SIGTERM/SIGINT, chaining previous handlers
+      -- Clean up socket + file on SIGTERM/SIGINT, chaining previous handlers.
+      -- Uses MVar so the handler can be installed atomically: if a signal
+      -- arrives before putMVar, tryReadMVar returns Nothing and chaining
+      -- is safely skipped (no Ignore window, no stale IORef read).
       let cleanup = do
             close sock `catch` \(_ :: SomeException) -> return ()
             removeFile path `catch` \(_ :: IOException) -> return ()
-      prevTermRef <- newIORef (Catch (return ()))
-      prevIntRef  <- newIORef (Catch (return ()))
-      oldTerm <- installHandler sigTERM (Catch (cleanup >> chainHandler prevTermRef)) Nothing
-      writeIORef prevTermRef oldTerm
-      oldInt  <- installHandler sigINT  (Catch (cleanup >> chainHandler prevIntRef))  Nothing
-      writeIORef prevIntRef oldInt
+      prevTermVar <- newEmptyMVar
+      prevIntVar  <- newEmptyMVar
+      oldTerm <- installHandler sigTERM (Catch (cleanup >> chainHandlerMVar prevTermVar)) Nothing
+      putMVar prevTermVar oldTerm
+      oldInt  <- installHandler sigINT  (Catch (cleanup >> chainHandlerMVar prevIntVar))  Nothing
+      putMVar prevIntVar oldInt
       _ <- forkIO $ acceptLoop sock handler
       return (IpcServer sock path)
    ) `onException` close sock
 
--- | Invoke a previously-saved signal handler (via IORef).
-chainHandler :: IORef Handler -> IO ()
-chainHandler ref = do
-  h <- readIORef ref
-  case h of
-    Catch action -> action
-    _            -> return ()  -- Default/Ignore: nothing to chain
+-- | Invoke a previously-saved signal handler (via MVar).
+-- If the MVar is still empty (signal arrived before putMVar), chaining is skipped.
+chainHandlerMVar :: MVar Handler -> IO ()
+chainHandlerMVar var = do
+  mh <- tryReadMVar var
+  case mh of
+    Just (Catch action) -> action
+    _                   -> return ()  -- not yet populated, Default, or Ignore
 
 -- | Accept loop with exception handling.
 -- On transient errors (e.g. EMFILE), logs and retries.
@@ -116,7 +120,8 @@ isFatalSocketError e = case ioe_type e of
 
 handleClient :: Socket -> (T.Text -> IO T.Text) -> IO ()
 handleClient conn handler =
-  (go `catch` (\(_ :: IOException) -> return ())) `finally` safeClose conn
+  (go `catch` (\(e :: IOException) ->
+    hPutStrLn stderr $ "handleClient: send error: " ++ show e)) `finally` safeClose conn
   where
     go = do
       result <- (Right <$> recvFramed conn) `catch` \(e :: IOException) -> return (Left e)
@@ -127,8 +132,9 @@ handleClient conn handler =
           let request = TE.decodeUtf8With lenientDecode msg
           response <- handler request `catch` \(e :: SomeException) ->
             return (T.pack $ "error:" ++ show e)
-          sendFramed conn (TE.encodeUtf8 response)
-          go
+          ok <- sendFramed conn (TE.encodeUtf8 response)
+          if ok then go
+                else hPutStrLn stderr "handleClient: sendFramed failed, closing connection"
 
 ------------------------------------------------------------------------
 -- Length-prefix framing: 4-byte big-endian length header + payload
@@ -147,11 +153,17 @@ encodeLenSafe n
       , fromIntegral (         n  .&. 0xFF)
       ]
 
--- | Decode a 4-byte big-endian length header (total function)
+-- | Decode a 4-byte big-endian length header (total function).
+-- Uses Word32 internally to avoid sign-bit overflow on 32-bit systems.
+-- Returns Nothing for values that exceed Int range (e.g. ≥2^31 on 32-bit).
 decodeLen :: BS.ByteString -> Maybe Int
 decodeLen bs = case map fromIntegral (BS.unpack bs) of
-  [a, b, c, d] -> Just (shiftL (a :: Int) 24 + shiftL b 16 + shiftL c 8 + d)
-  _             -> Nothing
+  [a, b, c, d] ->
+    let w = shiftL (a :: Word32) 24 + shiftL b 16 + shiftL c 8 + d
+    in  if w > fromIntegral (maxBound :: Int)
+        then Nothing
+        else Just (fromIntegral w)
+  _ -> Nothing
 
 -- | Maximum allowed frame size (16 MB). Frames larger than this are rejected
 -- to prevent OOM from malicious or corrupted length headers.
@@ -176,12 +188,20 @@ recvExact sock n = go [] n
             else go (chunk : chunks) (remaining - BS.length chunk)
 
 -- | Send a length-prefixed message.
--- Logs and drops the message if the payload exceeds the 4 GB frame limit.
-sendFramed :: Socket -> BS.ByteString -> IO ()
-sendFramed sock payload = case encodeLenSafe (BS.length payload) of
-  Nothing -> hPutStrLn stderr $ "sendFramed: payload too large (" ++ show (BS.length payload) ++ " bytes), dropping"
-  Just header ->
-    sendAll sock (header <> payload)
+-- Returns False (and logs) if the payload exceeds size limits, so callers
+-- can close the connection to avoid protocol desync.
+sendFramed :: Socket -> BS.ByteString -> IO Bool
+sendFramed sock payload
+  | BS.length payload > maxFrameSize = do
+      hPutStrLn stderr $ "sendFramed: payload exceeds maxFrameSize (" ++ show (BS.length payload) ++ " bytes), dropping"
+      return False
+  | otherwise = case encodeLenSafe (BS.length payload) of
+      Nothing -> do
+        hPutStrLn stderr $ "sendFramed: payload too large (" ++ show (BS.length payload) ++ " bytes), dropping"
+        return False
+      Just header -> do
+        sendAll sock (header <> payload)
+        return True
 
 -- | Receive a length-prefixed message.
 -- Returns Nothing if the peer closed the connection or frame is invalid/too large.
@@ -203,9 +223,11 @@ recvFramed sock = do
 -- IPC Client (optic user side)
 ------------------------------------------------------------------------
 
--- | IPC client connected to a Unix socket
+-- | IPC client connected to a Unix socket.
+-- Thread-safe: concurrent ipcRequest calls are serialized via icLock.
 data IpcClient = IpcClient
   { icSocket :: Socket
+  , icLock   :: MVar ()   -- ^ mutex for request/response atomicity
   }
 
 -- | Connect to an agent's Unix socket
@@ -213,17 +235,22 @@ connectUnix :: FilePath -> IO IpcClient
 connectUnix path = do
   sock <- socket AF_UNIX Stream defaultProtocol
   connect sock (SockAddrUnix path) `onException` close sock
-  return (IpcClient sock)
+  lock <- newMVar ()
+  return (IpcClient sock lock)
 
 -- | Send a request and receive response (length-prefixed framing).
+-- Thread-safe: serialized via icLock so concurrent calls don't interleave.
 -- Throws IOError if the connection is closed by the peer.
 ipcRequest :: IpcClient -> T.Text -> IO T.Text
-ipcRequest client request = do
-  sendFramed (icSocket client) (TE.encodeUtf8 request)
-  mResponse <- recvFramed (icSocket client)
-  case mResponse of
-    Just response -> return (TE.decodeUtf8With lenientDecode response)
-    Nothing       -> ioError (userError "IPC connection closed by peer")
+ipcRequest client request = withMVar (icLock client) $ \_ -> do
+  ok <- sendFramed (icSocket client) (TE.encodeUtf8 request)
+  if not ok
+    then ioError (userError "IPC request too large to send")
+    else do
+      mResponse <- recvFramed (icSocket client)
+      case mResponse of
+        Just response -> return (TE.decodeUtf8With lenientDecode response)
+        Nothing       -> ioError (userError "IPC connection closed by peer")
 
 -- | Close IPC connection (safe to call on already-closed connections)
 ipcClose :: IpcClient -> IO ()
