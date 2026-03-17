@@ -43,7 +43,7 @@ exports.uprimIntegerGreaterOrEqualThan = (x, y) => x >= y;
 exports.uprimIntegerLessThan = (x, y) => x < y;
 
 // Words
-const WORD64_MAX_VALUE = 18446744073709552000n;
+const WORD64_MAX_VALUE = 18446744073709551616n;
 
 // primWord64ToNat : Word64 -> Nat
 exports.primWord64ToNat = x => x;
@@ -121,12 +121,16 @@ exports._primFloatToRatio = function(x) {
         return {numerator: BigInt(0), denominator: BigInt(1)};
     }
     else {
-        var numerator = Math.round(x*1e9);
-        var denominator = 1e9;
-        var gcf = _primFloatGreatestCommonFactor(numerator, denominator);
-        numerator /= gcf;
-        denominator /= gcf;
-        return {numerator: BigInt(numerator), denominator: BigInt(denominator)};
+        // Exact decomposition: x = mantissa * 2^exponent (from _primFloatDecode)
+        var decoded = exports._primFloatDecode(x);
+        if (decoded === null) return {numerator: BigInt(0), denominator: BigInt(0)};
+        var m = decoded.mantissa;   // BigInt
+        var e = decoded.exponent;   // BigInt
+        if (e >= 0n) {
+            return {numerator: m * (2n ** e), denominator: 1n};
+        } else {
+            return {numerator: m, denominator: 2n ** (-e)};
+        }
     }
 };
 exports._primFloatDecode = function(x) {
@@ -138,6 +142,9 @@ exports._primFloatDecode = function(x) {
     }
     else if (x > 0.0 && exports.primFloatIsInfinite(x)) {
         return null;
+    }
+    else if (x === 0) {
+        return {mantissa: 0n, exponent: 0n};
     }
     else {
         var mantissa = x, exponent = 0;
@@ -184,39 +191,18 @@ exports.primFloatIsSafeInteger = function(x) {
 };
 
 
-// These WORD64 values were obtained via `castDoubleToWord64` in Haskell:
-const WORD64_POS_INF  = 9218868437227405312n;
-const WORD64_NEG_INF  = 18442240474082181120n;
-const WORD64_POS_ZERO = 0n;
-const WORD64_NEG_ZERO = 9223372036854775808n;
-
 exports.primFloatToWord64 = function(x) {
     if (exports.primFloatIsNaN(x)) {
         return null;
     }
-    else if (x < 0.0 && exports.primFloatIsInfinite(x)) {
-        return WORD64_NEG_INF;
-    }
-    else if (x > 0.0 && exports.primFloatIsInfinite(x)) {
-        return WORD64_POS_INF;
-    }
-    else if (exports.primFloatIsNegativeZero(x)) {
-        return WORD64_NEG_ZERO;
-    }
-    else if (x == 0.0) {
-        return WORD64_POS_ZERO;
-    }
-    else {
-        var mantissa, exponent;
-        ({mantissa, exponent} = exports._primFloatDecode(x));
-        var sign = Math.sign(mantissa);
-        console.log(mantissa);
-        mantissa *= sign;
-        sign = (sign === -1 ? "1" : "0");
-        mantissa = (mantissa.toString(2)).padStart(11, "0");
-        exponent = (mantissa.toString(2)).padStart(52, "0");
-        return BigInt(parseInt(sign + mantissa + exponent, 2));
-    }
+    // Use DataView to reinterpret float64 bits as uint64 (castDoubleToWord64).
+    // This handles all cases correctly: ±Inf, ±0, normals, subnormals.
+    var buf = new ArrayBuffer(8);
+    var view = new DataView(buf);
+    view.setFloat64(0, x);
+    var hi = BigInt(view.getUint32(0));
+    var lo = BigInt(view.getUint32(4));
+    return (hi << 32n) | lo;
 };
 
 // primNatToFloat : Nat -> Float
@@ -377,7 +363,7 @@ exports.primShowMeta = x => "_" + x['id'] + "@" + x['module'];
 
 // primMetaToNat : Meta -> Nat
 //   Should be kept in sync with `metaToNat` in Agda.TypeChecking.Primitive
-exports.primMetaToNat = x => x['module'] * 2^64 + x['id'];
+exports.primMetaToNat = x => BigInt(x['module']) * 18446744073709551616n + BigInt(x['id']);
 
 // primMetaEquality : Meta -> Meta -> Bool
 exports.primMetaEquality = x => y => x['id'] === y['id'] && x['module'] === y['module'];

@@ -215,9 +215,9 @@ export function deepEqual(a, b, depth) {
   if (depth > MAX_DEEP_EQUAL_DEPTH) {
     _deepEqualWarnCount++;
     if (_deepEqualWarnCount === 1 || _deepEqualWarnCount % _DEEP_EQUAL_WARN_INTERVAL === 0) {
-      console.warn(`deepEqual: max depth (${MAX_DEEP_EQUAL_DEPTH}) exceeded ${_deepEqualWarnCount} time(s), assuming different. Consider flattening your model.`);
+      console.warn(`deepEqual: max depth (${MAX_DEEP_EQUAL_DEPTH}) exceeded ${_deepEqualWarnCount} time(s), assuming equal. Consider flattening your model.`);
     }
-    return false;
+    return true;
   }
   const ta = typeof a, tb = typeof b;
   if (ta !== tb) return false;
@@ -413,21 +413,27 @@ export function listToArray(list) {
   let iterations = 0;
 
   while (true) {
-    if (iterations++ > MAX_LIST_ITEMS) {
+    if (iterations++ >= MAX_LIST_ITEMS) {
       console.error('listToArray: possible infinite loop');
       return { items: result, incomplete: true };
     }
 
     // Scott-encoded format
     if (typeof current === 'function') {
-      const done = current({
-        '[]': () => true,
-        '_∷_': (head, tail) => {
-          result.push(head);
-          current = tail;
-          return false;
-        }
-      });
+      let done;
+      try {
+        done = current({
+          '[]': () => true,
+          '_∷_': (head, tail) => {
+            result.push(head);
+            current = tail;
+            return false;
+          }
+        });
+      } catch {
+        console.warn('listToArray: element threw during destructuring');
+        return { items: result, incomplete: true };
+      }
       if (done) break;
       continue;
     }
@@ -529,7 +535,14 @@ export function ensureNumber(n) {
  * Used at FFI boundary for worker message data.
  */
 export function ensureString(data) {
-  return typeof data === 'string' ? data : JSON.stringify(data);
+  if (typeof data === 'string') return data;
+  if (typeof data === 'bigint') return data.toString();
+  if (data === null) return 'null';
+  if (data === undefined) return 'undefined';
+  if (typeof data === 'symbol') return data.toString();
+  if (typeof data === 'function') return '[function]';
+  try { return JSON.stringify(data); }
+  catch { return String(data); }
 }
 
 // ─────────────────────────────────────────────────────────────────────

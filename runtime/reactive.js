@@ -96,6 +96,20 @@ const ATTR_NS = {
 };
 
 /**
+ * Detect Content-Type for HTTP POST body.
+ * Returns 'application/json' if body looks like valid JSON, otherwise 'text/plain'.
+ */
+function detectContentType(body) {
+  if (typeof body === 'string' && body.length > 0) {
+    const ch = body[0];
+    if (ch === '{' || ch === '[' || ch === '"') {
+      try { JSON.parse(body); return 'application/json'; } catch {}
+    }
+  }
+  return 'text/plain';
+}
+
+/**
  * Execute a Task (monadic chain of async operations).
  * Tasks are Scott-encoded: task(cases) where cases = { pure, fail, httpGet, httpPost }
  *
@@ -123,7 +137,7 @@ function executeTask(task, onSuccess, onError, _depth = 0) {
         .catch((error) => executeTask(onErr(error.message), onSuccess, onError, _depth + 1));
     },
     'httpPost': (url, body, onOk, onErr) => {
-      fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body })
+      fetch(url, { method: 'POST', headers: { 'Content-Type': detectContentType(body) }, body })
         .then((response) => {
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           return response.text();
@@ -165,7 +179,7 @@ function executeCmd(cmd, dispatch) {
         .catch((error) => dispatch(onError(error.message)));
     },
     'httpPost': (url, body, onSuccess, onError) => {
-      fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body })
+      fetch(url, { method: 'POST', headers: { 'Content-Type': detectContentType(body) }, body })
         .then((r) => r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`)))
         .then((text) => dispatch(onSuccess(text)))
         .catch((error) => dispatch(onError(error.message)));
@@ -330,26 +344,31 @@ function wrapMutable(model, _visited) {
   const ctor = probeCtor(model);
   if (!args || !ctor) return model;
 
-  // Recursively wrap nested structures
-  const slots = args.map(a =>
-    (typeof a === 'function' || (typeof a === 'object' && a !== null))
-      ? wrapMutable(a, _visited)
-      : a
-  );
-
-  // Create wrapper based on original format
+  // Create wrapper and register in _visited BEFORE recursive wrapping
+  // to handle self-referential models (slot references parent).
+  // The closure reads `slots` at call time, so filling them after
+  // registration is safe — by the time anyone calls the wrapper,
+  // all slots will be populated.
+  const slots = [];
   let wrapper;
   if (typeof model === 'function') {
-    // Function format: (cases) => cases[ctor](...slots)
     wrapper = (cases) => cases[ctor](...slots);
   } else {
-    // Object format: {ctor: (c) => c.ctor(...slots)}
     wrapper = { [ctor]: (c) => c[ctor](...slots) };
   }
-
   wrapper._slots = slots;
   wrapper._ctor = ctor;
   _visited.set(model, wrapper);
+
+  // Recursively wrap nested structures (cycles resolve via _visited)
+  for (const a of args) {
+    slots.push(
+      (typeof a === 'function' || (typeof a === 'object' && a !== null))
+        ? wrapMutable(a, _visited)
+        : a
+    );
+  }
+
   return wrapper;
 }
 
@@ -363,24 +382,34 @@ function ensureMutable(model) {
  * Deep-clone a slot value for snapshotting (used to protect against in-place mutation).
  */
 function cloneSlot(s) {
-  if (!s || typeof s !== 'function' || !s._slots || !s._ctor) {
-    if (typeof s === 'object' && s !== null) {
-      try { return structuredClone(s); } catch { return s; }
+  // Recognize mutable wrappers by _slots/_ctor (both function-format and object-format)
+  if (s && s._slots && s._ctor) {
+    const clonedSlots = s._slots.map(c => {
+      if (c && c._slots && c._ctor) return cloneSlot(c);
+      if (typeof c === 'object' && c !== null) {
+        try { return structuredClone(c); } catch { return c; }
+      }
+      return c;
+    });
+    const ctor = s._ctor;
+    if (typeof s === 'function') {
+      const w = (cases) => cases[ctor](...clonedSlots);
+      w._slots = clonedSlots;
+      w._ctor = ctor;
+      return w;
+    } else {
+      // Object-format wrapper: { [ctor]: (c) => c[ctor](...slots) }
+      const w = { [ctor]: (c) => c[ctor](...clonedSlots) };
+      w._slots = clonedSlots;
+      w._ctor = ctor;
+      return w;
     }
-    return s;
   }
-  const clonedSlots = s._slots.map(c => {
-    if (typeof c === 'function' && c._slots && c._ctor) return cloneSlot(c);
-    if (typeof c === 'object' && c !== null) {
-      try { return structuredClone(c); } catch { return c; }
-    }
-    return c;
-  });
-  const ctor = s._ctor;
-  const w = (cases) => cases[ctor](...clonedSlots);
-  w._slots = clonedSlots;
-  w._ctor = ctor;
-  return w;
+  if (!s) return s;
+  if (typeof s === 'object' && s !== null) {
+    try { return structuredClone(s); } catch { return s; }
+  }
+  return s;
 }
 
 /**
@@ -457,6 +486,10 @@ function destroyScope(scope) {
   }
   // Cancel pending transition timeouts to prevent memory leaks
   for (const cond of scope.conditionals) {
+    if (cond.enterTimeoutId) {
+      clearTimeout(cond.enterTimeoutId);
+      cond.enterTimeoutId = null;
+    }
     if (cond.leaveTimeoutId) {
       clearTimeout(cond.leaveTimeoutId);
       cond.leaveTimeoutId = null;
@@ -611,9 +644,11 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   function withScope(scope, fn) {
     const prev = currentScope;
     currentScope = scope;
-    const result = fn();
-    currentScope = prev;
-    return result;
+    try {
+      return fn();
+    } finally {
+      currentScope = prev;
+    }
   }
 
   /**
@@ -630,7 +665,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
   function applyBatch(msgs) {
     const oldModel = model;
     const oldSlots = model && model._slots ? model._slots.map(s =>
-      (typeof s === 'function' && s._slots && s._ctor) ? cloneSlot(s) : s
+      (s && s._slots && s._ctor) ? cloneSlot(s) : s
     ) : null;
 
     // Snapshot model before the batch so all cmdFunc calls see the
@@ -708,7 +743,11 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     const msgs = p1Queue;
     p1Queue = [];
 
-    processBatch(msgs);
+    try {
+      processBatch(msgs);
+    } catch (e) {
+      console.error('flushP1: batch processing failed:', e);
+    }
 
     // If more messages arrived during flush, schedule another
     if (p1Queue.length > 0) {
@@ -777,6 +816,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
    * Use for keyboard input, focus events, or when immediate response is needed
    */
   function dispatchImmediate(msg) {
+    if (destroyed) return;
     // If we're in the middle of a flush, add to P1 queue for next cycle
     if (isUpdating) {
       p1Queue.push(msg);
@@ -790,6 +830,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
    * Use for clicks, user actions that can wait for next frame
    */
   function dispatchNormal(msg) {
+    if (destroyed) return;
     if (p1Queue.length >= MAX_BATCH_SIZE) {
       _droppedP1++;
       console.error(`P1 queue overflow (>${MAX_BATCH_SIZE} messages, ${_droppedP1} dropped total). Check for infinite dispatch loops.`);
@@ -807,6 +848,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
    * Use for data fetches, timers, and non-urgent updates
    */
   function dispatchBackground(msg) {
+    if (destroyed) return;
     if (p2Queue.length >= MAX_BATCH_SIZE) {
       _droppedP2++;
       console.error(`P2 queue overflow (>${MAX_BATCH_SIZE} messages, ${_droppedP2} dropped total). Check for infinite dispatch loops.`);
@@ -954,6 +996,12 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           if (itemNode) {
             renderedItems.push({ item, node: itemNode, scope: itemScope });
             container.appendChild(itemNode);
+          } else {
+            // Null render — use placeholder to keep renderedItems aligned with item indices
+            destroyScope(itemScope);
+            const placeholder = document.createComment('empty');
+            renderedItems.push({ item, node: placeholder, scope: null });
+            container.appendChild(placeholder);
           }
         });
 
@@ -997,12 +1045,12 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         currentMsgWrap = savedWrap ? (msg) => savedWrap(wrap(msg)) : wrap;
         childScope.composedMsgWrap = currentMsgWrap;
 
-        const result = withScope(childScope, () => renderNode(innerNode));
-
-        model = savedModel;
-        currentMsgWrap = savedWrap;
-
-        return result;
+        try {
+          return withScope(childScope, () => renderNode(innerNode));
+        } finally {
+          model = savedModel;
+          currentMsgWrap = savedWrap;
+        }
       },
 
       foreachKeyed: (_typeA, getList, keyFn, render) => {
@@ -1023,6 +1071,11 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           if (itemNode) {
             renderedItems.push({ key, item, node: itemNode, scope: itemScope });
             container.appendChild(itemNode);
+          } else {
+            destroyScope(itemScope);
+            const placeholder = document.createComment('empty');
+            renderedItems.push({ key, item, node: placeholder, scope: null });
+            container.appendChild(placeholder);
           }
         });
 
@@ -1073,6 +1126,9 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     } else if (BOOL_ATTRS.has(name)) {
       if (value === 'true' || value === true) el.setAttribute(name, '');
       else el.removeAttribute(name);
+    } else if (name === 'value' && 'value' in el) {
+      // For input/textarea/select, set the property (not attribute) to update displayed value
+      el.value = value;
     } else {
       el.setAttribute(name, value);
     }
@@ -1121,7 +1177,10 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           if (event === 'keydown' || event === 'keyup') {
             value = e.key;
           } else if (event === 'wheel') {
-            value = String(e.deltaY);
+            let dy = e.deltaY;
+            if (e.deltaMode === 1) dy *= 40;
+            else if (e.deltaMode === 2) dy *= window.innerHeight;
+            value = String(dy);
             e.preventDefault();
           } else if (e.clientX !== undefined && e.clientY !== undefined) {
             // Pointer/mouse event - convert to SVG coords if in SVG
@@ -1242,6 +1301,8 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       if (scope.composedMsgWrap) currentMsgWrap = scope.composedMsgWrap;
     }
 
+    try {
+
     // Scope cutoff: string fingerprint only (scopeProj skipped if slot tracking active)
     if (scope.fingerprint) {
       const newFP = scope.fingerprint(newModel);
@@ -1349,7 +1410,8 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
             newNode.classList.add(cond.transition.enterClass);
             // Use duration if specified, otherwise remove on next frame
             if (cond.transition.duration > 0) {
-              setTimeout(() => {
+              cond.enterTimeoutId = setTimeout(() => {
+                cond.enterTimeoutId = null;
                 if (newNode.classList) newNode.classList.remove(cond.transition.enterClass);
               }, cond.transition.duration);
             } else {
@@ -1367,6 +1429,11 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           cond.rendered = true;
           cond.scope = childScope;
         } else {
+          // Cancel any pending enter transition timeout
+          if (cond.enterTimeoutId) {
+            clearTimeout(cond.enterTimeoutId);
+            cond.enterTimeoutId = null;
+          }
           // Hide: destroy child scope
           if (cond.scope) destroyScope(cond.scope);
 
@@ -1428,10 +1495,12 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       }
     }
 
-    // Restore model/dispatch state after zoomRT scope update
-    if (scope.modelTransform) {
-      model = savedModel;
-      currentMsgWrap = savedWrap;
+    } finally {
+      // Restore model/dispatch state after zoomRT scope update (or on exception)
+      if (scope.modelTransform) {
+        model = savedModel;
+        currentMsgWrap = savedWrap;
+      }
     }
   }
 
@@ -1472,6 +1541,12 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         parent.insertBefore(itemNode, insertBefore);
         oldItems.push({ item: newItems[i], node: itemNode, scope: itemScope });
         insertBefore = itemNode.nextSibling;  // advance insertion point
+      } else {
+        // Null render — use placeholder to keep oldItems aligned with item indices
+        destroyScope(itemScope);
+        const placeholder = document.createComment('empty');
+        parent.insertBefore(placeholder, insertBefore);
+        oldItems.push({ item: newItems[i], node: placeholder, scope: null });
       }
     }
 
@@ -1617,6 +1692,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     if (!event) return 'null';
     const cases = {
       never: () => 'never',
+      sub: (subEvent) => `sub(${serializeEvent(subEvent)})`,
       interval: (ms, msg) => `interval(${ms})`,
       timeout: (ms, msg) => `timeout(${ms})`,
       animationFrame: (msg) => 'animationFrame',
@@ -1632,12 +1708,27 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       onMouseUp: (handler) => 'onMouseUp',
       onMouseMove: (handler) => 'onMouseMove',
       onClick: (handler) => 'onClick',
-      onKeys: (pairs) => 'onKeys',
+      onKeys: (pairs) => {
+        const pairArray = listToArray(pairs).items;
+        const keys = [];
+        for (const pair of pairArray) {
+          let k;
+          try {
+            if (typeof pair === 'function') {
+              pair({ '_,_': (a) => { k = a; } });
+            } else if (pair && typeof pair['_,_'] === 'function') {
+              pair['_,_']({ '_,_': (a) => { k = a; } });
+            }
+          } catch { /* ignore */ }
+          if (k !== undefined) keys.push(k);
+        }
+        return `onKeys(${keys.join(',')})`;
+      },
       httpGet: (url, ok, err) => `httpGet(${url})`,
       httpPost: (url, body, ok, err) => `httpPost(${url})`,
       merge: (e1, e2) => `merge(${serializeEvent(e1)},${serializeEvent(e2)})`,
-      debounce: (ms, inner) => `debounce(${ms})`,
-      throttle: (ms, inner) => `throttle(${ms})`,
+      debounce: (ms, inner) => `debounce(${ms},${serializeEvent(inner)})`,
+      throttle: (ms, inner) => `throttle(${ms},${serializeEvent(inner)})`,
       wsConnect: (url, handler) => `wsConnect(${url})`,
       onUrlChange: (handler) => 'onUrlChange',
       // Note: fingerprint uses only url+input, not callback identity.

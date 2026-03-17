@@ -15,11 +15,12 @@
 
 module Agdelte.STM
   ( Channel
+  , Subscription
   , newChannel
   , sendChannel
+  , dupChannel
   , recvChannel
   , tryRecvChannel
-  , dupChannel
   , Mailbox
   , newMailbox
   , putMailbox
@@ -35,38 +36,39 @@ import qualified Data.Text as T
 -- Channel: multi-producer, multi-consumer broadcast channel
 ------------------------------------------------------------------------
 
--- | A broadcast channel. Writers write to one end, readers each get
--- their own copy of all messages (via dupTChan).
-data Channel = Channel
+-- | A broadcast channel. Write-only by default; call 'dupChannel' to create
+-- a subscriber that can read. This avoids memory leaks when a Channel is
+-- used only for writing (no phantom read-end accumulating messages).
+newtype Channel = Channel
   { chWrite :: TChan T.Text      -- ^ Write end (shared)
-  , chRead  :: TChan T.Text      -- ^ Read end (per-subscriber via dup)
   }
 
--- | Create a new broadcast channel
+-- | A subscriber for a broadcast channel. Created via 'dupChannel'.
+-- Each subscriber has its own read position.
+newtype Subscription = Subscription
+  { subRead :: TChan T.Text
+  }
+
+-- | Create a new broadcast channel (write-only until 'dupChannel' is called)
 newChannel :: IO Channel
-newChannel = do
-  ch <- newBroadcastTChanIO
-  readCh <- atomically $ dupTChan ch
-  return (Channel ch readCh)
+newChannel = Channel <$> newBroadcastTChanIO
 
 -- | Send a message to the channel (all subscribers receive it)
 sendChannel :: Channel -> T.Text -> IO ()
 sendChannel ch msg = atomically $ writeTChan (chWrite ch) msg
 
--- | Receive next message (blocks until available)
-recvChannel :: Channel -> IO T.Text
-recvChannel ch = atomically $ readTChan (chRead ch)
+-- | Create a new subscriber. Each subscriber gets its own read position
+-- and receives all messages sent after this call.
+dupChannel :: Channel -> IO Subscription
+dupChannel ch = Subscription <$> atomically (dupTChan (chWrite ch))
 
--- | Try to receive (non-blocking, returns Nothing if empty)
-tryRecvChannel :: Channel -> IO (Maybe T.Text)
-tryRecvChannel ch = atomically $ tryReadTChan (chRead ch)
+-- | Receive next message from a subscription (blocks until available)
+recvChannel :: Subscription -> IO T.Text
+recvChannel sub = atomically $ readTChan (subRead sub)
 
--- | Duplicate channel for a new subscriber
--- Each subscriber gets their own read position
-dupChannel :: Channel -> IO Channel
-dupChannel ch = do
-  readCh <- atomically $ dupTChan (chWrite ch)
-  return (Channel (chWrite ch) readCh)
+-- | Try to receive from a subscription (non-blocking, returns Nothing if empty)
+tryRecvChannel :: Subscription -> IO (Maybe T.Text)
+tryRecvChannel sub = atomically $ tryReadTChan (subRead sub)
 
 ------------------------------------------------------------------------
 -- Mailbox: single-value mutable cell (like TVar but with blocking take)

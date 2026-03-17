@@ -404,6 +404,7 @@ layout(location = 0) in vec3 a_position;
 layout(location = 1) in vec3 a_normal;
 
 uniform mat4 u_model;
+uniform mat3 u_normalMat;
 uniform mat4 u_view;
 uniform mat4 u_proj;
 
@@ -413,7 +414,7 @@ out vec3 v_worldPos;
 void main() {
   vec4 worldPos = u_model * vec4(a_position, 1.0);
   v_worldPos = worldPos.xyz;
-  v_normal = normalize(mat3(u_model) * a_normal);
+  v_normal = normalize(u_normalMat * a_normal);
   gl_Position = u_proj * u_view * worldPos;
 }
 `;
@@ -727,6 +728,7 @@ layout(location = 1) in vec3 a_normal;
 layout(location = 2) in vec2 a_uv;
 
 uniform mat4 u_model;
+uniform mat3 u_normalMat;
 uniform mat4 u_view;
 uniform mat4 u_proj;
 
@@ -737,7 +739,7 @@ out vec3 v_worldPos;
 void main() {
   vec4 worldPos = u_model * vec4(a_position, 1.0);
   v_worldPos = worldPos.xyz;
-  v_normal = normalize(mat3(u_model) * a_normal);
+  v_normal = normalize(u_normalMat * a_normal);
   v_uv = a_uv;
   gl_Position = u_proj * u_view * worldPos;
 }
@@ -1514,9 +1516,10 @@ function mat4NormalMatrix(m) {
  * Transform a normal vector by a 3x3 normal matrix (from mat4NormalMatrix), then normalize.
  */
 function mat4TransformNormal(nm, x, y, z) {
-  const rx = nm[0] * x + nm[3] * y + nm[6] * z;
-  const ry = nm[1] * x + nm[4] * y + nm[7] * z;
-  const rz = nm[2] * x + nm[5] * y + nm[8] * z;
+  // nm is row-major: row i = nm[i*3 .. i*3+2]
+  const rx = nm[0] * x + nm[1] * y + nm[2] * z;
+  const ry = nm[3] * x + nm[4] * y + nm[5] * z;
+  const rz = nm[6] * x + nm[7] * y + nm[8] * z;
   const len = Math.sqrt(rx * rx + ry * ry + rz * rz);
   return len > 1e-8 ? [rx / len, ry / len, rz / len] : [0, 0, 1];
 }
@@ -2523,9 +2526,9 @@ function buildTextGeometry(text, style, fontAtlas) {
       const gw = glyph.advance;
       const gh = lineHeight;
 
-      // Quad corners (in XY plane, Z=0)
+      // Quad corners (in XY plane, Z=0), with bearing offset applied
       // Bottom-left, bottom-right, top-right, top-left
-      const x0 = cx, x1 = cx + gw;
+      const x0 = cx + (glyph.xOff || 0), x1 = cx + (glyph.xOff || 0) + gw;
       const y0 = yBase - gh, y1 = yBase;
 
       positions.push(
@@ -2757,6 +2760,7 @@ function createPhongProgram(gl) {
   linkAndCleanShaders(gl, prog, vert, frag, 'Phong program');
   const uniforms = {
     model:     gl.getUniformLocation(prog, 'u_model'),
+    normalMat: gl.getUniformLocation(prog, 'u_normalMat'),
     view:      gl.getUniformLocation(prog, 'u_view'),
     proj:      gl.getUniformLocation(prog, 'u_proj'),
     color:     gl.getUniformLocation(prog, 'u_color'),
@@ -2795,6 +2799,7 @@ function createPbrProgram(gl) {
   linkAndCleanShaders(gl, prog, vert, frag, 'PBR program');
   const uniforms = {
     model:     gl.getUniformLocation(prog, 'u_model'),
+    normalMat: gl.getUniformLocation(prog, 'u_normalMat'),
     view:      gl.getUniformLocation(prog, 'u_view'),
     proj:      gl.getUniformLocation(prog, 'u_proj'),
     color:     gl.getUniformLocation(prog, 'u_color'),
@@ -2828,6 +2833,7 @@ function createTexProgram(gl) {
   linkAndCleanShaders(gl, prog, vert, frag, 'Tex program');
   const uniforms = {
     model:     gl.getUniformLocation(prog, 'u_model'),
+    normalMat: gl.getUniformLocation(prog, 'u_normalMat'),
     view:      gl.getUniformLocation(prog, 'u_view'),
     proj:      gl.getUniformLocation(prog, 'u_proj'),
     color:     gl.getUniformLocation(prog, 'u_color'),
@@ -2892,6 +2898,7 @@ function createInstancedPhongProgram(gl) {
     color:     gl.getUniformLocation(prog, 'u_color'),
     shininess: gl.getUniformLocation(prog, 'u_shininess'),
     cameraPos: gl.getUniformLocation(prog, 'u_cameraPos'),
+    flatMode:  gl.getUniformLocation(prog, 'u_flatMode'),
     numLights: gl.getUniformLocation(prog, 'u_numLights'),
     lightType: [],
     lightColor: [],
@@ -3190,6 +3197,13 @@ function lerpMaterial(a, b, t) {
       roughness: lerpFloat(a.roughness, b.roughness, t),
     };
   }
+  if (a.type === 'textured') {
+    return {
+      type: 'textured',
+      url: b.url,
+      tint: lerpColor(a.tint, b.tint, t),
+    };
+  }
   return b;
 }
 
@@ -3462,6 +3476,7 @@ function collectNode(node, overrideTransform, renderList, bindings, model, pickR
       const renderStartIdx = renderList.length;
       const pickIdsBefore = new Set(pickRegistry.map.keys());
       const lightsStartIdx = lights.length;
+      const animateStartIdx = animateNodes.length;
 
       // Interpret and collect each child - pass null to let each child use its own transform
       for (const scottChild of childrenArray) {
@@ -3490,6 +3505,8 @@ function collectNode(node, overrideTransform, renderList, bindings, model, pickR
         renderCount: renderList.length - renderStartIdx,
         lightsStartIdx: lightsStartIdx,
         lightsCount: lights.length - lightsStartIdx,
+        animateStartIdx: animateStartIdx,
+        animateCount: animateNodes.length - animateStartIdx,
         ownedPickIds: ownedPickIds,
       });
       break;
@@ -3718,7 +3735,7 @@ function collectNode(node, overrideTransform, renderList, bindings, model, pickR
         pickRegistry.map.set(instancePickId, {
           entry,
           instanceIndex: i,
-          attrs: [{ type: 'onClick', handler: () => node.handler(BigInt(i)) }]
+          attrs: [{ type: 'onClick', msg: node.handler(BigInt(i)) }]
         });
       }
       renderList.push(entry);
@@ -3744,7 +3761,7 @@ function collectNode(node, overrideTransform, renderList, bindings, model, pickR
         pickRegistry.map.set(instancePickId, {
           entry,
           instanceIndex: i,
-          attrs: [{ type: 'onClick', handler: () => node.handler(BigInt(i)) }]
+          attrs: [{ type: 'onClick', msg: node.handler(BigInt(i)) }]
         });
       }
 
@@ -3816,7 +3833,7 @@ function materialEqual(a, b) {
  * Update GL bindings on model change. Returns true if anything changed.
  * When a transition is present, starts an animation instead of snapping.
  */
-function updateGLBindings(bindings, newModel, now) {
+function updateGLBindings(gl, bindings, newModel, now) {
   let dirty = false;
 
   for (const b of bindings) {
@@ -3910,7 +3927,7 @@ function updateGLBindings(bindings, newModel, now) {
           registry.map.set(instancePickId, {
             entry: b.target,
             instanceIndex: i,
-            attrs: [{ type: 'onClick', handler: () => b.handler(BigInt(i)) }]
+            attrs: [{ type: 'onClick', msg: b.handler(BigInt(i)) }]
           });
         }
         b.lastCount = newTransforms.length;
@@ -3926,10 +3943,22 @@ function updateGLBindings(bindings, newModel, now) {
       const pickRegistry = b.pickRegistryRef;
       const lights = b.lightsRef;
 
-      // Clean up GPU resources for old batched entries
+      // Clean up GPU resources for old entries
       for (let ri = b.renderStartIdx; ri < b.renderStartIdx + b.renderCount; ri++) {
-        if (renderList[ri] && renderList[ri]._mergedGeo) {
-          deleteGeometry(gl, renderList[ri]._mergedGeo);
+        const re = renderList[ri];
+        if (!re) continue;
+        if (re._mergedGeo) {
+          deleteGeometry(gl, re._mergedGeo);
+        }
+        if (re.textVAO) {
+          if (re.textVAO.vao) gl.deleteVertexArray(re.textVAO.vao);
+          if (re.textVAO.posBuf) gl.deleteBuffer(re.textVAO.posBuf);
+          if (re.textVAO.uvBuf) gl.deleteBuffer(re.textVAO.uvBuf);
+          if (re.textVAO.normBuf) gl.deleteBuffer(re.textVAO.normBuf);
+          if (re.textVAO.idxBuf) gl.deleteBuffer(re.textVAO.idxBuf);
+        }
+        if (re.instanceBuffer && re.instanceBuffer.buffer) {
+          gl.deleteBuffer(re.instanceBuffer.buffer);
         }
       }
 
@@ -3946,22 +3975,40 @@ function updateGLBindings(bindings, newModel, now) {
         }
       }
 
+      // Remove old owned animate nodes
+      const animateNodes = b.animateNodesRef;
+      if (b.animateCount > 0) {
+        animateNodes.splice(b.animateStartIdx, b.animateCount);
+      }
+
       // Rebuild children at the same position
       const newRenderStartIdx = b.renderStartIdx;
       const newLightsStartIdx = b.lightsStartIdx;
+      const newAnimateStartIdx = b.animateStartIdx;
       const pickIdsBefore = new Set(pickRegistry.map.keys());
 
-      // Collect new children
+      // Collect new children into temporary arrays
       const tempRenderList = [];
       const tempLights = [];
+      const tempAnimateNodes = [];
       for (const scottChild of childrenArray) {
         const interpretedChild = interpretSceneNode(scottChild);
-        collectNode(interpretedChild, null, tempRenderList, b.bindings, newModel, pickRegistry, tempLights, []);
+        collectNode(interpretedChild, null, tempRenderList, b.bindings, newModel, pickRegistry, tempLights, tempAnimateNodes);
       }
 
-      // Insert new entries into renderList and lights
+      // Insert new entries into main arrays
       renderList.splice(newRenderStartIdx, 0, ...tempRenderList);
       lights.splice(newLightsStartIdx, 0, ...tempLights);
+      animateNodes.splice(newAnimateStartIdx, 0, ...tempAnimateNodes);
+
+      // Fix new bindLight bindings: they were created with lightsRef = tempLights
+      // (disconnected). Update to reference the main lights array with correct index.
+      for (const other of bindings) {
+        if (other.type === 'light' && other.lightsRef === tempLights) {
+          other.lightsRef = lights;
+          other.lightIndex += newLightsStartIdx;
+        }
+      }
 
       // Track new pick IDs owned by this binding
       const newOwnedPickIds = [];
@@ -3969,20 +4016,30 @@ function updateGLBindings(bindings, newModel, now) {
         if (!pickIdsBefore.has(pickId)) newOwnedPickIds.push(pickId);
       }
 
-      // Adjust indices of subsequent children bindings if count changed
+      // Adjust indices of subsequent bindings if counts changed
       const renderDelta = tempRenderList.length - b.renderCount;
       const lightsDelta = tempLights.length - b.lightsCount;
-      if (renderDelta !== 0 || lightsDelta !== 0) {
+      const animateDelta = tempAnimateNodes.length - b.animateCount;
+      if (renderDelta !== 0 || lightsDelta !== 0 || animateDelta !== 0) {
         for (const other of bindings) {
-          if (other === b || other.type !== 'children') continue;
-          if (other.renderStartIdx > b.renderStartIdx) other.renderStartIdx += renderDelta;
-          if (other.lightsStartIdx > b.lightsStartIdx) other.lightsStartIdx += lightsDelta;
+          if (other === b) continue;
+          if (other.type === 'children') {
+            if (other.renderStartIdx > b.renderStartIdx) other.renderStartIdx += renderDelta;
+            if (other.lightsStartIdx > b.lightsStartIdx) other.lightsStartIdx += lightsDelta;
+            if (other.animateStartIdx > b.animateStartIdx) other.animateStartIdx += animateDelta;
+          } else if (other.type === 'light' && lightsDelta !== 0) {
+            // Adjust lightIndex for bindLight bindings after the old children block
+            if (other.lightsRef === lights && other.lightIndex >= b.lightsStartIdx + tempLights.length) {
+              other.lightIndex += lightsDelta;
+            }
+          }
         }
       }
 
       // Update binding with new counts
       b.renderCount = tempRenderList.length;
       b.lightsCount = tempLights.length;
+      b.animateCount = tempAnimateNodes.length;
       b.ownedPickIds = newOwnedPickIds;
 
       dirty = true;
@@ -4138,18 +4195,20 @@ function renderEntry(gl, programs, geoCache, texCache, fontCache, entry, parentM
       gl.uniformMatrix4fv(prog.uniforms.proj, false, programs._projMat);
       gl.uniformMatrix4fv(prog.uniforms.view, false, programs._viewMat);
       gl.uniformMatrix4fv(prog.uniforms.model, false, modelMat);
+      gl.uniformMatrix3fv(prog.uniforms.normalMat, true, mat4NormalMatrix(modelMat));
       gl.uniform4f(prog.uniforms.color, c.r, c.g, c.b, c.a);
       gl.uniform1f(prog.uniforms.metallic, mat.metallic);
       gl.uniform1f(prog.uniforms.roughness, mat.roughness);
       gl.uniform3f(prog.uniforms.cameraPos, cameraPos.x, cameraPos.y, cameraPos.z);
       uploadLights(gl, prog, lights);
-    } else if (mat.type === 'textured' && programs.tex) {
+    } else if (mat.type === 'textured' && programs.tex && lights.length > 0) {
       // Textured material (Phong-lit with texture sampling)
       const prog = programs.tex;
       gl.useProgram(prog.program);
       gl.uniformMatrix4fv(prog.uniforms.proj, false, programs._projMat);
       gl.uniformMatrix4fv(prog.uniforms.view, false, programs._viewMat);
       gl.uniformMatrix4fv(prog.uniforms.model, false, modelMat);
+      gl.uniformMatrix3fv(prog.uniforms.normalMat, true, mat4NormalMatrix(modelMat));
       const t = mat.tint;
       gl.uniform4f(prog.uniforms.color, t.r, t.g, t.b, t.a);
       gl.uniform1f(prog.uniforms.shininess, 32.0);
@@ -4169,6 +4228,7 @@ function renderEntry(gl, programs, geoCache, texCache, fontCache, entry, parentM
       gl.uniformMatrix4fv(prog.uniforms.proj, false, programs._projMat);
       gl.uniformMatrix4fv(prog.uniforms.view, false, programs._viewMat);
       gl.uniformMatrix4fv(prog.uniforms.model, false, modelMat);
+      gl.uniformMatrix3fv(prog.uniforms.normalMat, true, mat4NormalMatrix(modelMat));
       gl.uniform4f(prog.uniforms.color, c.r, c.g, c.b, c.a);
       gl.uniform1f(prog.uniforms.shininess, mat.type === 'flat' ? 1.0 : mat.shininess);
       gl.uniform3f(prog.uniforms.cameraPos, cameraPos.x, cameraPos.y, cameraPos.z);
@@ -4209,10 +4269,10 @@ function renderEntry(gl, programs, geoCache, texCache, fontCache, entry, parentM
       const textGeo = buildTextGeometry(entry.text, entry.style, atlas);
       if (!entry.textVAO) {
         entry.textVAO = createTextVAO(gl, textGeo);
-        entry._atlas = atlas;
       } else {
         updateTextVAO(gl, entry.textVAO, textGeo);
       }
+      entry._atlas = atlas;
       entry.textDirty = false;
     }
 
@@ -4237,15 +4297,11 @@ function renderEntry(gl, programs, geoCache, texCache, fontCache, entry, parentM
       gl.bindTexture(gl.TEXTURE_2D, entry._atlas.texture);
       gl.uniform1i(prog.uniforms.atlas, 0);
 
-      // Enable blending for text (alpha from atlas)
-      gl.enable(gl.BLEND);
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
+      // Blending managed by caller: text is always in the transparent pass
+      // (renderScene enables gl.BLEND before this point)
       gl.bindVertexArray(entry.textVAO.vao);
       gl.drawElements(gl.TRIANGLES, entry.textVAO.count, gl.UNSIGNED_SHORT, 0);
       gl.bindVertexArray(null);
-
-      gl.disable(gl.BLEND);
     }
   } else if (entry.type === 'instanced') {
     // Instanced rendering: draw many instances with a single draw call
@@ -4272,7 +4328,8 @@ function renderEntry(gl, programs, geoCache, texCache, fontCache, entry, parentM
     gl.uniformMatrix4fv(prog.uniforms.proj, false, programs._projMat);
     gl.uniformMatrix4fv(prog.uniforms.view, false, programs._viewMat);
     gl.uniform4f(prog.uniforms.color, c.r, c.g, c.b, c.a);
-    gl.uniform1f(prog.uniforms.shininess, mat.shininess || 32.0);
+    gl.uniform1f(prog.uniforms.shininess, mat.type === 'flat' ? 1.0 : (mat.shininess || 32.0));
+    gl.uniform1i(prog.uniforms.flatMode, mat.type === 'flat' ? 1 : 0);
     gl.uniform3f(prog.uniforms.cameraPos, cameraPos.x, cameraPos.y, cameraPos.z);
     uploadLights(gl, prog, lights);
 
@@ -4284,7 +4341,7 @@ function renderEntry(gl, programs, geoCache, texCache, fontCache, entry, parentM
     gl.drawElementsInstanced(
       gl.TRIANGLES,
       geo.count,
-      gl.UNSIGNED_SHORT,
+      geo._indexType === 'uint32' ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT,
       0,
       entry.instanceBuffer.count
     );
@@ -4320,6 +4377,7 @@ function renderEntry(gl, programs, geoCache, texCache, fontCache, entry, parentM
         gl.uniformMatrix4fv(prog.uniforms.proj, false, programs._projMat);
         gl.uniformMatrix4fv(prog.uniforms.view, false, programs._viewMat);
         gl.uniformMatrix4fv(prog.uniforms.model, false, groupMat);
+        gl.uniformMatrix3fv(prog.uniforms.normalMat, true, mat4NormalMatrix(groupMat));
         gl.uniform4f(prog.uniforms.color, c.r, c.g, c.b, c.a);
         gl.uniform1f(prog.uniforms.shininess, mat.type === 'flat' ? 1.0 : mat.shininess);
         gl.uniform3f(prog.uniforms.cameraPos, cameraPos.x, cameraPos.y, cameraPos.z);
@@ -4332,6 +4390,7 @@ function renderEntry(gl, programs, geoCache, texCache, fontCache, entry, parentM
         gl.uniformMatrix4fv(prog.uniforms.proj, false, programs._projMat);
         gl.uniformMatrix4fv(prog.uniforms.view, false, programs._viewMat);
         gl.uniformMatrix4fv(prog.uniforms.model, false, groupMat);
+        gl.uniformMatrix3fv(prog.uniforms.normalMat, true, mat4NormalMatrix(groupMat));
         gl.uniform4f(prog.uniforms.color, c.r, c.g, c.b, c.a);
         gl.uniform1f(prog.uniforms.metallic, mat.metallic);
         gl.uniform1f(prog.uniforms.roughness, mat.roughness);
@@ -4512,7 +4571,7 @@ function renderInstancedPick(gl, instancedPickProg, geoCache, entry, projMat, vi
   gl.drawElementsInstanced(
     gl.TRIANGLES,
     geo.count,
-    gl.UNSIGNED_SHORT,
+    geo._indexType === 'uint32' ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT,
     0,
     entry.instanceBuffer.count
   );
@@ -4902,10 +4961,11 @@ function initGLCanvas(canvas) {
       for (const attr of targetEntry.attrs) {
         if (attr.type === attrType) {
           if (attrType === 'onScreenDrag' || attrType === 'onMiddleDrag') {
-            // Screen-space drag: store pixel coordinates, no raycasting needed
+            // Screen-space drag: store canvas-relative pixel coordinates
+            const rect = canvas.getBoundingClientRect();
             dragState = {
               pickId: targetId,
-              startPoint: { x: e.clientX, y: e.clientY, z: 0 },
+              startPoint: { x: e.clientX - rect.left, y: e.clientY - rect.top, z: 0 },
               attrType: attrType
             };
             e.preventDefault();
@@ -4946,8 +5006,9 @@ function initGLCanvas(canvas) {
         didDrag = true;
 
         if (dragState.attrType === 'onScreenDrag' || dragState.attrType === 'onMiddleDrag') {
-          // Screen-space drag: pass pixel coordinates directly as Vec3 {x, y, z:0}
-          const currentPoint = { x: e.clientX, y: e.clientY, z: 0 };
+          // Screen-space drag: pass canvas-relative pixel coordinates as Vec3 {x, y, z:0}
+          const rect = canvas.getBoundingClientRect();
+          const currentPoint = { x: e.clientX - rect.left, y: e.clientY - rect.top, z: 0 };
           const entry = pickRegistry.map.get(dragState.pickId);
           if (entry) {
             for (const attr of entry.attrs) {
@@ -5013,13 +5074,17 @@ function initGLCanvas(canvas) {
       const id = getPickIdAt(e);
       const dispatched = new Set();
       let handled = false;
+      // Normalize deltaY to pixels — deltaMode 1 = lines, 2 = pages
+      let dy = e.deltaY;
+      if (e.deltaMode === 1) dy *= 40;
+      else if (e.deltaMode === 2) dy *= canvas.clientHeight;
       // Per-object scroll (color-picked object under cursor)
       if (id !== 0) {
         const entry = pickRegistry.map.get(id);
         if (entry) {
           for (const attr of entry.attrs) {
             if (attr.type === 'onScroll') {
-              dispatch(attr.handler(e.deltaY));
+              dispatch(attr.handler(dy));
               dispatched.add(id);
               handled = true;
             }
@@ -5031,7 +5096,7 @@ function initGLCanvas(canvas) {
         if (dispatched.has(eid)) continue;
         for (const attr of entry.attrs) {
           if (attr.type === 'onScroll') {
-            dispatch(attr.handler(e.deltaY));
+            dispatch(attr.handler(dy));
             dispatched.add(eid);
             handled = true;
           }
@@ -5076,7 +5141,7 @@ function initGLCanvas(canvas) {
 
     // Update GL bindings (transform, material) — may start animations
     if (glBindings.length > 0) {
-      dirty = updateGLBindings(glBindings, newModel, now);
+      dirty = updateGLBindings(gl, glBindings, newModel, now);
     }
 
     // Update camera if fromModel

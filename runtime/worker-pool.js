@@ -92,21 +92,27 @@ export class WorkerPool {
         const w = activeWorker;
         activeWorker = null;
         this._consecutiveErrors = 0;  // reset on success
-        onMessage(e);
-        this.active--;
-        this._returnWorker(w);
-        this._processQueue();
+        try {
+          onMessage(e);
+        } finally {
+          this.active--;
+          this._returnWorker(w);
+          this._processQueue();
+        }
       };
       activeWorker.onerror = (e) => {
         if (task.cancelled) return;
         const w = activeWorker;
         activeWorker = null;
         this._recordError();
-        onError(formatWorkerError(e));
-        this.active--;
-        // Don't reuse errored worker — terminate it
-        try { w.terminate(); } catch(e) { console.debug('worker terminate:', e.message); }
-        this._processQueue();
+        try {
+          onError(formatWorkerError(e));
+        } finally {
+          this.active--;
+          // Don't reuse errored worker — terminate it
+          try { w.terminate(); } catch(e2) { console.debug('worker terminate:', e2.message); }
+          this._processQueue();
+        }
       };
       activeWorker.postMessage(input);
     };

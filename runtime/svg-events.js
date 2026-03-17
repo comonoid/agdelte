@@ -176,6 +176,9 @@ export function createSvgPinch(svg, callbacks) {
     activePointers.delete(e.pointerId);
     if (activePointers.size < 2) {
       initialDistance = null;
+    } else if (activePointers.size === 2) {
+      // Recalculate baseline for the remaining pair (e.g. after 3→2 pointers)
+      initialDistance = getDistance();
     }
   };
 

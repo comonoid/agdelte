@@ -1,14 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Agdelte.Http
   ( serve, serveWithWs, mkApp, toWaiApp, Request(..), Response(..)
   ) where
 
+import Control.Exception (SomeAsyncException(..), SomeException, fromException, throwIO, try)
 import Data.Text (Text)
 import qualified Data.Text.Encoding as TE
 import Data.Text.Encoding.Error (lenientDecode)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.CaseInsensitive as CI
+import System.IO (hPutStrLn, stderr)
 import qualified Network.Wai as Wai
 import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.HTTP.Types as H
@@ -77,26 +80,53 @@ toWaiApp :: (Request -> IO Response) -> Wai.Application
 toWaiApp handler waiReq respond = do
   bodyResult <- readBodyLimited waiReq maxBodySize
   case bodyResult of
-    Left () -> respond $ Wai.responseLBS H.status413 [] "Payload too large"
+    Left () -> respond $ Wai.responseLBS H.status413
+      [("Content-Type", "text/plain")] "Payload too large"
     Right reqBodyBS -> do
       let req = Request
             { reqMethod = TE.decodeUtf8With lenientDecode (Wai.requestMethod waiReq)
             , reqPath   = TE.decodeUtf8With lenientDecode (Wai.rawPathInfo waiReq)
             , reqBody   = TE.decodeUtf8With lenientDecode reqBodyBS
             }
-      resp <- handler req
-      let userHdrs = map (\(k,v) -> (CI.mk (TE.encodeUtf8 k), TE.encodeUtf8 v)) (resHeaders resp)
-          hasContentType = any (\(k,_) -> CI.foldedCase k == "content-type") userHdrs
-          isOptions = Wai.requestMethod waiReq == "OPTIONS"
-          coopCoep = if isOptions then []
-                     else [ ("Cross-Origin-Opener-Policy", "same-origin")
-                          , ("Cross-Origin-Embedder-Policy", "require-corp") ]
-          defaultHdrs = [("Content-Type", "application/json") | not hasContentType]
-                     ++ coopCoep
-          hdrs = userHdrs ++ defaultHdrs
-          respBodyBS = LBS.fromStrict (TE.encodeUtf8 (resBody resp))
-          status = toStatus (resStatus resp)
-      respond $ Wai.responseLBS status hdrs respBodyBS
+      handlerResult <- try $ handler req
+      case handlerResult of
+        Left (e :: SomeException)
+          | Just (SomeAsyncException _) <- fromException e -> throwIO e
+          | otherwise -> do
+          hPutStrLn stderr $ "Http: handler exception: " ++ show e
+          respond $ Wai.responseLBS H.status500
+            [("Content-Type", "text/plain")] "Internal server error"
+        Right resp -> do
+          -- Evaluate response body and headers inside try to catch thunked exceptions
+          -- (e.g. handler returned Response with resBody = error "boom")
+          evalResult <- try $ do
+            let !status' = toStatus (resStatus resp)
+                !body' = TE.encodeUtf8 (resBody resp)
+            -- Force each header element deeply (not just spine) to catch thunked exceptions
+            hdrs' <- mapM (\(k,v) -> let !k' = CI.mk (TE.encodeUtf8 k)
+                                         !v' = TE.encodeUtf8 v
+                                     in return (k', v')) (resHeaders resp)
+            return (status', body', hdrs')
+          case evalResult of
+            Left (e2 :: SomeException)
+              | Just (SomeAsyncException _) <- fromException e2 -> throwIO e2
+              | otherwise -> do
+              hPutStrLn stderr $ "Http: response evaluation failed: " ++ show e2
+              respond $ Wai.responseLBS H.status500
+                [("Content-Type", "text/plain")] "Internal server error"
+            Right (status, respBodyStrict, userHdrs) -> do
+              let
+                  hasContentType = any (\(k,_) -> CI.foldedCase k == "content-type") userHdrs
+                  isOptions = Wai.requestMethod waiReq == "OPTIONS"
+                  coopCoep = if isOptions then []
+                             else [ ("Cross-Origin-Opener-Policy", "same-origin")
+                                  , ("Cross-Origin-Embedder-Policy", "require-corp") ]
+                  is204 = resStatus resp == 204
+                  defaultHdrs = [("Content-Type", "application/json") | not hasContentType && not is204]
+                             ++ coopCoep
+                  hdrs = userHdrs ++ defaultHdrs
+                  respBodyBS = LBS.fromStrict respBodyStrict
+              respond $ Wai.responseLBS status hdrs respBodyBS
 
 -- | Convert Int status code to http-types Status
 toStatus :: Int -> H.Status
@@ -112,6 +142,7 @@ toStatus 403 = H.status403
 toStatus 404 = H.status404
 toStatus 405 = H.status405
 toStatus 408 = H.status408
+toStatus 413 = H.status413
 toStatus 500 = H.status500
 toStatus 502 = H.status502
 toStatus 503 = H.status503

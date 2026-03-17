@@ -57,6 +57,9 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
   // Event is split into structural constructors (never, sub, merge, debounce,
   // throttle, foldE, mapFilterE, switchE, parallel, race) and leaf sources (Sub).
   // The `sub` handler delegates to interpretSub for leaf event sources.
+  // Leaf handlers shared with interpretSub (backward compat for direct Scott-encoded values)
+  const leafHandlers = makeLeafHandlers(dispatchImmediate, dispatchNormal, dispatchBackground);
+
   return event({
     // never: do nothing
     never: () => ({ unsubscribe: () => {} }),
@@ -64,106 +67,12 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
     // sub: delegate to interpretSub for leaf event sources
     sub: (subEvent) => interpretSub(subEvent, dispatch, dispatchers),
 
-    // interval: backward compat (removed from Event, now in Sub via smart constructor)
-    // These are kept temporarily for any direct Scott-encoded values in flight.
-    interval: (ms, msg) => {
-      const msNum = ensureNumber(ms);
-      const id = setInterval(() => dispatchBackground(msg), msNum);
-      return { unsubscribe: () => clearInterval(id) };
-    },
-
-    // timeout: one-shot event (P1 - normal)
-    timeout: (ms, msg) => {
-      const msNum = ensureNumber(ms);
-      const id = setTimeout(() => dispatchNormal(msg), msNum);
-      return { unsubscribe: () => clearTimeout(id) };
-    },
-
-    // onKeyDown: keyboard (keydown) - P0 (immediate)
-    onKeyDown: (handler) => {
-      const ac = new AbortController();
-      document.addEventListener('keydown', (e) => {
-        const keyEvent = mkKeyboardEvent(e);
-        const maybeMsg = handler(keyEvent);
-        const msg = fromMaybe(maybeMsg);
-        if (msg !== null) {
-          dispatchImmediate(msg);
-        }
-      }, { signal: ac.signal });
-      return { unsubscribe: () => ac.abort() };
-    },
-
-    // onKeyUp: keyboard (keyup) - P0 (immediate)
-    onKeyUp: (handler) => {
-      const ac = new AbortController();
-      document.addEventListener('keyup', (e) => {
-        const keyEvent = mkKeyboardEvent(e);
-        const maybeMsg = handler(keyEvent);
-        const msg = fromMaybe(maybeMsg);
-        if (msg !== null) {
-          dispatchImmediate(msg);
-        }
-      }, { signal: ac.signal });
-      return { unsubscribe: () => ac.abort() };
-    },
-
-    // onMouseDown: mouse (mousedown) - P0 (immediate)
-    onMouseDown: (handler) => {
-      const ac = new AbortController();
-      document.addEventListener('mousedown', (e) => {
-        const mouseEvent = mkMouseEvent(e);
-        const maybeMsg = handler(mouseEvent);
-        const msg = fromMaybe(maybeMsg);
-        if (msg !== null) {
-          dispatchImmediate(msg);
-        }
-      }, { signal: ac.signal });
-      return { unsubscribe: () => ac.abort() };
-    },
-
-    // onMouseUp: mouse (mouseup) - P0 (immediate)
-    onMouseUp: (handler) => {
-      const ac = new AbortController();
-      document.addEventListener('mouseup', (e) => {
-        const mouseEvent = mkMouseEvent(e);
-        const maybeMsg = handler(mouseEvent);
-        const msg = fromMaybe(maybeMsg);
-        if (msg !== null) {
-          dispatchImmediate(msg);
-        }
-      }, { signal: ac.signal });
-      return { unsubscribe: () => ac.abort() };
-    },
-
-    // onMouseMove: mouse (mousemove) - P1 (normal, throttled by nature)
-    onMouseMove: (handler) => {
-      const ac = new AbortController();
-      document.addEventListener('mousemove', (e) => {
-        const mouseEvent = mkMouseEvent(e);
-        const maybeMsg = handler(mouseEvent);
-        const msg = fromMaybe(maybeMsg);
-        if (msg !== null) {
-          dispatchNormal(msg);
-        }
-      }, { signal: ac.signal });
-      return { unsubscribe: () => ac.abort() };
-    },
-
-    // onClick: mouse (click) - P0 (immediate)
-    onClick: (handler) => {
-      const ac = new AbortController();
-      document.addEventListener('click', (e) => {
-        const mouseEvent = mkMouseEvent(e);
-        const maybeMsg = handler(mouseEvent);
-        const msg = fromMaybe(maybeMsg);
-        if (msg !== null) {
-          dispatchImmediate(msg);
-        }
-      }, { signal: ac.signal });
-      return { unsubscribe: () => ac.abort() };
-    },
+    // Backward compat: spread all leaf handlers so old Event values
+    // that directly use leaf constructors (without sub wrapper) still work.
+    ...leafHandlers,
 
     // onKeys: key-to-message mapping with P0 (immediate) dispatch
+    // (only in Event, not in Sub)
     onKeys: (pairs) => {
       const pairArray = listToArray(pairs).items;
       const keyMap = new Map();
@@ -187,79 +96,6 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         if (msg !== undefined) dispatchImmediate(msg);
       }, { signal: ac.signal });
       return { unsubscribe: () => ac.abort() };
-    },
-
-    // httpGet: HTTP GET request - P2 (background)
-    httpGet: (url, onSuccess, onError) => {
-      const controller = new AbortController();
-      let completed = false;
-
-      fetch(url, { signal: controller.signal })
-        .then(async (response) => {
-          if (completed) return;
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-          }
-          const text = await response.text();
-          if (completed) return;
-          completed = true;
-          dispatchBackground(onSuccess(text));
-        })
-        .catch((error) => {
-          if (completed || error.name === 'AbortError') return;
-          completed = true;
-          dispatchBackground(onError(error.message));
-        });
-
-      return {
-        unsubscribe: () => {
-          completed = true;
-          controller.abort();
-        }
-      };
-    },
-
-    // httpPost: HTTP POST request - P2 (background)
-    httpPost: (url, body, onSuccess, onError) => {
-      const controller = new AbortController();
-      let completed = false;
-
-      // Auto-detect content type: JSON if body looks like JSON, otherwise text/plain
-      let contentType = 'text/plain';
-      if (typeof body === 'string' && body.length > 0) {
-        const ch = body[0];
-        if (ch === '{' || ch === '[' || ch === '"') {
-          try { JSON.parse(body); contentType = 'application/json'; } catch {}
-        }
-      }
-      fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': contentType },
-        body,
-        signal: controller.signal
-      })
-        .then(async (response) => {
-          if (completed) return;
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-          }
-          const text = await response.text();
-          if (completed) return;
-          completed = true;
-          dispatchBackground(onSuccess(text));
-        })
-        .catch((error) => {
-          if (completed || error.name === 'AbortError') return;
-          completed = true;
-          dispatchBackground(onError(error.message));
-        });
-
-      return {
-        unsubscribe: () => {
-          completed = true;
-          controller.abort();
-        }
-      };
     },
 
     // merge: combine two events
@@ -352,71 +188,6 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       };
     },
 
-    // wsConnect: WebSocket connection (P2 - background for data, P1 for connection events)
-    // Multiple connections to the same URL are supported — each gets its own entry.
-    // wsSend broadcasts to all open connections for a URL.
-    wsConnect: (url, handler) => {
-      let ws;
-      try {
-        ws = new WebSocket(url);
-      } catch (e) {
-        // Malformed URL or other construction error — dispatch error and return
-        dispatchNormal(handler(mkWsMsg('WsError', e.message || 'Invalid WebSocket URL')));
-        return { unsubscribe: () => {} };
-      }
-
-      const connId = ++_wsConnectionCounter;
-
-      ws.onopen = () => {
-        dispatchNormal(handler(mkWsMsg('WsConnected')));
-      };
-
-      ws.onmessage = (e) => {
-        dispatchBackground(handler(mkWsMsg('WsMessage', e.data)));
-      };
-
-      ws.onerror = (e) => {
-        // WebSocket error events are Event objects, not Error objects
-        // They don't have a .message property - extract what info we can
-        const errorMsg = e.error?.message ||
-                        (ws.readyState === WebSocket.CLOSED ? 'Connection failed' : 'WebSocket error');
-        dispatchNormal(handler(mkWsMsg('WsError', errorMsg)));
-      };
-
-      ws.onclose = () => {
-        dispatchNormal(handler(mkWsMsg('WsClosed')));
-        // Clean up this connection from the pool
-        const urlConns = wsConnections.get(url);
-        if (urlConns) {
-          urlConns.delete(connId);
-          if (urlConns.size === 0) wsConnections.delete(url);
-        }
-      };
-
-      // Register for wsSend — multiple connections per URL
-      if (!wsConnections.has(url)) {
-        wsConnections.set(url, new Map());
-      }
-      wsConnections.get(url).set(connId, ws);
-
-      return {
-        unsubscribe: () => {
-          const urlConns = wsConnections.get(url);
-          if (urlConns) {
-            urlConns.delete(connId);
-            if (urlConns.size === 0) wsConnections.delete(url);
-          }
-          ws.onopen = null;
-          ws.onmessage = null;
-          ws.onclose = null;
-          ws.onerror = null;
-          if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-            ws.close();
-          }
-        }
-      };
-    },
-
     // foldE: accumulate state across event occurrences (uses inner event's priority)
     // Scott: foldE(_typeB, init, step, innerEvent)
     foldE: (_typeB, init, step, innerEvent) => {
@@ -495,71 +266,6 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
       };
     },
 
-    // worker: Web Worker (P2 - background for results)
-    worker: (scriptUrl, input, onResult, onError) => {
-      let w;
-      try {
-        w = new Worker(scriptUrl, { type: 'module' });
-      } catch (e) {
-        dispatchBackground(onError(e.message || 'Failed to create worker'));
-        return { unsubscribe: () => {} };
-      }
-
-      let terminated = false;
-
-      w.onmessage = (e) => {
-        if (terminated) return;
-        dispatchBackground(onResult(ensureString(e.data)));
-      };
-
-      w.onerror = (e) => {
-        if (terminated) return;
-        dispatchBackground(onError(formatWorkerError(e)));
-      };
-
-      // Send input to worker
-      w.postMessage(input);
-
-      return {
-        unsubscribe: () => {
-          terminated = true;
-          w.terminate();
-        }
-      };
-    },
-
-    // workerWithProgress: worker that sends progress, result, and error events (P2 - background)
-    workerWithProgress: (scriptUrl, input, onProgress, onResult, onError) => {
-      let w;
-      try {
-        w = new Worker(scriptUrl, { type: 'module' });
-      } catch (e) {
-        dispatchBackground(onError(e.message || 'Failed to create worker'));
-        return { unsubscribe: () => {} };
-      }
-
-      let terminated = false;
-
-      w.onmessage = (e) => {
-        if (terminated) return;
-        dispatchWorkerProgress(e.data, dispatchBackground, onProgress, onResult, onError);
-      };
-
-      w.onerror = (e) => {
-        if (terminated) return;
-        dispatchBackground(onError(formatWorkerError(e)));
-      };
-
-      w.postMessage(input);
-
-      return {
-        unsubscribe: () => {
-          terminated = true;
-          w.terminate();
-        }
-      };
-    },
-
     // parallel: subscribe to all events in list, collect first result from each (P2 - background)
     // Scott: parallel(_typeB, eventList, mapFn)
     parallel: (_typeB, eventList, mapFn) => {
@@ -601,6 +307,13 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         subs.push(sub);
       });
 
+      // If synchronous events completed during the forEach loop, some
+      // subscriptions may have been pushed after the completion unsubscribe.
+      // Clean them up now.
+      if (finished) {
+        subs.forEach(s => s.unsubscribe());
+      }
+
       return {
         unsubscribe: () => {
           finished = true;
@@ -629,7 +342,8 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         subs.forEach(s => s.unsubscribe());
       };
 
-      events.forEach((evt) => {
+      for (const evt of events) {
+        if (finished) break;  // winner already resolved, skip remaining
         const wrappedDispatchers = {
           immediate: raceDispatch,
           normal: raceDispatch,
@@ -637,7 +351,15 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
         };
         const sub = interpretEvent(evt, raceDispatch, wrappedDispatchers);
         subs.push(sub);
-      });
+      }
+
+      // If a synchronous event won during the loop, some subscriptions
+      // created before the winner may need cleanup (already handled by
+      // raceDispatch), but the winner's own sub may have been pushed after
+      // the completion unsubscribe. Clean up now.
+      if (finished) {
+        subs.forEach(s => s.unsubscribe());
+      }
 
       return {
         unsubscribe: () => {
@@ -645,315 +367,16 @@ export function interpretEvent(event, dispatch, dispatchers = null) {
           subs.forEach(s => s.unsubscribe());
         }
       };
-    },
-
-    // poolWorker: worker from pool (one-shot task) (P2 - background)
-    // Scott: poolWorker(poolSize, scriptUrl, input, onResult, onError)
-    poolWorker: (poolSize, scriptUrl, input, onResult, onError) => {
-      const pool = getPool(poolSize, scriptUrl);
-      const handle = pool.submit(
-        input,
-        (e) => {
-          dispatchBackground(onResult(ensureString(e.data)));
-        },
-        (errMsg) => {
-          dispatchBackground(onError(errMsg));
-        }
-      );
-      return { unsubscribe: () => handle.cancel() };
-    },
-
-    // poolWorkerWithProgress: pool worker with progress protocol (P2 - background)
-    // Scott: poolWorkerWithProgress(poolSize, scriptUrl, input, onProgress, onResult, onError)
-    poolWorkerWithProgress: (poolSize, scriptUrl, input, onProgress, onResult, onError) => {
-      const pool = getPool(poolSize, scriptUrl);
-      const handle = pool.submit(
-        input,
-        (e) => {
-          dispatchWorkerProgress(e.data, dispatchBackground, onProgress, onResult, onError);
-        },
-        (errMsg) => {
-          dispatchBackground(onError(errMsg));
-        }
-      );
-      return { unsubscribe: () => handle.cancel() };
-    },
-
-    // allocShared: allocate SharedArrayBuffer (P1 - normal, synchronous operation)
-    // Scott: allocShared(numBytes, handler) or allocShared(numBytes, handler, onError)
-    // NOTE: Requires Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy headers
-    allocShared: (numBytes, handler, onError) => {
-      const n = ensureNumber(numBytes);
-      try {
-        const buffer = new SharedArrayBuffer(n);
-        dispatchNormal(handler(buffer));
-      } catch (e) {
-        console.error('allocShared failed (COOP/COEP headers required):', e.message);
-        if (onError) {
-          dispatchNormal(onError(e.message));
-        }
-      }
-      return { unsubscribe: () => {} };
-    },
-
-    // workerShared: worker with SharedArrayBuffer access (P2 - background)
-    // Scott: workerShared(buffer, scriptUrl, input, onResult, onError)
-    workerShared: (buffer, scriptUrl, input, onResult, onError) => {
-      let w;
-      try {
-        w = new Worker(scriptUrl, { type: 'module' });
-      } catch (e) {
-        dispatchBackground(onError(e.message || 'Failed to create worker'));
-        return { unsubscribe: () => {} };
-      }
-
-      let terminated = false;
-
-      w.onmessage = (e) => {
-        if (terminated) return;
-        dispatchBackground(onResult(ensureString(e.data)));
-      };
-
-      w.onerror = (e) => {
-        if (terminated) return;
-        dispatchBackground(onError(formatWorkerError(e)));
-      };
-
-      // Send input + shared buffer to worker
-      w.postMessage({ input, buffer }, []);
-
-      return {
-        unsubscribe: () => {
-          terminated = true;
-          w.terminate();
-        }
-      };
-    },
-
-    // allocImage: allocate RGBA image buffer via BufferRegistry (P1 - normal, synchronous)
-    // Scott: allocImage(width, height, handler)
-    allocImage: (width, height, handler) => {
-      const w = ensureNumber(width);
-      const h = ensureNumber(height);
-      const id = bufferRegistry.allocateImage(w, h);
-      if (id !== -1) {
-        const version = bufferRegistry.version(id);
-        dispatchNormal(handler(mkBufferHandle(id, version, w, h)));
-      } else {
-        console.error('allocImage failed (COOP/COEP headers required)');
-      }
-      return { unsubscribe: () => {} };
-    },
-
-    // allocBuffer: allocate generic byte buffer via BufferRegistry (P1 - normal, synchronous)
-    // Scott: allocBuffer(size, handler)
-    allocBuffer: (size, handler) => {
-      const n = ensureNumber(size);
-      const id = bufferRegistry.allocate(n);
-      if (id !== -1) {
-        const version = bufferRegistry.version(id);
-        dispatchNormal(handler(mkBufferHandle(id, version, n, 1)));
-      } else {
-        console.error('allocBuffer failed (COOP/COEP headers required)');
-      }
-      return { unsubscribe: () => {} };
-    },
-
-    // workerChannel: long-lived bidirectional worker connection (P2 - background)
-    // Scott: workerChannel(scriptUrl, onMessage, onError)
-    workerChannel: (scriptUrl, onMessage, onError) => {
-      let w;
-      try {
-        w = new Worker(scriptUrl, { type: 'module' });
-      } catch (e) {
-        dispatchBackground(onError(e.message || 'Failed to create worker'));
-        return { unsubscribe: () => {} };
-      }
-
-      let terminated = false;
-
-      w.onmessage = (e) => {
-        if (terminated) return;
-        dispatchBackground(onMessage(ensureString(e.data)));
-      };
-
-      w.onerror = (e) => {
-        if (terminated) return;
-        dispatchBackground(onError(formatWorkerError(e)));
-      };
-
-      // Register for channelSend
-      channelConnections.set(scriptUrl, w);
-
-      return {
-        unsubscribe: () => {
-          terminated = true;
-          channelConnections.delete(scriptUrl);
-          w.terminate();
-        }
-      };
-    },
-
-    // onUrlChange: URL change (popstate/hashchange) (P1 - normal, user navigation)
-    // Uses hash-based routing (#/path) so apps work when served from any URL
-    onUrlChange: (handler) => {
-      const getRoutePath = () => {
-        const hash = window.location.hash;
-        return hash ? hash.slice(1) : '/';
-      };
-
-      let lastDispatchedUrl = null;
-      const ac = new AbortController();
-
-      const listener = () => {
-        const url = getRoutePath();
-        if (url !== lastDispatchedUrl) {
-          lastDispatchedUrl = url;
-          dispatchNormal(handler(url));
-        }
-      };
-
-      window.addEventListener('popstate', listener, { signal: ac.signal });
-      window.addEventListener('hashchange', listener, { signal: ac.signal });
-
-      // Dispatch initial URL via the dedup listener (skips if already dispatched)
-      listener();
-
-      return { unsubscribe: () => ac.abort() };
-    },
-
-    // animationFrame: dispatch message on every animation frame (P1 - normal)
-    animationFrame: (msg) => {
-      let running = true;
-      let rafId = 0;
-      const loop = () => {
-        if (!running) return;
-        dispatchNormal(msg);
-        if (running) rafId = requestAnimationFrame(loop);
-      };
-      rafId = requestAnimationFrame(loop);
-      return {
-        unsubscribe: () => { running = false; cancelAnimationFrame(rafId); }
-      };
-    },
-
-    // animationFrameWithTime: dispatch with timestamp (ms since origin) (P1 - normal)
-    animationFrameWithTime: (handler) => {
-      let running = true;
-      let rafId = 0;
-      const loop = (timestamp) => {
-        if (!running) return;
-        dispatchNormal(handler(timestamp));
-        if (running) rafId = requestAnimationFrame(loop);
-      };
-      rafId = requestAnimationFrame(loop);
-      return {
-        unsubscribe: () => { running = false; cancelAnimationFrame(rafId); }
-      };
-    },
-
-    // springLoop: animated spring that ticks until settled (P1 - normal for ticks)
-    // Scott: springLoop(cfg, onTick, onSettled) where cfg is SpringConfig record
-    // onTick receives current position each frame
-    // onSettled is dispatched when spring settles
-    springLoop: (cfg, onTick, onSettled) => {
-      // Destructure SpringConfig record (Scott-encoded)
-      let position, velocity, target, stiffness, damping;
-      cfg({ mkSpringConfig: (p, v, t, s, d) => { position = p; velocity = v; target = t; stiffness = s; damping = d; } });
-      let running = true;
-      let lastTime = null;
-      let pos = ensureNumber(position);
-      let vel = ensureNumber(velocity);
-      const tgt = ensureNumber(target);
-      const stiff = ensureNumber(stiffness);
-      const damp = ensureNumber(damping);
-
-      // Guard against NaN/Infinity parameters
-      if (!isFinite(pos) || !isFinite(vel) || !isFinite(tgt) ||
-          !isFinite(stiff) || !isFinite(damp)) {
-        console.warn('springLoop: invalid parameters (NaN/Infinity), settling immediately');
-        queueMicrotask(() => dispatchNormal(onSettled));
-        return { unsubscribe: () => {} };
-      }
-      // Clamp stiffness/damping to non-negative values
-      if (stiff < 0 || damp < 0) {
-        console.warn('springLoop: negative stiffness/damping clamped to 0');
-      }
-      const stiffClamped = Math.max(0, stiff);
-      const dampClamped = Math.max(0, damp);
-
-      // Zero stiffness and zero damping means no restoring force — settle immediately
-      if (stiffClamped === 0 && dampClamped === 0) {
-        queueMicrotask(() => dispatchNormal(onSettled));
-        return { unsubscribe: () => {} };
-      }
-
-      const tick = (dt) => {
-        const dtSec = dt / 1000;
-        const force = stiffClamped * (tgt - pos) - dampClamped * vel;
-        vel = vel + force * dtSec;
-        pos = pos + vel * dtSec;
-      };
-
-      // Adaptive threshold: scale with the magnitude of the spring's range
-      // to avoid jitter at extreme stiffness/mass values
-      const range = Math.abs(ensureNumber(position) - tgt);
-      const posThreshold = Math.max(0.01, range * 0.001);
-      const velThreshold = Math.max(0.01, range * 0.001);
-      const isSettled = () => {
-        return Math.abs(pos - tgt) < posThreshold && Math.abs(vel) < velThreshold;
-      };
-
-      let rafId = 0;
-      const loop = (timestamp) => {
-        if (!running) return;
-        if (lastTime === null) {
-          lastTime = timestamp;
-          rafId = requestAnimationFrame(loop);  // skip first frame (dt=0)
-          return;
-        }
-        const dt = Math.min(timestamp - lastTime, 64); // cap to avoid spiral of death
-        lastTime = timestamp;
-
-        // Skip frame if dt is 0 (identical timestamps)
-        if (dt <= 0) { rafId = requestAnimationFrame(loop); return; }
-
-        // Tick in 4ms steps for stability
-        let remaining = dt;
-        while (remaining >= 4) {
-          tick(4);
-          remaining -= 4;
-        }
-        if (remaining > 0) tick(remaining);
-
-        dispatchNormal(onTick(pos));
-
-        if (isSettled()) {
-          running = false;
-          dispatchNormal(onSettled);
-        } else {
-          rafId = requestAnimationFrame(loop);
-        }
-      };
-      rafId = requestAnimationFrame(loop);
-      return {
-        unsubscribe: () => { running = false; cancelAnimationFrame(rafId); }
-      };
     }
   });
 }
 
 /**
- * Interprets Sub AST (leaf event sources) and creates subscriptions.
- * Sub contains all event sources that don't recursively contain Event.
- * Adding a new event source only requires adding a handler here.
+ * Build the leaf event handler map shared by interpretEvent (backward compat)
+ * and interpretSub. Single source of truth — avoids handler duplication.
  */
-function interpretSub(subEvent, dispatch, dispatchers = null) {
-  const dispatchImmediate = dispatchers?.immediate || dispatch;
-  const dispatchNormal = dispatchers?.normal || dispatch;
-  const dispatchBackground = dispatchers?.background || dispatch;
-
-  return subEvent({
+function makeLeafHandlers(dispatchImmediate, dispatchNormal, dispatchBackground) {
+  return {
     interval: (ms, msg) => {
       const msNum = ensureNumber(ms);
       const id = setInterval(() => dispatchBackground(msg), msNum);
@@ -1159,7 +582,7 @@ function interpretSub(subEvent, dispatch, dispatchers = null) {
       };
     },
     onUrlChange: (handler) => {
-      const getRoutePath = () => { const hash = window.location.hash; return hash ? hash.slice(1) : '/'; };
+      const getRoutePath = () => { const hash = window.location.hash; return hash && hash.length > 1 ? hash.slice(1) : '/'; };
       let lastDispatchedUrl = null;
       const ac = new AbortController();
       const listener = () => {
@@ -1208,6 +631,8 @@ function interpretSub(subEvent, dispatch, dispatchers = null) {
       let terminated = false;
       w.onmessage = (e) => { if (!terminated) dispatchBackground(onMessage(ensureString(e.data))); };
       w.onerror = (e) => { if (!terminated) dispatchBackground(onError(formatWorkerError(e))); };
+      const prev = channelConnections.get(scriptUrl);
+      if (prev) prev.terminate();
       channelConnections.set(scriptUrl, w);
       return { unsubscribe: () => { terminated = true; channelConnections.delete(scriptUrl); w.terminate(); } };
     },
@@ -1241,7 +666,20 @@ function interpretSub(subEvent, dispatch, dispatchers = null) {
       else { console.error('allocBuffer failed (COOP/COEP headers required)'); }
       return { unsubscribe: () => {} };
     }
-  });
+  };
+}
+
+/**
+ * Interprets Sub AST (leaf event sources) and creates subscriptions.
+ * Sub contains all event sources that don't recursively contain Event.
+ * Adding a new event source only requires adding a handler in makeLeafHandlers.
+ */
+function interpretSub(subEvent, dispatch, dispatchers = null) {
+  const dispatchImmediate = dispatchers?.immediate || dispatch;
+  const dispatchNormal = dispatchers?.normal || dispatch;
+  const dispatchBackground = dispatchers?.background || dispatch;
+
+  return subEvent(makeLeafHandlers(dispatchImmediate, dispatchNormal, dispatchBackground));
 }
 
 /**
