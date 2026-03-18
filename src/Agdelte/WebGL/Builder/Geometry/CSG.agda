@@ -73,9 +73,18 @@ infixl 7 _∖_
 -- Multi-operand operations
 ------------------------------------------------------------------------
 
+-- Empty geometry: a postulate that compiles to a JS marker object the runtime
+-- skips during rendering.  This is the correct identity element for unionAll
+-- and intersectAll on empty lists — unlike `box (vec3 0 0 0)` it truly renders
+-- nothing and has no bounding box.
+postulate
+  emptyGeometry : Geometry
+
+{-# COMPILE JS emptyGeometry = ({ type: 'empty' }) #-}
+
 -- Union of multiple geometries
 unionAll : List Geometry → Geometry
-unionAll [] = box (vec3 0.0 0.0 0.0)
+unionAll [] = emptyGeometry
 unionAll (g ∷ []) = g
 unionAll (g ∷ gs) = union g (unionAll gs)
 
@@ -86,7 +95,7 @@ subtractAll base (g ∷ gs) = subtractAll (subtract base g) gs
 
 -- Intersect multiple geometries
 intersectAll : List Geometry → Geometry
-intersectAll [] = box (vec3 0.0 0.0 0.0)
+intersectAll [] = emptyGeometry
 intersectAll (g ∷ []) = g
 intersectAll (g ∷ gs) = intersect g (intersectAll gs)
 

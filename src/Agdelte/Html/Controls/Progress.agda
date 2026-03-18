@@ -17,6 +17,16 @@ open import Agdelte.Reactive.Node
 open import Agda.Builtin.String using (primShowNat)
 
 ------------------------------------------------------------------------
+-- Clamping helper (JS postulate)
+------------------------------------------------------------------------
+
+-- | Clamp a string-encoded number to [0,100], returning a string.
+postulate clampProgressValue : String → String
+{-# COMPILE JS clampProgressValue = function(s) {
+  return String(Math.max(0, Math.min(100, parseFloat(s) || 0)));
+} #-}
+
+------------------------------------------------------------------------
 -- Progress bar
 ------------------------------------------------------------------------
 
@@ -28,12 +38,12 @@ progressBar : ∀ {M A}
 progressBar {M} {A} getValue =
   div ( class "agdelte-progress"
       ∷ attr "role" "progressbar"
-      ∷ attrBind "aria-valuenow" (mkBinding getValue eqStr)
+      ∷ attrBind "aria-valuenow" (mkBinding (λ m → clampProgressValue (getValue m)) eqStr)
       ∷ attr "aria-valuemin" "0"
       ∷ attr "aria-valuemax" "100"
       ∷ [] )
     ( div ( class "agdelte-progress__bar"
-          ∷ styleBind "width" (mkBinding (λ m → getValue m ++ "%") eqStr)
+          ∷ styleBind "width" (mkBinding (λ m → clampProgressValue (getValue m) ++ "%") eqStr)
           ∷ [] )
         []
     ∷ [] )

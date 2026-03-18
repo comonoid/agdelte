@@ -160,10 +160,12 @@ open WidgetApp public
 
 ------------------------------------------------------------------------
 -- FFI: Runtime for Widget (no Virtual DOM!)
--- All conversion happens in JavaScript - see runtime/widget.js
+-- NOTE: runtime/widget.js does not exist yet. Widget is experimental
+-- and not integrated with the reactive runtime. The primary API is
+-- Agdelte.Reactive.Node.
 ------------------------------------------------------------------------
 
--- The runtime interprets:
+-- The runtime would interpret:
 -- - Path as navigation: here=root, child n p=nth child then p, text=textContent, attr=attribute
 -- - Mutation as DOM operation: setText, setAttr, remove
 -- - Widget.diff(oldModel, newModel) returns mutations to apply

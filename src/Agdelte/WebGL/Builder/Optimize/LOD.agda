@@ -11,6 +11,7 @@ open import Data.Nat using (ℕ; zero; suc)
 open import Data.Float using (Float)
 open import Data.List using (List; []; _∷_)
 open import Data.Product using (_×_; _,_)
+open import Data.String using (String)
 
 open import Agdelte.WebGL.Types
 
@@ -37,13 +38,17 @@ LODSpec M Msg = List (LODLevel M Msg)
 
 -- Create an LOD node from a specification
 -- The runtime will select the appropriate level based on camera distance
+-- Wrapped in named/group so zoomSceneNode can traverse it
 postulate
-  lod : ∀ {M Msg} → LODSpec M Msg → SceneNode M Msg
+  lodRaw : ∀ {M Msg} → LODSpec M Msg → SceneNode M Msg
 
-{-# COMPILE JS lod = levels => ({
+{-# COMPILE JS lodRaw = levels => ({
   type: 'lod',
   levels: levels
 }) #-}
+
+lod : ∀ {M Msg} → LODSpec M Msg → SceneNode M Msg
+lod levels = named "optimizationHint" (group identityTransform (lodRaw levels ∷ []))
 
 ------------------------------------------------------------------------
 -- Convenience constructors
@@ -71,23 +76,31 @@ lod3 high th1 med th2 low =
 ------------------------------------------------------------------------
 
 -- Show node only within distance range
+-- Wrapped in named/group so zoomSceneNode can traverse it
 postulate
-  visibleInRange : ∀ {M Msg} → Float → Float → SceneNode M Msg → SceneNode M Msg
+  visibleInRangeRaw : ∀ {M Msg} → Float → Float → SceneNode M Msg → SceneNode M Msg
 
-{-# COMPILE JS visibleInRange = minDist => maxDist => node => ({
+{-# COMPILE JS visibleInRangeRaw = minDist => maxDist => node => ({
   type: 'distanceVisible',
   minDistance: minDist,
   maxDistance: maxDist,
   child: node
 }) #-}
 
--- Fade node based on distance (alpha = 1 at near, 0 at far)
-postulate
-  fadeByDistance : ∀ {M Msg} → Float → Float → SceneNode M Msg → SceneNode M Msg
+visibleInRange : ∀ {M Msg} → Float → Float → SceneNode M Msg → SceneNode M Msg
+visibleInRange mn mx child = named "optimizationHint" (group identityTransform (visibleInRangeRaw mn mx child ∷ []))
 
-{-# COMPILE JS fadeByDistance = nearDist => farDist => node => ({
+-- Fade node based on distance (alpha = 1 at near, 0 at far)
+-- Wrapped in named/group so zoomSceneNode can traverse it
+postulate
+  fadeByDistanceRaw : ∀ {M Msg} → Float → Float → SceneNode M Msg → SceneNode M Msg
+
+{-# COMPILE JS fadeByDistanceRaw = nearDist => farDist => node => ({
   type: 'distanceFade',
   nearDistance: nearDist,
   farDistance: farDist,
   child: node
 }) #-}
+
+fadeByDistance : ∀ {M Msg} → Float → Float → SceneNode M Msg → SceneNode M Msg
+fadeByDistance near far child = named "optimizationHint" (group identityTransform (fadeByDistanceRaw near far child ∷ []))

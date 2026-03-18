@@ -51,7 +51,7 @@ mobileBreakpointRules =
           ∷ "z-index" ∶ "var(--agdelte-z-modal)"
           ∷ [])
       ∷ rule ".agdelte-sidebar--collapsed"
-          ( "transform" ∶ "translateX(-240px)"
+          ( "transform" ∶ "translateX(calc(-1 * var(--agdelte-sidebar-width)))"
           ∷ [])
       ∷ rule ".agdelte-modal__content"
           ( "max-width" ∶ "100vw"
@@ -85,8 +85,38 @@ mobileBreakpointRules =
   ∷ []
 
 ------------------------------------------------------------------------
+-- Tablet breakpoint
+------------------------------------------------------------------------
+
+tabletBreakpointRules : Stylesheet
+tabletBreakpointRules =
+    media "(max-width: 768px)"
+      ( rule ".agdelte-grid"
+          ( "font-size" ∶ "0.9375rem"
+          ∷ [])
+      ∷ rule ".agdelte-grid__cell"
+          ( "padding" ∶ "var(--agdelte-spacing-sm) var(--agdelte-spacing-md)"
+          ∷ [])
+      ∷ rule ".agdelte-datepicker__day"
+          ( "width" ∶ "2rem"
+          ∷ "height" ∶ "2rem"
+          ∷ "font-size" ∶ "0.875rem"
+          ∷ [])
+      ∷ rule ".agdelte-tabs__header"
+          ( "overflow-x" ∶ "auto"
+          ∷ "flex-wrap" ∶ "nowrap"
+          ∷ "-webkit-overflow-scrolling" ∶ "touch"
+          ∷ [])
+      ∷ rule ".agdelte-tabs__tab"
+          ( "white-space" ∶ "nowrap"
+          ∷ "flex-shrink" ∶ "0"
+          ∷ [])
+      ∷ [])
+  ∷ []
+
+------------------------------------------------------------------------
 -- Combined
 ------------------------------------------------------------------------
 
 responsiveRules : Stylesheet
-responsiveRules = reducedMotionRules ++ mobileBreakpointRules
+responsiveRules = reducedMotionRules ++ tabletBreakpointRules ++ mobileBreakpointRules

@@ -38,24 +38,30 @@ simplePagination : ∀ {M A}
                  → Node M A
 simplePagination {M} {A} currentPage totalPages prevMsg nextMsg =
   div ( class "agdelte-pagination" ∷ [] )
-    ( button ( class "agdelte-pagination__btn"
-             ∷ attr "aria-label" "Previous page"
-             ∷ disabledBind (λ m → currentPage m ≤ᵇ 1)
-             ∷ onClick prevMsg
-             ∷ [] )
-        ( text "← Prev" ∷ [] )
-    ∷ span ( class "agdelte-pagination__info" ∷ [] )
-        ( text "Page "
-        ∷ bindF (showℕ ∘ currentPage)
-        ∷ text " of "
-        ∷ bindF (showℕ ∘ totalPages)
-        ∷ [] )
-    ∷ button ( class "agdelte-pagination__btn"
-             ∷ attr "aria-label" "Next page"
-             ∷ disabledBind (λ m → not (currentPage m <ᵇ totalPages m))
-             ∷ onClick nextMsg
-             ∷ [] )
-        ( text "Next →" ∷ [] )
+    ( when (λ m → totalPages m ≡ᵇ 0)
+        (span ( class "agdelte-pagination__info" ∷ [] )
+           ( text "No pages" ∷ [] ))
+    ∷ when (λ m → not (totalPages m ≡ᵇ 0))
+        (div ( class "agdelte-pagination" ∷ [] )
+          ( button ( class "agdelte-pagination__btn"
+                   ∷ attr "aria-label" "Previous page"
+                   ∷ disabledBind (λ m → currentPage m ≤ᵇ 1)
+                   ∷ onClick prevMsg
+                   ∷ [] )
+              ( text "← Prev" ∷ [] )
+          ∷ span ( class "agdelte-pagination__info" ∷ [] )
+              ( text "Page "
+              ∷ bindF (showℕ ∘ currentPage)
+              ∷ text " of "
+              ∷ bindF (showℕ ∘ totalPages)
+              ∷ [] )
+          ∷ button ( class "agdelte-pagination__btn"
+                   ∷ attr "aria-label" "Next page"
+                   ∷ disabledBind (λ m → not (currentPage m <ᵇ totalPages m))
+                   ∷ onClick nextMsg
+                   ∷ [] )
+              ( text "Next →" ∷ [] )
+          ∷ [] ))
     ∷ [] )
 
 ------------------------------------------------------------------------
@@ -71,6 +77,11 @@ numberedPagination : ∀ {M A}
                    → A             -- next message
                    → List ℕ        -- pages to show
                    → Node M A
+numberedPagination {M} {A} currentPage goToPage prevMsg nextMsg [] =
+  div ( class "agdelte-pagination" ∷ [] )
+    ( span ( class "agdelte-pagination__info" ∷ [] )
+        ( text "No pages" ∷ [] )
+    ∷ [] )
 numberedPagination {M} {A} currentPage goToPage prevMsg nextMsg pages =
   div ( class "agdelte-pagination" ∷ [] )
     ( button ( class "agdelte-pagination__btn"
@@ -126,21 +137,27 @@ compactPagination : ∀ {M A}
                   → Node M A
 compactPagination {M} {A} currentPage totalPages prevMsg nextMsg =
   div ( class "agdelte-pagination agdelte-pagination--compact" ∷ [] )
-    ( button ( class "agdelte-pagination__btn"
-             ∷ attr "aria-label" "Previous page"
-             ∷ disabledBind (λ m → currentPage m ≤ᵇ 1)
-             ∷ onClick prevMsg
-             ∷ [] )
-        ( text "‹" ∷ [] )
-    ∷ span ( class "agdelte-pagination__current" ∷ [] )
-        ( bindF (showℕ ∘ currentPage)
-        ∷ text "/"
-        ∷ bindF (showℕ ∘ totalPages)
-        ∷ [] )
-    ∷ button ( class "agdelte-pagination__btn"
-             ∷ attr "aria-label" "Next page"
-             ∷ disabledBind (λ m → not (currentPage m <ᵇ totalPages m))
-             ∷ onClick nextMsg
-             ∷ [] )
-        ( text "›" ∷ [] )
+    ( when (λ m → totalPages m ≡ᵇ 0)
+        (span ( class "agdelte-pagination__current" ∷ [] )
+           ( text "0/0" ∷ [] ))
+    ∷ when (λ m → not (totalPages m ≡ᵇ 0))
+        (div ( class "agdelte-pagination agdelte-pagination--compact" ∷ [] )
+          ( button ( class "agdelte-pagination__btn"
+                   ∷ attr "aria-label" "Previous page"
+                   ∷ disabledBind (λ m → currentPage m ≤ᵇ 1)
+                   ∷ onClick prevMsg
+                   ∷ [] )
+              ( text "‹" ∷ [] )
+          ∷ span ( class "agdelte-pagination__current" ∷ [] )
+              ( bindF (showℕ ∘ currentPage)
+              ∷ text "/"
+              ∷ bindF (showℕ ∘ totalPages)
+              ∷ [] )
+          ∷ button ( class "agdelte-pagination__btn"
+                   ∷ attr "aria-label" "Next page"
+                   ∷ disabledBind (λ m → not (currentPage m <ᵇ totalPages m))
+                   ∷ onClick nextMsg
+                   ∷ [] )
+              ( text "›" ∷ [] )
+          ∷ [] ))
     ∷ [] )

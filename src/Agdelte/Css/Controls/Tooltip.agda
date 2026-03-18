@@ -35,11 +35,13 @@ tooltipRules =
       ∷ "opacity" ∶ "0"
       ∷ "visibility" ∶ "hidden"
       ∷ "transition" ∶ "opacity var(--agdelte-transition), visibility var(--agdelte-transition)"
+      ∷ "transition-delay" ∶ "0.1s"
       ∷ "pointer-events" ∶ "none"
       ∷ [])
   ∷ rule ".agdelte-tooltip:hover .agdelte-tooltip__content"
       ( "opacity" ∶ "1"
       ∷ "visibility" ∶ "visible"
+      ∷ "transition-delay" ∶ "0.3s"
       ∷ [])
   -- Positions
   ∷ rule ".agdelte-tooltip--top .agdelte-tooltip__content"

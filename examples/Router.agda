@@ -10,7 +10,7 @@ open import Data.Nat using (ℕ; zero; suc)
 open import Data.Nat.Show using (show)
 open import Data.String using (String; _++_)
 open import Data.List using (List; []; _∷_; [_])
-open import Data.Bool using (Bool; true; false)
+open import Data.Bool using (Bool; true; false; if_then_else_)
 
 open import Agdelte.Core.Event
 open import Agdelte.Core.Cmd
@@ -30,13 +30,14 @@ parseRoute : String → Route
 parseRoute "/" = Home
 parseRoute "/about" = About
 parseRoute "/contact" = Contact
+parseRoute "/404" = NotFound
 parseRoute _ = NotFound
 
 routeToPath : Route → String
 routeToPath Home = "/"
 routeToPath About = "/about"
 routeToPath Contact = "/contact"
-routeToPath NotFound = "/"
+routeToPath NotFound = "/404"
 
 ------------------------------------------------------------------------
 -- Model
@@ -143,14 +144,19 @@ routerTemplate =
     ( h1 [] [ text "Router Demo" ]
     ∷ p [ class "stats" ] [ bindF visitCountText ]  -- auto-updates!
 
-    -- Navigation (needs route-dependent active class)
-    -- Since we can't easily bind route-dependent children, we use a simpler approach
+    -- Navigation with dynamic active class
     ∷ nav [ class "main-nav" ]
-        ( a (href "/" ∷ onClick (Navigate Home) ∷ class "nav-link" ∷ [])
+        ( a (href "/" ∷ onClick (Navigate Home)
+            ∷ classBind (λ m → if routeEq (currentRoute m) Home then "nav-link active" else "nav-link")
+            ∷ [])
             [ text "Home" ]
-        ∷ a (href "/about" ∷ onClick (Navigate About) ∷ class "nav-link" ∷ [])
+        ∷ a (href "/about" ∷ onClick (Navigate About)
+            ∷ classBind (λ m → if routeEq (currentRoute m) About then "nav-link active" else "nav-link")
+            ∷ [])
             [ text "About" ]
-        ∷ a (href "/contact" ∷ onClick (Navigate Contact) ∷ class "nav-link" ∷ [])
+        ∷ a (href "/contact" ∷ onClick (Navigate Contact)
+            ∷ classBind (λ m → if routeEq (currentRoute m) Contact then "nav-link active" else "nav-link")
+            ∷ [])
             [ text "Contact" ]
         ∷ [] )
 

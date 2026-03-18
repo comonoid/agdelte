@@ -72,7 +72,7 @@ ringFacing {M} {Msg} radius children =
   in group identityTransform (go 0 angleStep children)
   where
     halfAngle : Float → Float
-    halfAngle a = a F.* 0.5
+    halfAngle a = (a F.+ π) F.* 0.5
 
     go : ℕ → Float → List (SceneNode M Msg) → List (SceneNode M Msg)
     go _ _ [] = []

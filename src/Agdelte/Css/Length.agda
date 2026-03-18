@@ -34,6 +34,9 @@ data Length : Set where
   dvw  : Float → Length      -- dynamic viewport width
   cqw  : Float → Length      -- container query width
   cqh  : Float → Length      -- container query height
+  vmin : Float → Length
+  vmax : Float → Length
+  fr   : Float → Length      -- grid fraction unit
   zero : Length
   auto : Length
 
@@ -51,6 +54,9 @@ showLength (svw f) = showFloat f ++ "svw"
 showLength (dvh f) = showFloat f ++ "dvh"
 showLength (dvw f) = showFloat f ++ "dvw"
 showLength (cqw f) = showFloat f ++ "cqw"
-showLength (cqh f) = showFloat f ++ "cqh"
+showLength (cqh f)  = showFloat f ++ "cqh"
+showLength (vmin f) = showFloat f ++ "vmin"
+showLength (vmax f) = showFloat f ++ "vmax"
+showLength (fr f)   = showFloat f ++ "fr"
 showLength zero    = "0"
 showLength auto    = "auto"

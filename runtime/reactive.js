@@ -85,6 +85,7 @@ const BOOL_ATTRS = new Set([
   'hidden', 'autofocus', 'multiple', 'open', 'novalidate',
   'formnovalidate', 'autoplay', 'controls', 'loop', 'muted',
   'default', 'reversed', 'allowfullscreen', 'async', 'defer',
+  'inert', 'popover',
 ]);
 
 // Namespaced attributes (xlink:href, xml:lang, etc.)
@@ -229,11 +230,22 @@ function executeCmd(cmd, dispatch) {
         dispatch(handler(''));
       }),
     'getItem': (key, handler) => {
-      const value = localStorage.getItem(key);
-      dispatch(handler(value !== null ? (cb) => cb['just'](value) : (cb) => cb['nothing']()));
+      try {
+        const value = localStorage.getItem(key);
+        dispatch(handler(value !== null ? (cb) => cb['just'](value) : (cb) => cb['nothing']()));
+      } catch (e) {
+        console.warn('Cmd.getItem failed:', e.message);
+        dispatch(handler((cb) => cb['nothing']()));
+      }
     },
-    'setItem': (key, value) => localStorage.setItem(key, value),
-    'removeItem': (key) => localStorage.removeItem(key),
+    'setItem': (key, value) => {
+      try { localStorage.setItem(key, value); }
+      catch (e) { console.warn('Cmd.setItem failed:', e.message); }
+    },
+    'removeItem': (key) => {
+      try { localStorage.removeItem(key); }
+      catch (e) { console.warn('Cmd.removeItem failed:', e.message); }
+    },
     'wsSend': (url, message) => {
       const urlConns = wsConnections.get(url);
       if (!urlConns || urlConns.size === 0) {
@@ -770,7 +782,11 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     p2Queue = [];
     let i = 0;
     while (i < all.length && !destroyed && deadline.timeRemaining() > 1) {
-      processBatch([all[i]]);
+      try {
+        processBatch([all[i]]);
+      } catch (e) {
+        console.error('flushP2: batch processing failed:', e);
+      }
       i++;
     }
     // Put back unprocessed messages
@@ -784,8 +800,11 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       if (typeof requestIdleCallback !== 'undefined') {
         requestIdleCallback(flushP2, { timeout: 1000 });
       } else {
-        // Fallback for Safari: use setTimeout with low priority
-        setTimeout(() => flushP2({ timeRemaining: () => 50 }), 100);
+        // Fallback for Safari: use setTimeout with real time budget (8ms)
+        setTimeout(() => {
+          const start = performance.now();
+          flushP2({ timeRemaining: () => Math.max(0, 8 - (performance.now() - start)) });
+        }, 100);
       }
     }
   }
@@ -860,8 +879,11 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       if (typeof requestIdleCallback !== 'undefined') {
         requestIdleCallback(flushP2, { timeout: 1000 });
       } else {
-        // Fallback for Safari
-        setTimeout(() => flushP2({ timeRemaining: () => 50 }), 100);
+        // Fallback for Safari: use real time budget (8ms)
+        setTimeout(() => {
+          const start = performance.now();
+          flushP2({ timeRemaining: () => Math.max(0, 8 - (performance.now() - start)) });
+        }, 100);
       }
     }
   }
@@ -1428,6 +1450,8 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           cond.node = replacement;
           cond.rendered = true;
           cond.scope = childScope;
+          // Start SMIL animations on newly inserted subtree
+          if (newNode) startSmilAnimations(newNode);
         } else {
           // Cancel any pending enter transition timeout
           if (cond.enterTimeoutId) {

@@ -885,19 +885,10 @@ codeBlock =
 
 themeVars : Style
 themeVars =
-  -- Override agdelte-controls for dark theme
-    cssVar "agdelte-bg"           "#16213e"
-  ∷ cssVar "agdelte-bg-hover"     "#1a2744"
-  ∷ cssVar "agdelte-bg-active"    "#1e2d4d"
-  ∷ cssVar "agdelte-text"         "#eee"
-  ∷ cssVar "agdelte-text-muted"   "#aaa"
-  ∷ cssVar "agdelte-border"       "#30363d"
-  ∷ cssVar "agdelte-primary"      "#4a9eff"
-  ∷ cssVar "agdelte-primary-hover" "#3a8eef"
-  ∷ cssVar "agdelte-success"      "#4ade80"
-  ∷ cssVar "agdelte-warning"      "#fbbf24"
-  ∷ cssVar "agdelte-error"        "#e94560"
-  ∷ []
+  -- All dark-theme values are already defined in rootVars (which sets the
+  -- defaults via var() references).  Only add overrides here for values
+  -- that should *differ* from the rootVars defaults.
+  []
 
 ------------------------------------------------------------------------
 -- Layout components

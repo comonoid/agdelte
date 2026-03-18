@@ -12,8 +12,10 @@ open import Data.List using (List; []; _∷_; length)
 open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.Nat using (ℕ; zero; suc)
 open import Data.Maybe using (Maybe; just; nothing)
+open import Data.Product using (_×_; _,_)
 
-open import Agdelte.Reactive.Node using (Node; Attr; elem; attr; text)
+open import Agdelte.Reactive.Node using (Node; Attr; elem; attr; text;
+  attrBind; stringBinding; Binding)
 open import Agdelte.Svg.Elements using (svg; g; rect'; path'; circle'; svgText)
 open import Agdelte.Svg.Attributes
 open import Agdelte.Css.Show using (showFloat)
@@ -72,6 +74,13 @@ private
   scaleY minY maxY h py vy =
     let range = if (maxY - minY) ≤ᵇ 0.0 then 1.0 else maxY - minY
     in py + h - ((vy - minY) ÷ range) * h
+
+  -- Zero-anchoring: ensure range always includes zero
+  zeroMin : Float → Float
+  zeroMin v = if v <ᵇ 0.0 then v else 0.0
+
+  zeroMax : Float → Float
+  zeroMax v = if 0.0 <ᵇ v then v else 0.0
 
 ------------------------------------------------------------------------
 -- Path building
@@ -148,8 +157,8 @@ simpleLineChart px py w h points sty =
       ys = extractY points
       minX = findMin xs 1.0e10
       maxX = findMax xs (0.0 - 1.0e10)
-      minY = findMin ys 1.0e10
-      maxY = findMax ys (0.0 - 1.0e10)
+      minY = zeroMin (findMin ys 1.0e10)
+      maxY = zeroMax (findMax ys (0.0 - 1.0e10))
       linePath = buildLinePath px py w h minX maxX minY maxY points 0
   in g ( attr "class" "svg-line-chart" ∷ [] )
        ( -- Optional area fill
@@ -220,25 +229,74 @@ lineChart {M} {Msg} px py w h strokeW dots series =
 ------------------------------------------------------------------------
 
 -- | Line chart that reads data from model
+-- Reactively scales data coordinates to SVG pixel space using min/max
+-- from the full data set, same scaling logic as simpleLineChart.
 reactiveLineChart : ∀ {M Msg}
                   → Float → Float → Float → Float
                   → (M → List DataPoint)
                   → LineStyle
                   → Node M Msg
-reactiveLineChart px py w h getData sty =
-  -- Use foreach to render based on model
+reactiveLineChart {M} px py w h getData sty =
   g ( attr "class" "svg-line-chart-reactive" ∷ [] )
-    ( Agdelte.Reactive.Node.foreach getData (λ p idx →
-        -- This won't work directly - we need buildPath with access to all points
-        -- For now, just render individual dots
-        circle' ( cxF (dpX p)
-                ∷ cyF (dpY p)
-                ∷ rF (lsDotRadius sty)
-                ∷ fill_ (lsStroke sty)
-                ∷ [] ) [])
+    ( -- Line path (reactively bound to model)
+      path' ( attrBind "d" (stringBinding (λ m →
+                let pts = getData m
+                    xs  = extractX pts
+                    ys  = extractY pts
+                    mnX = findMin xs 1.0e10
+                    mxX = findMax xs (0.0 - 1.0e10)
+                    mnY = zeroMin (findMin ys 1.0e10)
+                    mxY = zeroMax (findMax ys (0.0 - 1.0e10))
+                in buildLinePath px py w h mnX mxX mnY mxY pts 0))
+            ∷ fill_ "none"
+            ∷ stroke_ (lsStroke sty)
+            ∷ strokeWidthF (lsWidth sty)
+            ∷ attr "stroke-linecap" "round"
+            ∷ attr "stroke-linejoin" "round"
+            ∷ [] ) []
+    -- Optional area fill (reactively bound)
+    ∷ (if lsFill sty ≡ˢ "none"
+       then g [] []
+       else path' ( attrBind "d" (stringBinding (λ m →
+                      let pts = getData m
+                          xs  = extractX pts
+                          ys  = extractY pts
+                          mnX = findMin xs 1.0e10
+                          mxX = findMax xs (0.0 - 1.0e10)
+                          mnY = zeroMin (findMin ys 1.0e10)
+                          mxY = zeroMax (findMax ys (0.0 - 1.0e10))
+                      in buildAreaPath px py w h mnX mxX mnY mxY pts))
+                  ∷ fill_ (lsFill sty)
+                  ∷ attr "opacity" "0.3"
+                  ∷ [] ) [])
+    -- Optional dots (foreach with scaled coordinates)
+    ∷ (if lsShowDots sty
+       then Agdelte.Reactive.Node.foreach getData (λ p idx →
+              circle' ( attrBind "cx" (stringBinding (λ m →
+                          let pts = getData m
+                              xs  = extractX pts
+                              mnX = findMin xs 1.0e10
+                              mxX = findMax xs (0.0 - 1.0e10)
+                          in showFloat (scaleX mnX mxX w px (dpX p))))
+                      ∷ attrBind "cy" (stringBinding (λ m →
+                          let pts = getData m
+                              ys  = extractY pts
+                              mnY = zeroMin (findMin ys 1.0e10)
+                              mxY = zeroMax (findMax ys (0.0 - 1.0e10))
+                          in showFloat (scaleY mnY mxY h py (dpY p))))
+                      ∷ rF (lsDotRadius sty)
+                      ∷ fill_ (lsStroke sty)
+                      ∷ [] ) [])
+       else g [] [])
     ∷ [] )
   where
     open import Agdelte.Reactive.Node using (foreach)
+    open import Data.String using (_≟_)
+    open import Relation.Nullary using (yes; no)
+    _≡ˢ_ : String → String → Bool
+    s ≡ˢ t with s ≟ t
+    ... | yes _ = true
+    ... | no _ = false
 
 ------------------------------------------------------------------------
 -- Quick constructors
@@ -271,3 +329,82 @@ minimalLineChart : ∀ {M Msg}
 minimalLineChart px py w h pts color =
   simpleLineChart px py w h pts
     (mkLineStyle color 2.0 "none" false 0.0)
+
+------------------------------------------------------------------------
+-- Line Chart with Gaps (Maybe Float for Y)
+------------------------------------------------------------------------
+
+-- | A data point with an optional Y value; nothing means a gap in the line.
+GapDataPoint : Set
+GapDataPoint = Float × Maybe Float
+
+private
+  extractGapX : List GapDataPoint → List Float
+  extractGapX [] = []
+  extractGapX ((vx , _) ∷ ps) = vx ∷ extractGapX ps
+
+  extractGapY : List GapDataPoint → List Float
+  extractGapY [] = []
+  extractGapY ((_ , nothing) ∷ ps) = extractGapY ps
+  extractGapY ((_ , just vy) ∷ ps) = vy ∷ extractGapY ps
+
+  buildGapLinePath : Float → Float → Float → Float
+                   → Float → Float → Float → Float
+                   → List GapDataPoint → Bool → String
+  buildGapLinePath _ _ _ _ _ _ _ _ [] _ = ""
+  buildGapLinePath px py w h minX maxX minY maxY ((_ , nothing) ∷ ps) _ =
+    -- Gap: next valid point will start a new M command
+    buildGapLinePath px py w h minX maxX minY maxY ps false
+  buildGapLinePath px py w h minX maxX minY maxY ((vx , just vy) ∷ ps) connected =
+    let sx = scaleX minX maxX w px vx
+        sy = scaleY minY maxY h py vy
+        prefix = if connected then " L " else "M "
+    in prefix ++ showFloat sx ++ " " ++ showFloat sy
+       ++ buildGapLinePath px py w h minX maxX minY maxY ps true
+
+-- | Line chart that accepts data points as (x, Maybe y).
+--   When y = nothing, the line breaks (gap). When y = just v, the line continues.
+lineChartWithGaps : ∀ {M Msg}
+                  → Float → Float → Float → Float  -- x, y, width, height
+                  → List GapDataPoint
+                  → LineStyle
+                  → Node M Msg
+lineChartWithGaps px py w h points sty =
+  let xs = extractGapX points
+      ys = extractGapY points
+      minX = findMin xs 1.0e10
+      maxX = findMax xs (0.0 - 1.0e10)
+      minY = zeroMin (findMin ys 1.0e10)
+      maxY = zeroMax (findMax ys (0.0 - 1.0e10))
+      linePath = buildGapLinePath px py w h minX maxX minY maxY points false
+  in g ( attr "class" "svg-line-chart svg-line-chart--gaps" ∷ [] )
+       ( -- Line path (no area fill for gap charts)
+         path' ( d_ linePath
+               ∷ fill_ "none"
+               ∷ stroke_ (lsStroke sty)
+               ∷ strokeWidthF (lsWidth sty)
+               ∷ attr "stroke-linecap" "round"
+               ∷ attr "stroke-linejoin" "round"
+               ∷ [] ) []
+       -- Optional dots (only for present values)
+       ∷ (if lsShowDots sty
+          then g [] (renderGapDots px py w h minX maxX minY maxY
+                      (lsDotRadius sty) (lsStroke sty) points)
+          else g [] [])
+       ∷ [] )
+  where
+    renderGapDots : ∀ {M' Msg'}
+                  → Float → Float → Float → Float
+                  → Float → Float → Float → Float
+                  → Float → String
+                  → List GapDataPoint → List (Node M' Msg')
+    renderGapDots _ _ _ _ _ _ _ _ _ _ [] = []
+    renderGapDots px' py' w' h' mnX mxX mnY mxY r c ((_ , nothing) ∷ ps) =
+      renderGapDots px' py' w' h' mnX mxX mnY mxY r c ps
+    renderGapDots px' py' w' h' mnX mxX mnY mxY r c ((vx , just vy) ∷ ps) =
+      circle' ( cxF (scaleX mnX mxX w' px' vx)
+              ∷ cyF (scaleY mnY mxY h' py' vy)
+              ∷ rF r
+              ∷ fill_ c
+              ∷ [] ) []
+      ∷ renderGapDots px' py' w' h' mnX mxX mnY mxY r c ps

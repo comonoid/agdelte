@@ -20,6 +20,14 @@ open import Agdelte.Reactive.Node
 open import Agdelte.Html.Controls.Util using (eqStr)
 
 ------------------------------------------------------------------------
+-- Default accordion transition
+------------------------------------------------------------------------
+
+private
+  accordionTransition : Transition
+  accordionTransition = mkTransition "agdelte-enter-slide-down" "agdelte-leave-slide-down" 300
+
+------------------------------------------------------------------------
 -- Accordion item definition
 ------------------------------------------------------------------------
 
@@ -72,7 +80,7 @@ collapsible {M} {A} panelId title isOpen toggleMsg content =
                ∷ [] )
             ( text "▼" ∷ [] )
         ∷ [] )
-    ∷ when isOpen
+    ∷ whenT isOpen accordionTransition
         (div ( class "agdelte-accordion__content"
              ∷ id' contentId
              ∷ attr "role" "region"
@@ -131,7 +139,7 @@ accordion {M} {A} prefix getOpenIndex toggleMsg items =
                    ∷ [] )
                 ( text "▼" ∷ [] )
             ∷ [] )
-        ∷ when (isOpen idx)
+        ∷ whenT (isOpen idx) accordionTransition
             (div ( class "agdelte-accordion__content"
                  ∷ id' contentId
                  ∷ attr "role" "region"
@@ -189,7 +197,7 @@ accordionMulti {M} {A} prefix isItemOpen toggleMsg items =
                    ∷ [] )
                 ( text "▼" ∷ [] )
             ∷ [] )
-        ∷ when (isItemOpen idx)
+        ∷ whenT (isItemOpen idx) accordionTransition
             (div ( class "agdelte-accordion__content"
                  ∷ id' contentId
                  ∷ attr "role" "region"

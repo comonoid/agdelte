@@ -250,10 +250,27 @@ private
     where
       getSourcePoint : FlowNode A → String → Float × Float
       getSourcePoint n dir =
-        if dir ≡ˢ "down"  then (fnX n + fnWidth n ÷ 2.0 , fnY n + fnHeight n)
-        else if dir ≡ˢ "up"    then (fnX n + fnWidth n ÷ 2.0 , fnY n)
-        else if dir ≡ˢ "right" then (fnX n + fnWidth n , fnY n + fnHeight n ÷ 2.0)
-        else (fnX n , fnY n + fnHeight n ÷ 2.0)
+        let cx = fnX n + fnWidth n ÷ 2.0
+            cy = fnY n + fnHeight n ÷ 2.0
+            skew = fnHeight n * 0.2
+        in case fnShape n of λ where
+          Diamond →
+            -- Use diamond edge points (midpoints of each side)
+            if dir ≡ˢ "down"  then (cx , fnY n + fnHeight n)
+            else if dir ≡ˢ "up"    then (cx , fnY n)
+            else if dir ≡ˢ "right" then (fnX n + fnWidth n , cy)
+            else (fnX n , cy)
+          Parallelogram →
+            -- Offset by skew: left edge midpoint shifted right, right edge shifted left
+            if dir ≡ˢ "down"  then (cx , fnY n + fnHeight n)
+            else if dir ≡ˢ "up"    then (cx , fnY n)
+            else if dir ≡ˢ "right" then (fnX n + fnWidth n - skew ÷ 2.0 , cy)
+            else (fnX n + skew ÷ 2.0 , cy)
+          _ →
+            if dir ≡ˢ "down"  then (cx , fnY n + fnHeight n)
+            else if dir ≡ˢ "up"    then (cx , fnY n)
+            else if dir ≡ˢ "right" then (fnX n + fnWidth n , cy)
+            else (fnX n , cy)
         where
           open import Data.String using (_≟_)
           open import Relation.Nullary using (yes; no)
@@ -264,10 +281,27 @@ private
 
       getTargetPoint : FlowNode A → String → Float × Float
       getTargetPoint n dir =
-        if dir ≡ˢ "down"  then (fnX n + fnWidth n ÷ 2.0 , fnY n)
-        else if dir ≡ˢ "up"    then (fnX n + fnWidth n ÷ 2.0 , fnY n + fnHeight n)
-        else if dir ≡ˢ "right" then (fnX n , fnY n + fnHeight n ÷ 2.0)
-        else (fnX n + fnWidth n , fnY n + fnHeight n ÷ 2.0)
+        let cx = fnX n + fnWidth n ÷ 2.0
+            cy = fnY n + fnHeight n ÷ 2.0
+            skew = fnHeight n * 0.2
+        in case fnShape n of λ where
+          Diamond →
+            -- Use diamond edge points (midpoints of each side)
+            if dir ≡ˢ "down"  then (cx , fnY n)
+            else if dir ≡ˢ "up"    then (cx , fnY n + fnHeight n)
+            else if dir ≡ˢ "right" then (fnX n , cy)
+            else (fnX n + fnWidth n , cy)
+          Parallelogram →
+            -- Offset by skew: left edge midpoint shifted right, right edge shifted left
+            if dir ≡ˢ "down"  then (cx , fnY n)
+            else if dir ≡ˢ "up"    then (cx , fnY n + fnHeight n)
+            else if dir ≡ˢ "right" then (fnX n + skew ÷ 2.0 , cy)
+            else (fnX n + fnWidth n - skew ÷ 2.0 , cy)
+          _ →
+            if dir ≡ˢ "down"  then (cx , fnY n)
+            else if dir ≡ˢ "up"    then (cx , fnY n + fnHeight n)
+            else if dir ≡ˢ "right" then (fnX n , cy)
+            else (fnX n + fnWidth n , cy)
         where
           open import Data.String using (_≟_)
           open import Relation.Nullary using (yes; no)
@@ -278,8 +312,33 @@ private
 
       buildPath : Float → Float → Float → Float → String → String
       buildPath sx sy tx ty dir =
-        "M " ++ showFloat sx ++ " " ++ showFloat sy
-        ++ " L " ++ showFloat tx ++ " " ++ showFloat ty
+        if dir ≡ˢ "down"
+        then -- Down: vertical from source, horizontal to align, vertical to target
+          let midY = (sy + ty) ÷ 2.0
+          in "M " ++ showFloat sx ++ " " ++ showFloat sy
+             ++ " L " ++ showFloat sx ++ " " ++ showFloat midY
+             ++ " L " ++ showFloat tx ++ " " ++ showFloat midY
+             ++ " L " ++ showFloat tx ++ " " ++ showFloat ty
+        else if dir ≡ˢ "up"
+        then -- Up: mirror of down
+          let midY = (sy + ty) ÷ 2.0
+          in "M " ++ showFloat sx ++ " " ++ showFloat sy
+             ++ " L " ++ showFloat sx ++ " " ++ showFloat midY
+             ++ " L " ++ showFloat tx ++ " " ++ showFloat midY
+             ++ " L " ++ showFloat tx ++ " " ++ showFloat ty
+        else if dir ≡ˢ "right"
+        then -- Right: horizontal from source, vertical to align, horizontal to target
+          let midX = (sx + tx) ÷ 2.0
+          in "M " ++ showFloat sx ++ " " ++ showFloat sy
+             ++ " L " ++ showFloat midX ++ " " ++ showFloat sy
+             ++ " L " ++ showFloat midX ++ " " ++ showFloat ty
+             ++ " L " ++ showFloat tx ++ " " ++ showFloat ty
+        else -- left: mirror of right
+          let midX = (sx + tx) ÷ 2.0
+          in "M " ++ showFloat sx ++ " " ++ showFloat sy
+             ++ " L " ++ showFloat midX ++ " " ++ showFloat sy
+             ++ " L " ++ showFloat midX ++ " " ++ showFloat ty
+             ++ " L " ++ showFloat tx ++ " " ++ showFloat ty
         where
           open import Data.String using (_≟_)
           open import Relation.Nullary using (yes; no)

@@ -25,8 +25,10 @@ open import Agdelte.WebGL.Controls.Text
 
 postulate
   natToFloat : ℕ → Float
+  sqrtF : Float → Float
 
 {-# COMPILE JS natToFloat = n => Number(n) #-}
+{-# COMPILE JS sqrtF = x => Math.sqrt(x) #-}
 
 ------------------------------------------------------------------------
 -- Scatter plot data
@@ -132,7 +134,7 @@ scatterPlot3D {M} {Msg} theme config getPoints clickHandler t =
             (just l) →
               let labelT = mkTransform (vec3 0.0 (sz + 0.02) 0.0) identityQuat (vec3 1.0 1.0 1.0)
               in sizedLabel theme 0.02 l labelT ∷ []
-      in group pointT (pointNode ∷ labelNode)
+      in group identityTransform (pointNode ∷ labelNode)
          ∷ buildPointList (suc idx) ps
 
     -- Build scatter points
@@ -249,7 +251,7 @@ lineChart3D {M} {Msg} theme config getLines t =
           dx = vec3X p2 - vec3X p1
           dy = vec3Y p2 - vec3Y p1
           dz = vec3Z p2 - vec3Z p1
-          len = 0.1  -- Simplified; real impl would calculate distance
+          len = sqrtF (dx * dx + dy * dy + dz * dz)
           segGeom = cylinder w len
           segMat = phong c 32.0
       in mesh segGeom segMat [] midT

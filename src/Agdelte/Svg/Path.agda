@@ -151,8 +151,22 @@ translatePath dx dy = map translateCmd
 scalePath : Float → Float → Path → Path
 scalePath sx sy = map scaleCmd
   where
+    postulate sinF : Float → Float
+    {-# COMPILE JS sinF = x => Math.sin(x) #-}
+    postulate cosF : Float → Float
+    {-# COMPILE JS cosF = x => Math.cos(x) #-}
+    postulate atan2F : Float → Float → Float
+    {-# COMPILE JS atan2F = (y, x) => Math.atan2(y, x) #-}
+    postulate floatEq : Float → Float → Bool
+    {-# COMPILE JS floatEq = (a, b) => a === b #-}
+
     scale : Point → Point
     scale p = (x p * sx) , (y p * sy)
+
+    -- For non-uniform scale, adjust arc rotation angle
+    scaleRot : Float → Float
+    scaleRot rot = if floatEq sx sy then rot
+                   else atan2F (sy * sinF rot) (sx * cosF rot)
 
     scaleCmd : PathCmd → PathCmd
     scaleCmd (M p)              = M (scale p)
@@ -163,7 +177,7 @@ scalePath sx sy = map scaleCmd
     scaleCmd (S c2 p)           = S (scale c2) (scale p)
     scaleCmd (Q c p)            = Q (scale c) (scale p)
     scaleCmd (T p)              = T (scale p)
-    scaleCmd (A rx ry rot l s p) = A (rx * sx) (ry * sy) rot l s (scale p)
+    scaleCmd (A rx ry rot l s p) = A (rx * sx) (ry * sy) (scaleRot rot) l s (scale p)
     scaleCmd Z                  = Z
     -- Relative commands
     scaleCmd (mRel p)           = mRel (scale p)
@@ -174,7 +188,7 @@ scalePath sx sy = map scaleCmd
     scaleCmd (sRel c2 p)        = sRel (scale c2) (scale p)
     scaleCmd (qRel c p)         = qRel (scale c) (scale p)
     scaleCmd (tRel p)           = tRel (scale p)
-    scaleCmd (aRel rx ry rot l s p) = aRel (rx * sx) (ry * sy) rot l s (scale p)
+    scaleCmd (aRel rx ry rot l s p) = aRel (rx * sx) (ry * sy) (scaleRot rot) l s (scale p)
 
 -- Close a path (ensure Z at end)
 closePath : Path → Path
@@ -213,9 +227,9 @@ private
   accumLength (curr , len) (L p)       = (p , len + cmdLength curr (L p))
   accumLength (curr , len) (H x')      = ((x' , y curr) , len + cmdLength curr (H x'))
   accumLength (curr , len) (V y')      = ((x curr , y') , len + cmdLength curr (V y'))
-  accumLength (curr , len) (C _ _ p)   = (p , len + cmdLength curr (C (0.0 , 0.0) (0.0 , 0.0) p))
-  accumLength (curr , len) (S _ p)     = (p , len + cmdLength curr (S (0.0 , 0.0) p))
-  accumLength (curr , len) (Q _ p)     = (p , len + cmdLength curr (Q (0.0 , 0.0) p))
+  accumLength (curr , len) (C c1 c2 p) = (p , len + cmdLength curr (C c1 c2 p))
+  accumLength (curr , len) (S c2 p)    = (p , len + cmdLength curr (S c2 p))
+  accumLength (curr , len) (Q c p)     = (p , len + cmdLength curr (Q c p))
   accumLength (curr , len) (T p)       = (p , len + cmdLength curr (T p))
   accumLength (curr , len) (A rx ry rot l s p) = (p , len + cmdLength curr (A rx ry rot l s p))
   accumLength (curr , len) Z           = (curr , len)

@@ -127,10 +127,10 @@ httpPost′ url body = httpPost url body pure fail
 -- continuation, ensuring the fallback always executes.
 private
   alwaysThen : Task A → Task B → Task B
-  alwaysThen (pure _) k            = k
-  alwaysThen (fail _) k            = k
-  alwaysThen (httpGet u ok er) k   = httpGet u (λ s → alwaysThen (ok s) k) (λ e → alwaysThen (er e) k)
-  alwaysThen (httpPost u b ok er) k = httpPost u b (λ s → alwaysThen (ok s) k) (λ e → alwaysThen (er e) k)
+  alwaysThen (pure _)                 k = k
+  alwaysThen (fail _)                 k = k
+  alwaysThen (httpGet u onOk onEr)    k = httpGet u (λ s → alwaysThen (onOk s) k) (λ e → alwaysThen (onEr e) k)
+  alwaysThen (httpPost u b onOk onEr) k = httpPost u b (λ s → alwaysThen (onOk s) k) (λ e → alwaysThen (onEr e) k)
 
 -- | Alternative with side-effect preservation: on error, run original
 -- onErr for its effects, THEN continue with the fallback task.

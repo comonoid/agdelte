@@ -305,7 +305,7 @@ record ReactiveApp (Model Msg : Set) : Set where
     init     : Model
     update   : Msg → Model → Model
     template : Node Model Msg        -- NOT a function! Structure with bindings
-    cmd      : Msg → Model → Cmd Msg -- Side effects; receives POST-update model
+    cmd      : Msg → Model → Cmd Msg -- Side effects; receives PRE-update model
     subs     : Model → Event Msg     -- Subscriptions (timers, keyboard, etc.)
 
 open ReactiveApp public

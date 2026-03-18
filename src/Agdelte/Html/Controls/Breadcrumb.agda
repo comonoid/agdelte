@@ -35,6 +35,9 @@ private
   isLast : ℕ → ℕ → Bool
   isLast idx total = suc idx ≡ᵇ total
 
+  isSingleItem : ℕ → Bool
+  isSingleItem total = total ≡ᵇ 1
+
 ------------------------------------------------------------------------
 -- Simple breadcrumb
 ------------------------------------------------------------------------
@@ -56,11 +59,18 @@ breadcrumb {M} {A} items =
     renderItem idx total item =
       elem "li" ( class "agdelte-breadcrumb__item" ∷ [] )
         ( if isLast idx total
-          then span ( class "agdelte-breadcrumb__current"
-                    ∷ attr "aria-current" "page"
-                    ∷ [] )
-                 ( text (crumbLabel item) ∷ [] )
-               ∷ []
+          then (if isSingleItem total
+                then button ( class "agdelte-breadcrumb__current agdelte-breadcrumb__link"
+                            ∷ attr "aria-current" "page"
+                            ∷ onClick (crumbMsg item)
+                            ∷ [] )
+                       ( text (crumbLabel item) ∷ [] )
+                     ∷ []
+                else span ( class "agdelte-breadcrumb__current"
+                          ∷ attr "aria-current" "page"
+                          ∷ [] )
+                       ( text (crumbLabel item) ∷ [] )
+                     ∷ [])
           else button ( class "agdelte-breadcrumb__link"
                       ∷ onClick (crumbMsg item)
                       ∷ [] )
@@ -97,11 +107,18 @@ breadcrumbWith {M} {A} sep items =
     renderItem idx total item =
       elem "li" ( class "agdelte-breadcrumb__item" ∷ [] )
         ( if isLast idx total
-          then span ( class "agdelte-breadcrumb__current"
-                    ∷ attr "aria-current" "page"
-                    ∷ [] )
-                 ( text (crumbLabel item) ∷ [] )
-               ∷ []
+          then (if isSingleItem total
+                then button ( class "agdelte-breadcrumb__current agdelte-breadcrumb__link"
+                            ∷ attr "aria-current" "page"
+                            ∷ onClick (crumbMsg item)
+                            ∷ [] )
+                       ( text (crumbLabel item) ∷ [] )
+                     ∷ []
+                else span ( class "agdelte-breadcrumb__current"
+                          ∷ attr "aria-current" "page"
+                          ∷ [] )
+                       ( text (crumbLabel item) ∷ [] )
+                     ∷ [])
           else button ( class "agdelte-breadcrumb__link"
                       ∷ onClick (crumbMsg item)
                       ∷ [] )
@@ -139,11 +156,18 @@ simpleBreadcrumb {M} {A} handler labels =
     renderItem idx total lbl =
       elem "li" ( class "agdelte-breadcrumb__item" ∷ [] )
         ( if isLast idx total
-          then span ( class "agdelte-breadcrumb__current"
-                    ∷ attr "aria-current" "page"
-                    ∷ [] )
-                 ( text lbl ∷ [] )
-               ∷ []
+          then (if isSingleItem total
+                then button ( class "agdelte-breadcrumb__current agdelte-breadcrumb__link"
+                            ∷ attr "aria-current" "page"
+                            ∷ onClick (handler idx)
+                            ∷ [] )
+                       ( text lbl ∷ [] )
+                     ∷ []
+                else span ( class "agdelte-breadcrumb__current"
+                          ∷ attr "aria-current" "page"
+                          ∷ [] )
+                       ( text lbl ∷ [] )
+                     ∷ [])
           else button ( class "agdelte-breadcrumb__link"
                       ∷ onClick (handler idx)
                       ∷ [] )
@@ -166,3 +190,75 @@ simpleBreadcrumb {M} {A} handler labels =
 -- | Create a breadcrumb item
 crumb : ∀ {A} → String → A → BreadcrumbItem A
 crumb = mkBreadcrumbItem
+
+------------------------------------------------------------------------
+-- Model-bound breadcrumb (reactive)
+------------------------------------------------------------------------
+
+-- | Model-bound breadcrumb (internal helper with separator parameter).
+-- | Renders last item with aria-current="page" and no trailing separator.
+private
+  breadcrumbBindWith' : ∀ {M A}
+                      → String
+                      → (M → List (BreadcrumbItem A))
+                      → Node M A
+  breadcrumbBindWith' {M} {A} sep getItems =
+    nav ( class "agdelte-breadcrumb"
+        ∷ attr "aria-label" "Breadcrumb"
+        ∷ [] )
+      ( elem "ol" ( class "agdelte-breadcrumb__list" ∷ [] )
+          ( foreach getItems renderItem' ∷ [] )
+      ∷ [] )
+    where
+      open import Data.Bool using (_∧_; not)
+
+      isLastItem : ℕ → M → Bool
+      isLastItem idx m = isLast idx (length (getItems m))
+
+      isSingleItemM : M → Bool
+      isSingleItemM m = isSingleItem (length (getItems m))
+
+      renderItem' : BreadcrumbItem A → ℕ → Node M A
+      renderItem' item idx =
+        elem "li" ( class "agdelte-breadcrumb__item" ∷ [] )
+          -- Last item (single): clickable button with aria-current
+          ( when (λ m → isLastItem idx m ∧ isSingleItemM m)
+              (button ( class "agdelte-breadcrumb__current agdelte-breadcrumb__link"
+                      ∷ attr "aria-current" "page"
+                      ∷ onClick (crumbMsg item)
+                      ∷ [] )
+                 ( text (crumbLabel item) ∷ [] ))
+          -- Last item (multiple): span with aria-current, no separator
+          ∷ when (λ m → isLastItem idx m ∧ not (isSingleItemM m))
+              (span ( class "agdelte-breadcrumb__current"
+                    ∷ attr "aria-current" "page"
+                    ∷ [] )
+                 ( text (crumbLabel item) ∷ [] ))
+          -- Non-last item: clickable link with separator
+          ∷ when (λ m → not (isLastItem idx m))
+              (elem "span" [] (
+                button ( class "agdelte-breadcrumb__link"
+                       ∷ onClick (crumbMsg item)
+                       ∷ [] )
+                  ( text (crumbLabel item) ∷ [] )
+                ∷ span ( class "agdelte-breadcrumb__separator"
+                       ∷ attr "aria-hidden" "true"
+                       ∷ [] )
+                    ( text sep ∷ [] )
+                ∷ [] ))
+          ∷ [] )
+
+-- | Breadcrumb bound to the model: re-renders when the list changes.
+-- | Takes (M → List (BreadcrumbItem A)) instead of a static list.
+-- | Renders last item with aria-current="page" and no trailing separator.
+breadcrumbBind : ∀ {M A}
+              → (M → List (BreadcrumbItem A))
+              → Node M A
+breadcrumbBind getItems = breadcrumbBindWith' "/" getItems
+
+-- | Model-bound breadcrumb with custom separator.
+breadcrumbBindWith : ∀ {M A}
+                   → String
+                   → (M → List (BreadcrumbItem A))
+                   → Node M A
+breadcrumbBindWith = breadcrumbBindWith'

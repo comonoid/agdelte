@@ -8,9 +8,10 @@ module Agdelte.Svg.Controls.Axis where
 open import Data.String using (String; _++_)
 open import Data.Float using (Float; _+_; _-_; _*_)
 open import Data.Float.Base using (_÷_; fromℕ)
+  renaming (_≤ᵇ_ to _f≤ᵇ_; _<ᵇ_ to _f<ᵇ_)
 open import Data.List using (List; []; _∷_)
 open import Data.Bool using (Bool; true; false; if_then_else_)
-open import Data.Nat using (ℕ; zero; suc)
+open import Data.Nat using (ℕ; zero; suc; _≤ᵇ_; _∸_)
 
 open import Agdelte.Reactive.Node using (Node; Attr; elem; attr; text)
 open import Agdelte.Svg.Elements using (g; svgText)
@@ -19,6 +20,58 @@ open import Agdelte.Svg.Attributes
   renaming (xF to attrX; yF to attrY;
             fontSize_ to attrFontSize; fontFamily_ to attrFontFamily)
 open import Agdelte.Css.Show using (showFloat)
+
+------------------------------------------------------------------------
+-- Math primitives (JS backend)
+------------------------------------------------------------------------
+
+postulate
+  floorF : Float → Float
+  log10F : Float → Float
+  powF   : Float → Float → Float
+
+{-# COMPILE JS floorF = x => Math.floor(x) #-}
+{-# COMPILE JS log10F = x => Math.log10(x) #-}
+{-# COMPILE JS powF   = b => e => Math.pow(b, e) #-}
+
+------------------------------------------------------------------------
+-- Nice-numbers algorithm
+------------------------------------------------------------------------
+
+-- Compute a human-friendly tick interval for axis labelling.
+-- Classic algorithm: round the raw interval to the nearest "nice" number
+-- in the set {1, 2, 5, 10} × 10^k.
+
+niceNum : Float → Float
+niceNum rawInterval =
+  let exponent    = floorF (log10F rawInterval)
+      fraction    = rawInterval ÷ powF 10.0 exponent
+      niceFrac    = if fraction f<ᵇ 1.5 then 1.0
+                    else if fraction f<ᵇ 3.5 then 2.0
+                    else if fraction f<ᵇ 7.5 then 5.0
+                    else 10.0
+  in niceFrac * powF 10.0 exponent
+
+-- Compute nice min, nice max, and nice interval given data range and
+-- desired number of ticks.
+record NiceScale : Set where
+  constructor mkNiceScale
+  field
+    niceMin      : Float
+    niceMax      : Float
+    niceInterval : Float
+
+open NiceScale public
+
+computeNiceScale : Float → Float → ℕ → NiceScale
+computeNiceScale minVal maxVal numTicks =
+  let range    = if (maxVal - minVal) f≤ᵇ 0.0 then 1.0 else maxVal - minVal
+      rawInt   = range ÷ fromℕ (if numTicks ≤ᵇ 1 then 1 else numTicks ∸ 1)
+      interval = niceNum rawInt
+      nMin     = floorF (minVal ÷ interval) * interval
+      nMax     = let candidate = nMin + interval * fromℕ numTicks
+                 in if candidate f<ᵇ maxVal then candidate + interval else candidate
+  in mkNiceScale nMin nMax interval
 
 ------------------------------------------------------------------------
 -- Axis Style
@@ -85,7 +138,7 @@ svgAxisX {M} {Msg} px py w numTicks formatter sty =
     renderTicks : ℕ → ℕ → List (Node M Msg)
     renderTicks zero _ = []
     renderTicks (suc remaining) idx =
-      let ratio = fromℕ idx ÷ fromℕ (numTicks ∸ 1)
+      let ratio = if numTicks ≤ᵇ 1 then 0.0 else fromℕ idx ÷ fromℕ (numTicks ∸ 1)
           tickX = px + ratio * w
           tickY1 = py
           tickY2 = py + tickLength sty
@@ -108,7 +161,6 @@ svgAxisX {M} {Msg} px py w numTicks formatter sty =
                         ∷ [] ) ( text (formatter ratio) ∷ [] )
               ∷ [] )
          ∷ renderTicks remaining (suc idx)
-      where open import Data.Nat using (_∸_)
 
 ------------------------------------------------------------------------
 -- Y Axis (left)
@@ -135,7 +187,7 @@ svgAxisY {M} {Msg} px py h numTicks formatter sty =
     renderTicks : ℕ → ℕ → List (Node M Msg)
     renderTicks zero _ = []
     renderTicks (suc remaining) idx =
-      let ratio = fromℕ idx ÷ fromℕ (numTicks ∸ 1)
+      let ratio = if numTicks ≤ᵇ 1 then 0.0 else fromℕ idx ÷ fromℕ (numTicks ∸ 1)
           -- Y axis: 0 at bottom, 1 at top (invert)
           tickY = py + h - ratio * h
           tickX1 = px - tickLength sty
@@ -160,25 +212,31 @@ svgAxisY {M} {Msg} px py h numTicks formatter sty =
                         ∷ [] ) ( text (formatter ratio) ∷ [] )
               ∷ [] )
          ∷ renderTicks remaining (suc idx)
-      where open import Data.Nat using (_∸_)
 
 ------------------------------------------------------------------------
 -- Simple Axes
 ------------------------------------------------------------------------
 
--- Numeric X axis (0 to max value)
+-- Numeric X axis with nice-number tick values
+-- Takes min and max data values; computes human-friendly ticks.
 svgAxisXNumeric : ∀ {M Msg}
-                → Float → Float → Float → Float → ℕ
+                → Float → Float → Float → Float → Float → ℕ
                 → Node M Msg
-svgAxisXNumeric px py w maxVal numTicks =
-  svgAxisX px py w numTicks (λ r → showFloat (r * maxVal)) defaultAxisStyle
+svgAxisXNumeric px py w minVal maxVal numTicks =
+  let ns = computeNiceScale minVal maxVal numTicks
+  in svgAxisX px py w numTicks
+       (λ r → showFloat (niceMin ns + r * (niceMax ns - niceMin ns)))
+       defaultAxisStyle
 
--- Numeric Y axis (0 to max value)
+-- Numeric Y axis with nice-number tick values
 svgAxisYNumeric : ∀ {M Msg}
-                → Float → Float → Float → Float → ℕ
+                → Float → Float → Float → Float → Float → ℕ
                 → Node M Msg
-svgAxisYNumeric px py h maxVal numTicks =
-  svgAxisY px py h numTicks (λ r → showFloat (r * maxVal)) defaultAxisStyle
+svgAxisYNumeric px py h minVal maxVal numTicks =
+  let ns = computeNiceScale minVal maxVal numTicks
+  in svgAxisY px py h numTicks
+       (λ r → showFloat (niceMin ns + r * (niceMax ns - niceMin ns)))
+       defaultAxisStyle
 
 -- Percentage axis (0-100%)
 svgAxisXPercent : ∀ {M Msg}
@@ -209,7 +267,7 @@ svgGridLinesX {M} {Msg} px py w h numLines color =
     renderLines : ℕ → ℕ → List (Node M Msg)
     renderLines zero _ = []
     renderLines (suc remaining) idx =
-      let ratio = fromℕ idx ÷ fromℕ (numLines ∸ 1)
+      let ratio = if numLines ≤ᵇ 1 then 0.0 else fromℕ idx ÷ fromℕ (numLines ∸ 1)
           lineX = px + ratio * w
       in elem "line" ( attr "x1" (showFloat lineX)
                      ∷ attr "y1" (showFloat py)
@@ -220,7 +278,6 @@ svgGridLinesX {M} {Msg} px py w h numLines color =
                      ∷ attr "stroke-dasharray" "2,2"
                      ∷ [] ) []
          ∷ renderLines remaining (suc idx)
-      where open import Data.Nat using (_∸_)
 
 svgGridLinesY : ∀ {M Msg}
               → Float → Float → Float → Float
@@ -234,7 +291,7 @@ svgGridLinesY {M} {Msg} px py w h numLines color =
     renderLines : ℕ → ℕ → List (Node M Msg)
     renderLines zero _ = []
     renderLines (suc remaining) idx =
-      let ratio = fromℕ idx ÷ fromℕ (numLines ∸ 1)
+      let ratio = if numLines ≤ᵇ 1 then 0.0 else fromℕ idx ÷ fromℕ (numLines ∸ 1)
           lineY = py + ratio * h
       in elem "line" ( attr "x1" (showFloat px)
                      ∷ attr "y1" (showFloat lineY)
@@ -245,4 +302,3 @@ svgGridLinesY {M} {Msg} px py w h numLines color =
                      ∷ attr "stroke-dasharray" "2,2"
                      ∷ [] ) []
          ∷ renderLines remaining (suc idx)
-      where open import Data.Nat using (_∸_)

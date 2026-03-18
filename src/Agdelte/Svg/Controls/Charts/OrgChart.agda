@@ -218,7 +218,7 @@ private
       layoutChildren _ _ _ _ _ _ [] = []
       layoutChildren cfg' parentCx parentY parentH startX' childY' (c ∷ cs) =
         let childW = subtreeWidth cfg' c
-            childCx = startX' + childW ÷ 2.0
+            childCx = startX' + ocNodeWidth cfg' ÷ 2.0
             connector = if ocShowLines cfg'
                         then renderConnector parentCx parentY parentH childCx childY'
                         else g [] []
@@ -242,6 +242,27 @@ orgChart {M} {A} cx cy cfg root =
   g ( attr "class" "svg-orgchart" ∷ [] )
     (layoutTree cfg cx cy root)
 
+-- | Viewport-aware org chart that auto-scales when tree is wider than viewport
+orgChartScaled : ∀ {M A}
+               → Float → Float        -- root center position
+               → Float                 -- viewport width
+               → OrgConfig
+               → OrgNode A
+               → Node M A
+orgChartScaled {M} {A} cx cy viewportWidth cfg root =
+  let treeWidth = subtreeWidth cfg root
+      needsScale = viewportWidth <ᵇ treeWidth
+      scaleFactor = viewportWidth ÷ treeWidth
+      scaleStr = showFloat scaleFactor
+      transformStr = "scale(" ++ scaleStr ++ ")"
+  in if needsScale
+     then g ( attr "class" "svg-orgchart" ∷ [] )
+            ( g ( attr "transform" transformStr ∷ [] )
+                (layoutTree cfg cx cy root)
+            ∷ [] )
+     else g ( attr "class" "svg-orgchart" ∷ [] )
+            (layoutTree cfg cx cy root)
+
 ------------------------------------------------------------------------
 -- Simple Org Chart
 ------------------------------------------------------------------------
@@ -253,6 +274,15 @@ simpleOrgChart : ∀ {M A}
                → Node M A
 simpleOrgChart cx cy root =
   orgChart cx cy defaultOrgConfig root
+
+-- | Simple org chart with viewport-aware scaling
+simpleOrgChartScaled : ∀ {M A}
+                     → Float → Float
+                     → Float             -- viewport width
+                     → OrgNode A
+                     → Node M A
+simpleOrgChartScaled cx cy vw root =
+  orgChartScaled cx cy vw defaultOrgConfig root
 
 ------------------------------------------------------------------------
 -- Flat Org Chart (single level)

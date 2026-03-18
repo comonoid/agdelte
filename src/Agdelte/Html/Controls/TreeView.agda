@@ -11,6 +11,7 @@ open import Data.String using (String)
 open import Data.List using (List; []; _∷_; map)
 open import Data.Nat using (ℕ; zero; suc; _≡ᵇ_)
 open import Data.Bool using (Bool; true; false; if_then_else_; not)
+open import Data.Unit using (⊤; tt)
 open import Function using (_∘_)
 
 open import Agdelte.Reactive.Node
@@ -109,6 +110,11 @@ collapsibleTree {M} {A} isExpanded toggleNode onNodeClick roots =
     ... | [] = false
     ... | _ = true
 
+    -- Lazy children: returns the children list only when expanded,
+    -- empty list otherwise. foreach defers renderNode calls to the runtime.
+    lazyChildren : String → List (TreeNode A) → M → List (TreeNode A)
+    lazyChildren nid cs m = if isExpanded nid m then cs else []
+
     mutual
       renderNode : ℕ → TreeNode A → Node M A
       renderNode depth node =
@@ -139,9 +145,101 @@ collapsibleTree {M} {A} isExpanded toggleNode onNodeClick roots =
                      ( text (nodeLabel node) ∷ [] )
                  ∷ [] ) )
           ∷ (if hasChildren node
-             then when (isExpanded (nodeId node))
-                    (div ( class "agdelte-tree__children" ∷ [] )
-                      (renderNodes (suc depth) (nodeChildren node)))
+             then div ( class "agdelte-tree__children" ∷ [] )
+                    ( foreach (lazyChildren (nodeId node) (nodeChildren node))
+                        (λ child _ → renderNode (suc depth) child)
+                    ∷ [] )
+                  ∷ []
+             else []) )
+
+      renderNodes : ℕ → List (TreeNode A) → List (Node M A)
+      renderNodes _ [] = []
+      renderNodes depth (n ∷ ns) = renderNode depth n ∷ renderNodes depth ns
+
+------------------------------------------------------------------------
+-- Draggable collapsible tree view (drag-drop reorder)
+------------------------------------------------------------------------
+
+-- | Drag message: source node ID and drop target node ID
+record TreeDrag : Set where
+  constructor mkTreeDrag
+  field
+    dragSourceId : String
+    dropTargetId : String
+
+open TreeDrag public
+
+-- | Collapsible tree with drag-drop reorder support.
+-- | onDrag: constructs a message from a TreeDrag (source → target)
+draggableTree : ∀ {M A}
+              → (String → M → Bool)   -- is node expanded
+              → (String → A)          -- toggle expansion
+              → (String → A)          -- node click
+              → (TreeDrag → A)        -- drag-drop reorder
+              → List (TreeNode A)
+              → Node M A
+draggableTree {M} {A} isExpanded toggleNode onNodeClick onDrag roots =
+  div ( class "agdelte-tree" ∷ attr "role" "tree" ∷ [] )
+    (renderNodes 0 roots)
+  where
+    open import Agda.Builtin.String using (primShowNat)
+    open import Data.Nat using (_*_)
+    open import Data.String renaming (_++_ to _++ˢ_)
+    open import Data.List using (_++_)
+
+    depthPadding : ℕ → String
+    depthPadding d = primShowNat (d * 16) ++ˢ "px"
+
+    hasChildren : TreeNode A → Bool
+    hasChildren n with nodeChildren n
+    ... | [] = false
+    ... | _ = true
+
+    lazyChildren : String → List (TreeNode A) → M → List (TreeNode A)
+    lazyChildren nid cs m = if isExpanded nid m then cs else []
+
+    mutual
+      renderNode : ℕ → TreeNode A → Node M A
+      renderNode depth node =
+        div ( class "agdelte-tree__node"
+            ∷ attr "role" "treeitem"
+            ∷ attr "draggable" "true"
+            ∷ on "dragstart" (onDrag (mkTreeDrag (nodeId node) ""))
+            ∷ on "dragover" (onDrag (mkTreeDrag "" (nodeId node)))
+            ∷ on "drop" (onDrag (mkTreeDrag "" (nodeId node)))
+            ∷ style "padding-left" (depthPadding depth)
+            ∷ [] )
+          ( div ( class "agdelte-tree__header" ∷ [] )
+              ( (if hasChildren node
+                 then button ( attrBind "class" (mkBinding
+                                 (λ m → if isExpanded (nodeId node) m
+                                        then "agdelte-tree__toggle agdelte-tree__toggle--open"
+                                        else "agdelte-tree__toggle")
+                                 eqStr)
+                             ∷ attrBind "aria-expanded" (mkBinding
+                                 (λ m → if isExpanded (nodeId node) m
+                                        then "true"
+                                        else "false")
+                                 eqStr)
+                             ∷ onClick (toggleNode (nodeId node))
+                             ∷ [] )
+                        ( text "▶" ∷ [] )
+                      ∷ []
+                 else span ( class "agdelte-tree__spacer" ∷ [] ) [] ∷ [])
+              ++ ( button ( class "agdelte-tree__label"
+                          ∷ attr "draggable" "true"
+                          ∷ on "dragstart" (onDrag (mkTreeDrag (nodeId node) ""))
+                          ∷ on "dragover" (onDrag (mkTreeDrag "" (nodeId node)))
+                          ∷ on "drop" (onDrag (mkTreeDrag "" (nodeId node)))
+                          ∷ onClick (onNodeClick (nodeId node))
+                          ∷ [] )
+                     ( text (nodeLabel node) ∷ [] )
+                 ∷ [] ) )
+          ∷ (if hasChildren node
+             then div ( class "agdelte-tree__children" ∷ [] )
+                    ( foreach (lazyChildren (nodeId node) (nodeChildren node))
+                        (λ child _ → renderNode (suc depth) child)
+                    ∷ [] )
                   ∷ []
              else []) )
 

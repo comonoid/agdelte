@@ -73,8 +73,12 @@ feMerge inputs = elem "feMerge" []
 dropShadowFilter : ∀ {M Msg} → String → Float → Float → Float → Color → Float → Node M Msg
 dropShadowFilter filterId dx dy blur shadowColor opacity = elem "filter"
   ( attr "id" filterId ∷ [])
-  ( feGaussianBlur "SourceAlpha" blur
-  ∷ feOffset "SourceGraphic" dx dy "offsetBlur"
+  ( elem "feGaussianBlur"
+      ( attr "in" "SourceAlpha"
+      ∷ attr "stdDeviation" (showFloat blur)
+      ∷ attr "result" "blur"
+      ∷ []) []
+  ∷ feOffset "blur" dx dy "offsetBlur"
   ∷ feFlood shadowColor opacity "shadowColor"
   ∷ feComposite "shadowColor" "offsetBlur" "in" "shadow"
   ∷ feMerge ("shadow" ∷ "SourceGraphic" ∷ [])
@@ -90,8 +94,14 @@ blurFilter filterId stdDev = elem "filter"
 glowFilter : ∀ {M Msg} → String → Float → Color → Node M Msg
 glowFilter filterId blur glowColor = elem "filter"
   ( attr "id" filterId ∷ [])
-  ( feGaussianBlur "SourceGraphic" blur
-  ∷ feMerge ("SourceGraphic" ∷ [])
+  ( elem "feGaussianBlur"
+      ( attr "in" "SourceGraphic"
+      ∷ attr "stdDeviation" (showFloat blur)
+      ∷ attr "result" "blur"
+      ∷ []) []
+  ∷ feFlood glowColor 1.0 "flood"
+  ∷ feComposite "flood" "blur" "in" "coloredGlow"
+  ∷ feMerge ("coloredGlow" ∷ "SourceGraphic" ∷ [])
   ∷ [])
 
 ------------------------------------------------------------------------

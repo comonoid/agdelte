@@ -529,11 +529,8 @@ function makeLeafHandlers(dispatchImmediate, dispatchNormal, dispatchBackground)
       const controller = new AbortController();
       let completed = false;
       let contentType = 'text/plain';
-      if (typeof body === 'string' && body.length > 0) {
-        const ch = body[0];
-        if (ch === '{' || ch === '[' || ch === '"') {
-          try { JSON.parse(body); contentType = 'application/json'; } catch {}
-        }
+      if (typeof body === 'string' && /^\s*[\[{]/.test(body)) {
+        contentType = 'application/json';
       }
       fetch(url, { method: 'POST', headers: { 'Content-Type': contentType }, body, signal: controller.signal })
         .then(async (response) => {
@@ -636,10 +633,10 @@ function makeLeafHandlers(dispatchImmediate, dispatchNormal, dispatchBackground)
       channelConnections.set(scriptUrl, w);
       return { unsubscribe: () => { terminated = true; channelConnections.delete(scriptUrl); w.terminate(); } };
     },
-    allocShared: (numBytes, handler, onError) => {
+    allocShared: (numBytes, handler) => {
       const n = ensureNumber(numBytes);
       try { dispatchNormal(handler(new SharedArrayBuffer(n))); }
-      catch (e) { console.error('allocShared failed (COOP/COEP headers required):', e.message); if (onError) dispatchNormal(onError(e.message)); }
+      catch (e) { console.error('allocShared failed (COOP/COEP headers required):', e.message); }
       return { unsubscribe: () => {} };
     },
     workerShared: (buffer, scriptUrl, input, onResult, onError) => {
@@ -725,12 +722,12 @@ function mkKeyboardEvent(e) {
  */
 function mkMouseEvent(e) {
   return {"mkMouseEvent": (cb) => cb["mkMouseEvent"](
-    BigInt(e.clientX),
-    BigInt(e.clientY),
-    BigInt(e.pageX),
-    BigInt(e.pageY),
-    BigInt(e.button),
-    BigInt(e.buttons)
+    e.clientX,            // Float (mouseX)
+    e.clientY,            // Float (mouseY)
+    e.pageX,              // Float (pageX)
+    e.pageY,              // Float (pageY)
+    BigInt(e.button),     // ℕ (button)
+    BigInt(e.buttons)     // ℕ (buttons)
   )};
 }
 
@@ -743,33 +740,3 @@ export function unsubscribe(subscription) {
   }
 }
 
-/**
- * Debounce/throttle utilities
- */
-export function debounce(fn, ms) {
-  let timeoutId;
-  return (...args) => {
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => fn(...args), ms);
-  };
-}
-
-export function throttle(fn, ms) {
-  let lastCall = 0;
-  let timeoutId;
-  return (...args) => {
-    const now = Date.now();
-    const remaining = ms - (now - lastCall);
-    if (remaining <= 0) {
-      clearTimeout(timeoutId);
-      lastCall = now;
-      fn(...args);
-    } else if (!timeoutId) {
-      timeoutId = setTimeout(() => {
-        lastCall = Date.now();
-        timeoutId = null;
-        fn(...args);
-      }, remaining);
-    }
-  };
-}

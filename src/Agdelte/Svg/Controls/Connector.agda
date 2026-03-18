@@ -8,7 +8,7 @@ module Agdelte.Svg.Controls.Connector where
 open import Data.String using (String; _++_)
 open import Data.Float using (Float; _+_; _-_; _*_)
 open import Data.Float.Base using (_÷_; _<ᵇ_)
-open import Data.List using (List; []; _∷_)
+open import Data.List using (List; []; _∷_) renaming (_++_ to _++L_)
 open import Data.Bool using (Bool; true; false; if_then_else_)
 
 open import Agdelte.Reactive.Node using (Node; Attr; elem; attr; text)
@@ -86,6 +86,10 @@ dottedConnectorStyle = mkConnectorStyle
   0.0
   4.0          -- endpoint dots
 
+private
+  absConnF : Float → Float
+  absConnF v = if v <ᵇ 0.0 then 0.0 - v else v
+
 ------------------------------------------------------------------------
 -- Arrow marker definition (must be in defs)
 ------------------------------------------------------------------------
@@ -119,16 +123,19 @@ svgConnectorStraight : ∀ {M Msg}
                      → ConnectorStyle
                      → Node M Msg
 svgConnectorStraight x1 y1 x2 y2 sty =
-  g ( attr "class" "svg-connector-straight" ∷ [] )
-    ( elem "line" ( attr "x1" (showFloat x1)
-                  ∷ attr "y1" (showFloat y1)
-                  ∷ attr "x2" (showFloat x2)
-                  ∷ attr "y2" (showFloat y2)
-                  ∷ stroke_ (lineColor sty)
-                  ∷ strokeWidthF (lineWidth sty)
-                  ∷ attr "stroke-dasharray" (showDashPattern (dashPattern sty))
-                  ∷ [] ) []
-    ∷ [] )
+  let arrowAttrs = if 0.0 <ᵇ arrowSize sty
+                   then attr "marker-end" "url(#arrow)" ∷ []
+                   else []
+  in g ( attr "class" "svg-connector-straight" ∷ [] )
+       ( elem "line" (( attr "x1" (showFloat x1)
+                      ∷ attr "y1" (showFloat y1)
+                      ∷ attr "x2" (showFloat x2)
+                      ∷ attr "y2" (showFloat y2)
+                      ∷ stroke_ (lineColor sty)
+                      ∷ strokeWidthF (lineWidth sty)
+                      ∷ attr "stroke-dasharray" (showDashPattern (dashPattern sty))
+                      ∷ []) ++L arrowAttrs ) []
+       ∷ [] )
 
 ------------------------------------------------------------------------
 -- Curved Connector (Bezier)
@@ -139,23 +146,37 @@ svgConnectorCurved : ∀ {M Msg}
                    → ConnectorStyle
                    → Node M Msg
 svgConnectorCurved x1 y1 x2 y2 sty =
-  let -- Control points for smooth curve
+  let -- Control points for smooth curve (bidirectional)
       dx = x2 - x1
-      cp1x = x1 + dx * 0.5
-      cp1y = y1
-      cp2x = x1 + dx * 0.5
-      cp2y = y2
+      dy = y2 - y1
+      adx = absConnF dx
+      ady = absConnF dy
+      -- If mostly horizontal, offset control points horizontally (S-curve)
+      -- If mostly vertical, offset control points vertically
+      cp1x = if adx <ᵇ ady then x1       else x1 + dx * 0.5
+      cp1y = if adx <ᵇ ady then y1 + dy * 0.5 else y1
+      cp2x = if adx <ᵇ ady then x2       else x1 + dx * 0.5
+      cp2y = if adx <ᵇ ady then y1 + dy * 0.5 else y2
       pathD = "M " ++ showFloat x1 ++ " " ++ showFloat y1
            ++ " C " ++ showFloat cp1x ++ " " ++ showFloat cp1y
            ++ ", " ++ showFloat cp2x ++ " " ++ showFloat cp2y
            ++ ", " ++ showFloat x2 ++ " " ++ showFloat y2
+      arrowAttrs = if 0.0 <ᵇ arrowSize sty
+                   then attr "marker-end" "url(#arrow)" ∷ []
+                   else []
+      dashAttrs = case dashPattern sty of λ where
+                    solid → []
+                    (dashed s) → attr "stroke-dasharray" s ∷ []
   in g ( attr "class" "svg-connector-curved" ∷ [] )
-       ( elem "path" ( d_ pathD
+       ( elem "path" (( d_ pathD
                      ∷ fill_ "none"
                      ∷ stroke_ (lineColor sty)
                      ∷ strokeWidthF (lineWidth sty)
-                     ∷ [] ) []
+                     ∷ []) ++L dashAttrs ++L arrowAttrs ) []
        ∷ [] )
+  where
+    case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
+    case x of f = f x
 
 ------------------------------------------------------------------------
 -- Orthogonal Connector (right angles)
@@ -172,13 +193,22 @@ svgConnectorOrthogonal x1 y1 x2 y2 sty =
            ++ " L " ++ showFloat midX ++ " " ++ showFloat y1
            ++ " L " ++ showFloat midX ++ " " ++ showFloat y2
            ++ " L " ++ showFloat x2 ++ " " ++ showFloat y2
+      arrowAttrs = if 0.0 <ᵇ arrowSize sty
+                   then attr "marker-end" "url(#arrow)" ∷ []
+                   else []
+      dashAttrs = case dashPattern sty of λ where
+                    solid → []
+                    (dashed s) → attr "stroke-dasharray" s ∷ []
   in g ( attr "class" "svg-connector-ortho" ∷ [] )
-       ( elem "path" ( d_ pathD
+       ( elem "path" (( d_ pathD
                      ∷ fill_ "none"
                      ∷ stroke_ (lineColor sty)
                      ∷ strokeWidthF (lineWidth sty)
-                     ∷ [] ) []
+                     ∷ []) ++L dashAttrs ++L arrowAttrs ) []
        ∷ [] )
+  where
+    case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
+    case x of f = f x
 
 ------------------------------------------------------------------------
 -- Generic Connector

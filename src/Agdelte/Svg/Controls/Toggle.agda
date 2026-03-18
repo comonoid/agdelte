@@ -149,7 +149,6 @@ svgToggleLabeled px py isOn lbl sty msg =
       labelY = py + trackHeight sty ÷ 2.0
   in g ( attr "class" "svg-toggle-labeled"
        ∷ attr "cursor" "pointer"
-       ∷ on "click" msg
        ∷ [] )
        ( svgToggle px py isOn sty msg
        ∷ svgText ( attrX labelX
@@ -183,7 +182,6 @@ svgToggleWithLabels px py isOn offLbl onLbl sty msg =
       inactiveColor = "rgba(255,255,255,0.5)"
   in g ( attr "class" "svg-toggle-labels"
        ∷ attr "cursor" "pointer"
-       ∷ on "click" msg
        ∷ [] )
        ( svgToggle px py isOn sty msg
        -- Off label (inside track, left)

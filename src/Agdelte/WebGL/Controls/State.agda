@@ -60,7 +60,7 @@ applyHover _ false    = Normal
 applyActive : ControlState → Bool → ControlState
 applyActive Disabled _ = Disabled
 applyActive _ true     = Active
-applyActive s false    = s
+applyActive _ false    = Normal
 
 ------------------------------------------------------------------------
 -- Stateful control record

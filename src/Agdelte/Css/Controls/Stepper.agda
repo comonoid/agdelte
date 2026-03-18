@@ -107,4 +107,8 @@ stepperRules =
   ∷ rule ".agdelte-stepper--clickable .agdelte-stepper__step:hover"
       ( "background" ∶ "var(--agdelte-bg-hover)"
       ∷ [])
+  ∷ rule ".agdelte-stepper--clickable .agdelte-stepper__step:focus-visible"
+      ( "outline" ∶ "2px solid var(--agdelte-primary)"
+      ∷ "outline-offset" ∶ "2px"
+      ∷ [])
   ∷ []

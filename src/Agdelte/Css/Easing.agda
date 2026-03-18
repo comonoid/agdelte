@@ -15,7 +15,7 @@ module Agdelte.Css.Easing where
 
 open import Data.Nat using (ℕ; zero)
 open import Data.Nat.Show using (show)
-open import Data.Float using (Float; _≡ᵇ_)
+open import Data.Float using (Float; _≡ᵇ_; _<ᵇ_)
 open import Data.Bool using (if_then_else_)
 open import Data.String using (String; _++_)
 
@@ -37,8 +37,10 @@ showEasing easeIn     = "ease-in"
 showEasing easeOut    = "ease-out"
 showEasing easeInOut  = "ease-in-out"
 showEasing (cubicBezier a b c d) =
-  "cubic-bezier(" ++ showFloat a ++ ", " ++ showFloat b ++ ", "
-                  ++ showFloat c ++ ", " ++ showFloat d ++ ")"
+  let clamp : Float → Float
+      clamp x = if x <ᵇ 0.0 then 0.0 else (if 1.0 <ᵇ x then 1.0 else x)
+  in "cubic-bezier(" ++ showFloat (clamp a) ++ ", " ++ showFloat b ++ ", "
+                      ++ showFloat (clamp c) ++ ", " ++ showFloat d ++ ")"
 showEasing (raw s) = s
 
 ------------------------------------------------------------------------

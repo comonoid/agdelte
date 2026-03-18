@@ -15,6 +15,7 @@ open import Data.Bool using (Bool; true; false; if_then_else_; not)
 open import Function using (_∘_)
 
 open import Agdelte.Reactive.Node
+open import Agdelte.Html.Controls.Util using (eqStr)
 
 ------------------------------------------------------------------------
 -- Basic skeleton
@@ -24,6 +25,7 @@ open import Agdelte.Reactive.Node
 skeleton : ∀ {M A} → String → String → Node M A
 skeleton w h =
   div ( class "agdelte-skeleton"
+      ∷ attr "aria-hidden" "true"
       ∷ style "width" w
       ∷ style "height" h
       ∷ [] ) []
@@ -36,18 +38,20 @@ skeleton w h =
 skeletonCircle : ∀ {M A} → String → Node M A
 skeletonCircle size =
   div ( class "agdelte-skeleton agdelte-skeleton--circle"
+      ∷ attr "aria-hidden" "true"
       ∷ style "width" size
       ∷ style "height" size
       ∷ [] ) []
 
 -- | Text line skeleton (single line)
 skeletonLine : ∀ {M A} → Node M A
-skeletonLine = div (class "agdelte-skeleton agdelte-skeleton--text" ∷ []) []
+skeletonLine = div (class "agdelte-skeleton agdelte-skeleton--text" ∷ attr "aria-hidden" "true" ∷ []) []
 
 -- | Text line with custom width
 skeletonLineW : ∀ {M A} → String → Node M A
 skeletonLineW w =
   div ( class "agdelte-skeleton agdelte-skeleton--text"
+      ∷ attr "aria-hidden" "true"
       ∷ style "width" w
       ∷ [] ) []
 
@@ -58,7 +62,7 @@ skeletonLineW w =
 -- | Multiple text line skeletons
 skeletonText : ∀ {M A} → ℕ → Node M A
 skeletonText n =
-  div (class "agdelte-skeleton-text" ∷ []) (renderLines n)
+  div (class "agdelte-skeleton-text" ∷ attr "aria-hidden" "true" ∷ []) (renderLines n)
   where
     renderLines : ℕ → List (Node _ _)
     renderLines zero = []
@@ -79,7 +83,7 @@ skeletonText n =
 -- | Card placeholder with image and text
 skeletonCard : ∀ {M A} → Node M A
 skeletonCard =
-  div (class "agdelte-skeleton-card" ∷ [])
+  div (class "agdelte-skeleton-card" ∷ attr "aria-hidden" "true" ∷ [])
     ( -- Image placeholder
       div ( class "agdelte-skeleton"
           ∷ style "width" "100%"
@@ -108,6 +112,7 @@ skeletonCard =
 skeletonAvatarText : ∀ {M A} → Node M A
 skeletonAvatarText =
   div ( class "agdelte-skeleton-avatar-text"
+      ∷ attr "aria-hidden" "true"
       ∷ style "display" "flex"
       ∷ style "gap" "12px"
       ∷ style "align-items" "center"
@@ -136,8 +141,8 @@ skeletonAvatarText =
 
 -- | Table placeholder with rows and columns
 skeletonTable : ∀ {M A} → ℕ → ℕ → Node M A
-skeletonTable cols rows =
-  div (class "agdelte-skeleton-table" ∷ []) (renderRows rows)
+skeletonTable rows cols =
+  div (class "agdelte-skeleton-table" ∷ attr "aria-hidden" "true" ∷ []) (renderRows rows)
   where
     renderCells : ℕ → List (Node _ _)
     renderCells zero = []
@@ -164,7 +169,7 @@ skeletonTable cols rows =
 -- | List of avatar-text placeholders
 skeletonList : ∀ {M A} → ℕ → Node M A
 skeletonList n =
-  div (class "agdelte-skeleton-list" ∷ []) (renderItems n)
+  div (class "agdelte-skeleton-list" ∷ attr "aria-hidden" "true" ∷ []) (renderItems n)
   where
     renderItems : ℕ → List (Node _ _)
     renderItems zero = []
@@ -183,7 +188,11 @@ withSkeleton : ∀ {M A}
              → Node M A         -- actual content
              → Node M A
 withSkeleton {M} isLoading skeletonNode content =
-  div (class "agdelte-skeleton-wrapper" ∷ [])
+  div ( class "agdelte-skeleton-wrapper"
+      ∷ attrBind "aria-busy" (mkBinding
+          (λ m → if isLoading m then "true" else "false")
+          eqStr)
+      ∷ [] )
     ( when isLoading skeletonNode
     ∷ when (not ∘ isLoading) content
     ∷ [] )

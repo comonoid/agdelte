@@ -158,6 +158,83 @@ test('unprojectPoint center of screen at near plane', () => {
   assert(near(p.x, 0) && near(p.y, 0) && near(p.z, -1, 0.01));
 });
 
+// --- degenerate inputs ---
+
+test('mat4LookAt with parallel up vector does not produce NaN', () => {
+  // Looking straight up with up = (0,1,0) — up is parallel to view direction
+  const eye = { x: 0, y: 0, z: 0 };
+  const target = { x: 0, y: 1, z: 0 };
+  const up = { x: 0, y: 1, z: 0 };
+  const m = gl.mat4LookAt(eye, target, up);
+  for (let i = 0; i < 16; i++) {
+    assert(!Number.isNaN(m[i]), `mat4LookAt[${i}] is NaN`);
+    assert(Number.isFinite(m[i]), `mat4LookAt[${i}] is Infinity`);
+  }
+});
+
+test('slerpQuat with dot > 1.0 (nearly identical quaternions)', () => {
+  // Identical quaternions — dot product is exactly 1.0 (or >1 with float noise)
+  const q = { x: 0, y: 0, z: 0, w: 1 };
+  const r = gl.slerpQuat(q, q, 0.5);
+  assert(!Number.isNaN(r.x) && !Number.isNaN(r.y) && !Number.isNaN(r.z) && !Number.isNaN(r.w),
+    'slerpQuat produced NaN for identical quaternions');
+  assert(near(r.w, 1.0) && near(r.x, 0) && near(r.y, 0) && near(r.z, 0),
+    'slerpQuat should return identity for identical inputs');
+});
+
+test('slerpQuat with dot slightly above 1.0 due to float noise', () => {
+  // Quaternions that would produce dot > 1.0 with floating point
+  const q = { x: 0, y: 0, z: 0, w: 1 };
+  const q2 = { x: 1e-16, y: 0, z: 0, w: 1 };
+  const r = gl.slerpQuat(q, q2, 0.5);
+  assert(!Number.isNaN(r.x) && !Number.isNaN(r.w), 'slerpQuat produced NaN with near-unit dot');
+});
+
+test('tickSingleAnimation with durationMs = 0', () => {
+  const binding = {
+    type: 'transform',
+    animation: {
+      startTime: 100,
+      durationMs: 0,
+      easingFn: t => t,
+      from: { pos: { x: 0, y: 0, z: 0 }, rot: { x: 0, y: 0, z: 0, w: 1 }, scale: { x: 1, y: 1, z: 1 } },
+      to:   { pos: { x: 5, y: 5, z: 5 }, rot: { x: 0, y: 0, z: 0, w: 1 }, scale: { x: 2, y: 2, z: 2 } },
+    },
+  };
+  const result = gl.tickSingleAnimation(binding, 100);
+  assert(result.done === true, 'durationMs=0 should be immediately done');
+  assert(near(result.value.pos.x, 5), 'durationMs=0 should snap to target');
+  assert(near(result.value.scale.x, 2), 'durationMs=0 should snap scale to target');
+});
+
+test('mat4Invert with singular matrix returns null, not NaN', () => {
+  // All-zeros matrix (singular)
+  const m = new Float32Array(16);
+  const inv = gl.mat4Invert(m);
+  assert(inv === null, 'singular all-zeros matrix should return null');
+  // Matrix with duplicate rows (singular)
+  const m2 = new Float32Array([
+    1, 0, 0, 0,
+    1, 0, 0, 0,
+    0, 0, 1, 0,
+    0, 0, 0, 1,
+  ]);
+  const inv2 = gl.mat4Invert(m2);
+  if (inv2 !== null) {
+    for (let i = 0; i < 16; i++) {
+      assert(!Number.isNaN(inv2[i]), `singular mat4Invert[${i}] is NaN`);
+    }
+  }
+});
+
+test('unprojectPoint with w = 0 (degenerate projection)', () => {
+  // Use a zero projection matrix — inversion should fail or w=0 should return null
+  const zeroProj = new Float32Array(16);
+  const view = gl.mat4Identity();
+  const p = gl.unprojectPoint(0, 0, 0, zeroProj, view);
+  assert(p === null, 'unprojectPoint with zero projection should return null');
+});
+
 // --- results ---
 
 console.log(`\n=== Results ===\n\nPassed: ${passed}\nFailed: ${failed}\nTotal: ${passed + failed}\n`);

@@ -10,42 +10,18 @@ echo ""
 FAILED=0
 PASSED=0
 
-# Browser examples to build (Agda → JS)
-EXAMPLES=(
-  "counter"
-  "timer"
-  "todo"
-  "keyboard"
-  "http"
-  "task"
-  "websocket"
-  "router"
-  "composition"
-  "transitions"
-  "combinators"
-  "optic-dynamic"
-  "worker"
-  "parallel"
-  "session-form"
-  "stress-test"
-  "controls-demo"
-  "css-demo"
-  "css-full-demo"
-  "anim-demo"
-  "svg-test"
-  "svg-smil"
-  "svg-panzoom"
-  "svg-chart"
-  "svg-linedraw"
-  "webgl-test"
-  "webgl-full-demo"
-  "webgl-controls-demo"
-  "remote-agent"
-  "styles"
-  "agent-wiring"
-  "dep-agent-demo"
-  "session-dual"
-)
+# Auto-discover browser example builds from package.json
+# Excludes meta-targets (build:all, build:controls-css, build:test-server) and server builds
+SERVER_BUILDS="main|server|multi-agent|shared-demo|inspector-demo"
+EXCLUDE="all|controls-css|test-server|${SERVER_BUILDS}"
+EXAMPLES=($(node -e "
+  const pkg = require('./package.json');
+  const exclude = new Set('${EXCLUDE}'.split('|'));
+  Object.keys(pkg.scripts)
+    .filter(k => k.startsWith('build:') && !exclude.has(k.slice(6)))
+    .map(k => k.slice(6))
+    .forEach(k => console.log(k));
+"))
 
 echo "--- Browser examples (Agda → JS) ---"
 echo ""

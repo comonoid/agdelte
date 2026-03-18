@@ -9,11 +9,12 @@
 module Agdelte.Html.Controls.Toast where
 
 open import Data.String using (String)
-open import Data.List using (List; []; _∷_)
-open import Data.Nat using (ℕ)
+open import Data.List using (List; []; _∷_; drop; length)
+open import Data.Nat using (ℕ; _∸_; _⊔_)
 open import Data.Bool using (Bool)
 open import Function using (_∘_)
 
+open import Agdelte.Core.Cmd as Cmd using (Cmd; delay)
 open import Agdelte.Reactive.Node
 
 ------------------------------------------------------------------------
@@ -168,3 +169,33 @@ warningToast id msg = mkToast id msg Warning
 -- | Create error toast data
 errorToast : ℕ → String → ToastData
 errorToast id msg = mkToast id msg Error
+
+------------------------------------------------------------------------
+-- Auto-dismiss: schedule a delayed dismiss command
+------------------------------------------------------------------------
+
+-- | Create a Cmd that will fire the dismiss message after a duration (ms).
+-- | The caller's update function is responsible for removing the toast
+-- | when it receives the dismiss message.
+toastAutoDismiss : ∀ {A} → ℕ → A → Cmd A
+toastAutoDismiss ms dismissMsg = delay ms dismissMsg
+
+------------------------------------------------------------------------
+-- Toast container with max count
+------------------------------------------------------------------------
+
+-- | Like toastContainer, but only shows the last N toasts.
+-- | Older toasts beyond the max count are truncated from the view.
+toastContainerMax : ∀ {M A}
+                  → ℕ                        -- max number of visible toasts
+                  → (M → List ToastData)     -- get toasts from model
+                  → (ℕ → A)                  -- dismiss message by id
+                  → Node M A
+toastContainerMax maxN getToasts dismissMsg =
+  div ( class "agdelte-toast-container"
+      ∷ attr "aria-live" "polite"
+      ∷ [] )
+    ( foreach (λ m → let ts = getToasts m
+                     in drop (length ts ∸ maxN) ts)
+              (renderToast dismissMsg)
+    ∷ [] )

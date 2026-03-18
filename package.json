@@ -81,7 +81,7 @@
     "run:multi-agent": "./_build/MultiAgent",
     "run:shared-demo": "./_build/SharedAgentDemo",
     "run:inspector-demo": "./_build/InspectorDemo",
-    "build:test-server": "ghc -ihs -o _build/Spec hs/test/Spec.hs -package hspec -package network -package text -package bytestring -package stm -package containers -package websockets -package warp -package wai -package wai-websockets -package http-types -package async -package case-insensitive",
+    "build:test-server": "ghc -ihs -o _build/Spec hs/test/Spec.hs -package hspec -package network -package text -package bytestring -package stm -package containers -package websockets -package warp -package wai -package wai-websockets -package http-types -package async -package case-insensitive -package unix -package directory",
     "test:server": "npm run build:test-server && ./_build/Spec",
     "clean": "rm -rf _build MAlonzo jAgda"
   },

@@ -37,6 +37,10 @@ paginationRules =
       ( "background" ∶ "var(--agdelte-bg-hover)"
       ∷ "border-color" ∶ "var(--agdelte-primary)"
       ∷ [])
+  ∷ rule ".agdelte-pagination__btn:focus-visible"
+      ( "outline" ∶ "2px solid var(--agdelte-primary)"
+      ∷ "outline-offset" ∶ "2px"
+      ∷ [])
   ∷ rule ".agdelte-pagination__btn:disabled"
       ( "opacity" ∶ "0.5"
       ∷ "cursor" ∶ "not-allowed"
@@ -55,6 +59,10 @@ paginationRules =
   ∷ rule ".agdelte-pagination__page:hover"
       ( "background" ∶ "var(--agdelte-bg-hover)"
       ∷ "border-color" ∶ "var(--agdelte-primary)"
+      ∷ [])
+  ∷ rule ".agdelte-pagination__page:focus-visible"
+      ( "outline" ∶ "2px solid var(--agdelte-primary)"
+      ∷ "outline-offset" ∶ "2px"
       ∷ [])
   ∷ rule ".agdelte-pagination__page--active"
       ( "background" ∶ "var(--agdelte-primary)"

@@ -250,6 +250,7 @@ initialModel = mkModel
 data Msg : Set where
   -- Navigation
   SelectTab      : ℕ → Msg
+  TabKey         : String → Msg
   -- Modal
   OpenModal      : Msg
   CloseModal     : Msg
@@ -324,6 +325,22 @@ case x of f = f x
 updateModel : Msg → Model → Model
 -- Navigation
 updateModel (SelectTab n) m = record m { activeTab = n }
+updateModel (TabKey k) m = tabKey k m
+  where
+    numTabs : ℕ
+    numTabs = 8
+    tabKey : String → Model → Model
+    tabKey k m with k ≟ "ArrowRight"
+    ... | yes _ = record m { activeTab = if suc (activeTab m) ≡ᵇ numTabs then 0 else suc (activeTab m) }
+    ... | no _  with k ≟ "ArrowLeft"
+    ...   | yes _ = record m { activeTab = case activeTab m of λ where
+                      zero → numTabs ∸ 1
+                      (suc n) → n }
+    ...   | no _ with k ≟ "Home"
+    ...     | yes _ = record m { activeTab = 0 }
+    ...     | no _ with k ≟ "End"
+    ...       | yes _ = record m { activeTab = numTabs ∸ 1 }
+    ...       | no _ = m
 -- Modal
 updateModel OpenModal m = record m { modalOpen = true }
 updateModel CloseModal m = record m { modalOpen = false }
@@ -753,7 +770,7 @@ tabFeedback =
     -- Tooltip
     ∷ elem "h4" [] ( text "Tooltip" ∷ [] )
     ∷ div ( class "demo-section" ∷ [] )
-        ( tooltip (text "Hover me") "This is a tooltip!" Top
+        ( tooltip "tip-hover" (text "Hover me") "This is a tooltip!" Top
         ∷ text "  "
         ∷ popover popoverOpen TogglePopover
             (text "Click for popover")
@@ -804,7 +821,7 @@ view : Node Model Msg
 view =
   div ( class "controls-demo" ∷ [] )
     ( h1 [] ( text "Agdelte Controls" ∷ [] )
-    ∷ tabBar activeTab SelectTab
+    ∷ tabBar "demo" activeTab SelectTab TabKey
         ( mkTab "Overview" tabOverview
         ∷ mkTab "Forms" tabForms
         ∷ mkTab "Dropdown" tabDropdown

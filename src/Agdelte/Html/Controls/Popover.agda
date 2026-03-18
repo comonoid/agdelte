@@ -48,12 +48,19 @@ popover : ∀ {M A}
         → Node M A            -- popover content
         → Node M A
 popover isOpen toggle trigger content =
-  div (class "agdelte-popover-container" ∷ [])
+  div ( class "agdelte-popover-container"
+      ∷ onKeyFiltered ("Escape" ∷ []) (λ _ → toggle)
+      ∷ [] )
     ( -- Trigger
       div ( class "agdelte-popover__trigger"
           ∷ onClick toggle
           ∷ [] )
         ( trigger ∷ [] )
+    -- Backdrop for click-outside-to-close
+    ∷ when isOpen
+        ( div ( class "agdelte-popover__backdrop"
+              ∷ onClick toggle
+              ∷ [] ) [] )
     -- Popover panel (conditional)
     ∷ when isOpen
         ( div (class "agdelte-popover agdelte-popover--bottom" ∷ [])
@@ -73,11 +80,17 @@ popoverPositioned : ∀ {M A}
                   → Node M A
                   → Node M A
 popoverPositioned isOpen toggle pos trigger content =
-  div (class "agdelte-popover-container" ∷ [])
+  div ( class "agdelte-popover-container"
+      ∷ onKeyFiltered ("Escape" ∷ []) (λ _ → toggle)
+      ∷ [] )
     ( div ( class "agdelte-popover__trigger"
           ∷ onClick toggle
           ∷ [] )
         ( trigger ∷ [] )
+    ∷ when isOpen
+        ( div ( class "agdelte-popover__backdrop"
+              ∷ onClick toggle
+              ∷ [] ) [] )
     ∷ when isOpen
         ( div (class ("agdelte-popover " ++ positionClass pos) ∷ [])
             ( content ∷ [] ) )
@@ -96,11 +109,17 @@ popoverWithClose : ∀ {M A}
                  → Node M A
                  → Node M A
 popoverWithClose isOpen toggle close trigger content =
-  div (class "agdelte-popover-container" ∷ [])
+  div ( class "agdelte-popover-container"
+      ∷ onKeyFiltered ("Escape" ∷ []) (λ _ → close)
+      ∷ [] )
     ( div ( class "agdelte-popover__trigger"
           ∷ onClick toggle
           ∷ [] )
         ( trigger ∷ [] )
+    ∷ when isOpen
+        ( div ( class "agdelte-popover__backdrop"
+              ∷ onClick close
+              ∷ [] ) [] )
     ∷ when isOpen
         ( div (class "agdelte-popover agdelte-popover--bottom" ∷ [])
             ( -- Close button
@@ -129,11 +148,17 @@ popoverWithHeader : ∀ {M A}
                   → Node M A       -- content
                   → Node M A
 popoverWithHeader isOpen toggle close title trigger content =
-  div (class "agdelte-popover-container" ∷ [])
+  div ( class "agdelte-popover-container"
+      ∷ onKeyFiltered ("Escape" ∷ []) (λ _ → close)
+      ∷ [] )
     ( div ( class "agdelte-popover__trigger"
           ∷ onClick toggle
           ∷ [] )
         ( trigger ∷ [] )
+    ∷ when isOpen
+        ( div ( class "agdelte-popover__backdrop"
+              ∷ onClick close
+              ∷ [] ) [] )
     ∷ when isOpen
         ( div (class "agdelte-popover agdelte-popover--bottom" ∷ [])
             ( -- Header
@@ -153,6 +178,38 @@ popoverWithHeader isOpen toggle close title trigger content =
     ∷ [] )
 
 ------------------------------------------------------------------------
+-- Auto-positioned popover (viewport-edge flip)
+------------------------------------------------------------------------
+
+-- | Popover that accepts a model-projection returning the position,
+-- | letting the caller compute position based on viewport constraints.
+-- | The positionFn extracts a PopoverPosition from the model, enabling
+-- | dynamic repositioning when the trigger is near a viewport edge.
+popoverAuto : ∀ {M A}
+            → (M → Bool)              -- isOpen
+            → A                       -- toggle message
+            → (M → PopoverPosition)   -- compute position from model
+            → Node M A                -- trigger element
+            → Node M A                -- popover content
+            → Node M A
+popoverAuto isOpen toggle positionFn trigger content =
+  div ( class "agdelte-popover-container"
+      ∷ onKeyFiltered ("Escape" ∷ []) (λ _ → toggle)
+      ∷ [] )
+    ( div ( class "agdelte-popover__trigger"
+          ∷ onClick toggle
+          ∷ [] )
+        ( trigger ∷ [] )
+    ∷ when isOpen
+        ( div ( class "agdelte-popover__backdrop"
+              ∷ onClick toggle
+              ∷ [] ) [] )
+    ∷ when isOpen
+        ( div (classBind (λ m → "agdelte-popover " ++ positionClass (positionFn m)) ∷ [])
+            ( content ∷ [] ) )
+    ∷ [] )
+
+------------------------------------------------------------------------
 -- Dropdown menu (popover variant)
 ------------------------------------------------------------------------
 
@@ -164,11 +221,17 @@ popoverMenu : ∀ {M A}
             → List (String × A)       -- menu items (label, message)
             → Node M A
 popoverMenu {M} {A} isOpen toggle trigger items =
-  div (class "agdelte-popover-container" ∷ [])
+  div ( class "agdelte-popover-container"
+      ∷ onKeyFiltered ("Escape" ∷ []) (λ _ → toggle)
+      ∷ [] )
     ( div ( class "agdelte-popover__trigger"
           ∷ onClick toggle
           ∷ [] )
         ( trigger ∷ [] )
+    ∷ when isOpen
+        ( div ( class "agdelte-popover__backdrop"
+              ∷ onClick toggle
+              ∷ [] ) [] )
     ∷ when isOpen
         ( div (class "agdelte-popover agdelte-popover--bottom agdelte-popover--menu" ∷ [])
             (renderItems items) )
@@ -197,11 +260,17 @@ popoverConfirm : ∀ {M A}
                → Node M A       -- trigger
                → Node M A
 popoverConfirm isOpen toggle cancel confirm message trigger =
-  div (class "agdelte-popover-container" ∷ [])
+  div ( class "agdelte-popover-container"
+      ∷ onKeyFiltered ("Escape" ∷ []) (λ _ → cancel)
+      ∷ [] )
     ( div ( class "agdelte-popover__trigger"
           ∷ onClick toggle
           ∷ [] )
         ( trigger ∷ [] )
+    ∷ when isOpen
+        ( div ( class "agdelte-popover__backdrop"
+              ∷ onClick cancel
+              ∷ [] ) [] )
     ∷ when isOpen
         ( div (class "agdelte-popover agdelte-popover--bottom agdelte-popover--confirm" ∷ [])
             ( -- Message

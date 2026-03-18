@@ -30,6 +30,7 @@ module Agdelte.Process
   ) where
 
 import Control.Concurrent (ThreadId, forkIO, killThread, myThreadId, threadDelay)
+import System.Timeout (timeout)
 import Control.Concurrent.MVar (MVar, modifyMVar_, newEmptyMVar, newMVar, putMVar, readMVar, swapMVar, takeMVar, withMVar)
 import Control.Exception (Exception(..), SomeAsyncException(..), catch, finally, onException, throwIO, SomeException, IOException)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
@@ -172,10 +173,14 @@ handleClient conn handler =
         Right Nothing -> return ()  -- clean close by peer
         Right (Just msg) -> do
           let request = TE.decodeUtf8With lenientDecode msg
-          response <- handler request `catch` \(e :: SomeException) ->
-            case fromException e of
-              Just (SomeAsyncException _) -> throwIO e  -- re-raise async exceptions (killThread, cancel)
-              Nothing -> return (T.pack $ "error:" ++ show e)
+          mResponse <- timeout (30 * 1000000) $  -- 30 second timeout
+            handler request `catch` \(e :: SomeException) ->
+              case fromException e of
+                Just (SomeAsyncException _) -> throwIO e  -- re-raise async exceptions (killThread, cancel)
+                Nothing -> return (T.pack $ "error:" ++ show e)
+          let response = case mResponse of
+                Just r  -> r
+                Nothing -> "error:handler timeout (30s)"
           sendResult <- (Right <$> sendFramed conn (TE.encodeUtf8 response))
             `catch` \(e :: IOException) -> return (Left e)
           case sendResult of

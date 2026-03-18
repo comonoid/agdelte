@@ -27,16 +27,30 @@ private
   pi : Float
   pi = 3.14159265359
 
-  -- Taylor series approximations for sin/cos
+  -- Normalize angle to [-π, π] by repeated subtraction/addition of 2π
+  normalize : Float → Float
+  normalize x = go x 20
+    where
+      twoPi : Float
+      twoPi = 2.0 * pi
+      go : Float → ℕ → Float
+      go y zero = y
+      go y (suc n) = if pi ≤ᵇ y       then go (y - twoPi) n
+                     else if y ≤ᵇ (0.0 - pi) then go (y + twoPi) n
+                     else y
+
+  -- Taylor series approximations for sin/cos (with range reduction)
   sin : Float → Float
-  sin x = x - (x * x * x ÷ 6.0)
-        + (x * x * x * x * x ÷ 120.0)
-        - (x * x * x * x * x * x * x ÷ 5040.0)
+  sin x' = let x = normalize x'
+           in x - (x * x * x ÷ 6.0)
+            + (x * x * x * x * x ÷ 120.0)
+            - (x * x * x * x * x * x * x ÷ 5040.0)
 
   cos : Float → Float
-  cos x = 1.0 - (x * x ÷ 2.0)
-        + (x * x * x * x ÷ 24.0)
-        - (x * x * x * x * x * x ÷ 720.0)
+  cos x' = let x = normalize x'
+           in 1.0 - (x * x ÷ 2.0)
+            + (x * x * x * x ÷ 24.0)
+            - (x * x * x * x * x * x ÷ 720.0)
 
 ------------------------------------------------------------------------
 -- Data types
@@ -79,6 +93,9 @@ defaultRadarConfig r = mkRadarConfig r true 5 true true 0.25
 ------------------------------------------------------------------------
 
 private
+  maxFloat : Float → Float → Float
+  maxFloat a b = if a <ᵇ b then b else a
+
   listLen : ∀ {A : Set} → List A → ℕ
   listLen [] = 0
   listLen (_ ∷ xs) = suc (listLen xs)
@@ -206,7 +223,8 @@ private
       buildPoints _ [] _ _ = ""
       buildPoints (ax ∷ restAx) (v ∷ restV) idx total =
         let angle = axisAngle idx total
-            valueR = (v ÷ axisMax ax) * radius
+            safeMax = if axisMax ax ≤ᵇ 0.0 then 1.0 else axisMax ax
+            valueR = maxFloat 0.0 ((v ÷ safeMax) * radius)
             (px , py) = polarToCart cx cy valueR angle
             sep = if listLen restAx ≡ᵇ 0 then "" else " "
         in showFloat px ++ "," ++ showFloat py ++ sep
@@ -219,7 +237,8 @@ private
       renderDots _ _ _ _ [] _ _ _ = []
       renderDots cx' cy' r' (ax ∷ restAx) (v ∷ restV) color idx total =
         let angle = axisAngle idx total
-            valueR = (v ÷ axisMax ax) * r'
+            safeMax = if axisMax ax ≤ᵇ 0.0 then 1.0 else axisMax ax
+            valueR = maxFloat 0.0 ((v ÷ safeMax) * r')
             (px , py) = polarToCart cx' cy' valueR angle
         in circle' ( cxF px ∷ cyF py
                    ∷ rF 4.0

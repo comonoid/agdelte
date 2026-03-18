@@ -1,7 +1,7 @@
 {-# OPTIONS --without-K #-}
 
 -- Table: Simple table for small datasets
--- For large datasets use DataGrid with virtualization
+-- For large datasets use DataGrid (note: no virtualization yet — all rows are rendered)
 -- CSS classes: .agdelte-table, .agdelte-table__header,
 --              .agdelte-table__row, .agdelte-table__cell,
 --              .agdelte-table--striped, .agdelte-table--bordered
@@ -9,9 +9,10 @@
 module Agdelte.Html.Controls.Table where
 
 open import Data.String using (String)
-open import Data.List using (List; []; _∷_; map)
+open import Data.List using (List; []; _∷_; map; null; length)
 open import Data.Nat using (ℕ; zero; suc)
-open import Data.Bool using (Bool; true; false)
+open import Data.Nat.Show using (show)
+open import Data.Bool using (Bool; true; false; not)
 open import Function using (_∘_)
 
 open import Agdelte.Reactive.Node
@@ -54,6 +55,17 @@ private
     th (class "agdelte-table__header" ∷ []) (text h ∷ [])
     ∷ renderHeaders hs
 
+  -- Empty-data placeholder row
+  emptyRow : ∀ {R M A} → List String → (M → List R) → Node M A
+  emptyRow headers getData =
+    when (null ∘ getData)
+      (tr []
+        ( td ( class "agdelte-table__cell"
+             ∷ attr "colspan" (show (length headers))
+             ∷ [] )
+            ( text "No data available" ∷ [] )
+        ∷ [] ))
+
 ------------------------------------------------------------------------
 -- Simple table
 ------------------------------------------------------------------------
@@ -72,7 +84,8 @@ basicTable {R} headers rowRenderer getData =
     ( thead []
         ( tr [] (renderHeaders headers) ∷ [] )
     ∷ tbody []
-        ( foreach getData (λ r _ →
+        ( emptyRow headers getData
+        ∷ foreach getData (λ r _ →
             tr (class "agdelte-table__row" ∷ [])
               (wrapCells (rowRenderer r)))
         ∷ [] )
@@ -95,7 +108,8 @@ basicTableClickable {R} headers rowRenderer onRowClick getData =
     ( thead []
         ( tr [] (renderHeaders headers) ∷ [] )
     ∷ tbody []
-        ( foreach getData (λ r _ →
+        ( emptyRow headers getData
+        ∷ foreach getData (λ r _ →
             tr ( class "agdelte-table__row"
                ∷ style "cursor" "pointer"
                ∷ onClick (onRowClick r)
@@ -119,7 +133,8 @@ stripedTable {R} headers rowRenderer getData =
     ( thead []
         ( tr [] (renderHeaders headers) ∷ [] )
     ∷ tbody []
-        ( foreach getData (λ r idx →
+        ( emptyRow headers getData
+        ∷ foreach getData (λ r idx →
             tr (class (rowClass idx) ∷ [])
               (wrapCells (rowRenderer r)))
         ∷ [] )
@@ -151,7 +166,8 @@ borderedTable {R} headers rowRenderer getData =
     ( thead []
         ( tr [] (renderHeaders headers) ∷ [] )
     ∷ tbody []
-        ( foreach getData (λ r _ →
+        ( emptyRow headers getData
+        ∷ foreach getData (λ r _ →
             tr (class "agdelte-table__row" ∷ [])
               (wrapCells (rowRenderer r)))
         ∷ [] )

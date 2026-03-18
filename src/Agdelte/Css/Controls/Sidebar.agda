@@ -17,17 +17,19 @@ open import Agdelte.Css.Stylesheet using (Rule; rule; Stylesheet)
 sidebarRules : Stylesheet
 sidebarRules =
     rule ".agdelte-sidebar"
-      ( "display" ∶ "flex"
+      ( "--agdelte-sidebar-width" ∶ "240px"
+      ∷ "--agdelte-sidebar-collapsed-offset" ∶ "180px"
+      ∷ "display" ∶ "flex"
       ∷ "flex-direction" ∶ "column"
-      ∷ "width" ∶ "240px"
+      ∷ "width" ∶ "var(--agdelte-sidebar-width)"
       ∷ "background" ∶ "var(--agdelte-bg)"
       ∷ "border-right" ∶ "1px solid var(--agdelte-border)"
       ∷ "transition" ∶ "transform var(--agdelte-transition), margin-right var(--agdelte-transition)"
       ∷ "overflow" ∶ "hidden"
       ∷ [])
   ∷ rule ".agdelte-sidebar--collapsed"
-      ( "transform" ∶ "translateX(-180px)"
-      ∷ "margin-right" ∶ "-180px"
+      ( "transform" ∶ "translateX(calc(-1 * var(--agdelte-sidebar-collapsed-offset)))"
+      ∷ "margin-right" ∶ "calc(-1 * var(--agdelte-sidebar-collapsed-offset))"
       ∷ [])
   ∷ rule ".agdelte-sidebar__header"
       ( "display" ∶ "flex"
@@ -54,6 +56,10 @@ sidebarRules =
       ∷ [])
   ∷ rule ".agdelte-sidebar__toggle:hover"
       ( "background" ∶ "var(--agdelte-bg-hover)"
+      ∷ [])
+  ∷ rule ".agdelte-sidebar__toggle:focus-visible"
+      ( "outline" ∶ "2px solid var(--agdelte-primary)"
+      ∷ "outline-offset" ∶ "2px"
       ∷ [])
   ∷ rule ".agdelte-sidebar__title"
       ( "white-space" ∶ "nowrap"
@@ -84,6 +90,10 @@ sidebarRules =
       ∷ [])
   ∷ rule ".agdelte-sidebar__link:hover"
       ( "background" ∶ "var(--agdelte-bg-hover)"
+      ∷ [])
+  ∷ rule ".agdelte-sidebar__link:focus-visible"
+      ( "outline" ∶ "2px solid var(--agdelte-primary)"
+      ∷ "outline-offset" ∶ "2px"
       ∷ [])
   ∷ rule ".agdelte-sidebar__link--active"
       ( "background" ∶ "var(--agdelte-primary)"

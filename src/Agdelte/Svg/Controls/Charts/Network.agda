@@ -110,16 +110,31 @@ networkGraph {M} {A} px py w h nodes edges =
         case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
         case x of f = f x
 
-        -- Simple arrow head
+        -- Simple arrow head, offset back from target center by node radius
         renderArrow : Float → Float → Float → Float → Node M A
         renderArrow x1 y1 x2 y2 =
           let dx = x2 - x1
               dy = y2 - y1
-              -- Simplified - just a small triangle at end
-          in circle' ( cxF x2 ∷ cyF y2
+              dist = sqrt (dx * dx + dy * dy)
+              -- Target node radius (default 20.0 from simpleGraph, use nodeSize of target)
+              tgtRadius = case findNode (edgeTarget e) allNodes of λ where
+                (just tgt) → nodeSize tgt
+                nothing → 20.0
+              -- Offset arrow position along edge direction by target radius
+              offsetDist = if dist ≤ᵇ 0.0 then 0.0 else tgtRadius + 4.0
+              ndx = if dist ≤ᵇ 0.0 then 0.0 else dx ÷ dist
+              ndy = if dist ≤ᵇ 0.0 then 0.0 else dy ÷ dist
+              ax = x2 - ndx * offsetDist
+              ay = y2 - ndy * offsetDist
+          in circle' ( cxF ax ∷ cyF ay
                      ∷ rF 4.0
                      ∷ fill_ "#94a3b8"
                      ∷ [] ) []
+          where
+            postulate sqrt : Float → Float
+            {-# COMPILE JS sqrt = Math.sqrt #-}
+            case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
+            case x of f = f x
 
     renderEdges : List (GraphNode A) → List GraphEdge → List (Node M A)
     renderEdges _ [] = []

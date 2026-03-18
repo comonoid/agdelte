@@ -17,7 +17,7 @@ for (const file of files) {
   if (content.includes('const exports')) continue;
 
   // Fix files that reference exports without defining it
-  if (content.includes('exports')) {
+  if (/\bexports\b/.test(content)) {
     // Find last import line
     const lines = content.split('\n');
     let lastImportIdx = -1;

@@ -10,6 +10,7 @@ open import Data.String using (String)
 open import Data.List using (List; []; _∷_; map; any)
 open import Data.Nat using (ℕ)
 open import Data.Bool using (Bool; true; false; if_then_else_)
+open import Data.Maybe using (Maybe; just; nothing)
 open import Function using (_∘_)
 
 open import Agdelte.Reactive.Node
@@ -60,6 +61,40 @@ checkboxWithId cbId lbl isChecked toggleMsg =
             ∷ [] )
         ( text lbl ∷ [] )
     ∷ [] )
+
+------------------------------------------------------------------------
+-- Checkbox with indeterminate state
+------------------------------------------------------------------------
+
+-- | Checkbox with tri-state: Nothing = indeterminate, Just true = checked, Just false = unchecked.
+-- | The visual indeterminate state uses the CSS class .agdelte-checkbox--indeterminate
+-- | with a dash/minus icon via ::before pseudo-element.
+checkboxIndeterminate : ∀ {M A} → String → (M → Maybe Bool) → A → Node M A
+checkboxIndeterminate lbl getState toggleMsg =
+  label ( classBind (λ m → case getState m of λ where
+              nothing → "agdelte-checkbox agdelte-checkbox--indeterminate"
+              (just _) → "agdelte-checkbox")
+        ∷ [] )
+    ( input ( type' "checkbox"
+            ∷ class "agdelte-checkbox__input"
+            ∷ checkedBind (λ m → case getState m of λ where
+                nothing → false
+                (just b) → b)
+            ∷ attrBind "aria-checked" (mkBinding
+                (λ m → case getState m of λ where
+                    nothing → "mixed"
+                    (just true) → "true"
+                    (just false) → "false")
+                eqStr)
+            ∷ onChange (λ _ → toggleMsg)
+            ∷ [] )
+    ∷ span ( class "agdelte-checkbox__label" ∷ [] )
+        ( text lbl ∷ [] )
+    ∷ [] )
+  where
+    open import Data.Maybe using (Maybe; just; nothing)
+    case_of_ : ∀ {a b} {A : Set a} {B : Set b} → A → (A → B) → B
+    case x of f = f x
 
 ------------------------------------------------------------------------
 -- Checkbox group (multiple selection)

@@ -71,7 +71,8 @@ const data = {
 // Validate no undefined values in output
 const undefinedKeys = Object.entries(data).filter(([, v]) => v === undefined).map(([k]) => k);
 if (undefinedKeys.length > 0) {
-  console.warn(`Warning: undefined values for: ${undefinedKeys.join(', ')}`);
+  console.error(`Error: undefined values for: ${undefinedKeys.join(', ')}`);
+  process.exit(1);
 }
 
 mkdirSync(dirname(resolve(output)), { recursive: true });

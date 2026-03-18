@@ -51,6 +51,15 @@ private
   listLen [] = 0
   listLen (_ ∷ xs) = suc (listLen xs)
 
+  maxNat : ℕ → ℕ → ℕ
+  maxNat a b = if a ≤ᵇₙ b then b else a
+    where
+      open import Data.Nat using () renaming (_≤ᵇ_ to _≤ᵇₙ_)
+
+  maxRowLen : List (List Float) → ℕ
+  maxRowLen [] = 0
+  maxRowLen (row ∷ rows) = maxNat (listLen row) (maxRowLen rows)
+
   findMinMaxList : List Float → Float → Float → Float × Float
   findMinMaxList [] minA maxA = (minA , maxA)
   findMinMaxList (v ∷ vs) minA maxA =
@@ -77,9 +86,10 @@ heatmap : ∀ {M A}
         → Node M A
 heatmap {M} {A} px py w h colorFn grid onClick' =
   let numRows = listLen grid
+      numCols = maxRowLen grid
       (minV , maxV) = findMinMaxGrid grid 1.0e10 (0.0 - 1.0e10)
   in g ( attr "class" "svg-heatmap" ∷ [] )
-       (renderRows px py w h minV maxV colorFn grid 0 numRows onClick')
+       (renderRows px py w h minV maxV colorFn grid 0 numRows numCols onClick')
   where
     renderCells : Float → Float → Float → Float
                 → Float → Float
@@ -113,17 +123,16 @@ heatmap {M} {A} px py w h colorFn grid onClick' =
     renderRows : Float → Float → Float → Float
                → Float → Float
                → (Float → Float → Float → String)
-               → List (List Float) → ℕ → ℕ
+               → List (List Float) → ℕ → ℕ → ℕ
                → Maybe (ℕ → ℕ → A)
                → List (Node M A)
-    renderRows _ _ _ _ _ _ _ [] _ _ _ = []
-    renderRows rx ry w' h' minV maxV colFn (row ∷ rows) rowIdx numRows onClick'' =
-      let numCols = listLen row
-          cellW = if numCols ≡ᵇ 0 then 0.0 else w' ÷ fromℕ numCols
+    renderRows _ _ _ _ _ _ _ [] _ _ _ _ = []
+    renderRows rx ry w' h' minV maxV colFn (row ∷ rows) rowIdx numRows numCols onClick'' =
+      let cellW = if numCols ≡ᵇ 0 then 0.0 else w' ÷ fromℕ numCols
           cellH = if numRows ≡ᵇ 0 then 0.0 else h' ÷ fromℕ numRows
           rowY = ry + fromℕ rowIdx * cellH
       in g [] (renderCells rx rowY cellW cellH minV maxV colFn row 0 rowIdx numCols onClick'')
-         ∷ renderRows rx ry w' h' minV maxV colFn rows (suc rowIdx) numRows onClick''
+         ∷ renderRows rx ry w' h' minV maxV colFn rows (suc rowIdx) numRows numCols onClick''
       where
         open import Data.Nat using (_≡ᵇ_)
 
@@ -156,15 +165,20 @@ labeledHeatmap {M} {A} px py w h colLabels rowLabels grid =
       chartY = py + labelSpace
       chartW = w - labelSpace
       chartH = h - labelSpace
+      nCols = listLen colLabels
+      nRows = listLen rowLabels
+      colCellW = if nCols ≡ᵇ 0 then 0.0 else chartW ÷ fromℕ nCols
+      rowCellH = if nRows ≡ᵇ 0 then 0.0 else chartH ÷ fromℕ nRows
   in g ( attr "class" "svg-labeled-heatmap" ∷ [] )
        ( -- Column labels
-         renderColLabels chartX py (chartW ÷ fromℕ (listLen colLabels)) colLabels 0
+         renderColLabels chartX py colCellW colLabels 0
        -- Row labels
-       ∷ renderRowLabels px chartY (chartH ÷ fromℕ (listLen rowLabels)) rowLabels 0
+       ∷ renderRowLabels px chartY rowCellH rowLabels 0
        -- Heatmap
        ∷ heatmap chartX chartY chartW chartH valueToColor grid nothing
        ∷ [] )
   where
+    open import Data.Nat using (_≡ᵇ_)
     renderColLabels : Float → Float → Float → List String → ℕ → Node M A
     renderColLabels _ _ _ [] _ = g [] []
     renderColLabels lx ly cellW (lbl ∷ lbls) idx =

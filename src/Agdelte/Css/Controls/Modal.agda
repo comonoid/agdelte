@@ -92,4 +92,13 @@ modalRules =
       ( "outline" ∶ "2px solid var(--agdelte-primary)"
       ∷ "outline-offset" ∶ "2px"
       ∷ [])
+  -- Nested modals: use absolute positioning so the backdrop covers
+  -- only the parent modal, not the entire viewport.  CSS stacking
+  -- context handles z-order naturally since the inner modal DOM
+  -- is a child of the outer modal content.
+  -- Auto-applied via descendant selector; .agdelte-modal--nested
+  -- is also available for explicit use.
+  ∷ rule ".agdelte-modal .agdelte-modal, .agdelte-modal--nested"
+      ( "position" ∶ "absolute"
+      ∷ [])
   ∷ []

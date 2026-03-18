@@ -7,6 +7,7 @@ module Agdelte.Svg.Smil where
 
 open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.Float using (Float)
+open import Data.Float.Base using (_<ᵇ_)
 open import Data.List using (List; []; _∷_; map; intersperse; foldr) renaming (_++_ to _++L_)
 open import Data.Nat using (ℕ)
 open import Data.Nat.Show renaming (show to showNat)
@@ -62,9 +63,15 @@ showTimingList : List Timing → List String
 showTiming (offset d) = showDuration d
 showTiming (onEvent e) = e
 showTiming (syncBegin id') = id' ++ ".begin"
-showTiming (syncBeginD id' d) = id' ++ ".begin+" ++ showDuration d
+showTiming (syncBeginD id' d) = id' ++ ".begin" ++ (if isNegDur d then "" else "+") ++ showDuration d
+  where isNegDur : Duration → Bool
+        isNegDur (sec f) = f <ᵇ 0.0
+        isNegDur _       = false
 showTiming (syncEnd id') = id' ++ ".end"
-showTiming (syncEndD id' d) = id' ++ ".end+" ++ showDuration d
+showTiming (syncEndD id' d) = id' ++ ".end" ++ (if isNegDur d then "" else "+") ++ showDuration d
+  where isNegDur : Duration → Bool
+        isNegDur (sec f) = f <ᵇ 0.0
+        isNegDur _       = false
 showTiming (syncRepeat id' n) = id' ++ ".repeat(" ++ showNat n ++ ")"
 showTiming (anyOf ts) = concat (intersperse ";" (showTimingList ts))
 
@@ -170,6 +177,11 @@ defaultSmil = mkSmilAnim
   always              -- can restart anytime
   nothing              -- no id
 
+private
+  idAttrs : ∀ {M Msg} → Maybe String → List (Attr M Msg)
+  idAttrs nothing  = []
+  idAttrs (just i) = attr "id" i ∷ []
+
 ------------------------------------------------------------------------
 -- Animation elements
 ------------------------------------------------------------------------
@@ -192,7 +204,7 @@ animate attrName from' to' anim = elem "animate"
   ∷ attr "additive" (showAdditive (additive anim))
   ∷ attr "calcMode" (showCalcMode (calcMode anim))
   ∷ attr "restart" (showRestart (restart anim))
-  ∷ (maybe [] (λ i → attr "id" i ∷ []) (animId anim))
+  ∷ (idAttrs (animId anim))
   ) []
 
 -- Value animation with keyframes: values="v1;v2;v3"
@@ -209,7 +221,7 @@ animateValues attrName vals anim = elem "animate"
   ∷ attr "repeatCount" (showRepeatCount (repeatCount anim))
   ∷ attr "fill" (showFillMode (fill' anim))
   ∷ attr "calcMode" (showCalcMode (calcMode anim))
-  ∷ (maybe [] (λ i → attr "id" i ∷ []) (animId anim))
+  ∷ (idAttrs (animId anim))
   ) []
 
 -- Transform animation
@@ -239,7 +251,7 @@ animateTransform ttype from' to' anim = elem "animateTransform"
   ∷ attr "repeatCount" (showRepeatCount (repeatCount anim))
   ∷ attr "fill" (showFillMode (fill' anim))
   ∷ attr "additive" (showAdditive (additive anim))
-  ∷ (maybe [] (λ i → attr "id" i ∷ []) (animId anim))
+  ∷ (idAttrs (animId anim))
   ) []
 
 -- Motion along path
@@ -255,7 +267,7 @@ animateMotion pathData autoRotate anim = elem "animateMotion"
   ∷ attr "repeatCount" (showRepeatCount (repeatCount anim))
   ∷ attr "fill" (showFillMode (fill' anim))
   ∷ (if autoRotate then attr "rotate" "auto" ∷ [] else [])
-  ++L (maybe [] (λ i → attr "id" i ∷ []) (animId anim))
+  ++L (idAttrs (animId anim))
   ) []
 
 -- Set (discrete state change)
@@ -270,7 +282,7 @@ smilSet attrName to' anim = elem "set"
   ∷ attr "begin" (showTiming (begin' anim))
   ∷ attr "dur" (showDuration (dur anim))
   ∷ attr "fill" (showFillMode (fill' anim))
-  ∷ (maybe [] (λ i → attr "id" i ∷ []) (animId anim))
+  ∷ (idAttrs (animId anim))
   ) []
 
 ------------------------------------------------------------------------

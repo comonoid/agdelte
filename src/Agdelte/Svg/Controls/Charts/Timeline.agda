@@ -8,7 +8,7 @@ module Agdelte.Svg.Controls.Charts.Timeline where
 open import Data.String using (String; _++_)
 open import Data.Float using (Float; _+_; _-_; _*_)
 open import Data.Float.Base using (_÷_; _≤ᵇ_; _<ᵇ_; fromℕ)
-open import Data.List using (List; []; _∷_)
+open import Data.List as List using (List; []; _∷_)
 open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.Nat using (ℕ; zero; suc)
 open import Data.Maybe using (Maybe; just; nothing)
@@ -48,6 +48,13 @@ private
     where
       open import Data.Product using (_×_; _,_)
 
+  -- Label collision avoidance threshold (pixels)
+  labelThreshold : Float
+  labelThreshold = 60.0
+
+  absFloat : Float → Float
+  absFloat v = if v <ᵇ 0.0 then 0.0 - v else v
+
 ------------------------------------------------------------------------
 -- Horizontal Timeline
 ------------------------------------------------------------------------
@@ -78,10 +85,9 @@ horizontalTimeline {M} {A} px py w h events =
       let range = if (maxT - minT) ≤ᵇ 0.0 then 1.0 else maxT - minT
       in ((t - minT) ÷ range) * w'
 
-    renderEvents : Float → Float → Float → Float → Float
-                 → List (TimelineEvent A) → Node M A
-    renderEvents _ _ _ _ _ [] = g [] []
-    renderEvents bx axY w' minT maxT (e ∷ es) =
+    renderEvent : Float → Float → Float → Float → Float
+                → Float → TimelineEvent A → List (Node M A)
+    renderEvent bx axY w' minT maxT labelYOff e =
       let ex = bx + scaleT minT maxT w' (evTime e)
           marker = case evOnClick e of λ where
             nothing →
@@ -102,20 +108,43 @@ horizontalTimeline {M} {A} px py w h events =
                       ∷ attr "style" "cursor: pointer"
                       ∷ on "click" msg
                       ∷ [] ) []
-      in g []
-           ( marker
-           -- Label
-           ∷ svgText ( xF ex
-                     ∷ yF (axY - 20.0)
-                     ∷ attr "text-anchor" "middle"
-                     ∷ attr "font-size" "12"
-                     ∷ [] )
-               ( text (evLabel e) ∷ [] )
-           ∷ renderEvents bx axY w' minT maxT es
-           ∷ [] )
+      in marker
+         ∷ svgText ( xF ex
+                   ∷ yF (axY + labelYOff)
+                   ∷ attr "text-anchor" "middle"
+                   ∷ attr "font-size" "12"
+                   ∷ [] )
+             ( text (evLabel e) ∷ [] )
+         ∷ []
       where
         case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
         case x of f = f x
+
+    -- Check if current event is too close to the previous one
+    -- and stagger labels: even-indexed labels go above, odd go below
+    collectEvents : Float → Float → Float → Float → Float
+                  → List (TimelineEvent A) → Float → ℕ → List (Node M A)
+    collectEvents _ _ _ _ _ [] _ _ = []
+    collectEvents bx axY w' minT maxT (e ∷ es) prevPos idx =
+      let ex = bx + scaleT minT maxT w' (evTime e)
+          tooClose = absFloat (ex - prevPos) <ᵇ labelThreshold
+          -- Default offset is above the axis (-20); stagger to below (+25) for odd
+          labelYOff = if tooClose
+                      then (if isEven idx then 0.0 - 20.0 else 25.0)
+                      else 0.0 - 20.0
+      in renderEvent bx axY w' minT maxT labelYOff e
+         List.++ (collectEvents bx axY w' minT maxT es ex (suc idx))
+      where
+        open import Data.Nat using (_≡ᵇ_)
+        isEven : ℕ → Bool
+        isEven zero = true
+        isEven (suc zero) = false
+        isEven (suc (suc n)) = isEven n
+
+    renderEvents : Float → Float → Float → Float → Float
+                 → List (TimelineEvent A) → Node M A
+    renderEvents bx axY w' minT maxT events' =
+      g [] (collectEvents bx axY w' minT maxT events' (0.0 - 1.0e10) 0)
 
 ------------------------------------------------------------------------
 -- Vertical Timeline
@@ -198,3 +227,30 @@ simpleTimeline {M} {A} px py w h horiz pairs =
     toEvents ((t , lbl) ∷ rest) =
       mkTimelineEvent t lbl nothing "#3b82f6" nothing
       ∷ toEvents rest
+
+------------------------------------------------------------------------
+-- Zoomable Timeline
+------------------------------------------------------------------------
+
+open import Agdelte.Svg.ViewBox using (ViewBox; viewBoxBind; showViewBox)
+
+-- | Zoomable/pannable horizontal timeline.
+--   Wraps the timeline in an SVG with a dynamic viewBox.
+--   The caller provides:
+--   - a projection from model to ViewBox (for current pan/zoom state)
+--   - the inner timeline content dimensions (used as the SVG width/height attributes)
+--   - the list of events
+zoomableTimeline : ∀ {M A}
+                 → (M → ViewBox)            -- viewBox state projection
+                 → Float → Float            -- SVG element width, height
+                 → Float → Float            -- inner content width, height
+                 → List (TimelineEvent A)
+                 → Node M A
+zoomableTimeline {M} {A} getVB svgW svgH contentW contentH events =
+  svg ( widthF svgW
+      ∷ heightF svgH
+      ∷ viewBoxBind getVB
+      ∷ attr "class" "svg-timeline-zoomable"
+      ∷ [] )
+    ( horizontalTimeline 0.0 0.0 contentW contentH events
+    ∷ [] )

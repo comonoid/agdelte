@@ -117,6 +117,23 @@ daysInMonthLeap _ 12 = 31
 daysInMonthLeap _ _ = 30
 
 ------------------------------------------------------------------------
+-- First day of month (0 = Sunday, 6 = Saturday)
+-- Uses Zeller's congruence simplified
+------------------------------------------------------------------------
+
+firstDayOfMonth : ℕ → ℕ → ℕ
+firstDayOfMonth y m =
+  let y' = if m <ᵇ 3 then y ∸ 1 else y
+      m' = if m <ᵇ 3 then m + 12 else m
+      q = 1
+      k = modN y' 100
+      j = divN y' 100
+      h = modN (q + divN (13 * (m' + 1)) 5 + k + divN k 4 + divN j 4 + 5 * j) 7
+  in modN (h + 6) 7
+  where
+    open import Data.Nat using (_*_)
+
+------------------------------------------------------------------------
 -- Simple DatePicker
 ------------------------------------------------------------------------
 
@@ -151,18 +168,19 @@ datePickerSimple {M} {A} getSelected viewYear viewMonth onSelect onPrev onNext =
             ( text "▶" ∷ [] )
         ∷ [] )
     -- Weekday header
-    ∷ div (class "agdelte-datepicker__weekdays" ∷ [])
-        ( span (class "agdelte-datepicker__weekday" ∷ []) (text "Su" ∷ [])
-        ∷ span (class "agdelte-datepicker__weekday" ∷ []) (text "Mo" ∷ [])
-        ∷ span (class "agdelte-datepicker__weekday" ∷ []) (text "Tu" ∷ [])
-        ∷ span (class "agdelte-datepicker__weekday" ∷ []) (text "We" ∷ [])
-        ∷ span (class "agdelte-datepicker__weekday" ∷ []) (text "Th" ∷ [])
-        ∷ span (class "agdelte-datepicker__weekday" ∷ []) (text "Fr" ∷ [])
-        ∷ span (class "agdelte-datepicker__weekday" ∷ []) (text "Sa" ∷ [])
+    ∷ div (class "agdelte-datepicker__weekdays" ∷ attr "role" "row" ∷ [])
+        ( span (class "agdelte-datepicker__weekday" ∷ attr "role" "columnheader" ∷ []) (text "Su" ∷ [])
+        ∷ span (class "agdelte-datepicker__weekday" ∷ attr "role" "columnheader" ∷ []) (text "Mo" ∷ [])
+        ∷ span (class "agdelte-datepicker__weekday" ∷ attr "role" "columnheader" ∷ []) (text "Tu" ∷ [])
+        ∷ span (class "agdelte-datepicker__weekday" ∷ attr "role" "columnheader" ∷ []) (text "We" ∷ [])
+        ∷ span (class "agdelte-datepicker__weekday" ∷ attr "role" "columnheader" ∷ []) (text "Th" ∷ [])
+        ∷ span (class "agdelte-datepicker__weekday" ∷ attr "role" "columnheader" ∷ []) (text "Fr" ∷ [])
+        ∷ span (class "agdelte-datepicker__weekday" ∷ attr "role" "columnheader" ∷ []) (text "Sa" ∷ [])
         ∷ [] )
-    -- Day grid
-    ∷ div (class "agdelte-datepicker__grid" ∷ [])
-        (renderDays 1 (daysInMonthLeap viewYear viewMonth))
+    -- Day grid with proper first-day offset
+    ∷ div (class "agdelte-datepicker__grid" ∷ attr "role" "grid" ∷ [])
+        (renderEmptyDays (firstDayOfMonth viewYear viewMonth)
+         ++ᴸ renderDays 1 (daysInMonthLeap viewYear viewMonth))
     ∷ [] )
   where
     isSelected : ℕ → M → Bool
@@ -176,10 +194,17 @@ datePickerSimple {M} {A} getSelected viewYear viewMonth onSelect onPrev onNext =
       then "agdelte-datepicker__day agdelte-datepicker__day--selected"
       else "agdelte-datepicker__day"
 
+    renderEmptyDays : ℕ → List (Node M A)
+    renderEmptyDays zero = []
+    renderEmptyDays (suc n) =
+      span (class "agdelte-datepicker__day agdelte-datepicker__day--empty" ∷ attr "role" "gridcell" ∷ []) (text "" ∷ [])
+      ∷ renderEmptyDays n
+
     renderDays : ℕ → ℕ → List (Node M A)
     renderDays _ zero = []
     renderDays d (suc k) =
       button ( classBind (dayClass d)
+             ∷ attr "role" "gridcell"
              ∷ attr "aria-label" (show d ++ " " ++ monthName viewMonth ++ " " ++ show viewYear)
              ∷ onClick (onSelect (mkDate viewYear viewMonth d))
              ∷ [] )
@@ -221,9 +246,12 @@ datePickerInput {M} {A} getSelected isOpen viewYear viewMonth onSelect toggle on
 ------------------------------------------------------------------------
 
 -- | Navigate to previous month (returns new year, month)
+-- Guards: month 0 and month 1 both wrap to December of the previous year.
+-- Out-of-range months (> 12) are treated as December (wrap to November).
 prevMonth : ℕ → ℕ → ℕ × ℕ
+prevMonth y       0 = (y ∸ 1 , 12)  -- month 0 (invalid): wrap to prev year December
 prevMonth 0       1 = (0 , 1)       -- clamp at January year 0
-prevMonth (suc y) 1 = (y , 12)
+prevMonth (suc y) 1 = (y , 12)      -- January wraps to previous year December
 prevMonth y       m = (y , m ∸ 1)
 
 -- | Navigate to next month (returns new year, month)
@@ -234,20 +262,6 @@ nextMonth y m = (y , m + 1)
 ------------------------------------------------------------------------
 -- Advanced date utilities
 ------------------------------------------------------------------------
-
--- | First day of month (0 = Sunday, 6 = Saturday)
--- Uses Zeller's congruence simplified
-firstDayOfMonth : ℕ → ℕ → ℕ
-firstDayOfMonth y m =
-  let y' = if m <ᵇ 3 then y ∸ 1 else y
-      m' = if m <ᵇ 3 then m + 12 else m
-      q = 1
-      k = modN y' 100
-      j = divN y' 100
-      h = modN (q + divN (13 * (m' + 1)) 5 + k + divN k 4 + divN j 4 + 5 * j) 7
-  in modN (h + 6) 7
-  where
-    open import Data.Nat using (_*_)
 
 -- | Compare dates
 dateLt : Date → Date → Bool
@@ -353,10 +367,10 @@ datePickerFull {M} {A} cfg getSelected viewYear viewMonth onSelect onPrev onNext
             ( text "▶" ∷ [] )
         ∷ [] )
     -- Weekday headers (localized)
-    ∷ div (class "agdelte-datepicker__weekdays" ∷ [])
+    ∷ div (class "agdelte-datepicker__weekdays" ∷ attr "role" "row" ∷ [])
         (renderWeekdays (weekdayHeaders (dpLocale cfg) (dpStartMonday cfg)))
     -- Day grid with proper first-day offset
-    ∷ div (class "agdelte-datepicker__grid" ∷ [])
+    ∷ div (class "agdelte-datepicker__grid" ∷ attr "role" "grid" ∷ [])
         (renderEmptyDays (adjustFirstDay (firstDayOfMonth viewYear viewMonth))
          ++ᴸ renderDays 1 (daysInMonthLeap viewYear viewMonth))
     ∷ [] )
@@ -394,13 +408,13 @@ datePickerFull {M} {A} cfg getSelected viewYear viewMonth onSelect onPrev onNext
     renderWeekdays : List String → List (Node M A)
     renderWeekdays [] = []
     renderWeekdays (w ∷ ws) =
-      span (class "agdelte-datepicker__weekday" ∷ []) (text w ∷ [])
+      span (class "agdelte-datepicker__weekday" ∷ attr "role" "columnheader" ∷ []) (text w ∷ [])
       ∷ renderWeekdays ws
 
     renderEmptyDays : ℕ → List (Node M A)
     renderEmptyDays zero = []
     renderEmptyDays (suc n) =
-      span (class "agdelte-datepicker__day agdelte-datepicker__day--empty" ∷ []) (text "" ∷ [])
+      span (class "agdelte-datepicker__day agdelte-datepicker__day--empty" ∷ attr "role" "gridcell" ∷ []) (text "" ∷ [])
       ∷ renderEmptyDays n
 
     renderDays : ℕ → ℕ → List (Node M A)
@@ -410,10 +424,12 @@ datePickerFull {M} {A} cfg getSelected viewYear viewMonth onSelect onPrev onNext
           dayLabel = show d ++ " " ++ monthNameLocalized (dpLocale cfg) viewMonth ++ " " ++ show viewYear
       in (if disabled
           then span ( classBind (dayClass d)
+                    ∷ attr "role" "gridcell"
                     ∷ attr "aria-label" dayLabel
                     ∷ [] )
                  ( text (show d) ∷ [] )
           else button ( classBind (dayClass d)
+                      ∷ attr "role" "gridcell"
                       ∷ attr "aria-label" dayLabel
                       ∷ onClick (onSelect (mkDate viewYear viewMonth d))
                       ∷ [] )
@@ -546,10 +562,10 @@ dateRangeCalendar {M} {A} cfg getStart getEnd isSelectingEnd viewYear viewMonth 
             ( text "▶" ∷ [] )
         ∷ [] )
     -- Weekday headers
-    ∷ div (class "agdelte-datepicker__weekdays" ∷ [])
+    ∷ div (class "agdelte-datepicker__weekdays" ∷ attr "role" "row" ∷ [])
         (renderWeekdays (weekdayHeaders (dpLocale cfg) (dpStartMonday cfg)))
     -- Day grid with proper first-day offset
-    ∷ div (class "agdelte-datepicker__grid" ∷ [])
+    ∷ div (class "agdelte-datepicker__grid" ∷ attr "role" "grid" ∷ [])
         (renderEmptyDays (adjustFirstDay (firstDayOfMonth viewYear viewMonth))
          ++ᴸ renderDays 1 (daysInMonthLeap viewYear viewMonth))
     ∷ [] )
@@ -565,7 +581,7 @@ dateRangeCalendar {M} {A} cfg getStart getEnd isSelectingEnd viewYear viewMonth 
     renderEmptyDays : ℕ → List (Node M A)
     renderEmptyDays zero = []
     renderEmptyDays (suc n) =
-      span (class "agdelte-datepicker__day agdelte-datepicker__day--empty" ∷ []) (text "" ∷ [])
+      span (class "agdelte-datepicker__day agdelte-datepicker__day--empty" ∷ attr "role" "gridcell" ∷ []) (text "" ∷ [])
       ∷ renderEmptyDays n
 
     getDayClass : ℕ → M → String
@@ -593,13 +609,14 @@ dateRangeCalendar {M} {A} cfg getStart getEnd isSelectingEnd viewYear viewMonth 
     renderWeekdays : List String → List (Node M A)
     renderWeekdays [] = []
     renderWeekdays (w ∷ ws) =
-      span (class "agdelte-datepicker__weekday" ∷ []) (text w ∷ [])
+      span (class "agdelte-datepicker__weekday" ∷ attr "role" "columnheader" ∷ []) (text w ∷ [])
       ∷ renderWeekdays ws
 
     renderDays : ℕ → ℕ → List (Node M A)
     renderDays _ zero = []
     renderDays d (suc k) =
       button ( classBind (getDayClass d)
+             ∷ attr "role" "gridcell"
              ∷ attr "aria-label" (show d ++ " " ++ monthNameLocalized (dpLocale cfg) viewMonth ++ " " ++ show viewYear)
              ∷ onClick (onClick' (mkDate viewYear viewMonth d))
              ∷ [] )

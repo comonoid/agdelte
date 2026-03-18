@@ -169,18 +169,19 @@ subs' m =
         else never
       parSub = if fetching m
         then parallel
-               ( httpGet "https://jsonplaceholder.typicode.com/posts/1" id (const "")
-               ∷ httpGet "https://jsonplaceholder.typicode.com/posts/2" id (const "")
+               ( httpGet "https://jsonplaceholder.typicode.com/posts/1" id (λ e → "Error: " ++ e)
+               ∷ httpGet "https://jsonplaceholder.typicode.com/posts/2" id (λ e → "Error: " ++ e)
                ∷ [] )
                GotAll
         else never
-      -- Race: three requests with server-side random delay (500–2500ms)
+      -- Race: three requests with server-side random delay (500–2500ms), 5s timeout
       raceSub = if racing m
-        then race
-               ( mapE RaceWon (httpGet "/api/random-delay?name=Runner A" id (const "error"))
-               ∷ mapE RaceWon (httpGet "/api/random-delay?name=Runner B" id (const "error"))
-               ∷ mapE RaceWon (httpGet "/api/random-delay?name=Runner C" id (const "error"))
-               ∷ [] )
+        then raceTimeout 5000 (RaceWon "Timeout")
+               (race
+               ( mapE RaceWon (httpGet "/api/random-delay?name=Runner A" id (λ e → "Error: " ++ e))
+               ∷ mapE RaceWon (httpGet "/api/random-delay?name=Runner B" id (λ e → "Error: " ++ e))
+               ∷ mapE RaceWon (httpGet "/api/random-delay?name=Runner C" id (λ e → "Error: " ++ e))
+               ∷ [] ))
         else never
   in merge progSub (merge parSub raceSub)
 

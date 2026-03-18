@@ -7,7 +7,7 @@
 
 module WebGLTest where
 
-open import Data.Nat using (ℕ; zero; suc; _+_; _∸_)
+open import Data.Nat using (ℕ; zero; suc; _+_; _∸_; _⊔_)
 open import Data.Nat.Show using (show)
 open import Data.Float as F using (Float; sin; cos)
 open import Data.List using (List; []; _∷_; [_])
@@ -55,7 +55,7 @@ updateModel : Msg → Model → Model
 updateModel MoveLeft    m = mkModel (posX m ∸ 1) (scaleN m) (clicks m)
 updateModel MoveRight   m = mkModel (posX m + 1) (scaleN m) (clicks m)
 updateModel ScaleUp     m = mkModel (posX m) (scaleN m + 1) (clicks m)
-updateModel ScaleDown   m = mkModel (posX m) (scaleN m ∸ 1) (clicks m)
+updateModel ScaleDown   m = mkModel (posX m) (1 ⊔ (scaleN m ∸ 1)) (clicks m)
 updateModel ClickLeft   m = mkModel (posX m) (scaleN m) (clicks m + 1)
 updateModel ClickRight  m = mkModel (posX m) (scaleN m) (clicks m + 1)
 updateModel ClickCenter m = mkModel (posX m) (scaleN m + 1) (clicks m + 1)

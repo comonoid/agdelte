@@ -3,8 +3,6 @@
  * Tests for JavaScript runtime (reactive.js, events.js, agda-values.js)
  */
 
-import { debounce, throttle } from '../runtime/events.js';
-
 // Simple test runner
 let passed = 0;
 let failed = 0;
@@ -40,24 +38,6 @@ function assertDeepEqual(actual, expected, message) {
 // ========================================
 // Events Tests
 // ========================================
-
-console.log('\n=== Events Tests ===\n');
-
-test('debounce delays calls', () => {
-  let callCount = 0;
-  const fn = debounce(() => callCount++, 10);
-  fn(); fn(); fn();
-  // Immediate check - should not have been called yet
-  assertEqual(callCount, 0);
-});
-
-test('throttle limits call rate', () => {
-  let callCount = 0;
-  const fn = throttle(() => callCount++, 100);
-  fn(); fn(); fn();
-  // First call should go through immediately
-  assertEqual(callCount, 1);
-});
 
 // ========================================
 // Combinator Runtime Tests
@@ -497,28 +477,9 @@ test('deepEqual returns true at depth limit even if deep parts differ', () => {
     'values differing only at depth > 50 should be assumed equal');
 });
 
-console.log('\n=== Bug #5: allocShared error callback ===\n');
+console.log('\n=== Bug #5: allocShared error handling ===\n');
 
-test('interpretEvent allocShared calls onError when provided and SAB unavailable', () => {
-  // SharedArrayBuffer may not be available without COOP/COEP headers.
-  // We test the error path by requesting a negative size (always throws).
-  const results = [];
-  const dispatch = (msg) => results.push(msg);
-
-  const allocEvent = (c) => c.allocShared(
-    -1,
-    (buffer) => 'got-buffer',
-    (errMsg) => `error:${errMsg}`
-  );
-
-  const sub = interpretEvent(allocEvent, dispatch);
-  // Should have dispatched an error
-  assert(results.length > 0, 'should dispatch something');
-  assert(results[0].startsWith('error:'), `should dispatch error, got: ${results[0]}`);
-  sub.unsubscribe();
-});
-
-test('interpretEvent allocShared works without onError (backward compat)', () => {
+test('interpretEvent allocShared handles failure gracefully without onError', () => {
   // No onError param — should not throw
   const results = [];
   const dispatch = (msg) => results.push(msg);

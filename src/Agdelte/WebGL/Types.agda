@@ -8,10 +8,11 @@
 module Agdelte.WebGL.Types where
 
 open import Data.Nat using (ℕ)
-open import Data.Float using (Float)
+open import Data.Float using (Float; _*_; _+_; _-_)
+open import Data.Float.Base using (_≤ᵇ_)
 open import Data.String using (String)
 open import Data.List using (List; []; _∷_)
-open import Data.Bool using (Bool)
+open import Data.Bool using (Bool; if_then_else_)
 
 ------------------------------------------------------------------------
 -- Math primitives (FFI to JS typed arrays / plain objects)
@@ -42,6 +43,78 @@ postulate
 
 identityQuat : Quat
 identityQuat = quat 0.0 0.0 0.0 1.0
+
+------------------------------------------------------------------------
+-- Vec3 / Quat math helpers (JS FFI)
+------------------------------------------------------------------------
+
+postulate
+  sqrtF  : Float → Float
+  acosF  : Float → Float
+  sinF   : Float → Float
+  cosF   : Float → Float
+  recipF : Float → Float
+
+{-# COMPILE JS sqrtF  = x => Math.sqrt(x) #-}
+{-# COMPILE JS acosF  = x => Math.acos(x) #-}
+{-# COMPILE JS sinF   = x => Math.sin(x) #-}
+{-# COMPILE JS cosF   = x => Math.cos(x) #-}
+{-# COMPILE JS recipF = x => 1 / x #-}
+
+-- Vector subtraction
+subVec3 : Vec3 → Vec3 → Vec3
+subVec3 a b = vec3 (vec3X a - vec3X b) (vec3Y a - vec3Y b) (vec3Z a - vec3Z b)
+
+-- Dot product
+dotVec3 : Vec3 → Vec3 → Float
+dotVec3 a b = vec3X a * vec3X b + vec3Y a * vec3Y b + vec3Z a * vec3Z b
+
+-- Cross product
+crossVec3 : Vec3 → Vec3 → Vec3
+crossVec3 a b =
+  vec3 (vec3Y a * vec3Z b - vec3Z a * vec3Y b)
+       (vec3Z a * vec3X b - vec3X a * vec3Z b)
+       (vec3X a * vec3Y b - vec3Y a * vec3X b)
+
+-- Length of a vector
+lengthVec3 : Vec3 → Float
+lengthVec3 v = sqrtF (dotVec3 v v)
+
+-- Normalize a vector (returns zero vector if length ≈ 0)
+normalizeVec3 : Vec3 → Vec3
+normalizeVec3 v =
+  let len = lengthVec3 v
+  in if len ≤ᵇ 0.000001 then vec3 0.0 0.0 0.0
+     else let r = recipF len
+          in vec3 (vec3X v * r) (vec3Y v * r) (vec3Z v * r)
+
+-- Quaternion from axis (must be unit) and angle (radians)
+-- q = (axis * sin(angle/2), cos(angle/2))
+fromAxisAngle : Vec3 → Float → Quat
+fromAxisAngle axis angle =
+  let halfAngle = angle * 0.5
+      s = sinF halfAngle
+      c = cosF halfAngle
+  in quat (vec3X axis * s) (vec3Y axis * s) (vec3Z axis * s) c
+
+-- lookAtQuat: compute a quaternion to orient a cylinder (default Y-axis)
+-- to point from source toward target.
+--   direction = normalize(target - source)
+--   axis = cross(Y, direction)
+--   angle = acos(dot(Y, direction))
+-- When direction ≈ Y, returns identity.  When direction ≈ -Y, rotates 180° around X.
+lookAtQuat : Vec3 → Vec3 → Quat
+lookAtQuat source target =
+  let dir  = normalizeVec3 (subVec3 target source)
+      yUp  = vec3 0.0 1.0 0.0
+      d    = dotVec3 yUp dir
+      axis = crossVec3 yUp dir
+      axisLen = lengthVec3 axis
+  in if axisLen ≤ᵇ 0.000001
+     then (if d ≤ᵇ 0.0
+           then fromAxisAngle (vec3 1.0 0.0 0.0) 3.14159265358979  -- 180° flip
+           else identityQuat)                                       -- already aligned
+     else fromAxisAngle (normalizeVec3 axis) (acosF d)
 
 ------------------------------------------------------------------------
 -- Color (GPU: Float 0-1, NOT Css.Color which is ℕ 0-255)

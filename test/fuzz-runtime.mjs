@@ -8,7 +8,8 @@
 import {
   listToArray, deepEqual, ensureNumber, ensureString,
   construct, probeSlots, probeCtor, getSlots, getCtor,
-  natToNumber, numberToNat, arrayToList
+  natToNumber, numberToNat, arrayToList,
+  probe, matchOr, fromMaybe, toMaybe, fromBool, toBool
 } from '../runtime/agda-values.js';
 
 // ─────────────────────────────────────────────────────────────────────
@@ -480,14 +481,12 @@ test('ensureString: null', () => {
   assert(r === 'null', `expected "null", got ${JSON.stringify(r)}`);
 });
 
-test('ensureString: undefined (BUG: returns undefined, not string)', () => {
+test('ensureString: undefined', () => {
   const r = ensureString(undefined);
-  // JSON.stringify(undefined) returns undefined (not a string)
   assert(typeof r === 'string', `expected string, got ${typeof r}: ${r}`);
 });
 
-test('ensureString: Symbol (CRASH: throws TypeError)', () => {
-  // JSON.stringify(Symbol()) throws TypeError -- ensureString should handle this
+test('ensureString: Symbol', () => {
   const r = ensureString(Symbol('test'));
   assert(typeof r === 'string', `expected string, got ${typeof r}`);
 });
@@ -512,17 +511,15 @@ test('ensureString: Infinity', () => {
   assert(r === 'null', `Infinity JSON.stringifies to "null", got ${JSON.stringify(r)}`);
 });
 
-test('ensureString: circular object (CRASH: throws TypeError)', () => {
+test('ensureString: circular object', () => {
   const obj = {};
   obj.self = obj;
-  // JSON.stringify on circular throws TypeError -- ensureString doesn't catch it
   const r = ensureString(obj);
   assert(typeof r === 'string', `expected string, got ${typeof r}`);
 });
 
-test('ensureString: object with toJSON that throws (CRASH: propagates)', () => {
+test('ensureString: object with toJSON that throws', () => {
   const obj = { toJSON() { throw new Error('toJSON bomb'); } };
-  // JSON.stringify calls toJSON which throws -- ensureString doesn't catch it
   const r = ensureString(obj);
   assert(typeof r === 'string', `expected string, got ${typeof r}`);
 });
@@ -545,8 +542,7 @@ test('ensureString: empty string', () => {
   assert(ensureString('') === '');
 });
 
-test('ensureString: function (BUG: returns undefined, not string)', () => {
-  // JSON.stringify(function) returns undefined
+test('ensureString: function', () => {
   const r = ensureString(() => 42);
   assert(typeof r === 'string', `expected string, got ${typeof r}: ${r}`);
 });
@@ -760,6 +756,338 @@ test('ensureNumber: Scott Nat depth 200000 (stress)', () => {
     // MAX_NAT_VALUE is 100000, so it should be capped
     assert(r === 100000, `expected 100000 (capped), got ${r}`);
   } finally { unhush(); }
+});
+
+// =====================================================================
+// 6. FUZZ probe
+// =====================================================================
+
+test('probe: null', () => {
+  assert(probe(null) === null);
+});
+
+test('probe: undefined', () => {
+  assert(probe(undefined) === null);
+});
+
+test('probe: primitive number', () => {
+  assert(probe(42) === null);
+});
+
+test('probe: primitive string', () => {
+  assert(probe('hello') === null);
+});
+
+test('probe: Scott-encoded value', () => {
+  const val = construct('pair', 1, 'two');
+  const result = probe(val);
+  assert(result !== null, 'should probe successfully');
+  assert(result.ctor === 'pair', `expected ctor "pair", got "${result.ctor}"`);
+  assert(result.slots.length === 2, `expected 2 slots, got ${result.slots.length}`);
+  assert(result.slots[0] === 1);
+  assert(result.slots[1] === 'two');
+});
+
+test('probe: nullary constructor', () => {
+  const val = construct('nothing');
+  const result = probe(val);
+  assert(result !== null);
+  assert(result.ctor === 'nothing');
+  assert(result.slots.length === 0);
+});
+
+test('probe: function that throws', () => {
+  const thrower = () => { throw new Error('boom'); };
+  const result = probe(thrower);
+  assert(result === null, 'throwing function should return null');
+});
+
+test('probe: plain object (not Scott)', () => {
+  const obj = { a: 1, b: 2 };
+  assert(probe(obj) === null, 'multi-key object should return null');
+});
+
+test('probe: boolean false', () => {
+  assert(probe(false) === null);
+});
+
+test('probe: nested Scott value', () => {
+  const inner = construct('leaf', 42);
+  const outer = construct('node', inner);
+  const result = probe(outer);
+  assert(result !== null);
+  assert(result.ctor === 'node');
+  // The slot should be the inner Scott function
+  const innerResult = probe(result.slots[0]);
+  assert(innerResult !== null);
+  assert(innerResult.ctor === 'leaf');
+  assert(innerResult.slots[0] === 42);
+});
+
+// =====================================================================
+// 7. FUZZ matchOr
+// =====================================================================
+
+test('matchOr: matching constructor', () => {
+  const val = construct('just', 42);
+  const result = matchOr(val, { just: (x) => x * 2, nothing: () => 0 }, -1);
+  assert(result === 84, `expected 84, got ${result}`);
+});
+
+test('matchOr: missing constructor falls back to default', () => {
+  const val = construct('just', 42);
+  const result = matchOr(val, { nothing: () => 0 }, -1);
+  assert(result === -1, `expected -1, got ${result}`);
+});
+
+test('matchOr: null value returns default', () => {
+  const result = matchOr(null, { just: (x) => x }, 'default');
+  assert(result === 'default', `expected "default", got ${result}`);
+});
+
+test('matchOr: undefined value returns default', () => {
+  const result = matchOr(undefined, { just: (x) => x }, 'default');
+  assert(result === 'default');
+});
+
+test('matchOr: primitive value returns default', () => {
+  const result = matchOr(42, { just: (x) => x }, 'default');
+  assert(result === 'default');
+});
+
+test('matchOr: handler that throws returns default', () => {
+  const val = construct('boom');
+  const result = matchOr(val, { boom: () => { throw new Error('kaboom'); } }, 'safe');
+  // matchOr catches match errors, but the handler throw may propagate
+  // depending on implementation — the key is it doesn't crash
+  assert(typeof result !== 'undefined');
+});
+
+test('matchOr: Scott value with multiple slots', () => {
+  const val = construct('triple', 1, 2, 3);
+  const result = matchOr(val, { triple: (a, b, c) => a + b + c }, 0);
+  assert(result === 6, `expected 6, got ${result}`);
+});
+
+// =====================================================================
+// 8. FUZZ fromMaybe
+// =====================================================================
+
+test('fromMaybe: just value', () => {
+  const val = construct('just', 42);
+  const result = fromMaybe(val);
+  assert(result === 42, `expected 42, got ${result}`);
+});
+
+test('fromMaybe: nothing', () => {
+  const val = construct('nothing');
+  const result = fromMaybe(val);
+  assert(result === null, `expected null, got ${result}`);
+});
+
+test('fromMaybe: null input', () => {
+  assert(fromMaybe(null) === null);
+});
+
+test('fromMaybe: undefined input', () => {
+  assert(fromMaybe(undefined) === null);
+});
+
+test('fromMaybe: primitive input', () => {
+  const result = fromMaybe(42);
+  assert(result === null, 'non-Maybe value should return null');
+});
+
+test('fromMaybe: just with nested Scott value', () => {
+  const inner = construct('pair', 'a', 'b');
+  const val = construct('just', inner);
+  const result = fromMaybe(val);
+  const probed = probe(result);
+  assert(probed !== null);
+  assert(probed.ctor === 'pair');
+});
+
+test('fromMaybe: just null', () => {
+  const val = construct('just', null);
+  const result = fromMaybe(val);
+  assert(result === null, 'just(null) extracts to null');
+});
+
+test('fromMaybe: just undefined', () => {
+  const val = construct('just', undefined);
+  const result = fromMaybe(val);
+  assert(result === undefined, 'just(undefined) extracts to undefined');
+});
+
+// =====================================================================
+// 9. FUZZ toMaybe
+// =====================================================================
+
+test('toMaybe: non-null value', () => {
+  const result = toMaybe(42);
+  const probed = probe(result);
+  assert(probed !== null, 'should be Scott-encoded');
+  assert(probed.ctor === 'just');
+  assert(probed.slots[0] === 42);
+});
+
+test('toMaybe: string value', () => {
+  const result = toMaybe('hello');
+  const probed = probe(result);
+  assert(probed.ctor === 'just');
+  assert(probed.slots[0] === 'hello');
+});
+
+test('toMaybe: null', () => {
+  const result = toMaybe(null);
+  const probed = probe(result);
+  assert(probed !== null);
+  assert(probed.ctor === 'nothing');
+  assert(probed.slots.length === 0);
+});
+
+test('toMaybe: undefined', () => {
+  const result = toMaybe(undefined);
+  const probed = probe(result);
+  assert(probed !== null);
+  assert(probed.ctor === 'nothing');
+});
+
+test('toMaybe: false (truthy check)', () => {
+  // false is non-null/non-undefined, so should be just(false)
+  const result = toMaybe(false);
+  const probed = probe(result);
+  // toMaybe uses != null, so false is non-null → just
+  assert(probed.ctor === 'just');
+  assert(probed.slots[0] === false);
+});
+
+test('toMaybe: zero', () => {
+  const result = toMaybe(0);
+  const probed = probe(result);
+  assert(probed.ctor === 'just');
+  assert(probed.slots[0] === 0);
+});
+
+test('toMaybe: empty string', () => {
+  const result = toMaybe('');
+  const probed = probe(result);
+  assert(probed.ctor === 'just');
+  assert(probed.slots[0] === '');
+});
+
+test('toMaybe: roundtrip with fromMaybe', () => {
+  assert(fromMaybe(toMaybe(42)) === 42);
+  assert(fromMaybe(toMaybe(null)) === null);
+  assert(fromMaybe(toMaybe('test')) === 'test');
+});
+
+// =====================================================================
+// 10. FUZZ fromBool
+// =====================================================================
+
+test('fromBool: JS true passthrough', () => {
+  assert(fromBool(true) === true);
+});
+
+test('fromBool: JS false passthrough', () => {
+  assert(fromBool(false) === false);
+});
+
+test('fromBool: Scott true', () => {
+  const val = construct('true');
+  assert(fromBool(val) === true);
+});
+
+test('fromBool: Scott false', () => {
+  const val = construct('false');
+  assert(fromBool(val) === false);
+});
+
+test('fromBool: null returns false (default)', () => {
+  assert(fromBool(null) === false);
+});
+
+test('fromBool: undefined returns false (default)', () => {
+  assert(fromBool(undefined) === false);
+});
+
+test('fromBool: non-bool Scott value returns false (default)', () => {
+  const val = construct('just', 42);
+  assert(fromBool(val) === false);
+});
+
+test('fromBool: number returns false (default)', () => {
+  // Numbers are not booleans and not Scott
+  assert(fromBool(1) === false);
+});
+
+// =====================================================================
+// 11. FUZZ toBool
+// =====================================================================
+
+test('toBool: truthy value', () => {
+  const result = toBool(true);
+  const probed = probe(result);
+  assert(probed !== null);
+  assert(probed.ctor === 'true');
+});
+
+test('toBool: falsy value (false)', () => {
+  const result = toBool(false);
+  const probed = probe(result);
+  assert(probed !== null);
+  assert(probed.ctor === 'false');
+});
+
+test('toBool: falsy value (0)', () => {
+  const result = toBool(0);
+  const probed = probe(result);
+  assert(probed.ctor === 'false');
+});
+
+test('toBool: falsy value (null)', () => {
+  const result = toBool(null);
+  const probed = probe(result);
+  assert(probed.ctor === 'false');
+});
+
+test('toBool: falsy value (undefined)', () => {
+  const result = toBool(undefined);
+  const probed = probe(result);
+  assert(probed.ctor === 'false');
+});
+
+test('toBool: falsy value (empty string)', () => {
+  const result = toBool('');
+  const probed = probe(result);
+  assert(probed.ctor === 'false');
+});
+
+test('toBool: truthy value (non-empty string)', () => {
+  const result = toBool('hello');
+  const probed = probe(result);
+  assert(probed.ctor === 'true');
+});
+
+test('toBool: truthy value (number 1)', () => {
+  const result = toBool(1);
+  const probed = probe(result);
+  assert(probed.ctor === 'true');
+});
+
+test('toBool: truthy value (object)', () => {
+  const result = toBool({});
+  const probed = probe(result);
+  assert(probed.ctor === 'true');
+});
+
+test('toBool: roundtrip with fromBool', () => {
+  assert(fromBool(toBool(true)) === true);
+  assert(fromBool(toBool(false)) === false);
+  assert(fromBool(toBool(1)) === true);
+  assert(fromBool(toBool(0)) === false);
+  assert(fromBool(toBool(null)) === false);
 });
 
 // =====================================================================

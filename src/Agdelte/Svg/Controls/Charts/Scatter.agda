@@ -60,6 +60,13 @@ private
     let range = if (maxV - minV) ≤ᵇ 0.0 then 1.0 else maxV - minV
     in offset + ((v - minV) ÷ range) * size
 
+  -- Zero-anchoring: ensure range always includes zero
+  zeroMin : Float → Float
+  zeroMin v = if v <ᵇ 0.0 then v else 0.0
+
+  zeroMax : Float → Float
+  zeroMax v = if 0.0 <ᵇ v then v else 0.0
+
 ------------------------------------------------------------------------
 -- Scatter Plot
 ------------------------------------------------------------------------
@@ -72,8 +79,12 @@ scatterPlot : ∀ {M A}
 scatterPlot {M} {A} px py w h points =
   let xs = extractXs points
       ys = extractYs points
-      (minX , maxX) = findMinMax xs 1.0e10 (0.0 - 1.0e10)
-      (minY , maxY) = findMinMax ys 1.0e10 (0.0 - 1.0e10)
+      (minX₀ , maxX₀) = findMinMax xs 1.0e10 (0.0 - 1.0e10)
+      (minY₀ , maxY₀) = findMinMax ys 1.0e10 (0.0 - 1.0e10)
+      minX = zeroMin minX₀
+      maxX = zeroMax maxX₀
+      minY = zeroMin minY₀
+      maxY = zeroMax maxY₀
   in g ( attr "class" "svg-scatter-plot" ∷ [] )
        (renderPoints px py w h minX maxX minY maxY points)
   where

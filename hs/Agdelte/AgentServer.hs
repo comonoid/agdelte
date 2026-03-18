@@ -131,7 +131,7 @@ handleClientRequest registry method rest body = do
         -- Per-request MVar peek protocol: each peek gets a fresh MVar keyed by
         -- nonce, so stale/concurrent responses cannot interfere.
         -- Protocol: peek:clientId:nonce → peek-response:nonce:value
-        nonce <- IORef.atomicModifyIORef' (clientPeekNonce client) (\n -> (n + 1, n + 1))
+        nonce <- IORef.atomicModifyIORef' (clientPeekNonce client) (\n -> (n + 1, n))
         let nonceText = T.pack (show nonce)
         slot <- newEmptyMVar
         atomically $ modifyTVar' (clientPeekSlots client)
@@ -146,7 +146,7 @@ handleClientRequest registry method rest body = do
                 mResponse <- timeout 5000000 $ takeMVar slot
                 case mResponse of
                   Just value ->
-                    return $ Http.Response 200 value []
+                    return $ textResponse 200 value
                   Nothing -> return $ textResponse 504 "Client peek timeout"
          ) `finally` atomically (modifyTVar' (clientPeekSlots client) (Map.delete nonce))
       "over"

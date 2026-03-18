@@ -87,8 +87,10 @@ export class WorkerPool {
       }
 
       this.active++;
+      let handled = false;
       activeWorker.onmessage = (e) => {
-        if (task.cancelled) return;
+        if (task.cancelled || handled) return;
+        handled = true;
         const w = activeWorker;
         activeWorker = null;
         this._consecutiveErrors = 0;  // reset on success
@@ -101,7 +103,8 @@ export class WorkerPool {
         }
       };
       activeWorker.onerror = (e) => {
-        if (task.cancelled) return;
+        if (task.cancelled || handled) return;
+        handled = true;
         const w = activeWorker;
         activeWorker = null;
         this._recordError();

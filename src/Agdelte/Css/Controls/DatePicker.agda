@@ -53,6 +53,10 @@ datePickerRules =
   ∷ rule ".agdelte-datepicker__nav:hover"
       ( "background" ∶ "var(--agdelte-bg-hover)"
       ∷ [])
+  ∷ rule ".agdelte-datepicker__nav:focus-visible"
+      ( "outline" ∶ "2px solid var(--agdelte-primary)"
+      ∷ "outline-offset" ∶ "2px"
+      ∷ [])
   ∷ rule ".agdelte-datepicker__title"
       ( "font-weight" ∶ "600"
       ∷ "color" ∶ "var(--agdelte-text)"
@@ -94,6 +98,10 @@ datePickerRules =
       ∷ [])
   ∷ rule ".agdelte-datepicker__day:hover"
       ( "background" ∶ "var(--agdelte-bg-hover)"
+      ∷ [])
+  ∷ rule ".agdelte-datepicker__day:focus-visible"
+      ( "outline" ∶ "2px solid var(--agdelte-primary)"
+      ∷ "outline-offset" ∶ "2px"
       ∷ [])
   ∷ rule ".agdelte-datepicker__day--selected"
       ( "background" ∶ "var(--agdelte-primary)"

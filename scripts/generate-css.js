@@ -53,7 +53,8 @@ const stylesheetPath = join(buildDir, 'jAgda.Agdelte.Css.Stylesheet.mjs');
 const outputResolved = resolve(outputPath);
 
 // Check if CSS is up to date (skip if output is newer than compiled module)
-if (!forceFlag && existsSync(outputResolved) && existsSync(modulePath)) {
+// When --hash is active, the filename changes with content, so skip freshness check
+if (!forceFlag && !hashFlag && existsSync(outputResolved) && existsSync(modulePath)) {
   try {
     const cssMtime = statSync(outputResolved).mtimeMs;
     const mjsMtime = statSync(modulePath).mtimeMs;
@@ -120,7 +121,7 @@ if (hashFlag) {
 mkdirSync(dirname(resolve(finalPath)), { recursive: true });
 
 // Add source attribution comment
-const sourceComment = `\n/*# sourceAgda=${moduleName}:${exportName} */\n`;
+const sourceComment = `\n/* sourceAgda=${moduleName}:${exportName} */\n`;
 
 // Write
 writeFileSync(finalPath, css + sourceComment);

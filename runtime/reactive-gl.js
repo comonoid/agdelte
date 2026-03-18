@@ -875,11 +875,21 @@ function mat4LookAt(eye, target, up) {
   const iz = len ? 1 / len : 0;
   const fz = { x: zx * iz, y: zy * iz, z: zz * iz };
 
-  // cross(up, fz)
-  const xx = up.y * fz.z - up.z * fz.y;
-  const xy = up.z * fz.x - up.x * fz.z;
-  const xz = up.x * fz.y - up.y * fz.x;
+  // cross(up, fz) — if up is parallel to fz, pick an alternative up vector
+  let ux = up.x, uy = up.y, uz = up.z;
+  let xx = uy * fz.z - uz * fz.y;
+  let xy = uz * fz.x - ux * fz.z;
+  let xz = ux * fz.y - uy * fz.x;
   len = Math.hypot(xx, xy, xz);
+  if (len < 1e-6) {
+    // up is (nearly) parallel to forward — choose an alternative up vector
+    if (Math.abs(ux) < 0.9) { ux = 1; uy = 0; uz = 0; }
+    else                     { ux = 0; uy = 0; uz = 1; }
+    xx = uy * fz.z - uz * fz.y;
+    xy = uz * fz.x - ux * fz.z;
+    xz = ux * fz.y - uy * fz.x;
+    len = Math.hypot(xx, xy, xz);
+  }
   const ix = len ? 1 / len : 0;
   const fx = { x: xx * ix, y: xy * ix, z: xz * ix };
 
@@ -1650,7 +1660,7 @@ function createCapsuleGeometry(gl, radius, height, segments) {
     console.warn('createCapsuleGeometry: invalid parameters', { radius, height, segments });
   }
   const positions = [], normals = [], indices = [];
-  const halfHeight = height * 0.5 - radius; // Cylinder height excluding caps
+  const halfHeight = Math.max(height * 0.5 - radius, 0); // Cylinder height excluding caps (clamped to 0 when height < 2*radius)
   const stacks = Math.floor(segments / 2);
 
   // Top hemisphere
@@ -3027,6 +3037,7 @@ function getOrCreateGeometry(gl, cache, geom) {
     case 'octahedron':  result = createOctahedronGeometry(gl, geom.radius); break;
     case 'icosahedron': result = createIcosahedronGeometry(gl, geom.radius); break;
     case 'dodecahedron': result = createDodecahedronGeometry(gl, geom.radius); break;
+    case 'empty': return null;  // empty geometry from unionAll []/intersectAll []
     default: throw new Error('Unknown geometry type: ' + geom.type);
   }
   if (key) {
@@ -3146,7 +3157,7 @@ function slerpQuat(a, b, t) {
     s0 = 1 - t;
     s1 = t;
   } else {
-    const theta = Math.acos(dot);
+    const theta = Math.acos(Math.min(1, dot));
     const sinTheta = Math.sin(theta);
     s0 = Math.sin((1 - t) * theta) / sinTheta;
     s1 = Math.sin(t * theta) / sinTheta;
@@ -4056,7 +4067,7 @@ function updateGLBindings(gl, bindings, newModel, now) {
 function tickSingleAnimation(binding, now) {
   const anim = binding.animation;
   const elapsed = now - anim.startTime;
-  const rawT = Math.min(elapsed / anim.durationMs, 1.0);
+  const rawT = anim.durationMs > 0 ? Math.min(elapsed / anim.durationMs, 1.0) : 1.0;
   const t = anim.easingFn(rawT);
   const done = rawT >= 1.0;
 
@@ -4418,7 +4429,7 @@ function renderEntry(gl, programs, geoCache, texCache, fontCache, entry, parentM
  * Check if a render entry is transparent (material alpha < 1.0).
  */
 function isTransparent(entry) {
-  if (entry.type === 'mesh') {
+  if (entry.type === 'mesh' || entry.type === 'instanced') {
     const mat = entry.material;
     if (mat.type === 'textured') return mat.tint.a < 1.0;
     return mat.color.a < 1.0;
@@ -5416,4 +5427,5 @@ export const _test = {
   mat4Identity, mat4Ortho, mat4Perspective, mat4LookAt,
   mat4FromTRS, mat4Multiply, mat4Invert, unprojectPoint,
   raySphere, rayAABB, rayPlane, rayToLocal, rayAt,
+  slerpQuat, tickSingleAnimation,
 };

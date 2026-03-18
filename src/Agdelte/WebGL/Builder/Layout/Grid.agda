@@ -89,9 +89,14 @@ grid : ∀ {M Msg}
      → Plane           -- which plane
      → List (SceneNode M Msg)
      → SceneNode M Msg
-grid {M} {Msg} (cols , _) (spX , spY) pl children =
-  group identityTransform (go 0 children)
+grid {M} {Msg} (cols , rows) (spX , spY) pl children =
+  group identityTransform (go 0 (take (cols * rows) children))
   where
+    take : ℕ → List (SceneNode M Msg) → List (SceneNode M Msg)
+    take zero    _          = []
+    take (suc _) []         = []
+    take (suc n) (x ∷ rest) = x ∷ take n rest
+
     cols' : ℕ
     cols' = suc (case cols of λ { zero → zero ; (suc n) → n })
       where

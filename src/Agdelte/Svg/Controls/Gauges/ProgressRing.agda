@@ -27,15 +27,26 @@ private
   pi : Float
   pi = 3.14159265359
 
+  normalize : Float → Float
+  normalize x = go x 20
+    where go : Float → ℕ → Float
+          go y zero = y
+          go y (suc n) =
+            if pi <ᵇ y then go (y - 2.0 * pi) n
+            else if y <ᵇ (0.0 - pi) then go (y + 2.0 * pi) n
+            else y
+
   sin : Float → Float
-  sin x = x - (x * x * x ÷ 6.0)
-        + (x * x * x * x * x ÷ 120.0)
-        - (x * x * x * x * x * x * x ÷ 5040.0)
+  sin x' = let x = normalize x' in
+    x - (x * x * x ÷ 6.0)
+    + (x * x * x * x * x ÷ 120.0)
+    - (x * x * x * x * x * x * x ÷ 5040.0)
 
   cos : Float → Float
-  cos x = 1.0 - (x * x ÷ 2.0)
-        + (x * x * x * x ÷ 24.0)
-        - (x * x * x * x * x * x ÷ 720.0)
+  cos x' = let x = normalize x' in
+    1.0 - (x * x ÷ 2.0)
+    + (x * x * x * x ÷ 24.0)
+    - (x * x * x * x * x * x ÷ 720.0)
 
 ------------------------------------------------------------------------
 -- Simple Progress Ring

@@ -6,13 +6,61 @@
 
 module Agdelte.Html.Controls.Modal where
 
-open import Data.String using (String)
+open import Data.String using (String; _++_)
 open import Data.List using (List; []; _∷_)
 open import Data.Nat using (ℕ)
 open import Data.Bool using (Bool)
 open import Function using (_∘_)
 
 open import Agdelte.Reactive.Node
+
+------------------------------------------------------------------------
+-- Focus trap sentinels
+------------------------------------------------------------------------
+
+-- | Invisible sentinel divs with tabindex="0" placed at the start
+-- | and end of the modal content area.  When Tab moves focus past
+-- | the last focusable element the end sentinel receives focus and
+-- | redirects it to the first focusable child inside the modal.
+-- | Shift+Tab past the first element hits the start sentinel which
+-- | redirects to the last focusable child.  This is the standard
+-- | "JS-free" focus trap pattern (inline onfocus handler).
+private
+  -- Redirect focus to the first focusable element inside .agdelte-modal__content
+  focusFirst : String
+  focusFirst =
+    "var m=this.closest('.agdelte-modal--open');" ++
+    "if(m){var f=m.querySelector('.agdelte-modal__content [tabindex],." ++
+    "agdelte-modal__content button,.agdelte-modal__content a,.agdelte-modal__content input,.agdelte-modal__content select,.agdelte-modal__content textarea');" ++
+    "if(f)f.focus()}"
+
+  -- Redirect focus to the last focusable element inside .agdelte-modal__content
+  focusLast : String
+  focusLast =
+    "var m=this.closest('.agdelte-modal--open');" ++
+    "if(m){var a=m.querySelectorAll('.agdelte-modal__content [tabindex],." ++
+    "agdelte-modal__content button,.agdelte-modal__content a,.agdelte-modal__content input,.agdelte-modal__content select,.agdelte-modal__content textarea');" ++
+    "if(a.length)a[a.length-1].focus()}"
+
+  sentinelAttrs : ∀ {M A} → String → List (Attr M A)
+  sentinelAttrs handler =
+      class "agdelte-modal__sentinel"
+    ∷ attr "tabindex" "0"
+    ∷ attr "aria-hidden" "true"
+    ∷ style "position" "absolute"
+    ∷ style "width" "1px"
+    ∷ style "height" "1px"
+    ∷ style "overflow" "hidden"
+    ∷ style "clip" "rect(0,0,0,0)"
+    ∷ style "white-space" "nowrap"
+    ∷ attr "onfocus" handler
+    ∷ []
+
+  startSentinel : ∀ {M A} → Node M A
+  startSentinel = div (sentinelAttrs focusLast) []
+
+  endSentinel : ∀ {M A} → Node M A
+  endSentinel = div (sentinelAttrs focusFirst) []
 
 ------------------------------------------------------------------------
 -- Basic modal
@@ -28,13 +76,16 @@ modal isOpen closeMsg content =
     ( div ( class "agdelte-modal agdelte-modal--open"
           ∷ attr "role" "dialog"
           ∷ attr "aria-modal" "true"
+          ∷ onKeyFiltered ("Escape" ∷ []) (λ _ → closeMsg)
           ∷ [] )
-        ( div ( class "agdelte-modal__backdrop"
+        ( startSentinel
+        ∷ div ( class "agdelte-modal__backdrop"
               ∷ onClick closeMsg
               ∷ [] )
             []
         ∷ div ( class "agdelte-modal__content" ∷ [] )
             ( content ∷ [] )
+        ∷ endSentinel
         ∷ [] ) )
 
 ------------------------------------------------------------------------
@@ -48,13 +99,16 @@ modalT isOpen closeMsg trans content =
     ( div ( class "agdelte-modal agdelte-modal--open"
           ∷ attr "role" "dialog"
           ∷ attr "aria-modal" "true"
+          ∷ onKeyFiltered ("Escape" ∷ []) (λ _ → closeMsg)
           ∷ [] )
-        ( div ( class "agdelte-modal__backdrop"
+        ( startSentinel
+        ∷ div ( class "agdelte-modal__backdrop"
               ∷ onClick closeMsg
               ∷ [] )
             []
         ∷ div ( class "agdelte-modal__content" ∷ [] )
             ( content ∷ [] )
+        ∷ endSentinel
         ∷ [] ) )
 
 ------------------------------------------------------------------------

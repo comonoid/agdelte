@@ -8,7 +8,8 @@
 module Agdelte.WebGL.Builder.Optimize.Culling where
 
 open import Data.Float using (Float)
-open import Data.List using (List)
+open import Data.List using (List; []; _∷_)
+open import Data.String using (String)
 
 open import Agdelte.WebGL.Types
 
@@ -36,26 +37,36 @@ record BoundingSphere : Set where
 
 -- Attach a bounding box for frustum culling
 -- Runtime will skip rendering if the box is outside the view frustum
+-- Wrapped in named/group so zoomSceneNode can traverse it
 postulate
-  withBounds : ∀ {M Msg} → AABB → SceneNode M Msg → SceneNode M Msg
+  withBoundsRaw : ∀ {M Msg} → AABB → SceneNode M Msg → SceneNode M Msg
 
-{-# COMPILE JS withBounds = bounds => node => ({
-  type: 'bounded',
-  bounds: { min: bounds.min, max: bounds.max },
-  child: node
-}) #-}
+{-# COMPILE JS withBoundsRaw = bounds => node =>
+  bounds(min => max => ({
+    type: 'bounded',
+    bounds: { min: min, max: max },
+    child: node
+  })) #-}
+
+withBounds : ∀ {M Msg} → AABB → SceneNode M Msg → SceneNode M Msg
+withBounds b child = named "optimizationHint" (group identityTransform (withBoundsRaw b child ∷ []))
 
 -- Attach a bounding sphere for frustum culling
 -- Faster than box culling, but less precise
+-- Wrapped in named/group so zoomSceneNode can traverse it
 postulate
-  withSphereBounds : ∀ {M Msg} → BoundingSphere → SceneNode M Msg → SceneNode M Msg
+  withSphereBoundsRaw : ∀ {M Msg} → BoundingSphere → SceneNode M Msg → SceneNode M Msg
 
-{-# COMPILE JS withSphereBounds = sphere => node => ({
-  type: 'sphereBounded',
-  center: sphere.sphereCenter,
-  radius: sphere.sphereRadius,
-  child: node
-}) #-}
+{-# COMPILE JS withSphereBoundsRaw = sphere => node =>
+  sphere(center => radius => ({
+    type: 'sphereBounded',
+    center: center,
+    radius: radius,
+    child: node
+  })) #-}
+
+withSphereBounds : ∀ {M Msg} → BoundingSphere → SceneNode M Msg → SceneNode M Msg
+withSphereBounds s child = named "optimizationHint" (group identityTransform (withSphereBoundsRaw s child ∷ []))
 
 ------------------------------------------------------------------------
 -- Convenience functions for common bounding volumes
@@ -82,13 +93,17 @@ sphereFromCenter c r = boundingSphere c r
 ------------------------------------------------------------------------
 
 -- Let runtime compute bounding box from child geometry
+-- Wrapped in named/group so zoomSceneNode can traverse it
 postulate
-  autoBounds : ∀ {M Msg} → SceneNode M Msg → SceneNode M Msg
+  autoBoundsRaw : ∀ {M Msg} → SceneNode M Msg → SceneNode M Msg
 
-{-# COMPILE JS autoBounds = node => ({
+{-# COMPILE JS autoBoundsRaw = node => ({
   type: 'autoBounded',
   child: node
 }) #-}
+
+autoBounds : ∀ {M Msg} → SceneNode M Msg → SceneNode M Msg
+autoBounds child = named "optimizationHint" (group identityTransform (autoBoundsRaw child ∷ []))
 
 ------------------------------------------------------------------------
 -- Occlusion culling
@@ -96,22 +111,30 @@ postulate
 
 -- Mark node as an occluder (can hide things behind it)
 -- The runtime uses these for occlusion queries
+-- Wrapped in named/group so zoomSceneNode can traverse it
 postulate
-  occluder : ∀ {M Msg} → SceneNode M Msg → SceneNode M Msg
+  occluderRaw : ∀ {M Msg} → SceneNode M Msg → SceneNode M Msg
 
-{-# COMPILE JS occluder = node => ({
+{-# COMPILE JS occluderRaw = node => ({
   type: 'occluder',
   child: node
 }) #-}
 
--- Mark node as occludee (can be hidden by occluders)
-postulate
-  occludee : ∀ {M Msg} → SceneNode M Msg → SceneNode M Msg
+occluder : ∀ {M Msg} → SceneNode M Msg → SceneNode M Msg
+occluder child = named "optimizationHint" (group identityTransform (occluderRaw child ∷ []))
 
-{-# COMPILE JS occludee = node => ({
+-- Mark node as occludee (can be hidden by occluders)
+-- Wrapped in named/group so zoomSceneNode can traverse it
+postulate
+  occludeeRaw : ∀ {M Msg} → SceneNode M Msg → SceneNode M Msg
+
+{-# COMPILE JS occludeeRaw = node => ({
   type: 'occludee',
   child: node
 }) #-}
+
+occludee : ∀ {M Msg} → SceneNode M Msg → SceneNode M Msg
+occludee child = named "optimizationHint" (group identityTransform (occludeeRaw child ∷ []))
 
 ------------------------------------------------------------------------
 -- Portal culling (for indoor scenes)
@@ -119,19 +142,23 @@ postulate
 
 -- Define a portal (doorway/window) between two spaces
 -- Only render content through portal if portal is visible
+-- Wrapped in named/group so zoomSceneNode can traverse it
 postulate
-  portal : ∀ {M Msg}
-         → Vec3             -- Portal center
-         → Vec3             -- Portal size (width, height, 0)
-         → SceneNode M Msg  -- Content visible through portal
-         → SceneNode M Msg
+  portalRaw : ∀ {M Msg}
+            → Vec3             -- Portal center
+            → Vec3             -- Portal size (width, height, 0)
+            → SceneNode M Msg  -- Content visible through portal
+            → SceneNode M Msg
 
-{-# COMPILE JS portal = center => size => content => ({
+{-# COMPILE JS portalRaw = center => size => content => ({
   type: 'portal',
   center: center,
   size: size,
   child: content
 }) #-}
+
+portal : ∀ {M Msg} → Vec3 → Vec3 → SceneNode M Msg → SceneNode M Msg
+portal c s child = named "optimizationHint" (group identityTransform (portalRaw c s child ∷ []))
 
 ------------------------------------------------------------------------
 -- Spatial partitioning hints
@@ -139,10 +166,14 @@ postulate
 
 -- Hint that children are spatially organized as an octree
 -- Enables faster culling of large scenes
+-- Wrapped in named/group so zoomSceneNode can traverse it
 postulate
-  octreeHint : ∀ {M Msg} → List (SceneNode M Msg) → SceneNode M Msg
+  octreeHintRaw : ∀ {M Msg} → List (SceneNode M Msg) → SceneNode M Msg
 
-{-# COMPILE JS octreeHint = children => ({
+{-# COMPILE JS octreeHintRaw = children => ({
   type: 'octreeHint',
   children: children
 }) #-}
+
+octreeHint : ∀ {M Msg} → List (SceneNode M Msg) → SceneNode M Msg
+octreeHint children = named "optimizationHint" (group identityTransform (octreeHintRaw children ∷ []))

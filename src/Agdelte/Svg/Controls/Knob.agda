@@ -10,6 +10,7 @@ open import Data.Float using (Float; _+_; _-_; _*_)
 open import Data.Float.Base using (_÷_; _≤ᵇ_)
 open import Data.List using (List; []; _∷_)
 open import Data.Bool using (Bool; true; false; if_then_else_)
+open import Data.Nat using (ℕ; zero; suc)
 
 open import Agdelte.Reactive.Node using (Node; Attr; elem; attr; on; text)
 open import Agdelte.Svg.Elements using (g; circle'; svgText)
@@ -18,10 +19,17 @@ open import Agdelte.Svg.Attributes
   renaming (xF to attrX; yF to attrY; cxF to attrCx; cyF to attrCy;
             fontSize_ to attrFontSize; fontFamily_ to attrFontFamily)
 open import Agdelte.Css.Show using (showFloat)
+open import Agdelte.Svg.Events using (onSvgClick)
+open import Agdelte.Svg.Path using (Point)
+  renaming (x to ptX; y to ptY)
 
 ------------------------------------------------------------------------
 -- Math constants
 ------------------------------------------------------------------------
+
+postulate
+  atan2F : Float → Float → Float
+{-# COMPILE JS atan2F = y => x => Math.atan2(y, x) #-}
 
 private
   π : Float
@@ -31,13 +39,31 @@ private
   degToRad : Float → Float
   degToRad deg = deg * π ÷ 180.0
 
-  -- Sine approximation (Taylor series)
-  sin' : Float → Float
-  sin' x = x - (x * x * x ÷ 6.0) + (x * x * x * x * x ÷ 120.0)
+  -- Normalize angle to [-π, π] by repeated subtraction/addition of 2π
+  normalize : Float → Float
+  normalize x = go x 20
+    where
+      twoPi : Float
+      twoPi = 2.0 * π
+      go : Float → ℕ → Float
+      go y zero = y
+      go y (suc n) = if π ≤ᵇ y       then go (y - twoPi) n
+                     else if y ≤ᵇ (0.0 - π) then go (y + twoPi) n
+                     else y
 
-  -- Cosine approximation
+  -- Sine approximation (Taylor series with range reduction)
+  sin' : Float → Float
+  sin' x' = let x = normalize x'
+            in x - (x * x * x ÷ 6.0)
+             + (x * x * x * x * x ÷ 120.0)
+             - (x * x * x * x * x * x * x ÷ 5040.0)
+
+  -- Cosine approximation (Taylor series with range reduction)
   cos' : Float → Float
-  cos' x = 1.0 - (x * x ÷ 2.0) + (x * x * x * x ÷ 24.0)
+  cos' x' = let x = normalize x'
+            in 1.0 - (x * x ÷ 2.0)
+             + (x * x * x * x ÷ 24.0)
+             - (x * x * x * x * x * x ÷ 720.0)
 
 ------------------------------------------------------------------------
 -- Knob Style
@@ -117,6 +143,24 @@ private
   valueToAngle : Float → Float
   valueToAngle ratio = (ratio - 0.5) * 270.0
 
+  -- Compute [0,1] value from click position relative to knob center.
+  -- Uses atan2 to get angle, then maps the -135°..+135° range to 0..1.
+  -- Angles outside the 270° active arc are clamped.
+  clickToValue : Float → Float → Point → Float
+  clickToValue cx cy pt =
+    let dx = ptX pt - cx
+        dy = ptY pt - cy
+        -- atan2 gives angle from positive-x axis; SVG y-axis points down
+        -- Rotate so that "up" (12 o'clock) = 0° in our system
+        rawRad = atan2F dx (0.0 - dy)   -- angle from 12 o'clock, CW positive
+        rawDeg = rawRad * 180.0 ÷ π
+        -- rawDeg is in (-180, 180]. Active range is -135..+135 (270°).
+        -- Dead zone is the bottom 90° arc (from +135 CW to -135 = 225..315 if measured 0..360).
+        -- Clamp: if rawDeg > 135, clamp to 1; if rawDeg < -135, clamp to 0.
+    in if 135.0 ≤ᵇ rawDeg then 1.0
+       else if rawDeg ≤ᵇ (0.0 - 135.0) then 0.0
+       else clamp01 ((rawDeg + 135.0) ÷ 270.0)
+
 
 ------------------------------------------------------------------------
 -- Knob
@@ -126,8 +170,9 @@ svgKnob : ∀ {M Msg}
         → Float → Float       -- cx, cy (center)
         → Float               -- value (0-1)
         → KnobStyle
+        → (Float → Msg)       -- onChange (new value 0-1)
         → Node M Msg
-svgKnob cx cy val sty =
+svgKnob cx cy val sty onChange =
   let ratio = clamp01 val
       r = knobRadius sty
       angle = valueToAngle ratio
@@ -138,6 +183,7 @@ svgKnob cx cy val sty =
       indY = cy + indicatorR * sin' indicatorRad
   in g ( attr "class" "svg-knob"
        ∷ attr "cursor" "pointer"
+       ∷ onSvgClick (λ pt → onChange (clickToValue cx cy pt))
        ∷ [] )
        ( -- Value arc (behind knob)
          (if arcWidth sty ≤ᵇ 0.0
@@ -211,8 +257,9 @@ svgKnobLabeled : ∀ {M Msg}
                → Float               -- value (0-1)
                → String              -- label
                → KnobStyle
+               → (Float → Msg)       -- onChange (new value 0-1)
                → Node M Msg
-svgKnobLabeled cx cy val lbl sty =
+svgKnobLabeled cx cy val lbl sty onChange =
   let r = knobRadius sty
   in g ( attr "class" "svg-knob-labeled" ∷ [] )
        ( -- Label above
@@ -223,7 +270,7 @@ svgKnobLabeled cx cy val lbl sty =
                  ∷ attrFontFamily "system-ui, sans-serif"
                  ∷ textAnchor_ "middle"
                  ∷ [] ) ( text lbl ∷ [] )
-       ∷ svgKnob cx cy val sty
+       ∷ svgKnob cx cy val sty onChange
        ∷ [] )
 
 ------------------------------------------------------------------------
@@ -232,15 +279,17 @@ svgKnobLabeled cx cy val lbl sty =
 
 svgKnobSimple : ∀ {M Msg}
               → Float → Float → Float
+              → (Float → Msg)
               → Node M Msg
-svgKnobSimple cx cy val =
-  svgKnob cx cy val defaultKnobStyle
+svgKnobSimple cx cy val onChange =
+  svgKnob cx cy val defaultKnobStyle onChange
 
 svgKnobSimpleLabeled : ∀ {M Msg}
                      → Float → Float → Float → String
+                     → (Float → Msg)
                      → Node M Msg
-svgKnobSimpleLabeled cx cy val lbl =
-  svgKnobLabeled cx cy val lbl defaultKnobStyle
+svgKnobSimpleLabeled cx cy val lbl onChange =
+  svgKnobLabeled cx cy val lbl defaultKnobStyle onChange
 
 ------------------------------------------------------------------------
 -- Volume Knob (0-100 scale, shows dB-style marks)
@@ -248,6 +297,8 @@ svgKnobSimpleLabeled cx cy val lbl =
 
 svgVolumeKnob : ∀ {M Msg}
               → Float → Float → Float  -- cx, cy, value (0-100)
+              → (Float → Msg)          -- onChange (new value 0-100)
               → Node M Msg
-svgVolumeKnob cx cy val =
+svgVolumeKnob cx cy val onChange =
   svgKnobLabeled cx cy (val ÷ 100.0) "Volume" defaultKnobStyle
+    (λ v → onChange (v * 100.0))

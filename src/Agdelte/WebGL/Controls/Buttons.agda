@@ -183,7 +183,7 @@ pushButton theme config lbl isPressed pressMsg releaseMsg t =
       textTransform = mkTransform textOffset identityQuat (vec3 1.0 1.0 1.0)
   in bindTransform getTransform
        (interactiveGroup
-         (onHover releaseMsg ∷ onClick pressMsg ∷ transition (ms 80) easeOut ∷ [])
+         (onLeave releaseMsg ∷ onClick pressMsg ∷ transition (ms 80) easeOut ∷ [])
          t
          ( mesh btnGeom btnMat [] identityTransform
          ∷ label theme lbl textTransform

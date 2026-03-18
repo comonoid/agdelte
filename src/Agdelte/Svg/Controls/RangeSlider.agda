@@ -17,6 +17,8 @@ open import Agdelte.Svg.Attributes
   hiding (x_; y_)
   renaming (xF to attrX; yF to attrY; cxF to attrCx; cyF to attrCy)
 open import Agdelte.Css.Show using (showFloat)
+open import Agdelte.Svg.Events using (onSvgClick)
+open import Agdelte.Svg.Path using (Point; x; y)
 
 ------------------------------------------------------------------------
 -- Range Slider Style (reusing concepts from Slider)
@@ -68,7 +70,7 @@ svgRangeSlider : ∀ {M Msg}
                → Float → Float             -- min, max
                → Float → Float             -- low value, high value
                → RangeSliderStyle
-               → Msg → Msg                 -- onLowChange, onHighChange (simplified)
+               → (Float → Msg) → (Float → Msg)  -- onLowChange(newVal), onHighChange(newVal)
                → Node M Msg
 svgRangeSlider px py len minV maxV lowV highV sty onLow onHigh =
   let lowRatio = valueToRatio minV maxV lowV
@@ -79,7 +81,17 @@ svgRangeSlider px py len minV maxV lowV highV sty onLow onHigh =
       lowX = px + lowRatio * len
       highX = px + highRatio * len
       fillX = lowX
-      fillW = highX - lowX
+      fillW = if lowX ≤ᵇ highX then highX - lowX else 0.0
+      -- Compute value from click/drag position on the track
+      posToVal : Point → Float
+      posToVal pt = let clickRatio = clamp 0.0 1.0 ((x pt - px) ÷ len)
+                    in minV + clickRatio * (maxV - minV)
+      computeLow : Point → Msg
+      computeLow pt = onLow (posToVal pt)
+      computeHigh : Point → Msg
+      computeHigh pt = onHigh (posToVal pt)
+      hitH = if thumbR * 2.0 ≤ᵇ thick then thick else thumbR * 2.0
+      hitY = py - hitH ÷ 2.0
   in g ( attr "class" "svg-range-slider" ∷ [] )
        ( -- Track background
          rect' ( attrX px
@@ -97,7 +109,7 @@ svgRangeSlider px py len minV maxV lowV highV sty onLow onHigh =
                ∷ heightF thick
                ∷ fill_ (fillColor sty)
                ∷ [] ) []
-       -- Low thumb
+       -- Low thumb (draggable via click position)
        ∷ circle' ( attrCx lowX
                  ∷ attrCy py
                  ∷ rF thumbR
@@ -105,9 +117,9 @@ svgRangeSlider px py len minV maxV lowV highV sty onLow onHigh =
                  ∷ stroke_ (thumbBorder sty)
                  ∷ strokeWidthF 2.0
                  ∷ attr "cursor" "pointer"
-                 ∷ on "click" onLow
+                 ∷ onSvgClick computeLow
                  ∷ [] ) []
-       -- High thumb
+       -- High thumb (draggable via click position)
        ∷ circle' ( attrCx highX
                  ∷ attrCy py
                  ∷ rF thumbR
@@ -115,8 +127,21 @@ svgRangeSlider px py len minV maxV lowV highV sty onLow onHigh =
                  ∷ stroke_ (thumbBorder sty)
                  ∷ strokeWidthF 2.0
                  ∷ attr "cursor" "pointer"
-                 ∷ on "click" onHigh
+                 ∷ onSvgClick computeHigh
                  ∷ [] ) []
+       -- Invisible click target overlay for the full track
+       -- Clicks on left half go to low thumb, right half to high thumb
+       ∷ rect' ( attrX px
+               ∷ attrY hitY
+               ∷ widthF len
+               ∷ heightF hitH
+               ∷ fill_ "transparent"
+               ∷ attr "cursor" "pointer"
+               ∷ onSvgClick (λ pt →
+                   let val = posToVal pt
+                       midVal = minV + (lowRatio + highRatio) * 0.5 * (maxV - minV)
+                   in if val ≤ᵇ midVal then onLow val else onHigh val)
+               ∷ [] ) []
        ∷ [] )
 
 ------------------------------------------------------------------------
@@ -127,7 +152,7 @@ svgRangeSliderSimple : ∀ {M Msg}
                      → Float → Float → Float
                      → Float → Float
                      → Float → Float
-                     → Msg → Msg
+                     → (Float → Msg) → (Float → Msg)
                      → Node M Msg
 svgRangeSliderSimple px py len minV maxV lowV highV onLow onHigh =
   svgRangeSlider px py len minV maxV lowV highV defaultRangeSliderStyle onLow onHigh
@@ -136,7 +161,7 @@ svgRangeSliderSimple px py len minV maxV lowV highV onLow onHigh =
 svgPriceRangeSlider : ∀ {M Msg}
                     → Float → Float → Float
                     → Float → Float
-                    → Msg → Msg
+                    → (Float → Msg) → (Float → Msg)
                     → Node M Msg
 svgPriceRangeSlider px py len lowV highV onLow onHigh =
   svgRangeSlider px py len 0.0 1000.0 lowV highV defaultRangeSliderStyle onLow onHigh

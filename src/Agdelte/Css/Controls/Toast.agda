@@ -67,4 +67,8 @@ toastRules =
   ∷ rule ".agdelte-toast__close:hover"
       ( "opacity" ∶ "1"
       ∷ [])
+  ∷ rule ".agdelte-toast__close:focus-visible"
+      ( "outline" ∶ "2px solid var(--agdelte-primary)"
+      ∷ "outline-offset" ∶ "2px"
+      ∷ [])
   ∷ []

@@ -160,7 +160,6 @@ svgCheckboxLabeled px py checked lbl sty msg =
       labelY = py + size ÷ 2.0
   in g ( attr "class" "svg-checkbox-labeled"
        ∷ attr "cursor" "pointer"
-       ∷ on "click" msg
        ∷ [] )
        ( svgCheckbox px py checked sty msg
        ∷ svgText ( attrX labelX

@@ -115,45 +115,80 @@ private
 ------------------------------------------------------------------------
 
 private
-  -- Determine node columns (0 = source only, 1+ = has incoming)
-  getNodeColumn : String → List SankeyLink → ℕ
-  getNodeColumn nodeId links =
-    if hasIncoming nodeId links then 1 else 0
-    where
-      hasIncoming : String → List SankeyLink → Bool
-      hasIncoming _ [] = false
-      hasIncoming nid (l ∷ ls) = if slTarget l ≡ˢ nid then true else hasIncoming nid ls
+  -- Column assignment as association list (node id → column)
+  ColumnMap : Set
+  ColumnMap = List (String × ℕ)
 
-  -- Simple 2-column layout
+  lookupCol : String → ColumnMap → ℕ
+  lookupCol _ [] = 0
+  lookupCol nid ((k , v) ∷ rest) = if k ≡ˢ nid then v else lookupCol nid rest
+
+  updateCol : String → ℕ → ColumnMap → ColumnMap
+  updateCol nid col [] = (nid , col) ∷ []
+  updateCol nid col ((k , v) ∷ rest) =
+    if k ≡ˢ nid then (k , col) ∷ rest
+    else (k , v) ∷ updateCol nid col rest
+
+  -- Initialize column map: nodes with no incoming links = 0, others = 0 (to be updated)
+  initColumnMap : List SankeyNode → ColumnMap
+  initColumnMap [] = []
+  initColumnMap (n ∷ ns) = (snId n , 0) ∷ initColumnMap ns
+
+  -- Single pass over links: for each link, set target col = max(target col, source col + 1)
+  propagateLinks : List SankeyLink → ColumnMap → ColumnMap
+  propagateLinks [] cm = cm
+  propagateLinks (l ∷ ls) cm =
+    let srcCol = lookupCol (slSource l) cm
+        tgtCol = lookupCol (slTarget l) cm
+        newCol = suc srcCol
+        cm' = if tgtCol <ᵇ newCol then updateCol (slTarget l) newCol cm else cm
+    in propagateLinks ls cm'
+    where
+      open import Data.Nat using (_<ᵇ_)
+
+  -- Iterate propagation (repeat as many times as there are nodes for convergence)
+  iteratePropagate : ℕ → List SankeyLink → ColumnMap → ColumnMap
+  iteratePropagate zero _ cm = cm
+  iteratePropagate (suc n) links' cm = iteratePropagate n links' (propagateLinks links' cm)
+
+  -- Compute column assignments for all nodes
+  computeColumns : List SankeyNode → List SankeyLink → ColumnMap
+  computeColumns nodes links' =
+    let cm0 = initColumnMap nodes
+    in iteratePropagate (listLen nodes) links' cm0
+
+  -- Find the maximum column number
+  maxColumn : ColumnMap → ℕ
+  maxColumn [] = 0
+  maxColumn ((_ , c) ∷ rest) = if c <ᵇ maxColumn rest then maxColumn rest else c
+    where
+      open import Data.Nat using (_<ᵇ_)
+
+  -- Determine node columns using iterative propagation
+  getNodeColumn : String → ColumnMap → ℕ
+  getNodeColumn = lookupCol
+
+  -- Filter nodes by column
+  filterByColumn : ℕ → List SankeyNode → ColumnMap → List SankeyNode
+  filterByColumn _ [] _ = []
+  filterByColumn col (n ∷ ns) cm =
+    if getNodeColumn (snId n) cm ≡ᵇ col
+    then n ∷ filterByColumn col ns cm
+    else filterByColumn col ns cm
+    where
+      open import Data.Nat using (_≡ᵇ_)
+
+  -- Multi-column layout
   layoutNodes : Float → Float → Float → Float → Float
               → List SankeyNode → List SankeyLink → List PositionedNode
   layoutNodes px py w h nodeWidth nodes links =
-    let leftNodes = filterLeft nodes links
-        rightNodes = filterRight nodes links
-        leftTotal = sumNodeValues leftNodes links
-        rightTotal = sumNodeValues rightNodes links
-    in positionColumn px py h nodeWidth leftTotal leftNodes links 0.0 0
-       ++ᴸ positionColumn (px + w - nodeWidth) py h nodeWidth rightTotal rightNodes links 0.0 (listLen leftNodes)
+    let cm = computeColumns nodes links
+        numCols = suc (maxColumn cm)
+        colSpan = if numCols ≡ᵇ 1 then 0.0 else (w - nodeWidth) ÷ fromℕ (numCols ∸ 1)
+    in layoutAllColumns 0 numCols px py w h nodeWidth colSpan nodes links cm 0
     where
+      open import Data.Nat using (_≡ᵇ_; _∸_; _<ᵇ_) renaming (_+_ to _+ℕ_)
       open import Data.List renaming (_++_ to _++ᴸ_)
-
-      filterLeft : List SankeyNode → List SankeyLink → List SankeyNode
-      filterLeft [] _ = []
-      filterLeft (n ∷ ns) ls =
-        if getNodeColumn (snId n) ls ≡ᵇ 0
-        then n ∷ filterLeft ns ls
-        else filterLeft ns ls
-        where
-          open import Data.Nat using (_≡ᵇ_)
-
-      filterRight : List SankeyNode → List SankeyLink → List SankeyNode
-      filterRight [] _ = []
-      filterRight (n ∷ ns) ls =
-        if getNodeColumn (snId n) ls ≡ᵇ 1
-        then n ∷ filterRight ns ls
-        else filterRight ns ls
-        where
-          open import Data.Nat using (_≡ᵇ_)
 
       sumNodeValues : List SankeyNode → List SankeyLink → Float
       sumNodeValues [] _ = 0.0
@@ -176,6 +211,19 @@ private
           case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
           case x of f = f x
 
+      layoutAllColumns : ℕ → ℕ → Float → Float → Float → Float → Float → Float
+                       → List SankeyNode → List SankeyLink → ColumnMap → ℕ
+                       → List PositionedNode
+      layoutAllColumns col numCols px' py' w' h' nw colW nodes' links' cm colorIdx =
+        if numCols ≡ᵇ 0 then []
+        else if col <ᵇ numCols
+        then let colNodes = filterByColumn col nodes' cm
+                 colTotal = sumNodeValues colNodes links'
+                 colX = px' + fromℕ col * colW
+                 positioned = positionColumn colX py' h' nw colTotal colNodes links' 0.0 colorIdx
+             in positioned ++ᴸ layoutAllColumns (suc col) numCols px' py' w' h' nw colW nodes' links' cm (colorIdx +ℕ listLen colNodes)
+        else []
+
 ------------------------------------------------------------------------
 -- Link rendering (curved paths)
 ------------------------------------------------------------------------
@@ -185,7 +233,8 @@ private
   renderLink nodes link totalOut sourceYOffset =
     case (findNode (slSource link) nodes , findNode (slTarget link) nodes) of λ where
       (just src , just tgt) →
-        let linkHeight = slValue link
+        let linkHeight = if totalOut ≤ᵇ 0.0 then 2.0
+                         else (slValue link ÷ totalOut) * pnHeight src
             -- Source point
             sx = pnX src + pnWidth src
             sy = pnY src + sourceYOffset + linkHeight ÷ 2.0
@@ -226,10 +275,34 @@ private
            ++ " Z"
 
   renderLinks : ∀ {M A} → List PositionedNode → List SankeyLink → List (Node M A)
-  renderLinks _ [] = []
-  renderLinks nodes (l ∷ ls) =
-    renderLink nodes l 0.0 0.0
-    ∷ renderLinks nodes ls
+  renderLinks nodes allLinks = go nodes allLinks allLinks []
+    where
+      go : List PositionedNode → List SankeyLink → List SankeyLink → List SankeyLink → List (Node M A)
+      go _ _ [] _ = []
+      go ns all' (l ∷ ls) prev =
+        let srcId = slSource l
+            totalOut = sumOutgoing srcId all'
+            -- Sum heights of previous links with same source
+            prevOffset = sumPrevOffset srcId prev ns all'
+        in renderLink ns l totalOut prevOffset
+           ∷ go ns all' ls (prev ++ᴸ (l ∷ []))
+        where
+          open import Data.List renaming (_++_ to _++ᴸ_)
+
+          sumPrevOffset : String → List SankeyLink → List PositionedNode → List SankeyLink → Float
+          sumPrevOffset _ [] _ _ = 0.0
+          sumPrevOffset sid (p ∷ ps) posNodes all' =
+            (if slSource p ≡ˢ sid
+             then let tot = sumOutgoing sid all'
+                  in case findNode sid posNodes of λ where
+                       (just src) → if tot ≤ᵇ 0.0 then 2.0
+                                    else (slValue p ÷ tot) * pnHeight src
+                       nothing → 0.0
+             else 0.0)
+            + sumPrevOffset sid ps posNodes all'
+            where
+              case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
+              case x of f = f x
 
 ------------------------------------------------------------------------
 -- Node rendering
@@ -288,11 +361,33 @@ simpleSankey {M} {A} px py w h flows =
   sankeyDiagram px py w h 20.0 (extractNodes flows) (toLinks flows)
   where
     extractNodes : List (String × String × Float) → List SankeyNode
-    extractNodes [] = []
-    extractNodes ((from' , to' , _) ∷ rest) =
-      mkSankeyNode from' from' nothing
-      ∷ mkSankeyNode to' to' nothing
-      ∷ extractNodes rest
+    extractNodes flows' = dedup (collectAll flows')
+      where
+        collectAll : List (String × String × Float) → List SankeyNode
+        collectAll [] = []
+        collectAll ((from' , to' , _) ∷ rest) =
+          mkSankeyNode from' from' nothing
+          ∷ mkSankeyNode to' to' nothing
+          ∷ collectAll rest
+
+        -- Remove duplicate nodes by ID
+        hasId : String → List SankeyNode → Bool
+        hasId _ [] = false
+        hasId id' (n ∷ ns) = if snId n ≡ˢ id' then true else hasId id' ns
+          where
+            open import Data.String using (_≟_)
+            open import Relation.Nullary using (yes; no)
+            _≡ˢ_ : String → String → Bool
+            s ≡ˢ t with s ≟ t
+            ... | yes _ = true
+            ... | no _ = false
+
+        dedup : List SankeyNode → List SankeyNode
+        dedup [] = []
+        dedup (n ∷ ns) =
+          if hasId (snId n) ns
+          then dedup ns
+          else n ∷ dedup ns
 
     toLinks : List (String × String × Float) → List SankeyLink
     toLinks [] = []
@@ -353,15 +448,35 @@ budgetSankey {M} {A} px py w h incomes expenses =
       where
         open import Data.List renaming (_++_ to _++ᴸ_)
 
-    incomeLinks : List SankeyLink
-    incomeLinks = go incomes 0
+    -- Sum all expense values
+    totalExpenses : Float
+    totalExpenses = sumExpenses expenses
       where
-        go : List (String × Float) → ℕ → List SankeyLink
-        go [] _ = []
-        go ((_ , val) ∷ rest) idx =
-          mkSankeyLink ("in" ++ showℕ idx) ("out0") val nothing
-          ∷ go rest (suc idx)
+        sumExpenses : List (String × Float) → Float
+        sumExpenses [] = 0.0
+        sumExpenses ((_ , v) ∷ rest) = v + sumExpenses rest
 
-    -- Simplified: all income flows to first expense
+    -- For each income source, create links to ALL expenses proportionally
+    incomeLinks : List SankeyLink
+    incomeLinks = goIncomes incomes 0
+      where
+        -- Generate links from one income source to all expenses
+        linksForIncome : String → Float → List (String × Float) → ℕ → List SankeyLink
+        linksForIncome _ _ [] _ = []
+        linksForIncome srcId incomeVal ((_ , expVal) ∷ rest) expIdx =
+          let linkVal = if totalExpenses ≤ᵇ 0.0 then 0.0
+                        else incomeVal * (expVal ÷ totalExpenses)
+          in mkSankeyLink srcId ("out" ++ showℕ expIdx) linkVal nothing
+             ∷ linksForIncome srcId incomeVal rest (suc expIdx)
+
+        goIncomes : List (String × Float) → ℕ → List SankeyLink
+        goIncomes [] _ = []
+        goIncomes ((_ , val) ∷ rest) idx =
+          linksForIncome ("in" ++ showℕ idx) val expenses 0
+          ++ᴸ goIncomes rest (suc idx)
+          where
+            open import Data.List renaming (_++_ to _++ᴸ_)
+
+    -- Distribute income proportionally across all expenses
     links : List SankeyLink
     links = incomeLinks

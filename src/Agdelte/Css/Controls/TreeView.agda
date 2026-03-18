@@ -45,6 +45,10 @@ treeViewRules =
   ∷ rule ".agdelte-tree__toggle:hover"
       ( "color" ∶ "var(--agdelte-text)"
       ∷ [])
+  ∷ rule ".agdelte-tree__toggle:focus-visible"
+      ( "outline" ∶ "2px solid var(--agdelte-primary)"
+      ∷ "outline-offset" ∶ "2px"
+      ∷ [])
   ∷ rule ".agdelte-tree__toggle--open"
       ( "transform" ∶ "rotate(90deg)"
       ∷ [])
@@ -66,9 +70,12 @@ treeViewRules =
   ∷ rule ".agdelte-tree__label:hover"
       ( "background" ∶ "var(--agdelte-bg-hover)"
       ∷ [])
+  ∷ rule ".agdelte-tree__label:focus-visible"
+      ( "outline" ∶ "2px solid var(--agdelte-primary)"
+      ∷ "outline-offset" ∶ "2px"
+      ∷ [])
   ∷ rule ".agdelte-tree__children"
-      ( "margin-left" ∶ "var(--agdelte-spacing-md)"
-      ∷ "border-left" ∶ "1px solid var(--agdelte-border)"
+      ( "border-left" ∶ "1px solid var(--agdelte-border)"
       ∷ "animation" ∶ "agdelte-slide-down var(--agdelte-transition)"
       ∷ [])
   ∷ []

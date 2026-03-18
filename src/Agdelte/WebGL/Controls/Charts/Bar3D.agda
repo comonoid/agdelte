@@ -27,10 +27,14 @@ postulate
   natToFloat : ℕ → Float
   maxFloat : Float → Float → Float
   absFloat : Float → Float
+  _/F_ : Float → Float → Float
 
 {-# COMPILE JS natToFloat = n => Number(n) #-}
 {-# COMPILE JS maxFloat = a => b => Math.max(a, b) #-}
 {-# COMPILE JS absFloat = x => Math.abs(x) #-}
+{-# COMPILE JS _/F_ = a => b => a / b #-}
+
+infixl 7 _/F_
 
 ------------------------------------------------------------------------
 -- Bar chart data
@@ -129,9 +133,10 @@ barChart3D {M} {Msg} theme config getData clickHandler t =
     (x ∷ xs) ++ ys = x ∷ (xs ++ ys)
 
     -- Build a single bar with optional label and value
-    buildSingleBar : Float → String → Float → GlColor → ℕ → SceneNode M Msg
-    buildSingleBar x lbl val color idx =
-      let heightRatio = absFloat val * 0.5  -- simplified
+    buildSingleBar : Float → Float → String → Float → GlColor → ℕ → SceneNode M Msg
+    buildSingleBar maxVal x lbl val color idx =
+      let safeMax = maxFloat maxVal 0.0001  -- guard against maxVal=0
+          heightRatio = absFloat val /F safeMax
           barHeight = maxH * heightRatio + 0.01  -- minimum height
           y = barHeight * 0.5
           barT = mkTransform (vec3 x y 0.0) identityQuat (vec3 1.0 1.0 1.0)
@@ -163,7 +168,7 @@ barChart3D {M} {Msg} theme config getData clickHandler t =
           -- Bar position
           x = startX + natToFloat idx * (barW + spacing)
           -- Create bar
-          bar = buildSingleBar x lbl val barColor idx
+          bar = buildSingleBar maxVal x lbl val barColor idx
       in bar ∷ buildBarList maxVal startX (suc idx) ds
 
     buildBars : M → List (SceneNode M Msg)

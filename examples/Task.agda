@@ -10,6 +10,7 @@ open import Data.Nat using (ℕ; zero; suc)
 open import Data.Nat.Show using (show)
 open import Data.String using (String; _++_; length)
 open import Data.List using (List; []; _∷_; [_])
+open import Data.Bool using (Bool; true; false)
 open import Function using (const)
 
 open import Agdelte.Core.Event
@@ -95,6 +96,11 @@ getStatusText loading = "Fetching..."
 getStatusText (success d) = d
 getStatusText (error e) = "Error: " ++ e
 
+isLoading : Model → Bool
+isLoading m with Model.status m
+... | loading = true
+... | _       = false
+
 -- Model to string functions
 btnTextFromModel : Model → String
 btnTextFromModel m = getBtnText (Model.status m)
@@ -114,7 +120,7 @@ taskTemplate =
   div [ class "task-demo" ]
     ( h1 [] [ text "Task Chain Demo" ]
     ∷ p [] [ text "Demonstrates monadic HTTP request chains" ]
-    ∷ button (onClick FetchChain ∷ class "fetch-btn" ∷ [])
+    ∷ button (onClick FetchChain ∷ class "fetch-btn" ∷ disabledBind isLoading ∷ [])
         [ bindF btnTextFromModel ]    -- auto-updates!
     ∷ div [ class "status" ]
         [ pre [] [ bindF statusTextFromModel ] ]  -- auto-updates!

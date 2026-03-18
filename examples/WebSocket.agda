@@ -39,12 +39,13 @@ record Model : Set where
     connStatus    : ConnectionStatus  -- current connection status
     messages      : List ChatMsg
     inputText     : String
+    pendingMsg    : String            -- message captured before clearing inputText
     msgCount      : ℕ
 
 open Model public
 
 initialModel : Model
-initialModel = mkModel false Disconnected [] "" zero
+initialModel = mkModel false Disconnected [] "" "" zero
 
 postulate wsUrl : String
 {-# COMPILE JS wsUrl =
@@ -82,6 +83,7 @@ updateModel (UpdateInput s) m = record m { inputText = s }
 updateModel SendMessage m = record m
   { messages = messages m ++L [ Sent (inputText m) ]
   ; inputText = ""
+  ; pendingMsg = inputText m
   }
 
 ------------------------------------------------------------------------
@@ -90,7 +92,7 @@ updateModel SendMessage m = record m
 
 cmd' : Msg → Model → Cmd Msg
 cmd' SendMessage m with connStatus m
-... | Connected = wsSend wsUrl (inputText m)
+... | Connected = wsSend wsUrl (pendingMsg m)
 ... | _ = ε
 cmd' _ _ = ε
 

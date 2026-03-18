@@ -5,7 +5,8 @@ module Main where
 import Test.Hspec
 
 import qualified Numeric
-import Control.Concurrent.Async (async, cancel)
+import Control.Concurrent (threadDelay)
+import Control.Concurrent.Async (async, cancel, mapConcurrently)
 import Control.Concurrent.MVar
 import Control.Exception (SomeException, bracket, try)
 import Data.IORef
@@ -21,6 +22,7 @@ import qualified Network.WebSockets as WS
 
 import qualified Agdelte.Http as Http
 import qualified Agdelte.AgentServer as Agent
+import qualified Agdelte.Process as Process
 
 -- Helper: run a WAI app on an ephemeral port and pass port to callback
 withApp :: Wai.Application -> (Int -> IO a) -> IO a
@@ -131,6 +133,8 @@ main = hspec $ do
   describe "Http" httpTests
   describe "WebSocket" wsTests
   describe "AgentServer" agentTests
+  describe "Process timeout" processTimeoutTests
+  describe "AgentServer concurrent access" concurrentAgentTests
 
 -- | Simple echo HTTP handler for tests
 testHttpHandler :: Http.Request -> IO Http.Response
@@ -315,3 +319,121 @@ withAgentServerCors corsOrigin action = do
         }
   app <- Agent.mkAgentApp corsOrigin [agent]
   withApp app action
+
+------------------------------------------------------------------------
+-- Process timeout tests (H2)
+------------------------------------------------------------------------
+
+-- | Helper: run an IPC server on a temp Unix socket, connect a client,
+-- run the test, then clean up both sides.
+withIpc :: FilePath -> IO T.Text -> (T.Text -> IO T.Text)
+        -> (Process.IpcClient -> IO a) -> IO a
+withIpc path observe step action =
+  bracket (Process.serveAgentProcess path observe step) Process.stopIpcServer $ \_ -> do
+    -- Small delay to let the accept loop start
+    threadDelay 50000
+    bracket (Process.connectUnix path) Process.ipcClose action
+
+processTimeoutTests :: Spec
+processTimeoutTests = do
+  it "fast peek completes successfully within timeout" $ do
+    ref <- newIORef ("hello" :: T.Text)
+    let observe = readIORef ref
+        step _  = atomicModifyIORef' ref (\s -> (s <> "!", s <> "!"))
+        path = "/tmp/agdelte-test-timeout-fast.sock"
+    withIpc path observe step $ \client -> do
+      result <- Process.queryProcess client
+      result `shouldBe` "hello"
+
+  it "fast step completes successfully within timeout" $ do
+    ref <- newIORef ("0" :: T.Text)
+    let observe = readIORef ref
+        step input = do
+          let new = input <> "-ok"
+          writeIORef ref new
+          return new
+        path = "/tmp/agdelte-test-timeout-step.sock"
+    withIpc path observe step $ \client -> do
+      result <- Process.stepProcess client "test"
+      result `shouldBe` "test-ok"
+      -- Verify the state was updated
+      state <- Process.queryProcess client
+      state `shouldBe` "test-ok"
+
+  it "handler exception returns error response (not crash)" $ do
+    let observe = return "ok" :: IO T.Text
+        step _ = error "intentional test error"
+        path = "/tmp/agdelte-test-timeout-err.sock"
+    withIpc path observe step $ \client -> do
+      result <- Process.stepProcess client "boom"
+      -- The handler catches exceptions and returns "error:..." text
+      T.isPrefixOf "error:" result `shouldBe` True
+
+  -- Note: testing the actual 30-second timeout would require waiting 30+ seconds.
+  -- The timeout is hardcoded in Process.handleClient. The tests above verify that
+  -- the timeout wrapper does not interfere with normal (fast) operations, and that
+  -- exceptions are caught correctly — the same code path that timeout uses.
+
+------------------------------------------------------------------------
+-- Concurrent access tests (H6)
+------------------------------------------------------------------------
+
+concurrentAgentTests :: Spec
+concurrentAgentTests = do
+  it "concurrent GET /counter/state requests all succeed" $ do
+    withAgentServer $ \port -> do
+      -- Fire 20 concurrent GET requests
+      results <- mapConcurrently (\_ -> httpGet port "/counter/state") [(1::Int)..20]
+      -- All should return 200 with consistent state
+      let statuses = map (\(s, _, _) -> s) results
+      all (== 200) statuses `shouldBe` True
+
+  it "concurrent POST /counter/step requests all succeed and produce correct final state" $ do
+    withAgentServer $ \port -> do
+      -- Fire 50 concurrent step requests
+      results <- mapConcurrently (\_ -> httpPost port "/counter/step" "") [(1::Int)..50]
+      let statuses = map (\(s, _, _) -> s) results
+      all (== 200) statuses `shouldBe` True
+      -- Each step increments by 1, so final state should be 50
+      (_, finalBody, _) <- httpGet port "/counter/state"
+      finalBody `shouldBe` "50"
+
+  it "concurrent mixed GET and POST requests do not crash or corrupt" $ do
+    withAgentServer $ \port -> do
+      -- Mix of reads and writes concurrently
+      let actions = [ if even i
+                      then httpGet port "/counter/state"
+                      else httpPost port "/counter/step" ""
+                    | i <- [(1::Int)..40]
+                    ]
+      results <- mapConcurrently id actions
+      let statuses = map (\(s, _, _) -> s) results
+      -- No 500s or other error codes
+      all (== 200) statuses `shouldBe` True
+      -- The number of steps is the number of odd indices in [1..40] = 20
+      (_, finalBody, _) <- httpGet port "/counter/state"
+      finalBody `shouldBe` "20"
+
+  it "concurrent WebSocket connects + HTTP steps do not crash" $ do
+    withAgentServer $ \port -> do
+      -- Start 5 WS clients that each listen for one broadcast
+      gotMessages <- newMVar (0 :: Int)
+      wsThreads <- mapConcurrently (\_ ->
+        async $ WS.runClient "127.0.0.1" port "/ws" $ \conn -> do
+          -- Read welcome message
+          _ <- WS.receiveData conn :: IO Text
+          -- Read one broadcast
+          _ <- WS.receiveData conn :: IO Text
+          modifyMVar_ gotMessages (\n -> return (n + 1))
+        ) [(1::Int)..5]
+      -- Small delay to let WS clients connect and register
+      threadDelay 100000
+      -- Step the agent to trigger a broadcast
+      (status, _, _) <- httpPost port "/counter/step" ""
+      status `shouldBe` 200
+      -- Wait a bit for broadcasts to propagate then clean up
+      threadDelay 200000
+      mapM_ cancel wsThreads
+      received <- readMVar gotMessages
+      -- At least some WS clients should have received the broadcast
+      received `shouldSatisfy` (> 0)

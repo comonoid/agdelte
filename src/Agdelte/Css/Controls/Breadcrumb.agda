@@ -21,12 +21,15 @@ breadcrumbRules =
       ∷ [])
   ∷ rule ".agdelte-breadcrumb__list"
       ( "display" ∶ "flex"
-      ∷ "flex-wrap" ∶ "wrap"
+      ∷ "flex-wrap" ∶ "nowrap"
       ∷ "align-items" ∶ "center"
       ∷ "list-style" ∶ "none"
       ∷ "margin" ∶ "0"
       ∷ "padding" ∶ "0"
       ∷ "gap" ∶ "var(--agdelte-spacing-xs)"
+      ∷ "overflow" ∶ "hidden"
+      ∷ "text-overflow" ∶ "ellipsis"
+      ∷ "white-space" ∶ "nowrap"
       ∷ [])
   ∷ rule ".agdelte-breadcrumb__item"
       ( "display" ∶ "flex"
@@ -45,6 +48,10 @@ breadcrumbRules =
   ∷ rule ".agdelte-breadcrumb__link:hover"
       ( "background" ∶ "var(--agdelte-bg-hover)"
       ∷ "text-decoration" ∶ "underline"
+      ∷ [])
+  ∷ rule ".agdelte-breadcrumb__link:focus-visible"
+      ( "outline" ∶ "2px solid var(--agdelte-primary)"
+      ∷ "outline-offset" ∶ "2px"
       ∷ [])
   ∷ rule ".agdelte-breadcrumb__separator"
       ( "color" ∶ "var(--agdelte-text-muted)"

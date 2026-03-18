@@ -39,6 +39,10 @@ tabBarRules =
       ( "color" ∶ "var(--agdelte-text)"
       ∷ "background" ∶ "var(--agdelte-bg-hover)"
       ∷ [])
+  ∷ rule ".agdelte-tabs__tab:focus-visible"
+      ( "outline" ∶ "2px solid var(--agdelte-primary)"
+      ∷ "outline-offset" ∶ "2px"
+      ∷ [])
   ∷ rule ".agdelte-tabs__tab--active"
       ( "color" ∶ "var(--agdelte-primary)"
       ∷ "border-bottom-color" ∶ "var(--agdelte-primary)"

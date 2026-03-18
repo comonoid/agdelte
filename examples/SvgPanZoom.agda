@@ -79,9 +79,9 @@ updateModel (Drag p) m with Model.isDragging m
     }
 updateModel StopDrag m = record m { isDragging = false }
 updateModel ZoomIn m = record m
-  { viewBox = zoomViewBox 1.2 (Model.viewBox m) }
-updateModel ZoomOut m = record m
   { viewBox = zoomViewBox 0.8 (Model.viewBox m) }
+updateModel ZoomOut m = record m
+  { viewBox = zoomViewBox 1.2 (Model.viewBox m) }
 updateModel Reset m = record m
   { viewBox = mkViewBox 0.0 0.0 400.0 300.0 }
 updateModel (Wheel delta) m =

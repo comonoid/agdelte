@@ -220,12 +220,12 @@ colorPicker3D {M} {Msg} theme config getColor onChange t =
     buildHueRing : Float → Float → ℕ → SceneNode M Msg
     buildHueRing r d n = group identityTransform (buildSegments r d 0 12)
       where
-        segmentAngle = 2.0 * pi * (1.0 * (1.0 * (1.0 * (1.0 * (1.0 * (1.0 * (1.0 * (1.0 * (1.0 * (1.0 * (1.0 * (1.0 * 0.0833)))))))))))) -- 1/12
+        segmentAngle = 2.0 * pi * 0.0833  -- 1/12 of full circle
 
         buildSegments : Float → Float → ℕ → ℕ → List (SceneNode M Msg)
         buildSegments _ _ _ zero = []
         buildSegments radius depth idx (suc remaining) =
-          let angle = natToFloat idx * segmentAngle * 12.0 * 2.0 * pi * (1.0 * (1.0 * (1.0 * 0.0833)))
+          let angle = natToFloat idx * segmentAngle
               x = (radius * 0.75) * cosF angle
               y = (radius * 0.75) * sinF angle
               segT = mkTransform (vec3 x y 0.0) identityQuat (vec3 1.0 1.0 1.0)

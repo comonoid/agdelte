@@ -36,7 +36,9 @@ postulate
 {-# COMPILE JS loadModel = url => ({
   type: 'modelHandle',
   url: url,
-  format: 'gltf'
+  format: 'gltf',
+  meshNames: [],
+  animationNames: []
 }) #-}
 
 -- Load with options
@@ -53,7 +55,9 @@ postulate
   type: 'modelHandle',
   url: url,
   format: 'gltf',
-  options: options
+  options: options,
+  meshNames: [],
+  animationNames: []
 }) #-}
 
 ------------------------------------------------------------------------
@@ -189,13 +193,15 @@ postulate
 postulate
   getMeshNames : ModelHandle → List String
 
-{-# COMPILE JS getMeshNames = handle => [] #-}  -- Runtime would populate
+{-# COMPILE JS getMeshNames = handle =>
+  (handle && handle.meshNames) ? handle.meshNames : [] #-}
 
 -- Placeholder: get list of animation names
 postulate
   getAnimationNames : ModelHandle → List String
 
-{-# COMPILE JS getAnimationNames = handle => [] #-}  -- Runtime would populate
+{-# COMPILE JS getAnimationNames = handle =>
+  (handle && handle.animationNames) ? handle.animationNames : [] #-}
 
 ------------------------------------------------------------------------
 -- Convenience functions

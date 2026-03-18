@@ -41,6 +41,34 @@ getRotation (mkTransform _ rot _) = rot
 getScale : Transform → Vec3
 getScale (mkTransform _ _ sc) = sc
 
+-- Vector and quaternion composition helpers
+addVec3 : Vec3 → Vec3 → Vec3
+addVec3 a b = vec3 (vec3X a + vec3X b) (vec3Y a + vec3Y b) (vec3Z a + vec3Z b)
+
+mulVec3 : Vec3 → Vec3 → Vec3
+mulVec3 a b = vec3 (vec3X a * vec3X b) (vec3Y a * vec3Y b) (vec3Z a * vec3Z b)
+
+-- Quaternion multiplication (Hamilton product)
+postulate
+  quatX : Quat → Float
+  quatY : Quat → Float
+  quatZ : Quat → Float
+  quatW : Quat → Float
+
+{-# COMPILE JS quatX = q => q.x #-}
+{-# COMPILE JS quatY = q => q.y #-}
+{-# COMPILE JS quatZ = q => q.z #-}
+{-# COMPILE JS quatW = q => q.w #-}
+
+multiplyQuat : Quat → Quat → Quat
+multiplyQuat a b =
+  let ax = quatX a; ay = quatY a; az = quatZ a; aw = quatW a
+      bx = quatX b; by = quatY b; bz = quatZ b; bw = quatW b
+  in quat (aw * bx + ax * bw + ay * bz - az * by)
+          (aw * by - ax * bz + ay * bw + az * bx)
+          (aw * bz + ax * by - ay * bx + az * bw)
+          (aw * bw - ax * bx - ay * by - az * bz)
+
 ------------------------------------------------------------------------
 -- Gizmo configuration
 ------------------------------------------------------------------------
@@ -389,23 +417,27 @@ transformGizmo {M} {Msg} style getMode getTransform updateTransform =
       TranslateMode →
         translateGizmo style
           (λ m' → getPosition (getTransform m'))
-          (λ pos → updateTransform (mkTransform pos
-                     (getRotation (getTransform m))
-                     (getScale (getTransform m))))
+          (λ pos → let currentT = getTransform m
+                   in updateTransform (mkTransform
+                        (addVec3 (getPosition currentT) pos)
+                        (getRotation currentT)
+                        (getScale currentT)))
         ∷ []
       RotateMode →
         rotateGizmo style
           (λ m' → getRotation (getTransform m'))
-          (λ rot → updateTransform (mkTransform
-                     (getPosition (getTransform m))
-                     rot
-                     (getScale (getTransform m))))
+          (λ deltaQuat → let currentT = getTransform m
+                         in updateTransform (mkTransform
+                              (getPosition currentT)
+                              (multiplyQuat deltaQuat (getRotation currentT))
+                              (getScale currentT)))
         ∷ []
       ScaleMode →
         scaleGizmo style
           (λ m' → getScale (getTransform m'))
-          (λ sc → updateTransform (mkTransform
-                    (getPosition (getTransform m))
-                    (getRotation (getTransform m))
-                    sc))
+          (λ deltaScale → let currentT = getTransform m
+                          in updateTransform (mkTransform
+                               (getPosition currentT)
+                               (getRotation currentT)
+                               (mulVec3 deltaScale (getScale currentT))))
         ∷ []

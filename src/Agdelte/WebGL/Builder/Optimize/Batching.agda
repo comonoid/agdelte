@@ -11,6 +11,7 @@ open import Data.Nat using (ℕ)
 open import Data.Float using (Float)
 open import Data.List using (List; []; _∷_)
 open import Data.Product using (_×_; _,_)
+open import Data.String using (String)
 
 open import Agdelte.WebGL.Types
 
@@ -42,7 +43,7 @@ postulate
 
 {-# COMPILE JS combineStatic = meshes => ({
   type: 'combinedStatic',
-  meshes: meshes
+  meshes: meshes.map(m => m(geom => xform => ({ geometry: geom, transform: xform })))
 }) #-}
 
 ------------------------------------------------------------------------
@@ -51,13 +52,17 @@ postulate
 
 -- Group children by material for automatic batching
 -- The runtime will sort and batch draw calls by material
+-- Wrapped in named/group so zoomSceneNode can traverse it
 postulate
-  materialBatch : ∀ {M Msg} → List (SceneNode M Msg) → SceneNode M Msg
+  materialBatchRaw : ∀ {M Msg} → List (SceneNode M Msg) → SceneNode M Msg
 
-{-# COMPILE JS materialBatch = children => ({
+{-# COMPILE JS materialBatchRaw = children => ({
   type: 'materialBatch',
   children: children
 }) #-}
+
+materialBatch : ∀ {M Msg} → List (SceneNode M Msg) → SceneNode M Msg
+materialBatch children = named "optimizationHint" (group identityTransform (materialBatchRaw children ∷ []))
 
 ------------------------------------------------------------------------
 -- Texture atlas batching
@@ -74,12 +79,13 @@ record AtlasConfig : Set where
 postulate
   textureAtlas : ∀ {M Msg} → AtlasConfig → List (SceneNode M Msg) → SceneNode M Msg
 
-{-# COMPILE JS textureAtlas = config => children => ({
-  type: 'textureAtlas',
-  maxSize: Number(config.maxSize),
-  padding: Number(config.padding),
-  children: children
-}) #-}
+{-# COMPILE JS textureAtlas = config => children =>
+  config(maxSize => padding => ({
+    type: 'textureAtlas',
+    maxSize: Number(maxSize),
+    padding: Number(padding),
+    children: children
+  })) #-}
 
 ------------------------------------------------------------------------
 -- Instance batching hints
@@ -87,13 +93,17 @@ postulate
 
 -- Hint that these nodes should be rendered using GPU instancing
 -- The runtime will automatically merge identical geometries
+-- Wrapped in named/group so zoomSceneNode can traverse it
 postulate
-  instanceHint : ∀ {M Msg} → List (SceneNode M Msg) → SceneNode M Msg
+  instanceHintRaw : ∀ {M Msg} → List (SceneNode M Msg) → SceneNode M Msg
 
-{-# COMPILE JS instanceHint = children => ({
+{-# COMPILE JS instanceHintRaw = children => ({
   type: 'instanceHint',
   children: children
 }) #-}
+
+instanceHint : ∀ {M Msg} → List (SceneNode M Msg) → SceneNode M Msg
+instanceHint children = named "optimizationHint" (group identityTransform (instanceHintRaw children ∷ []))
 
 ------------------------------------------------------------------------
 -- Draw call sorting
@@ -103,10 +113,14 @@ postulate
 -- 1. Opaque objects front-to-back (minimize overdraw)
 -- 2. Transparent objects back-to-front (correct blending)
 -- 3. Group by material/shader
+-- Wrapped in named/group so zoomSceneNode can traverse it
 postulate
-  optimizeDrawOrder : ∀ {M Msg} → List (SceneNode M Msg) → SceneNode M Msg
+  optimizeDrawOrderRaw : ∀ {M Msg} → List (SceneNode M Msg) → SceneNode M Msg
 
-{-# COMPILE JS optimizeDrawOrder = children => ({
+{-# COMPILE JS optimizeDrawOrderRaw = children => ({
   type: 'sortedDrawOrder',
   children: children
 }) #-}
+
+optimizeDrawOrder : ∀ {M Msg} → List (SceneNode M Msg) → SceneNode M Msg
+optimizeDrawOrder children = named "optimizationHint" (group identityTransform (optimizeDrawOrderRaw children ∷ []))

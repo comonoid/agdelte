@@ -89,6 +89,10 @@ popoverRules =
   ∷ rule ".agdelte-popover__close:hover"
       ( "color" ∶ "var(--agdelte-text)"
       ∷ [])
+  ∷ rule ".agdelte-popover__close:focus-visible"
+      ( "outline" ∶ "2px solid var(--agdelte-primary)"
+      ∷ "outline-offset" ∶ "2px"
+      ∷ [])
   -- Menu variant
   ∷ rule ".agdelte-popover--menu"
       ( "padding" ∶ "var(--agdelte-spacing-xs)"
@@ -108,6 +112,10 @@ popoverRules =
       ∷ [])
   ∷ rule ".agdelte-popover__menu-item:hover"
       ( "background" ∶ "var(--agdelte-bg-hover)"
+      ∷ [])
+  ∷ rule ".agdelte-popover__menu-item:focus-visible"
+      ( "outline" ∶ "2px solid var(--agdelte-primary)"
+      ∷ "outline-offset" ∶ "2px"
       ∷ [])
   -- Confirm variant
   ∷ rule ".agdelte-popover--confirm"

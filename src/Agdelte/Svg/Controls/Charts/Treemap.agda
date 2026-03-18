@@ -87,9 +87,69 @@ private
 -- Squarified Treemap Layout
 ------------------------------------------------------------------------
 
--- Simplified squarified layout algorithm
--- Real implementation would use proper squarify algorithm
+-- JS-compiled helpers for squarified algorithm
 private
+  postulate absFloat : Float → Float
+  {-# COMPILE JS absFloat = Math.abs #-}
+
+  postulate maxFloat : Float → Float → Float
+  {-# COMPILE JS maxFloat = x => y => Math.max(x, y) #-}
+
+  postulate sortDescFloat : ∀ {A : Set} → (A → Float) → List A → List A
+  {-# COMPILE JS sortDescFloat = f => xs => [...xs].sort((a, b) => f(b) - f(a)) #-}
+
+private
+  open import Data.List renaming (_++_ to _++ᴸ_)
+  open import Data.Nat using (_≡ᵇ_) renaming (_+_ to _+ᴺ_)
+
+  case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
+  case x of f = f x
+
+  -- Filter out nodes with non-positive values
+  positiveNodes : ∀ {A} → List (TreemapNode A) → List (TreemapNode A)
+  positiveNodes [] = []
+  positiveNodes (n ∷ ns) =
+    if 0.0 <ᵇ tmValue n then n ∷ positiveNodes ns else positiveNodes ns
+
+  -- Maximum fuel for squarify iterations (safety net against infinite loops)
+  maxFuel : ℕ
+  maxFuel = 1000
+
+  -- Sum float values in a list
+  sumFloats : List Float → Float
+  sumFloats [] = 0.0
+  sumFloats (v ∷ vs) = v + sumFloats vs
+
+  -- Compute worst aspect ratio for a row of areas laid out along a side of length `side`
+  -- Each item's area is given; the row's total area determines the row thickness.
+  worstRatio : List Float → Float → Float
+  worstRatio [] _ = 0.0
+  worstRatio areas side =
+    let s = sumFloats areas
+        -- row thickness = totalArea / side
+        -- for each item: itemWidth = itemArea / thickness = itemArea * side / totalArea
+        -- aspect ratio = max(w/thickness, thickness/w)
+    in go areas s side
+    where
+      ratioOf : Float → Float → Float → Float
+      ratioOf area total sideLen =
+        if total ≤ᵇ 0.0 then 1.0e10
+        else let thickness = total ÷ sideLen
+                 w = area ÷ thickness
+                 r1 = w ÷ thickness
+                 r2 = thickness ÷ w
+             in maxFloat r1 r2
+
+      go : List Float → Float → Float → Float
+      go [] _ _ = 0.0
+      go (a ∷ []) total sideLen = ratioOf a total sideLen
+      go (a ∷ rest) total sideLen = maxFloat (ratioOf a total sideLen) (go rest total sideLen)
+
+  -- Squarified layout: recursively partition nodes into rows with good aspect ratios.
+  -- Uses a fuel parameter as a safety net against infinite loops (e.g. from
+  -- zero-valued nodes that don't shrink the remaining rectangle).
+  -- Nodes with value ≤ 0 are filtered out before processing.
+  {-# TERMINATING #-}
   layoutChildren : ∀ {A}
                  → Float → Float → Float → Float  -- available area
                  → Float                           -- total value
@@ -99,50 +159,100 @@ private
                  → List (TreemapRect A)
   layoutChildren _ _ _ _ _ _ _ [] = []
   layoutChildren {A} px py w h total colorIdx depth nodes =
-    if w <ᵇ h
-    then layoutVertical px py w h total colorIdx depth nodes
-    else layoutHorizontal px py w h total colorIdx depth nodes
+    let filtered = positiveNodes nodes
+        filteredTotal = sumValues filtered
+        sorted = sortDescFloat (λ n → tmValue n) filtered
+    in squarify maxFuel sorted [] px py w h filteredTotal colorIdx depth
     where
-      layoutHorizontal : Float → Float → Float → Float → Float → ℕ → ℕ → List (TreemapNode A) → List (TreemapRect A)
-      layoutHorizontal _ _ _ _ _ _ _ [] = []
-      layoutHorizontal px' py' w' h' tot' cidx dep (n ∷ ns) =
-        let ratio = if tot' ≤ᵇ 0.0 then 0.0 else tmValue n ÷ tot'
-            nodeW = ratio * w'
-            nodeColor = case tmColor n of λ where
-              nothing → getColor cidx
-              (just c) → c
-            rect = mkTreemapRect px' py' nodeW h' (tmLabel n) (tmValue n) nodeColor dep (tmOnClick n)
-            -- Recurse into children if any
-            childRects = if listLen (tmChildren n) ≡ᵇ 0
-                         then []
-                         else layoutChildren (px' + 2.0) (py' + 2.0) (nodeW - 4.0) (h' - 4.0)
-                                (sumValues (tmChildren n)) 0 (suc dep) (tmChildren n)
-        in rect ∷ childRects ++ᴸ layoutHorizontal (px' + nodeW) py' (w' - nodeW) h' (tot' - tmValue n) (suc cidx) dep ns
+      -- Lay out a finalized row of nodes along the short side of the remaining rectangle
+      -- When w < h (tall), the row goes horizontally (fixed height strip at top)
+      -- When w >= h (wide), the row goes vertically (fixed width strip at left)
+      layoutRow : List (TreemapNode A) → Float → Float → Float → Float → Float → ℕ → ℕ
+                → List (TreemapRect A) × Float × Float × Float × Float × ℕ
+      layoutRow [] px' py' w' h' _ cidx _ = ([] , px' , py' , w' , h' , cidx)
+      layoutRow row px' py' w' h' tot cidx dep =
+        let rowSum = sumFloats (Data.List.map (λ n → tmValue n) row)
+        in if w' <ᵇ h'
+           then -- Tall: lay row as horizontal strip at top, height = rowSum/total * h
+             let stripH = if tot ≤ᵇ 0.0 then 0.0 else (rowSum ÷ tot) * h'
+             in (layHoriz row px' py' w' stripH rowSum cidx dep
+                , px' , py' + stripH , w' , h' - stripH , cidx)
+           else -- Wide: lay row as vertical strip at left, width = rowSum/total * w
+             let stripW = if tot ≤ᵇ 0.0 then 0.0 else (rowSum ÷ tot) * w'
+             in (layVert row px' py' stripW h' rowSum cidx dep
+                , px' + stripW , py' , w' - stripW , h' , cidx)
         where
-          open import Data.Nat using (_≡ᵇ_)
-          open import Data.List renaming (_++_ to _++ᴸ_)
-          case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
-          case x of f = f x
+          layHoriz : List (TreemapNode A) → Float → Float → Float → Float → Float → ℕ → ℕ → List (TreemapRect A)
+          layHoriz [] _ _ _ _ _ _ _ = []
+          layHoriz (n ∷ ns) lx ly lw lh rowTotal ci dp =
+            let frac = if rowTotal ≤ᵇ 0.0 then 0.0 else tmValue n ÷ rowTotal
+                nodeW = frac * lw
+                nodeColor = case tmColor n of λ where
+                  nothing → getColor ci
+                  (just c) → c
+                rect = mkTreemapRect lx ly nodeW lh (tmLabel n) (tmValue n) nodeColor dp (tmOnClick n)
+                kids = positiveNodes (tmChildren n)
+                childRects = if listLen kids ≡ᵇ 0 then []
+                             else if (nodeW ≤ᵇ 4.0) then []
+                             else if (lh ≤ᵇ 4.0) then []
+                             else layoutChildren (lx + 2.0) (ly + 2.0) (nodeW - 4.0) (lh - 4.0)
+                                    (sumValues kids) 0 (suc dp) kids
+            in rect ∷ childRects ++ᴸ layHoriz ns (lx + nodeW) ly (lw - nodeW) lh (rowTotal - tmValue n) (suc ci) dp
 
-      layoutVertical : Float → Float → Float → Float → Float → ℕ → ℕ → List (TreemapNode A) → List (TreemapRect A)
-      layoutVertical _ _ _ _ _ _ _ [] = []
-      layoutVertical px' py' w' h' tot' cidx dep (n ∷ ns) =
-        let ratio = if tot' ≤ᵇ 0.0 then 0.0 else tmValue n ÷ tot'
-            nodeH = ratio * h'
-            nodeColor = case tmColor n of λ where
-              nothing → getColor cidx
-              (just c) → c
-            rect = mkTreemapRect px' py' w' nodeH (tmLabel n) (tmValue n) nodeColor dep (tmOnClick n)
-            childRects = if listLen (tmChildren n) ≡ᵇ 0
-                         then []
-                         else layoutChildren (px' + 2.0) (py' + 2.0) (w' - 4.0) (nodeH - 4.0)
-                                (sumValues (tmChildren n)) 0 (suc dep) (tmChildren n)
-        in rect ∷ childRects ++ᴸ layoutVertical px' (py' + nodeH) w' (h' - nodeH) (tot' - tmValue n) (suc cidx) dep ns
-        where
-          open import Data.Nat using (_≡ᵇ_)
-          open import Data.List renaming (_++_ to _++ᴸ_)
-          case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
-          case x of f = f x
+          layVert : List (TreemapNode A) → Float → Float → Float → Float → Float → ℕ → ℕ → List (TreemapRect A)
+          layVert [] _ _ _ _ _ _ _ = []
+          layVert (n ∷ ns) lx ly lw lh rowTotal ci dp =
+            let frac = if rowTotal ≤ᵇ 0.0 then 0.0 else tmValue n ÷ rowTotal
+                nodeH = frac * lh
+                nodeColor = case tmColor n of λ where
+                  nothing → getColor ci
+                  (just c) → c
+                rect = mkTreemapRect lx ly lw nodeH (tmLabel n) (tmValue n) nodeColor dp (tmOnClick n)
+                kids = positiveNodes (tmChildren n)
+                childRects = if listLen kids ≡ᵇ 0 then []
+                             else if (lw ≤ᵇ 4.0) then []
+                             else if (nodeH ≤ᵇ 4.0) then []
+                             else layoutChildren (lx + 2.0) (ly + 2.0) (lw - 4.0) (nodeH - 4.0)
+                                    (sumValues kids) 0 (suc dp) kids
+            in rect ∷ childRects ++ᴸ layVert ns lx (ly + nodeH) lw (lh - nodeH) (rowTotal - tmValue n) (suc ci) dp
+
+      -- The short side of the remaining rectangle
+      shortSide : Float → Float → Float
+      shortSide w' h' = if w' <ᵇ h' then w' else h'
+
+      -- Squarify: greedily build rows by checking aspect ratios.
+      -- fuel parameter prevents infinite loops when values don't shrink the rectangle.
+      squarify : ℕ → List (TreemapNode A) → List (TreemapNode A)
+               → Float → Float → Float → Float → Float → ℕ → ℕ
+               → List (TreemapRect A)
+      -- Fuel exhausted: finalize whatever row we have and stop
+      squarify zero [] _ _ _ _ _ _ _ _ = []
+      squarify zero _ row px' py' w' h' tot cidx dep =
+        let (rects , _ , _ , _ , _ , _) = layoutRow row px' py' w' h' tot cidx dep
+        in rects
+      squarify _ [] [] _ _ _ _ _ _ _ = []
+      squarify fuel [] row px' py' w' h' tot cidx dep =
+        -- No more items, finalize current row
+        let (rects , _ , _ , _ , _ , _) = layoutRow row px' py' w' h' tot cidx dep
+        in rects
+      squarify (suc fuel') (n ∷ rest) [] px' py' w' h' tot cidx dep =
+        -- Empty row, always add first item
+        squarify fuel' rest (n ∷ []) px' py' w' h' tot cidx dep
+      squarify (suc fuel') (n ∷ rest) row px' py' w' h' tot cidx dep =
+        let side = shortSide w' h'
+            -- Scale node values to pixel areas for ratio computation
+            areaScale = if tot ≤ᵇ 0.0 then 0.0 else (w' * h') ÷ tot
+            rowAreas = Data.List.map (λ nd → tmValue nd * areaScale) row
+            candArea = tmValue n * areaScale
+            worstWithout = worstRatio rowAreas side
+            worstWith    = worstRatio (rowAreas ++ᴸ (candArea ∷ [])) side
+        in if worstWith ≤ᵇ worstWithout
+           then -- Adding candidate improves or maintains ratio, add it
+             squarify fuel' rest (row ++ᴸ (n ∷ [])) px' py' w' h' tot cidx dep
+           else -- Adding candidate worsens ratio, finalize row and start new one
+             let (rects , px'' , py'' , w'' , h'' , cidx') = layoutRow row px' py' w' h' tot cidx dep
+                 newCidx = cidx +ᴺ listLen row
+             in rects ++ᴸ squarify fuel' (n ∷ rest) [] px'' py'' w'' h'' (tot - sumValues row) newCidx dep
 
 ------------------------------------------------------------------------
 -- Rendering

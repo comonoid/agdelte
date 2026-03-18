@@ -84,10 +84,23 @@ private
   absF x = if x FB.<ᵇ 0.0 then FB.- x else x
     where open import Data.Bool using (if_then_else_)
 
+  maxFloat : F.Float → F.Float → F.Float
+  maxFloat a b = if a FB.<ᵇ b then b else a
+    where open import Data.Bool using (if_then_else_)
+
+-- | Original isSettled with fixed threshold (kept for backward compatibility)
 isSettled : Spring → Bool
 isSettled s =
   (absF (Spring.position s F.- Spring.target s) FB.<ᵇ 0.01)
   ∧ (absF (Spring.velocity s) FB.<ᵇ 0.01)
+
+-- | Range-aware isSettled matching runtime behavior (events.js).
+-- Threshold = max(0.01, range * 0.001) where range = |start - target|.
+isSettledRange : F.Float → Spring → Bool
+isSettledRange range s =
+  let threshold = maxFloat 0.01 (range F.* 0.001)
+  in (absF (Spring.position s F.- Spring.target s) FB.<ᵇ threshold)
+     ∧ (absF (Spring.velocity s) FB.<ᵇ threshold)
 
 ------------------------------------------------------------------------
 -- Retarget (interrupt mid-flight, velocity carries over)

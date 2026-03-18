@@ -26,17 +26,24 @@ echo ""
 echo "--- Library modules ---"
 echo ""
 typecheck "Reactive.Node"          -i src src/Agdelte/Reactive/Node.agda
-typecheck "Theory/Poly"            -i src src/Agdelte/Theory/Poly.agda
-typecheck "Theory/DepPoly"         -i src src/Agdelte/Theory/DepPoly.agda
-typecheck "Theory/PolySignal"      -i src src/Agdelte/Theory/PolySignal.agda
-typecheck "Theory/LensLaws"        -i src src/Agdelte/Theory/LensLaws.agda
-typecheck "Theory/OpticPolyLens"   -i src src/Agdelte/Theory/OpticPolyLens.agda
-typecheck "Theory/BigLensPolyLens" -i src src/Agdelte/Theory/BigLensPolyLens.agda
-typecheck "Theory/SessionDualProof" -i src src/Agdelte/Theory/SessionDualProof.agda
-typecheck "Theory/AgentCoalg"      -i src src/Agdelte/Theory/AgentCoalg.agda
-typecheck "Test/OpticTest"         -i src src/Agdelte/Test/OpticTest.agda
-typecheck "Test/Interpret"         -i src src/Agdelte/Test/Interpret.agda
-typecheck "test/EventTest"         -i src -i test test/EventTest.agda
+
+# Auto-discover Theory modules
+for f in $(find src/Agdelte/Theory -name "*.agda" | sort); do
+  mod=$(echo "$f" | sed 's|^src/||; s|/|.|g; s|\.agda$||')
+  typecheck "$mod" -i src "$f"
+done
+
+# Auto-discover Test modules
+for f in $(find src/Agdelte/Test -name "*.agda" | sort); do
+  mod=$(echo "$f" | sed 's|^src/||; s|/|.|g; s|\.agda$||')
+  typecheck "$mod" -i src "$f"
+done
+
+# test/ directory (separate include path)
+for f in $(find test -name "*.agda" | sort); do
+  mod=$(basename "$f" .agda)
+  typecheck "test/$mod" -i src -i test "$f"
+done
 
 echo ""
 echo "--- Examples ---"

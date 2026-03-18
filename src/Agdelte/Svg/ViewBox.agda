@@ -6,6 +6,7 @@
 module Agdelte.Svg.ViewBox where
 
 open import Data.Float using (Float; _+_; _-_; _*_; _÷_)
+open import Data.Bool using (if_then_else_)
 open import Data.String using (String; _++_)
 open import Agdelte.Css.Show using (showFloat)
 open import Agdelte.Reactive.Node using (Attr; attr; attrBind; Binding; stringBinding)
@@ -45,6 +46,17 @@ viewBoxBind f = attrBind "viewBox" (stringBinding (showViewBox ∘ f))
   where open import Function using (_∘_)
 
 ------------------------------------------------------------------------
+-- Scale clamping helper
+------------------------------------------------------------------------
+
+private
+  -- Clamp scale factor to a minimum of 0.001 to prevent
+  -- negative or zero dimensions in zoom operations
+  clampScale : Float → Float
+  clampScale s = if s <ᵇ 0.001 then 0.001 else s
+    where open import Data.Float.Base using (_<ᵇ_)
+
+------------------------------------------------------------------------
 -- ViewBox operations
 ------------------------------------------------------------------------
 
@@ -61,9 +73,11 @@ panViewBoxPt : Point → ViewBox → ViewBox
 panViewBoxPt p vb = panViewBox (x p) (y p) vb
 
 -- Zoom viewBox around center (scale > 1 = zoom out, < 1 = zoom in)
+-- Scale is clamped to a minimum of 0.001 to prevent negative/zero dimensions.
 zoomViewBox : Float → ViewBox → ViewBox
-zoomViewBox scale vb =
+zoomViewBox scale₀ vb =
   let
+    scale = clampScale scale₀
     cx = minX vb + width vb * 0.5
     cy = minY vb + height vb * 0.5
     newW = width vb * scale
@@ -75,9 +89,11 @@ zoomViewBox scale vb =
     newH
 
 -- Zoom around specific point in SVG coordinates
+-- Scale is clamped to a minimum of 0.001 to prevent negative/zero dimensions.
 zoomViewBoxAt : Float → Point → ViewBox → ViewBox
-zoomViewBoxAt scale p vb =
+zoomViewBoxAt scale₀ p vb =
   let
+    scale = clampScale scale₀
     -- Point relative to viewBox
     relX = x p - minX vb
     relY = y p - minY vb

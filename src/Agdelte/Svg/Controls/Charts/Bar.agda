@@ -38,10 +38,16 @@ open BarData public
 ------------------------------------------------------------------------
 
 private
-  findMaxValue : ∀ {A} → List (BarData A) → Float → Float
-  findMaxValue [] acc = acc
-  findMaxValue (b ∷ bs) acc =
-    findMaxValue bs (if acc <ᵇ barValue b then barValue b else acc)
+  absFloat : Float → Float
+  absFloat x = if x <ᵇ 0.0 then 0.0 - x else x
+
+  maxFloat : Float → Float → Float
+  maxFloat a b = if a <ᵇ b then b else a
+
+  findMaxAbsValue : ∀ {A} → List (BarData A) → Float → Float
+  findMaxAbsValue [] acc = acc
+  findMaxAbsValue (b ∷ bs) acc =
+    findMaxAbsValue bs (maxFloat acc (absFloat (barValue b)))
 
   listLen : ∀ {A : Set} → List A → ℕ
   listLen [] = 0
@@ -59,7 +65,7 @@ barChart : ∀ {M A}
          → Node M A
 barChart {M} {A} px py w h gap bars =
   let count = listLen bars
-      maxVal = findMaxValue bars 0.0
+      maxVal = findMaxAbsValue bars 0.0
       barW = if count ≡ᵇ 0 then 0.0 else (w - fromℕ count * gap) ÷ fromℕ count
   in g ( attr "class" "svg-bar-chart" ∷ [] )
        (renderBars px py barW h maxVal gap bars 0)
@@ -70,9 +76,12 @@ barChart {M} {A} px py w h gap bars =
                → List (BarData A) → ℕ → List (Node M A)
     renderBars _ _ _ _ _ _ [] _ = []
     renderBars bx by barW' h' maxV gp (b ∷ bs) idx =
-      let barH = if maxV ≤ᵇ 0.0 then 0.0 else (barValue b ÷ maxV) * h'
+      let halfH = h' ÷ 2.0
+          baseline = by + halfH
+          heightF' = if maxV ≤ᵇ 0.0 then 0.0 else (absFloat (barValue b) ÷ maxV) * halfH
+          barH = maxFloat 0.0 heightF'
           barX = bx + fromℕ idx * (barW' + gp)
-          barY = by + h' - barH
+          barY = if barValue b <ᵇ 0.0 then baseline else baseline - barH
       in (case barOnClick b of λ where
             nothing →
               rect' ( xF barX ∷ yF barY
@@ -137,7 +146,7 @@ horizontalBarChart : ∀ {M A}
                    → Node M A
 horizontalBarChart {M} {A} px py w h gap bars =
   let count = listLen bars
-      maxVal = findMaxValue bars 0.0
+      maxVal = findMaxAbsValue bars 0.0
       barH = if count ≡ᵇ 0 then 0.0 else (h - fromℕ count * gap) ÷ fromℕ count
   in g ( attr "class" "svg-bar-chart-h" ∷ [] )
        (renderBarsH px py w barH maxVal gap bars 0)
@@ -148,7 +157,7 @@ horizontalBarChart {M} {A} px py w h gap bars =
                 → List (BarData A) → ℕ → List (Node M A)
     renderBarsH _ _ _ _ _ _ [] _ = []
     renderBarsH bx by w' barH' maxV gp (b ∷ bs) idx =
-      let barW = if maxV ≤ᵇ 0.0 then 0.0 else (barValue b ÷ maxV) * w'
+      let barW = if maxV ≤ᵇ 0.0 then 0.0 else (absFloat (barValue b) ÷ maxV) * w'
           barY = by + fromℕ idx * (barH' + gp)
       in rect' ( xF bx ∷ yF barY
                ∷ widthF barW ∷ heightF barH'

@@ -27,15 +27,29 @@ private
   pi : Float
   pi = 3.14159265359
 
+  -- Normalize angle to [-π, π] by repeated subtraction/addition of 2π
+  normalize : Float → Float
+  normalize x = go x 20
+    where
+      twoPi : Float
+      twoPi = 2.0 * pi
+      go : Float → ℕ → Float
+      go y zero = y
+      go y (suc n) = if pi ≤ᵇ y       then go (y - twoPi) n
+                     else if y ≤ᵇ (0.0 - pi) then go (y + twoPi) n
+                     else y
+
   sin : Float → Float
-  sin x = x - (x * x * x ÷ 6.0)
-        + (x * x * x * x * x ÷ 120.0)
-        - (x * x * x * x * x * x * x ÷ 5040.0)
+  sin x' = let x = normalize x'
+           in x - (x * x * x ÷ 6.0)
+            + (x * x * x * x * x ÷ 120.0)
+            - (x * x * x * x * x * x * x ÷ 5040.0)
 
   cos : Float → Float
-  cos x = 1.0 - (x * x ÷ 2.0)
-        + (x * x * x * x ÷ 24.0)
-        - (x * x * x * x * x * x ÷ 720.0)
+  cos x' = let x = normalize x'
+           in 1.0 - (x * x ÷ 2.0)
+            + (x * x * x * x ÷ 24.0)
+            - (x * x * x * x * x * x ÷ 720.0)
 
 ------------------------------------------------------------------------
 -- Data types
@@ -62,6 +76,8 @@ record GaugeConfig : Set where
     gcTickCount   : ℕ
     gcNeedleColor : String
     gcBackColor   : String
+    gcTextColor   : String
+    gcLabelColor  : String
 
 open GaugeConfig public
 
@@ -72,7 +88,7 @@ defaultGaugeConfig minV maxV = mkGaugeConfig
   ∷ mkThreshold (minV + (maxV - minV) * 0.8) "#f59e0b"
   ∷ mkThreshold maxV "#ef4444"
   ∷ [] )
-  nothing true true 10 "#1e293b" "#e2e8f0"
+  nothing true true 10 "#1e293b" "#e2e8f0" "#1e293b" "#64748b"
 
 ------------------------------------------------------------------------
 -- Helpers
@@ -101,14 +117,21 @@ private
 ------------------------------------------------------------------------
 
 private
+  absFloat : Float → Float
+  absFloat v = if v <ᵇ 0.0 then 0.0 - v else v
+
   arcPath : Float → Float → Float → Float → Float → String
   arcPath cx cy r startA endA =
     let (x1 , y1) = polarToCart cx cy r startA
         (x2 , y2) = polarToCart cx cy r endA
-        largeArc = if (endA - startA) <ᵇ pi then "0" else "1"
+        diff = endA - startA
+        absDiff = absFloat diff
+        largeArc = if absDiff ≤ᵇ pi then "0" else "1"
+        -- sweep=1 (CW) when going forward in angle, sweep=0 (CCW) when backward
+        sweep = if 0.0 ≤ᵇ diff then "1" else "0"
     in "M " ++ showFloat x1 ++ " " ++ showFloat y1
        ++ " A " ++ showFloat r ++ " " ++ showFloat r
-       ++ " 0 " ++ largeArc ++ " 1 "
+       ++ " 0 " ++ largeArc ++ " " ++ sweep ++ " "
        ++ showFloat x2 ++ " " ++ showFloat y2
 
 ------------------------------------------------------------------------
@@ -162,7 +185,7 @@ semicircleGauge {M} {A} cx cy radius config value =
                        ∷ attr "text-anchor" "middle"
                        ∷ attr "font-size" "18"
                        ∷ attr "font-weight" "bold"
-                       ∷ fill_ "#1e293b"
+                       ∷ fill_ (gcTextColor config)
                        ∷ [] )
                  ( text (showFloat clampedV) ∷ [] )
           else g [] [])
@@ -173,7 +196,7 @@ semicircleGauge {M} {A} cx cy radius config value =
               svgText ( xF cx ∷ yF (cy + 45.0)
                       ∷ attr "text-anchor" "middle"
                       ∷ attr "font-size" "12"
-                      ∷ fill_ "#64748b"
+                      ∷ fill_ (gcLabelColor config)
                       ∷ [] )
                 ( text lbl ∷ [] ))
        ∷ [] )
@@ -250,7 +273,7 @@ fullGauge {M} {A} cx cy radius config value =
                            ∷ attr "dominant-baseline" "middle"
                            ∷ attr "font-size" "24"
                            ∷ attr "font-weight" "bold"
-                           ∷ fill_ "#1e293b"
+                           ∷ fill_ (gcTextColor config)
                            ∷ [] )
                      ( text (showFloat clampedV) ∷ [] )
                  ∷ [] )
@@ -262,7 +285,7 @@ fullGauge {M} {A} cx cy radius config value =
               svgText ( xF cx ∷ yF (cy + 20.0)
                       ∷ attr "text-anchor" "middle"
                       ∷ attr "font-size" "12"
-                      ∷ fill_ "#64748b"
+                      ∷ fill_ (gcLabelColor config)
                       ∷ [] )
                 ( text lbl ∷ [] ))
        ∷ [] )
@@ -285,7 +308,8 @@ linearGaugeH {M} {A} px py w h config value =
       maxV = gcMax config
       clampedV = if value <ᵇ minV then minV
                  else if maxV <ᵇ value then maxV else value
-      fillW = ((clampedV - minV) ÷ (maxV - minV)) * w
+      range = let r = maxV - minV in if r ≤ᵇ 0.0 then 1.0 else r
+      fillW = ((clampedV - minV) ÷ range) * w
   in g ( attr "class" "svg-linear-gauge-h" ∷ [] )
        ( -- Background bar
          path' ( d_ (roundedRect px py w h 4.0)
@@ -300,7 +324,7 @@ linearGaugeH {M} {A} px py w h config value =
           then svgText ( xF (px + w + 10.0) ∷ yF (py + h ÷ 2.0)
                        ∷ attr "dominant-baseline" "middle"
                        ∷ attr "font-size" "14"
-                       ∷ fill_ "#1e293b"
+                       ∷ fill_ (gcTextColor config)
                        ∷ [] )
                  ( text (showFloat clampedV) ∷ [] )
           else g [] [])
@@ -334,7 +358,8 @@ linearGaugeV {M} {A} px py w h config value =
       maxV = gcMax config
       clampedV = if value <ᵇ minV then minV
                  else if maxV <ᵇ value then maxV else value
-      fillH = ((clampedV - minV) ÷ (maxV - minV)) * h
+      range = let r = maxV - minV in if r ≤ᵇ 0.0 then 1.0 else r
+      fillH = ((clampedV - minV) ÷ range) * h
       fillY = py + h - fillH
   in g ( attr "class" "svg-linear-gauge-v" ∷ [] )
        ( -- Background
@@ -403,7 +428,7 @@ tempGauge cx cy radius temp minT maxT =
       ∷ mkThreshold (minT + (maxT - minT) * 0.7) "#22c55e"
       ∷ mkThreshold maxT "#ef4444"
       ∷ [] )
-      (just "°C") true false 10 "#1e293b" "#e2e8f0"
+      (just "°C") true false 10 "#1e293b" "#e2e8f0" "#1e293b" "#64748b"
 
 -- | Speed gauge (0-maxSpeed)
 speedGauge : ∀ {M A}
@@ -419,4 +444,4 @@ speedGauge cx cy radius speed maxSpeed =
       ∷ mkThreshold (maxSpeed * 0.75) "#f59e0b"
       ∷ mkThreshold maxSpeed "#ef4444"
       ∷ [] )
-      (just "km/h") true true 10 "#1e293b" "#e2e8f0"
+      (just "km/h") true true 10 "#1e293b" "#e2e8f0" "#1e293b" "#64748b"

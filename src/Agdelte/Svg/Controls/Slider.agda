@@ -17,6 +17,8 @@ open import Agdelte.Svg.Attributes
   hiding (x_; y_)
   renaming (xF to attrX; yF to attrY; cxF to attrCx; cyF to attrCy)
 open import Agdelte.Css.Show using (showFloat)
+open import Agdelte.Svg.Events using (onSvgClick)
+open import Agdelte.Svg.Path using (Point; x; y)
 
 ------------------------------------------------------------------------
 -- Slider Orientation
@@ -129,6 +131,11 @@ svgSliderH px py len minV maxV val sty onChange =
       trackY = py - thick ÷ 2.0
       fillW = ratio * len
       thumbX = px + ratio * len
+      hitH = if thumbR * 2.0 ≤ᵇ thick then thick else thumbR * 2.0
+      hitY = py - hitH ÷ 2.0
+      computeVal : Point → Msg
+      computeVal pt = let clickRatio = clamp 0.0 1.0 ((x pt - px) ÷ len)
+                      in onChange (minV + clickRatio * (maxV - minV))
   in g ( attr "class" "svg-slider-h" ∷ [] )
        ( -- Track background
          rect' ( attrX px
@@ -157,6 +164,15 @@ svgSliderH px py len minV maxV val sty onChange =
                  ∷ strokeWidthF 2.0
                  ∷ attr "cursor" "pointer"
                  ∷ [] ) []
+       -- Invisible click target overlay
+       ∷ rect' ( attrX px
+               ∷ attrY hitY
+               ∷ widthF len
+               ∷ heightF hitH
+               ∷ fill_ "transparent"
+               ∷ attr "cursor" "pointer"
+               ∷ onSvgClick computeVal
+               ∷ [] ) []
        ∷ [] )
 
 ------------------------------------------------------------------------
@@ -178,6 +194,11 @@ svgSliderV px py len minV maxV val sty onChange =
       invRatio = 1.0 - ratio
       fillH = ratio * len
       thumbY = py + invRatio * len
+      hitW = if thumbR * 2.0 ≤ᵇ thick then thick else thumbR * 2.0
+      hitX = px - hitW ÷ 2.0
+      computeVal : Point → Msg
+      computeVal pt = let clickRatio = clamp 0.0 1.0 (1.0 - (y pt - py) ÷ len)
+                      in onChange (minV + clickRatio * (maxV - minV))
   in g ( attr "class" "svg-slider-v" ∷ [] )
        ( -- Track background
          rect' ( attrX trackX
@@ -206,6 +227,15 @@ svgSliderV px py len minV maxV val sty onChange =
                  ∷ strokeWidthF 2.0
                  ∷ attr "cursor" "pointer"
                  ∷ [] ) []
+       -- Invisible click target overlay
+       ∷ rect' ( attrX hitX
+               ∷ attrY py
+               ∷ widthF hitW
+               ∷ heightF len
+               ∷ fill_ "transparent"
+               ∷ attr "cursor" "pointer"
+               ∷ onSvgClick computeVal
+               ∷ [] ) []
        ∷ [] )
 
 ------------------------------------------------------------------------

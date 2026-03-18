@@ -81,6 +81,11 @@ private
               nothing → "false"
               (just sel) → if sel ≡ᵇ idx then "true" else "false")
             eqStr)
+        ∷ attrBind "data-highlighted" (mkBinding
+            (λ m → case getHighlighted m of λ where
+              nothing → "false"
+              (just hl) → if hl ≡ᵇ idx then "true" else "false")
+            eqStr)
         ∷ onClick (selectMsg idx)
         ∷ [] )
         ( text lbl ∷ [] )
@@ -156,6 +161,11 @@ private
             (λ m → case getSelected m of λ where
               nothing → "false"
               (just sel) → if eqV sel (optValue opt) then "true" else "false")
+            eqStr)
+        ∷ attrBind "data-highlighted" (mkBinding
+            (λ m → case getHighlighted m of λ where
+              nothing → "false"
+              (just hl) → if hl ≡ᵇ idx then "true" else "false")
             eqStr)
         ∷ onClick (selectMsg (optValue opt))
         ∷ [] )

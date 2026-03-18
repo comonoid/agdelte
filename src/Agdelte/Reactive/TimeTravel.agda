@@ -73,7 +73,7 @@ undo h with past h
 redo : ∀ {S} → History S → History S
 redo h with future h
 ... | []       = h  -- nothing to redo
-... | (f ∷ fs) = mkHistory (trimList (maxSize h) (present h ∷ past h)) f fs (maxSize h)
+... | (f ∷ fs) = mkHistory (trimList (maxSize h) (present h ∷ past h)) f (trimList (maxSize h) fs) (maxSize h)
 
 -- Create initial history (nothing = unlimited, just n = keep at most n)
 initHistory : ∀ {S} → S → Maybe Nat → History S

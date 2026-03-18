@@ -85,6 +85,13 @@ private
     let range = if (maxY - minY) ≤ᵇ 0.0 then 1.0 else maxY - minY
     in py + h - ((vy - minY) ÷ range) * h
 
+  -- Zero-anchoring: ensure range always includes zero
+  zeroMin : Float → Float
+  zeroMin v = if v <ᵇ 0.0 then v else 0.0
+
+  zeroMax : Float → Float
+  zeroMax v = if 0.0 <ᵇ v then v else 0.0
+
   -- Collect all X/Y from all series
   allXs : List AreaSeries → List Float
   allXs [] = []
@@ -194,8 +201,8 @@ simpleAreaChart {M} {A} px py w h color opacity pts =
       ys = extractY pts
       minX = findMin xs 1.0e10
       maxX = findMax xs (0.0 - 1.0e10)
-      minY = findMin ys 1.0e10
-      maxY = findMax ys (0.0 - 1.0e10)
+      minY = zeroMin (findMin ys 1.0e10)
+      maxY = zeroMax (findMax ys (0.0 - 1.0e10))
       areaPath = buildAreaPath px py w h minX maxX minY maxY pts
       linePath = buildLinePath px py w h minX maxX minY maxY pts
   in g ( attr "class" "svg-area-chart" ∷ [] )
@@ -229,8 +236,8 @@ multiAreaChart {M} {A} px py w h opacity series =
       allY = allYs series
       minX = findMin allX 1.0e10
       maxX = findMax allX (0.0 - 1.0e10)
-      minY = findMin allY 1.0e10
-      maxY = findMax allY (0.0 - 1.0e10)
+      minY = zeroMin (findMin allY 1.0e10)
+      maxY = zeroMax (findMax allY (0.0 - 1.0e10))
   in g ( attr "class" "svg-multi-area-chart" ∷ [] )
        (renderAllSeries px py w h minX maxX minY maxY opacity series)
   where
@@ -271,8 +278,23 @@ stackedAreaChart {M} {A} px py w h colors allData =
       stackedData = computeStacks allData
       maxY = findMaxStacked stackedData
   in g ( attr "class" "svg-stacked-area-chart" ∷ [] )
-       (renderStacked px py w h minX maxX 0.0 maxY colors stackedData [])
+       (renderStacked px py w h minX maxX 0.0 maxY
+         (reverseStrings colors) (reversePoints stackedData) [])
   where
+    reverseStrings : List String → List String
+    reverseStrings = go []
+      where
+        go : List String → List String → List String
+        go acc [] = acc
+        go acc (x ∷ xs) = go (x ∷ acc) xs
+
+    reversePoints : List (List DataPoint) → List (List DataPoint)
+    reversePoints = go []
+      where
+        go : List (List DataPoint) → List (List DataPoint) → List (List DataPoint)
+        go acc [] = acc
+        go acc (x ∷ xs) = go (x ∷ acc) xs
+
     getXsFromFirst : List (List DataPoint) → List Float
     getXsFromFirst [] = []
     getXsFromFirst (pts ∷ _) = extractX pts

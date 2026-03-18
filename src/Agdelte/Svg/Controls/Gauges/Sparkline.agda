@@ -91,6 +91,7 @@ sparklineArea : ∀ {M A}
               → Float                         -- opacity
               → List Float
               → Node M A
+sparklineArea px py w h color opacity [] = g [] []
 sparklineArea px py w h color opacity values =
   let minV = findMin values 1.0e10
       maxV = findMax values (0.0 - 1.0e10)
@@ -177,6 +178,7 @@ sparklineWithDots : ∀ {M A}
                   → String                    -- end dot color
                   → List Float
                   → Node M A
+sparklineWithDots px py w h lineColor startColor endColor [] = g [] []
 sparklineWithDots px py w h lineColor startColor endColor values =
   let minV = findMin values 1.0e10
       maxV = findMax values (0.0 - 1.0e10)

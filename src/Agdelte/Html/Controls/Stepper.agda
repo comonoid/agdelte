@@ -9,7 +9,7 @@ module Agdelte.Html.Controls.Stepper where
 
 open import Data.String using (String)
 open import Data.List using (List; []; _∷_; map; length)
-open import Data.Nat using (ℕ; zero; suc; _<ᵇ_; _≡ᵇ_)
+open import Data.Nat using (ℕ; zero; suc; _<ᵇ_; _≡ᵇ_; _∸_)
 open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Function using (_∘_)
 
@@ -35,11 +35,19 @@ open Step public
 ------------------------------------------------------------------------
 
 private
-  getStepClass : ℕ → ℕ → String
-  getStepClass idx current =
-    if idx <ᵇ current then "agdelte-stepper__step agdelte-stepper__step--completed"
-    else if idx ≡ᵇ current then "agdelte-stepper__step agdelte-stepper__step--active"
-    else "agdelte-stepper__step"
+  -- | Clamp currentStep to [0, totalSteps - 1] before comparing.
+  -- When currentStep >= totalSteps, treat as last step (active, not all completed).
+  clampStep : ℕ → ℕ → ℕ
+  clampStep _ zero = zero
+  clampStep current (suc n) =
+    if current <ᵇ suc n then current else n
+
+  getStepClass : ℕ → ℕ → ℕ → String
+  getStepClass idx totalSteps current =
+    let clamped = clampStep current totalSteps
+    in if idx <ᵇ clamped then "agdelte-stepper__step agdelte-stepper__step--completed"
+       else if idx ≡ᵇ clamped then "agdelte-stepper__step agdelte-stepper__step--active"
+       else "agdelte-stepper__step"
 
 ------------------------------------------------------------------------
 -- Horizontal stepper
@@ -59,7 +67,7 @@ stepper {M} {A} currentStep steps =
     renderStep : ℕ → ℕ → Step → Node M A
     renderStep idx total step =
       div ( attrBind "class" (mkBinding
-              (λ m → getStepClass idx (currentStep m))
+              (λ m → getStepClass idx total (currentStep m))
               eqStr)
           ∷ [] )
         ( div ( class "agdelte-stepper__indicator" ∷ [] )
@@ -103,7 +111,7 @@ clickableStepper {M} {A} currentStep goToStep steps =
     renderStep : ℕ → ℕ → Step → Node M A
     renderStep idx total step =
       button ( attrBind "class" (mkBinding
-                 (λ m → getStepClass idx (currentStep m))
+                 (λ m → getStepClass idx total (currentStep m))
                  eqStr)
              ∷ onClick (goToStep idx)
              ∷ [] )
@@ -142,7 +150,7 @@ verticalStepper {M} {A} currentStep steps =
     renderStep : ℕ → ℕ → Step → Node M A
     renderStep idx total step =
       div ( attrBind "class" (mkBinding
-              (λ m → getStepClass idx (currentStep m))
+              (λ m → getStepClass idx total (currentStep m))
               eqStr)
           ∷ [] )
         ( div ( class "agdelte-stepper__indicator" ∷ [] )

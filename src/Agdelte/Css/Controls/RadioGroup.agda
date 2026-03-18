@@ -30,6 +30,10 @@ radioGroupRules =
       ∷ "cursor" ∶ "pointer"
       ∷ "accent-color" ∶ "var(--agdelte-primary)"
       ∷ [])
+  ∷ rule ".agdelte-radio__input:focus-visible"
+      ( "outline" ∶ "2px solid var(--agdelte-primary)"
+      ∷ "outline-offset" ∶ "2px"
+      ∷ [])
   ∷ rule ".agdelte-radio__label"
       ( "color" ∶ "var(--agdelte-text)"
       ∷ "user-select" ∶ "none"

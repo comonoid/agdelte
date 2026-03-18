@@ -66,10 +66,24 @@ private
        ++ showFloat x2 ++ " " ++ showFloat y2
        ++ " Z"
     where
-      -- Simple sin/cos approximations (for demo - real impl would use primitives)
+      -- Normalize angle to [-π, π] by repeated subtraction/addition of 2π
+      normalize : Float → Float
+      normalize x = go x 20
+        where
+          twoPi : Float
+          twoPi = 2.0 * pi
+          go : Float → ℕ → Float
+          go y zero = y
+          go y (suc n) = if pi ≤ᵇ y       then go (y - twoPi) n
+                         else if y ≤ᵇ (0.0 - pi) then go (y + twoPi) n
+                         else y
       cos sin : Float → Float
-      cos x = 1.0 - (x * x ÷ 2.0) + (x * x * x * x ÷ 24.0)
-      sin x = x - (x * x * x ÷ 6.0) + (x * x * x * x * x ÷ 120.0)
+      cos x' = let x = normalize x'
+               in 1.0 - (x * x ÷ 2.0) + (x * x * x * x ÷ 24.0)
+                - (x * x * x * x * x * x ÷ 720.0)
+      sin x' = let x = normalize x'
+               in x - (x * x * x ÷ 6.0) + (x * x * x * x * x ÷ 120.0)
+                - (x * x * x * x * x * x * x ÷ 5040.0)
 
   -- Donut arc (two arcs connected)
   donutArcPath : Float → Float → Float → Float → Float → Float → String
@@ -93,9 +107,23 @@ private
        ++ showFloat ix2 ++ " " ++ showFloat iy2
        ++ " Z"
     where
+      normalize : Float → Float
+      normalize x = go x 20
+        where
+          twoPi : Float
+          twoPi = 2.0 * pi
+          go : Float → ℕ → Float
+          go y zero = y
+          go y (suc n) = if pi ≤ᵇ y       then go (y - twoPi) n
+                         else if y ≤ᵇ (0.0 - pi) then go (y + twoPi) n
+                         else y
       cos sin : Float → Float
-      cos x = 1.0 - (x * x ÷ 2.0) + (x * x * x * x ÷ 24.0)
-      sin x = x - (x * x * x ÷ 6.0) + (x * x * x * x * x ÷ 120.0)
+      cos x' = let x = normalize x'
+               in 1.0 - (x * x ÷ 2.0) + (x * x * x * x ÷ 24.0)
+                - (x * x * x * x * x * x ÷ 720.0)
+      sin x' = let x = normalize x'
+               in x - (x * x * x ÷ 6.0) + (x * x * x * x * x ÷ 120.0)
+                - (x * x * x * x * x * x * x ÷ 5040.0)
 
 ------------------------------------------------------------------------
 -- Pie Chart
@@ -119,20 +147,39 @@ pieChart {M} {A} cx cy radius slices =
       let fraction = if tot ≤ᵇ 0.0 then 0.0 else sliceValue s ÷ tot
           sweep = fraction * 2.0 * pi
           endA = startA + sweep
-          pathD = arcPath pcx pcy r startA endA
-      in (case sliceOnClick s of λ where
-            nothing →
-              path' ( d_ pathD
-                    ∷ fill_ (sliceColor s)
-                    ∷ attr "class" "pie-slice"
-                    ∷ [] ) []
-            (just msg) →
-              path' ( d_ pathD
-                    ∷ fill_ (sliceColor s)
-                    ∷ attr "class" "pie-slice pie-slice--clickable"
-                    ∷ attr "style" "cursor: pointer"
-                    ∷ on "click" msg
-                    ∷ [] ) [])
+          -- When a single slice is (nearly) 100%, arc degenerates; use circle
+          fullCircle = (2.0 * pi - 0.00001) ≤ᵇ sweep
+          sliceNode = if fullCircle
+            then (case sliceOnClick s of λ where
+              nothing →
+                circle' ( cxF pcx ∷ cyF pcy
+                        ∷ rF r
+                        ∷ fill_ (sliceColor s)
+                        ∷ attr "class" "pie-slice"
+                        ∷ [] ) []
+              (just msg) →
+                circle' ( cxF pcx ∷ cyF pcy
+                        ∷ rF r
+                        ∷ fill_ (sliceColor s)
+                        ∷ attr "class" "pie-slice pie-slice--clickable"
+                        ∷ attr "style" "cursor: pointer"
+                        ∷ on "click" msg
+                        ∷ [] ) [])
+            else let pathD = arcPath pcx pcy r startA endA
+                 in (case sliceOnClick s of λ where
+              nothing →
+                path' ( d_ pathD
+                      ∷ fill_ (sliceColor s)
+                      ∷ attr "class" "pie-slice"
+                      ∷ [] ) []
+              (just msg) →
+                path' ( d_ pathD
+                      ∷ fill_ (sliceColor s)
+                      ∷ attr "class" "pie-slice pie-slice--clickable"
+                      ∷ attr "style" "cursor: pointer"
+                      ∷ on "click" msg
+                      ∷ [] ) [])
+      in sliceNode
          ∷ renderSlices pcx pcy r tot ss endA
       where
         case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
@@ -160,11 +207,18 @@ donutChart {M} {A} cx cy outer inner slices =
       let fraction = if tot ≤ᵇ 0.0 then 0.0 else sliceValue s ÷ tot
           sweep = fraction * 2.0 * pi
           endA = startA + sweep
-          pathD = donutArcPath pcx pcy outr inr startA endA
-      in path' ( d_ pathD
-               ∷ fill_ (sliceColor s)
-               ∷ attr "class" "donut-slice"
-               ∷ [] ) []
+          fullCircle = (2.0 * pi - 0.00001) ≤ᵇ sweep
+          sliceNode = if fullCircle
+            then g ( attr "class" "donut-slice" ∷ [] )
+                   ( circle' ( cxF pcx ∷ cyF pcy ∷ rF outr ∷ fill_ (sliceColor s) ∷ [] ) []
+                   ∷ circle' ( cxF pcx ∷ cyF pcy ∷ rF inr ∷ fill_ "white" ∷ [] ) []
+                   ∷ [] )
+            else let pathD = donutArcPath pcx pcy outr inr startA endA
+                 in path' ( d_ pathD
+                          ∷ fill_ (sliceColor s)
+                          ∷ attr "class" "donut-slice"
+                          ∷ [] ) []
+      in sliceNode
          ∷ renderSlices pcx pcy outr inr tot ss endA
 
 ------------------------------------------------------------------------

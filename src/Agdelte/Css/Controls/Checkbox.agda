@@ -30,6 +30,10 @@ checkboxRules =
       ∷ "cursor" ∶ "pointer"
       ∷ "accent-color" ∶ "var(--agdelte-primary)"
       ∷ [])
+  ∷ rule ".agdelte-checkbox__input:focus-visible"
+      ( "outline" ∶ "2px solid var(--agdelte-primary)"
+      ∷ "outline-offset" ∶ "2px"
+      ∷ [])
   ∷ rule ".agdelte-checkbox__label"
       ( "color" ∶ "var(--agdelte-text)"
       ∷ "user-select" ∶ "none"
@@ -43,5 +47,27 @@ checkboxRules =
       ( "flex-direction" ∶ "row"
       ∷ "flex-wrap" ∶ "wrap"
       ∷ "gap" ∶ "var(--agdelte-spacing-md)"
+      ∷ [])
+  ∷ rule ".agdelte-checkbox--indeterminate .agdelte-checkbox__input"
+      ( "opacity" ∶ "0"
+      ∷ "width" ∶ "0"
+      ∷ "height" ∶ "0"
+      ∷ "position" ∶ "absolute"
+      ∷ [])
+  ∷ rule ".agdelte-checkbox--indeterminate::before"
+      ( "content" ∶ "'\\2013'"
+      ∷ "display" ∶ "inline-flex"
+      ∷ "align-items" ∶ "center"
+      ∷ "justify-content" ∶ "center"
+      ∷ "width" ∶ "18px"
+      ∷ "height" ∶ "18px"
+      ∷ "border" ∶ "2px solid var(--agdelte-primary)"
+      ∷ "border-radius" ∶ "3px"
+      ∷ "background" ∶ "var(--agdelte-surface, #fff)"
+      ∷ "color" ∶ "var(--agdelte-primary)"
+      ∷ "font-weight" ∶ "bold"
+      ∷ "font-size" ∶ "14px"
+      ∷ "line-height" ∶ "1"
+      ∷ "flex-shrink" ∶ "0"
       ∷ [])
   ∷ []

@@ -32,6 +32,7 @@ data Color : Set where
   rgb   : ℕ → ℕ → ℕ → Color
   rgba  : ℕ → ℕ → ℕ → Float → Color
   hsl   : ℕ → ℕ → ℕ → Color
+  hsla  : ℕ → ℕ → ℕ → Float → Color  -- hue, sat%, light%, alpha
   named : String → Color              -- "red", "transparent"
   var   : String → Color              -- CSS custom property
   raw   : String → Color              -- escape hatch
@@ -64,6 +65,7 @@ showColor (hex s)        = s
 showColor (rgb r g b)    = "rgb(" ++ show r ++ ", " ++ show g ++ ", " ++ show b ++ ")"
 showColor (rgba r g b a) = "rgba(" ++ show r ++ ", " ++ show g ++ ", " ++ show b ++ ", " ++ showFloat a ++ ")"
 showColor (hsl h s l)    = "hsl(" ++ show h ++ ", " ++ show s ++ "%, " ++ show l ++ "%)"
+showColor (hsla h s l a) = "hsla(" ++ show h ++ ", " ++ show s ++ "%, " ++ show l ++ "%, " ++ showFloat a ++ ")"
 showColor (named s)      = s
 showColor (var s)        = "var(--" ++ s ++ ")"
 showColor (raw s)        = s

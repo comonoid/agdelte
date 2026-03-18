@@ -7,7 +7,6 @@
 module SvgLineDraw where
 
 open import Data.List using (List; []; _∷_; [_])
-open import Data.Nat using (ℕ; zero; suc)
 open import Data.Float using (Float; _+_; _-_; _*_)
 open import Data.String using (String; _++_)
 open import Data.Bool using (Bool; true; false; if_then_else_)
@@ -24,27 +23,22 @@ open import Agdelte.Svg
 
 record Model : Set where
   constructor mkModel
-  field
-    animKey : ℕ   -- increment to restart animation
 
 initModel : Model
-initModel = mkModel 0
+initModel = mkModel
 
 ------------------------------------------------------------------------
 -- Messages
 ------------------------------------------------------------------------
 
 data Msg : Set where
-  StartDraw : Msg
-  Reset     : Msg
 
 ------------------------------------------------------------------------
 -- Update
 ------------------------------------------------------------------------
 
 updateModel : Msg → Model → Model
-updateModel StartDraw m = record m { animKey = suc (Model.animKey m) }
-updateModel Reset m = mkModel 0
+updateModel () _
 
 ------------------------------------------------------------------------
 -- Paths

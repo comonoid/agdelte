@@ -132,7 +132,6 @@ svgRadioLabeled cx cy selected lbl sty msg =
   let labelX = cx + outerRadius sty + labelGap sty
   in g ( attr "class" "svg-radio-labeled"
        ∷ attr "cursor" "pointer"
-       ∷ on "click" msg
        ∷ [] )
        ( svgRadio cx cy selected sty msg
        ∷ svgText ( attrX labelX

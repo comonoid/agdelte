@@ -10,6 +10,7 @@ open import Data.Float using (Float; _+_; _-_; _*_)
 open import Data.Float.Base using (_÷_; _≤ᵇ_)
 open import Data.List using (List; []; _∷_)
 open import Data.Bool using (Bool; true; false; if_then_else_)
+open import Data.Nat using (ℕ; zero; suc)
 
 open import Agdelte.Reactive.Node using (Node; Attr; elem; attr; on; text)
 open import Agdelte.Svg.Elements using (g; circle'; svgText)
@@ -30,11 +31,29 @@ private
   degToRad : Float → Float
   degToRad d = d * π ÷ 180.0
 
+  -- Normalize angle to [-π, π] by repeated subtraction/addition of 2π
+  normalize : Float → Float
+  normalize x = go x 20
+    where
+      twoPi : Float
+      twoPi = 2.0 * π
+      go : Float → ℕ → Float
+      go y zero = y
+      go y (suc n) = if π ≤ᵇ y       then go (y - twoPi) n
+                     else if y ≤ᵇ (0.0 - π) then go (y + twoPi) n
+                     else y
+
   sin' : Float → Float
-  sin' x = x - (x * x * x ÷ 6.0) + (x * x * x * x * x ÷ 120.0)
+  sin' x' = let x = normalize x'
+            in x - (x * x * x ÷ 6.0)
+             + (x * x * x * x * x ÷ 120.0)
+             - (x * x * x * x * x * x * x ÷ 5040.0)
 
   cos' : Float → Float
-  cos' x = 1.0 - (x * x ÷ 2.0) + (x * x * x * x ÷ 24.0)
+  cos' x' = let x = normalize x'
+            in 1.0 - (x * x ÷ 2.0)
+             + (x * x * x * x ÷ 24.0)
+             - (x * x * x * x * x * x ÷ 720.0)
 
   clamp01 : Float → Float
   clamp01 v = if v ≤ᵇ 0.0 then 0.0 else if 1.0 ≤ᵇ v then 1.0 else v

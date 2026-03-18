@@ -22,13 +22,13 @@ progressRules =
       ( "width" ∶ "100%"
       ∷ "height" ∶ "8px"
       ∷ "background" ∶ "var(--agdelte-bg-active)"
-      ∷ "border-radius" ∶ "4px"
+      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
       ∷ "overflow" ∶ "hidden"
       ∷ [])
   ∷ rule ".agdelte-progress__bar"
       ( "height" ∶ "100%"
       ∷ "background" ∶ "var(--agdelte-primary)"
-      ∷ "border-radius" ∶ "4px"
+      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
       ∷ "transition" ∶ "width var(--agdelte-transition)"
       ∷ [])
   ∷ rule ".agdelte-progress--indeterminate .agdelte-progress__bar"

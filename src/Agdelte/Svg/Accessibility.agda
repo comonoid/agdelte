@@ -42,20 +42,24 @@ tabindex_ = attr "tabindex"
 -- Accessible SVG with title and description
 -- Screen readers will announce the title
 accessibleSvg : ∀ {M Msg}
+  → String                    -- ID prefix (for unique IDs)
   → String                    -- title text
   → String                    -- description text
   → List (Attr M Msg)         -- additional attributes
   → List (Node M Msg)         -- content
   → Node M Msg
-accessibleSvg titleText descText attrs content =
+accessibleSvg prefix titleText descText attrs content =
   svg ( role_ "img"
-      ∷ ariaLabelledby_ "svg-title svg-desc"
+      ∷ ariaLabelledby_ (titleId ++ " " ++ descId)
       ∷ attrs)
-    ( title' (attr "id" "svg-title" ∷ []) (text titleText ∷ [])
-    ∷ desc' (attr "id" "svg-desc" ∷ []) (text descText ∷ [])
+    ( title' (attr "id" titleId ∷ []) (text titleText ∷ [])
+    ∷ desc' (attr "id" descId ∷ []) (text descText ∷ [])
     ∷ content)
   where
+    open import Data.String using (_++_)
     open import Agdelte.Reactive.Node using (text)
+    titleId = prefix ++ "-title"
+    descId  = prefix ++ "-desc"
 
 -- Decorative SVG (hidden from screen readers)
 decorativeSvg : ∀ {M Msg}

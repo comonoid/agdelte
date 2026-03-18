@@ -39,7 +39,11 @@ sliderRules =
       ∷ "-webkit-appearance" ∶ "none"
       ∷ "appearance" ∶ "none"
       ∷ "background" ∶ "var(--agdelte-border)"
-      ∷ "border-radius" ∶ "3px"
+      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
+      ∷ [])
+  ∷ rule ".agdelte-slider__input:focus-visible"
+      ( "outline" ∶ "2px solid var(--agdelte-primary)"
+      ∷ "outline-offset" ∶ "2px"
       ∷ [])
   ∷ rule ".agdelte-slider__input::-webkit-slider-thumb"
       ( "-webkit-appearance" ∶ "none"
@@ -63,7 +67,7 @@ sliderRules =
       ∷ [])
   ∷ rule ".agdelte-slider__input::-moz-range-track"
       ( "background" ∶ "var(--agdelte-border)"
-      ∷ "border-radius" ∶ "3px"
+      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
       ∷ "height" ∶ "6px"
       ∷ [])
   ∷ rule ".agdelte-slider__value"
@@ -122,7 +126,7 @@ sliderRules =
       ∷ "height" ∶ "6px"
       ∷ "transform" ∶ "translateY(-50%)"
       ∷ "background" ∶ "var(--agdelte-border)"
-      ∷ "border-radius" ∶ "3px"
+      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
       ∷ "pointer-events" ∶ "none"
       ∷ [])
   ∷ rule ".agdelte-range-slider__input"

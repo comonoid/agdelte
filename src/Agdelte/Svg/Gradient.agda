@@ -6,8 +6,10 @@
 module Agdelte.Svg.Gradient where
 
 open import Data.Float using (Float; _*_)
+open import Data.Float.Base using (_<ᵇ_)
 open import Data.List using (List; []; _∷_; map)
 open import Data.String using (String; _++_)
+open import Data.Bool using (if_then_else_)
 open import Agdelte.Css.Show using (showFloat)
 open import Agdelte.Css.Color using (Color; showColor)
 open import Agdelte.Reactive.Node using (Node; Attr; attr; elem)
@@ -25,16 +27,21 @@ record GradientStop : Set where
 
 open GradientStop public
 
--- Simple stop (fully opaque)
-stop : Float → Color → GradientStop
-stop o c = mkStop o c 1.0
+-- | Clamp a Float to [0.0, 1.0]
+private
+  clampUnit : Float → Float
+  clampUnit x = if x <ᵇ 0.0 then 0.0 else if 1.0 <ᵇ x then 1.0 else x
 
--- Render stop element
+-- Simple stop (fully opaque); offset is clamped to [0.0, 1.0]
+stop : Float → Color → GradientStop
+stop o c = mkStop (clampUnit o) c 1.0
+
+-- Render stop element (offset and opacity are clamped to [0.0, 1.0])
 renderStop : ∀ {M Msg} → GradientStop → Node M Msg
 renderStop s = elem "stop"
-  ( attr "offset" (showFloat (offset' s * 100.0) ++ "%")
+  ( attr "offset" (showFloat (clampUnit (offset' s) * 100.0) ++ "%")
   ∷ attr "stop-color" (showColor (color s))
-  ∷ attr "stop-opacity" (showFloat (opacity s))
+  ∷ attr "stop-opacity" (showFloat (clampUnit (opacity s)))
   ∷ []) []
 
 ------------------------------------------------------------------------

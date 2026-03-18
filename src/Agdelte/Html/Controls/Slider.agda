@@ -8,9 +8,51 @@ module Agdelte.Html.Controls.Slider where
 
 open import Data.String using (String; _++_)
 open import Data.List using (List; []; _∷_)
+open import Data.Product using (_×_; proj₁; proj₂)
 
 open import Agdelte.Reactive.Node
 open import Agdelte.Html.Controls.Util using (eqStr)
+
+------------------------------------------------------------------------
+-- Range crossover prevention (JS postulates)
+------------------------------------------------------------------------
+
+-- | Guard step value: returns "1" if input is "0" or empty, otherwise returns input
+postulate guardStep : String → String
+{-# COMPILE JS guardStep = function(s) {
+  if (s === "" || s === "0") return "1";
+  return s;
+} #-}
+
+-- | Guard min/max: if min > max (parsed as numbers), swap them
+postulate guardMinMax : String → String → _×_ String String
+{-# COMPILE JS guardMinMax = function(minV) { return function(maxV) {
+  var a = parseFloat(minV) || 0, b = parseFloat(maxV) || 0;
+  if (a > b) return { "fst": maxV, "snd": minV };
+  return { "fst": minV, "snd": maxV };
+}; } #-}
+
+-- | Clamp min value to not exceed max: returns min(minVal, maxVal)
+postulate clampMinStr : String → String → String
+{-# COMPILE JS clampMinStr = function(minV) { return function(maxV) {
+  var a = parseFloat(minV) || 0, b = parseFloat(maxV) || 0;
+  return String(Math.min(a, b));
+}; } #-}
+
+-- | Clamp max value to not go below min: returns max(minVal, maxVal)
+postulate clampMaxStr : String → String → String
+{-# COMPILE JS clampMaxStr = function(minV) { return function(maxV) {
+  var a = parseFloat(minV) || 0, b = parseFloat(maxV) || 0;
+  return String(Math.max(a, b));
+}; } #-}
+
+-- | Compute percentage of value within [lo, hi] range for track highlighting
+postulate rangePercent : String → String → String → String
+{-# COMPILE JS rangePercent = function(lo) { return function(hi) { return function(val) {
+  var l = parseFloat(lo) || 0, h = parseFloat(hi) || 0, v = parseFloat(val) || 0;
+  if (h <= l) return "0";
+  return String(((v - l) / (h - l)) * 100);
+}; }; } #-}
 
 ------------------------------------------------------------------------
 -- Basic slider (number value)
@@ -29,15 +71,18 @@ slider : ∀ {M A}
        → (String → A)        -- change handler
        → Node M A
 slider {M} {A} lbl minVal maxVal getValue onChangeMsg =
-  div ( class "agdelte-slider" ∷ [] )
+  let mm = guardMinMax minVal maxVal
+      mn = proj₁ mm
+      mx = proj₂ mm
+  in div ( class "agdelte-slider" ∷ [] )
     ( label ( class "agdelte-slider__label" ∷ [] )
         ( text lbl ∷ [] )
     ∷ input ( type' "range"
             ∷ class "agdelte-slider__input"
-            ∷ attr "min" minVal
-            ∷ attr "max" maxVal
-            ∷ attr "aria-valuemin" minVal
-            ∷ attr "aria-valuemax" maxVal
+            ∷ attr "min" mn
+            ∷ attr "max" mx
+            ∷ attr "aria-valuemin" mn
+            ∷ attr "aria-valuemax" mx
             ∷ attrBind "aria-valuenow" (mkBinding getValue eqStr)
             ∷ valueBind getValue
             ∷ onInput onChangeMsg
@@ -60,16 +105,20 @@ sliderWithStep : ∀ {M A}
                → (String → A)    -- change handler
                → Node M A
 sliderWithStep {M} {A} lbl minVal maxVal stepVal getValue onChangeMsg =
-  div ( class "agdelte-slider" ∷ [] )
+  let mm = guardMinMax minVal maxVal
+      mn = proj₁ mm
+      mx = proj₂ mm
+      sv = guardStep stepVal
+  in div ( class "agdelte-slider" ∷ [] )
     ( label ( class "agdelte-slider__label" ∷ [] )
         ( text lbl ∷ [] )
     ∷ input ( type' "range"
             ∷ class "agdelte-slider__input"
-            ∷ attr "min" minVal
-            ∷ attr "max" maxVal
-            ∷ attr "step" stepVal
-            ∷ attr "aria-valuemin" minVal
-            ∷ attr "aria-valuemax" maxVal
+            ∷ attr "min" mn
+            ∷ attr "max" mx
+            ∷ attr "step" sv
+            ∷ attr "aria-valuemin" mn
+            ∷ attr "aria-valuemax" mx
             ∷ attrBind "aria-valuenow" (mkBinding getValue eqStr)
             ∷ valueBind getValue
             ∷ onInput onChangeMsg
@@ -90,13 +139,16 @@ sliderCompact : ∀ {M A}
               → (String → A)    -- change handler
               → Node M A
 sliderCompact {M} {A} minVal maxVal getValue onChangeMsg =
-  div ( class "agdelte-slider agdelte-slider--compact" ∷ [] )
+  let mm = guardMinMax minVal maxVal
+      mn = proj₁ mm
+      mx = proj₂ mm
+  in div ( class "agdelte-slider agdelte-slider--compact" ∷ [] )
     ( input ( type' "range"
             ∷ class "agdelte-slider__input"
-            ∷ attr "min" minVal
-            ∷ attr "max" maxVal
-            ∷ attr "aria-valuemin" minVal
-            ∷ attr "aria-valuemax" maxVal
+            ∷ attr "min" mn
+            ∷ attr "max" mx
+            ∷ attr "aria-valuemin" mn
+            ∷ attr "aria-valuemax" mx
             ∷ attrBind "aria-valuenow" (mkBinding getValue eqStr)
             ∷ valueBind getValue
             ∷ onInput onChangeMsg
@@ -120,15 +172,18 @@ sliderWithFormat : ∀ {M A}
                  → (String → A)        -- change handler
                  → Node M A
 sliderWithFormat {M} {A} lbl minVal maxVal getValue formatValue onChangeMsg =
-  div ( class "agdelte-slider" ∷ [] )
+  let mm = guardMinMax minVal maxVal
+      mn = proj₁ mm
+      mx = proj₂ mm
+  in div ( class "agdelte-slider" ∷ [] )
     ( label ( class "agdelte-slider__label" ∷ [] )
         ( text lbl ∷ [] )
     ∷ input ( type' "range"
             ∷ class "agdelte-slider__input"
-            ∷ attr "min" minVal
-            ∷ attr "max" maxVal
-            ∷ attr "aria-valuemin" minVal
-            ∷ attr "aria-valuemax" maxVal
+            ∷ attr "min" mn
+            ∷ attr "max" mx
+            ∷ attr "aria-valuemin" mn
+            ∷ attr "aria-valuemax" mx
             ∷ attrBind "aria-valuenow" (mkBinding getValue eqStr)
             ∷ valueBind getValue
             ∷ onInput onChangeMsg
@@ -155,32 +210,49 @@ rangeSlider : ∀ {M A}
             → (String → A)        -- on max change
             → Node M A
 rangeSlider {M} {A} lbl minBound maxBound getMin getMax onMinChange onMaxChange =
-  div ( class "agdelte-range-slider" ∷ [] )
+  let bb = guardMinMax minBound maxBound
+      mb = proj₁ bb
+      xb = proj₂ bb
+  in div ( class "agdelte-range-slider" ∷ [] )
     ( label ( class "agdelte-range-slider__label" ∷ [] )
         ( text lbl ∷ [] )
     ∷ div ( class "agdelte-range-slider__container" ∷ [] )
-        ( -- Track background
-          div ( class "agdelte-range-slider__track" ∷ [] ) []
-          -- Min thumb input
+        ( -- Track background with clamped width to visualize selected range
+          div ( class "agdelte-range-slider__track"
+              ∷ styleBind "width" (mkBinding
+                  (λ m → let clMin = clampMinStr (getMin m) (getMax m)
+                             clMax = clampMaxStr (getMin m) (getMax m)
+                         in rangePercent mb xb clMax
+                            ++ "%")
+                  eqStr)
+              ∷ styleBind "margin-left" (mkBinding
+                  (λ m → rangePercent mb xb
+                            (clampMinStr (getMin m) (getMax m))
+                         ++ "%")
+                  eqStr)
+              ∷ [] ) []
+          -- Min thumb input (value clamped to not exceed max)
         ∷ input ( type' "range"
                 ∷ class "agdelte-range-slider__input agdelte-range-slider__input--min"
-                ∷ attr "min" minBound
-                ∷ attr "max" maxBound
-                ∷ attr "aria-valuemin" minBound
-                ∷ attr "aria-valuemax" maxBound
-                ∷ attrBind "aria-valuenow" (mkBinding getMin eqStr)
+                ∷ attr "min" mb
+                ∷ attr "max" xb
+                ∷ attr "aria-valuemin" mb
+                ∷ attr "aria-valuemax" xb
+                ∷ attrBind "aria-valuenow" (mkBinding
+                    (λ m → clampMinStr (getMin m) (getMax m)) eqStr)
                 ∷ attr "aria-label" "Range minimum"
                 ∷ valueBind getMin
                 ∷ onInput onMinChange
                 ∷ [] )
-          -- Max thumb input
+          -- Max thumb input (value clamped to not go below min)
         ∷ input ( type' "range"
                 ∷ class "agdelte-range-slider__input agdelte-range-slider__input--max"
-                ∷ attr "min" minBound
-                ∷ attr "max" maxBound
-                ∷ attr "aria-valuemin" minBound
-                ∷ attr "aria-valuemax" maxBound
-                ∷ attrBind "aria-valuenow" (mkBinding getMax eqStr)
+                ∷ attr "min" mb
+                ∷ attr "max" xb
+                ∷ attr "aria-valuemin" mb
+                ∷ attr "aria-valuemax" xb
+                ∷ attrBind "aria-valuenow" (mkBinding
+                    (λ m → clampMaxStr (getMin m) (getMax m)) eqStr)
                 ∷ attr "aria-label" "Range maximum"
                 ∷ valueBind getMax
                 ∷ onInput onMaxChange
@@ -188,11 +260,11 @@ rangeSlider {M} {A} lbl minBound maxBound getMin getMax onMinChange onMaxChange 
         ∷ [] )
     ∷ div ( class "agdelte-range-slider__values" ∷ [] )
         ( span ( class "agdelte-range-slider__value--min" ∷ [] )
-            ( bindF getMin ∷ [] )
+            ( bindF (λ m → clampMinStr (getMin m) (getMax m)) ∷ [] )
         ∷ span ( class "agdelte-range-slider__separator" ∷ [] )
             ( text " - " ∷ [] )
         ∷ span ( class "agdelte-range-slider__value--max" ∷ [] )
-            ( bindF getMax ∷ [] )
+            ( bindF (λ m → clampMaxStr (getMin m) (getMax m)) ∷ [] )
         ∷ [] )
     ∷ [] )
 
@@ -206,34 +278,58 @@ rangeSliderCompact : ∀ {M A}
                    → (String → A)    -- on max change
                    → Node M A
 rangeSliderCompact {M} {A} minBound maxBound getMin getMax onMinChange onMaxChange =
-  div ( class "agdelte-range-slider agdelte-range-slider--compact" ∷ [] )
+  let bb = guardMinMax minBound maxBound
+      mb = proj₁ bb
+      xb = proj₂ bb
+  in div ( class "agdelte-range-slider agdelte-range-slider--compact" ∷ [] )
     ( div ( class "agdelte-range-slider__container" ∷ [] )
-        ( div ( class "agdelte-range-slider__track" ∷ [] ) []
+        ( -- Track with clamped width to visualize selected range
+          div ( class "agdelte-range-slider__track"
+              ∷ styleBind "width" (mkBinding
+                  (λ m → let clMin = clampMinStr (getMin m) (getMax m)
+                             clMax = clampMaxStr (getMin m) (getMax m)
+                         in rangePercent mb xb clMax
+                            ++ "%")
+                  eqStr)
+              ∷ styleBind "margin-left" (mkBinding
+                  (λ m → rangePercent mb xb
+                            (clampMinStr (getMin m) (getMax m))
+                         ++ "%")
+                  eqStr)
+              ∷ [] ) []
         ∷ input ( type' "range"
                 ∷ class "agdelte-range-slider__input agdelte-range-slider__input--min"
-                ∷ attr "min" minBound
-                ∷ attr "max" maxBound
-                ∷ attr "aria-valuemin" minBound
-                ∷ attr "aria-valuemax" maxBound
-                ∷ attrBind "aria-valuenow" (mkBinding getMin eqStr)
+                ∷ attr "min" mb
+                ∷ attr "max" xb
+                ∷ attr "aria-valuemin" mb
+                ∷ attr "aria-valuemax" xb
+                ∷ attrBind "aria-valuenow" (mkBinding
+                    (λ m → clampMinStr (getMin m) (getMax m)) eqStr)
                 ∷ attr "aria-label" "Range minimum"
                 ∷ valueBind getMin
                 ∷ onInput onMinChange
                 ∷ [] )
         ∷ input ( type' "range"
                 ∷ class "agdelte-range-slider__input agdelte-range-slider__input--max"
-                ∷ attr "min" minBound
-                ∷ attr "max" maxBound
-                ∷ attr "aria-valuemin" minBound
-                ∷ attr "aria-valuemax" maxBound
-                ∷ attrBind "aria-valuenow" (mkBinding getMax eqStr)
+                ∷ attr "min" mb
+                ∷ attr "max" xb
+                ∷ attr "aria-valuemin" mb
+                ∷ attr "aria-valuemax" xb
+                ∷ attrBind "aria-valuenow" (mkBinding
+                    (λ m → clampMaxStr (getMin m) (getMax m)) eqStr)
                 ∷ attr "aria-label" "Range maximum"
                 ∷ valueBind getMax
                 ∷ onInput onMaxChange
                 ∷ [] )
         ∷ [] )
     ∷ div ( class "agdelte-range-slider__values" ∷ [] )
-        ( bindF (λ m → getMin m ++ " - " ++ getMax m) ∷ [] )
+        ( span ( class "agdelte-range-slider__value--min" ∷ [] )
+            ( bindF (λ m → clampMinStr (getMin m) (getMax m)) ∷ [] )
+        ∷ span ( class "agdelte-range-slider__separator" ∷ [] )
+            ( text " - " ∷ [] )
+        ∷ span ( class "agdelte-range-slider__value--max" ∷ [] )
+            ( bindF (λ m → clampMaxStr (getMin m) (getMax m)) ∷ [] )
+        ∷ [] )
     ∷ [] )
 
 -- | Range slider with step value.
@@ -248,31 +344,48 @@ rangeSliderWithStep : ∀ {M A}
                     → (String → A)    -- on max change
                     → Node M A
 rangeSliderWithStep {M} {A} lbl minBound maxBound stepVal getMin getMax onMinChange onMaxChange =
-  div ( class "agdelte-range-slider" ∷ [] )
+  let bb = guardMinMax minBound maxBound
+      mb = proj₁ bb
+      xb = proj₂ bb
+      sv = guardStep stepVal
+  in div ( class "agdelte-range-slider" ∷ [] )
     ( label ( class "agdelte-range-slider__label" ∷ [] )
         ( text lbl ∷ [] )
     ∷ div ( class "agdelte-range-slider__container" ∷ [] )
-        ( div ( class "agdelte-range-slider__track" ∷ [] ) []
+        ( -- Track with clamped width to visualize selected range
+          div ( class "agdelte-range-slider__track"
+              ∷ styleBind "width" (mkBinding
+                  (λ m → let clMax = clampMaxStr (getMin m) (getMax m)
+                         in rangePercent mb xb clMax ++ "%")
+                  eqStr)
+              ∷ styleBind "margin-left" (mkBinding
+                  (λ m → rangePercent mb xb
+                            (clampMinStr (getMin m) (getMax m))
+                         ++ "%")
+                  eqStr)
+              ∷ [] ) []
         ∷ input ( type' "range"
                 ∷ class "agdelte-range-slider__input agdelte-range-slider__input--min"
-                ∷ attr "min" minBound
-                ∷ attr "max" maxBound
-                ∷ attr "step" stepVal
-                ∷ attr "aria-valuemin" minBound
-                ∷ attr "aria-valuemax" maxBound
-                ∷ attrBind "aria-valuenow" (mkBinding getMin eqStr)
+                ∷ attr "min" mb
+                ∷ attr "max" xb
+                ∷ attr "step" sv
+                ∷ attr "aria-valuemin" mb
+                ∷ attr "aria-valuemax" xb
+                ∷ attrBind "aria-valuenow" (mkBinding
+                    (λ m → clampMinStr (getMin m) (getMax m)) eqStr)
                 ∷ attr "aria-label" "Range minimum"
                 ∷ valueBind getMin
                 ∷ onInput onMinChange
                 ∷ [] )
         ∷ input ( type' "range"
                 ∷ class "agdelte-range-slider__input agdelte-range-slider__input--max"
-                ∷ attr "min" minBound
-                ∷ attr "max" maxBound
-                ∷ attr "step" stepVal
-                ∷ attr "aria-valuemin" minBound
-                ∷ attr "aria-valuemax" maxBound
-                ∷ attrBind "aria-valuenow" (mkBinding getMax eqStr)
+                ∷ attr "min" mb
+                ∷ attr "max" xb
+                ∷ attr "step" sv
+                ∷ attr "aria-valuemin" mb
+                ∷ attr "aria-valuemax" xb
+                ∷ attrBind "aria-valuenow" (mkBinding
+                    (λ m → clampMaxStr (getMin m) (getMax m)) eqStr)
                 ∷ attr "aria-label" "Range maximum"
                 ∷ valueBind getMax
                 ∷ onInput onMaxChange
@@ -280,11 +393,11 @@ rangeSliderWithStep {M} {A} lbl minBound maxBound stepVal getMin getMax onMinCha
         ∷ [] )
     ∷ div ( class "agdelte-range-slider__values" ∷ [] )
         ( span ( class "agdelte-range-slider__value--min" ∷ [] )
-            ( bindF getMin ∷ [] )
+            ( bindF (λ m → clampMinStr (getMin m) (getMax m)) ∷ [] )
         ∷ span ( class "agdelte-range-slider__separator" ∷ [] )
             ( text " - " ∷ [] )
         ∷ span ( class "agdelte-range-slider__value--max" ∷ [] )
-            ( bindF getMax ∷ [] )
+            ( bindF (λ m → clampMaxStr (getMin m) (getMax m)) ∷ [] )
         ∷ [] )
     ∷ [] )
 
@@ -301,16 +414,20 @@ sliderVertical : ∀ {M A}
                → (String → A)        -- change handler
                → Node M A
 sliderVertical {M} {A} lbl minVal maxVal getValue onChangeMsg =
-  div ( class "agdelte-slider agdelte-slider--vertical" ∷ [] )
+  let mm = guardMinMax minVal maxVal
+      mn = proj₁ mm
+      mx = proj₂ mm
+  in div ( class "agdelte-slider agdelte-slider--vertical" ∷ [] )
     ( label ( class "agdelte-slider__label" ∷ [] )
         ( text lbl ∷ [] )
     ∷ input ( type' "range"
             ∷ class "agdelte-slider__input"
-            ∷ attr "min" minVal
-            ∷ attr "max" maxVal
-            ∷ attr "orient" "vertical"
-            ∷ attr "aria-valuemin" minVal
-            ∷ attr "aria-valuemax" maxVal
+            ∷ attr "min" mn
+            ∷ attr "max" mx
+            ∷ style "writing-mode" "vertical-lr"
+            ∷ attr "aria-orientation" "vertical"
+            ∷ attr "aria-valuemin" mn
+            ∷ attr "aria-valuemax" mx
             ∷ attrBind "aria-valuenow" (mkBinding getValue eqStr)
             ∷ valueBind getValue
             ∷ onInput onChangeMsg
@@ -334,16 +451,19 @@ sliderWithTicks : ∀ {M A}
                 → (String → A)        -- change handler
                 → Node M A
 sliderWithTicks {M} {A} lbl minVal maxVal ticks listId getValue onChangeMsg =
-  div ( class "agdelte-slider agdelte-slider--ticks" ∷ [] )
+  let mm = guardMinMax minVal maxVal
+      mn = proj₁ mm
+      mx = proj₂ mm
+  in div ( class "agdelte-slider agdelte-slider--ticks" ∷ [] )
     ( label ( class "agdelte-slider__label" ∷ [] )
         ( text lbl ∷ [] )
     ∷ input ( type' "range"
             ∷ class "agdelte-slider__input"
-            ∷ attr "min" minVal
-            ∷ attr "max" maxVal
+            ∷ attr "min" mn
+            ∷ attr "max" mx
             ∷ attr "list" listId
-            ∷ attr "aria-valuemin" minVal
-            ∷ attr "aria-valuemax" maxVal
+            ∷ attr "aria-valuemin" mn
+            ∷ attr "aria-valuemax" mx
             ∷ attrBind "aria-valuenow" (mkBinding getValue eqStr)
             ∷ valueBind getValue
             ∷ onInput onChangeMsg
@@ -372,16 +492,19 @@ sliderDisabled : ∀ {M A}
                → (M → String)        -- current value
                → Node M A
 sliderDisabled {M} {A} lbl minVal maxVal getValue =
-  div ( class "agdelte-slider agdelte-slider--disabled" ∷ [] )
+  let mm = guardMinMax minVal maxVal
+      mn = proj₁ mm
+      mx = proj₂ mm
+  in div ( class "agdelte-slider agdelte-slider--disabled" ∷ [] )
     ( label ( class "agdelte-slider__label" ∷ [] )
         ( text lbl ∷ [] )
     ∷ input ( type' "range"
             ∷ class "agdelte-slider__input"
-            ∷ attr "min" minVal
-            ∷ attr "max" maxVal
+            ∷ attr "min" mn
+            ∷ attr "max" mx
             ∷ attr "disabled" "true"
-            ∷ attr "aria-valuemin" minVal
-            ∷ attr "aria-valuemax" maxVal
+            ∷ attr "aria-valuemin" mn
+            ∷ attr "aria-valuemax" mx
             ∷ attrBind "aria-valuenow" (mkBinding getValue eqStr)
             ∷ valueBind getValue
             ∷ [] )
