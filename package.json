@@ -22,7 +22,9 @@
     "test:forms": "node test/forms.test.js",
     "test:json": "node test/json.test.js",
     "test:datetime": "node test/datetime.test.js",
-    "test:all": "npm test && npm run test:smoke && npm run test:gl && npm run test:css && npm run test:agda && npm run test:array && npm run test:forms && npm run test:json && npm run test:datetime",
+    "test:dom": "node test/dom.test.js",
+    "test:serialize": "node test/serialize.test.js",
+    "test:all": "npm test && npm run test:smoke && npm run test:gl && npm run test:css && npm run test:agda && npm run test:array && npm run test:forms && npm run test:json && npm run test:datetime && npm run test:dom && npm run test:serialize",
     "verify": "bash scripts/verify-build.sh",
     "build:counter": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/Counter.agda",
     "build:timer": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/Timer.agda",
@@ -104,7 +106,9 @@
   "engines": {
     "node": ">=20.0.0"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "happy-dom": "^20.8.4"
+  },
   "agda": {
     "version": ">=2.9",
     "standardLibrary": ">=2.0"

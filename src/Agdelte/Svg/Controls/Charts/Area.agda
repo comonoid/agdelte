@@ -196,6 +196,7 @@ simpleAreaChart : ∀ {M A}
                 → Float                           -- opacity
                 → List DataPoint
                 → Node M A
+simpleAreaChart {M} {A} px py w h color opacity [] = g [] []  -- empty data
 simpleAreaChart {M} {A} px py w h color opacity pts =
   let xs = extractX pts
       ys = extractY pts
@@ -231,6 +232,7 @@ multiAreaChart : ∀ {M A}
                → Float                            -- opacity
                → List AreaSeries
                → Node M A
+multiAreaChart {M} {A} px py w h opacity [] = g [] []  -- empty data
 multiAreaChart {M} {A} px py w h opacity series =
   let allX = allXs series
       allY = allYs series
@@ -271,6 +273,7 @@ stackedAreaChart : ∀ {M A}
                  → List String                    -- colors
                  → List (List DataPoint)          -- series data
                  → Node M A
+stackedAreaChart {M} {A} px py w h colors [] = g [] []  -- empty data
 stackedAreaChart {M} {A} px py w h colors allData =
   let xs = getXsFromFirst allData
       minX = findMin xs 1.0e10

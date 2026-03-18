@@ -77,6 +77,10 @@ updateModel (WsEvent (WsMessage s)) m = record m
   { messages = messages m ++L [ Received s ]
   ; msgCount = suc (msgCount m)
   }
+updateModel (WsEvent (WsBinary _)) m = record m
+  { messages = messages m ++L [ Received "[binary data]" ]
+  ; msgCount = suc (msgCount m)
+  }
 updateModel (WsEvent WsClosed) m = record m { connStatus = Disconnected ; wantConnected = false }
 updateModel (WsEvent (WsError e)) m = record m { connStatus = Error e ; wantConnected = false }
 updateModel (UpdateInput s) m = record m { inputText = s }

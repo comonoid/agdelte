@@ -64,6 +64,7 @@ horizontalTimeline : ∀ {M A}
                    → Float → Float → Float → Float  -- x, y, width, height
                    → List (TimelineEvent A)
                    → Node M A
+horizontalTimeline {M} {A} px py w h [] = g [] []
 horizontalTimeline {M} {A} px py w h events =
   let (minT , maxT) = findMinMax events 1.0e10 (0.0 - 1.0e10)
       axisY = py + h ÷ 2.0
@@ -155,6 +156,7 @@ verticalTimeline : ∀ {M A}
                  → Float → Float → Float → Float
                  → List (TimelineEvent A)
                  → Node M A
+verticalTimeline {M} {A} px py w h [] = g [] []
 verticalTimeline {M} {A} px py w h events =
   let (minT , maxT) = findMinMax events 1.0e10 (0.0 - 1.0e10)
       axisX = px + w ÷ 2.0

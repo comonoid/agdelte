@@ -1242,7 +1242,8 @@ function rayPickEntries(ray, renderList, pickRegistry) {
 /**
  * Recursively find ray hits in a group, collecting { t, point, pickId }.
  */
-function rayPickGroup(ray, entry, parentMat, results) {
+function rayPickGroup(ray, entry, parentMat, results, depth) {
+  if ((depth || 0) > 200) return;
   if (entry.type === 'mesh') {
     const hit = rayIntersectEntry(ray, entry, parentMat);
     if (hit && entry.pickId != null) {
@@ -1254,7 +1255,7 @@ function rayPickGroup(ray, entry, parentMat, results) {
       ? mat4Multiply(parentMat, mat4FromTRS(tfm.pos, tfm.rot, tfm.scale))
       : mat4FromTRS(tfm.pos, tfm.rot, tfm.scale);
     for (const child of entry.children) {
-      rayPickGroup(ray, child, groupMat, results);
+      rayPickGroup(ray, child, groupMat, results, (depth || 0) + 1);
     }
   }
 }
@@ -2320,6 +2321,7 @@ function createTextureCache(gl, scheduleFrame, isDisposed, maxSize = 128) {
       if (isDisposed()) return;
       console.warn('[reactive-gl] Failed to load texture:', url);
       entry.tex = errorTex;
+      entry.loaded = true;  // Mark as loaded so LRU eviction can remove failed entries
       scheduleFrame();
     };
     img.src = url;
@@ -2576,7 +2578,7 @@ function buildTextGeometry(text, style, fontAtlas) {
     uvs: new Float32Array(uvs),
     indices: new Uint16Array(indices),
     count: indices.length,
-    width: Math.max(0, ...lines.map(l => l.width)),
+    width: lines.reduce((max, l) => Math.max(max, l.width), 0),
     height: totalHeight,
   };
 }
@@ -4067,7 +4069,7 @@ function updateGLBindings(gl, bindings, newModel, now) {
 function tickSingleAnimation(binding, now) {
   const anim = binding.animation;
   const elapsed = now - anim.startTime;
-  const rawT = anim.durationMs > 0 ? Math.min(elapsed / anim.durationMs, 1.0) : 1.0;
+  const rawT = (anim.durationMs > 0 && isFinite(anim.durationMs)) ? Math.min(elapsed / anim.durationMs, 1.0) : 1.0;
   const t = anim.easingFn(rawT);
   const done = rawT >= 1.0;
 
@@ -4198,6 +4200,7 @@ function renderEntry(gl, programs, geoCache, texCache, fontCache, entry, parentM
 
     const mat = entry.material;
     const geo = getOrCreateGeometry(gl, geoCache, entry.geometry);
+    if (!geo || !mat) return;
 
     if (mat.type === 'pbr' && lights.length > 0) {
       const prog = programs.pbr;
@@ -4318,6 +4321,7 @@ function renderEntry(gl, programs, geoCache, texCache, fontCache, entry, parentM
     // Instanced rendering: draw many instances with a single draw call
     const mat = entry.material;
     const geo = getOrCreateGeometry(gl, geoCache, entry.geometry);
+    if (!geo || !mat) return;
 
     // Create or update instance buffer
     if (!entry.instanceBuffer || entry.instancesDirty) {
@@ -4429,10 +4433,11 @@ function renderEntry(gl, programs, geoCache, texCache, fontCache, entry, parentM
  * Check if a render entry is transparent (material alpha < 1.0).
  */
 function isTransparent(entry) {
-  if (entry.type === 'mesh' || entry.type === 'instanced') {
+  if (entry.type === 'mesh' || entry.type === 'instanced' || entry.type === 'batched') {
     const mat = entry.material;
-    if (mat.type === 'textured') return mat.tint.a < 1.0;
-    return mat.color.a < 1.0;
+    if (!mat) return false;
+    if (mat.type === 'textured') return mat.tint && mat.tint.a < 1.0;
+    return mat.color && mat.color.a < 1.0;
   }
   if (entry.type === 'group') return entry.children.some(isTransparent);
   return false;
@@ -4498,7 +4503,8 @@ function renderScene(gl, programs, geoCache, texCache, fontCache, renderList, pr
 /**
  * Render a single entry into the pick buffer with its pickId color.
  */
-function renderPickEntry(gl, pickProg, geoCache, entry, parentMat) {
+function renderPickEntry(gl, pickProg, geoCache, entry, parentMat, depth) {
+  if ((depth || 0) > 200) return;
   if (entry.type === 'mesh') {
     const tfm = entry.transform;
     const modelMat = parentMat
@@ -4509,6 +4515,7 @@ function renderPickEntry(gl, pickProg, geoCache, entry, parentMat) {
     const effectivePickId = entry.pickId ?? entry._groupPickId;
     if (effectivePickId != null) {
       const geo = getOrCreateGeometry(gl, geoCache, entry.geometry);
+      if (!geo) return;
       const idColor = pickIdToRGB(effectivePickId);
 
       gl.uniformMatrix4fv(pickProg.uniforms.model, false, modelMat);
@@ -4531,7 +4538,7 @@ function renderPickEntry(gl, pickProg, geoCache, entry, parentMat) {
       if (groupPickId != null && child.pickId == null) {
         child._groupPickId = groupPickId;
       }
-      renderPickEntry(gl, pickProg, geoCache, child, groupMat);
+      renderPickEntry(gl, pickProg, geoCache, child, groupMat, (depth || 0) + 1);
     }
   } else if (entry.type === 'text') {
     // Text picking: render text quads with pick color
@@ -5428,4 +5435,5 @@ export const _test = {
   mat4FromTRS, mat4Multiply, mat4Invert, unprojectPoint,
   raySphere, rayAABB, rayPlane, rayToLocal, rayAt,
   slerpQuat, tickSingleAnimation,
+  lerpFloat, lerpVec3,
 };

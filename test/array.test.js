@@ -147,5 +147,123 @@ test('foldr: right fold', () => {
   assertEqual(foldr(x => acc => x - acc)(0)([1, 2, 3]), 2);
 });
 
+// ========================================
+// Additional Array Tests (A53, T4)
+// ========================================
+
+import ArrayModuleFull from '../_build/jAgda.Agdelte.Data.Array.mjs';
+const { sortBy, take, drop, reverse, slice, singleton, empty, replicate, snoc, cons: arrayCons, append } = ArrayModuleFull;
+
+console.log('\n=== Array Extended Tests ===\n');
+
+// Sort comparator for numbers
+const numCmp = (a) => (b) => {
+  if (a < b) return (c) => c.lt();
+  if (a > b) return (c) => c.gt();
+  return (c) => c.eq();
+};
+
+test('sortBy: sorts numbers ascending', () => {
+  assertDeepEqual(sortBy(numCmp)([3, 1, 4, 1, 5, 9]), [1, 1, 3, 4, 5, 9]);
+});
+
+test('sortBy: stability (equal elements keep order)', () => {
+  const items = [{v: 2, id: 'a'}, {v: 1, id: 'b'}, {v: 2, id: 'c'}, {v: 1, id: 'd'}];
+  const cmp = (a) => (b) => {
+    if (a.v < b.v) return (c) => c.lt();
+    if (a.v > b.v) return (c) => c.gt();
+    return (c) => c.eq();
+  };
+  const sorted = sortBy(cmp)(items);
+  assertEqual(sorted[0].id, 'b', 'first 1 should be b');
+  assertEqual(sorted[1].id, 'd', 'second 1 should be d');
+  assertEqual(sorted[2].id, 'a', 'first 2 should be a');
+  assertEqual(sorted[3].id, 'c', 'second 2 should be c');
+});
+
+test('sortBy: empty array', () => {
+  assertDeepEqual(sortBy(numCmp)([]), []);
+});
+
+test('sortBy: single element', () => {
+  assertDeepEqual(sortBy(numCmp)([42]), [42]);
+});
+
+test('take: first N elements', () => {
+  assertDeepEqual(take(3n)([1, 2, 3, 4, 5]), [1, 2, 3]);
+});
+
+test('take: N > length returns all', () => {
+  assertDeepEqual(take(10n)([1, 2]), [1, 2]);
+});
+
+test('take: 0 returns empty', () => {
+  assertDeepEqual(take(0n)([1, 2, 3]), []);
+});
+
+test('drop: remove first N', () => {
+  assertDeepEqual(drop(2n)([1, 2, 3, 4]), [3, 4]);
+});
+
+test('drop: N > length returns empty', () => {
+  assertDeepEqual(drop(10n)([1, 2]), []);
+});
+
+test('reverse: reverses array', () => {
+  assertDeepEqual(reverse([1, 2, 3]), [3, 2, 1]);
+});
+
+test('reverse: does not mutate original', () => {
+  const orig = [1, 2, 3];
+  reverse(orig);
+  assertDeepEqual(orig, [1, 2, 3], 'original should be unchanged');
+});
+
+test('reverse: empty', () => {
+  assertDeepEqual(reverse([]), []);
+});
+
+test('slice: range', () => {
+  assertDeepEqual(slice(1n)(3n)([10, 20, 30, 40, 50]), [20, 30]);
+});
+
+test('singleton: creates 1-element array', () => {
+  assertDeepEqual(singleton(42), [42]);
+});
+
+test('empty: creates empty array', () => {
+  assertDeepEqual(empty, []);
+});
+
+test('replicate: creates N copies', () => {
+  assertDeepEqual(replicate(3n)('x'), ['x', 'x', 'x']);
+});
+
+test('snoc: append to end', () => {
+  assertDeepEqual(snoc([1, 2])(3), [1, 2, 3]);
+});
+
+test('cons: prepend to front', () => {
+  assertDeepEqual(arrayCons(0)([1, 2]), [0, 1, 2]);
+});
+
+test('append: concatenate', () => {
+  assertDeepEqual(append([1, 2])([3, 4]), [1, 2, 3, 4]);
+});
+
+test('fromList -> toList roundtrip', () => {
+  const arr = [10, 20, 30];
+  const list = toList(arr);
+  const back = ArrayModuleFull.fromList(list);
+  assertDeepEqual(back, arr, 'roundtrip should preserve elements');
+});
+
+test('index: negative index returns just(undefined) due to idx < length check', () => {
+  // BigInt(-1) → Number(-1) → -1 < 3 → just(arr[-1]) → just(undefined)
+  // This is a known edge case: no guard for negative indices
+  const result = matchMaybe(index(-1n)([10, 20, 30]));
+  assertEqual(result, undefined, 'negative index returns just(undefined)');
+});
+
 console.log(`\nPassed: ${passed}, Failed: ${failed}, Total: ${passed + failed}`);
 process.exit(failed > 0 ? 1 : 0);

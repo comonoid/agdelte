@@ -168,7 +168,7 @@ export class WorkerPool {
 
   _cleanup() {
     if (this.active === 0 && this.queue.length === 0 &&
-        Date.now() - this.lastUsed > POOL_IDLE_TIMEOUT) {
+        Math.max(0, Date.now() - this.lastUsed) > POOL_IDLE_TIMEOUT) {
       this.idle.forEach(w => w.terminate());
       this.idle = [];
       this._isEmpty = true;  // Mark for removal from registry

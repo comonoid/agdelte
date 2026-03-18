@@ -63,7 +63,7 @@ checkboxRules =
       ∷ "height" ∶ "18px"
       ∷ "border" ∶ "2px solid var(--agdelte-primary)"
       ∷ "border-radius" ∶ "3px"
-      ∷ "background" ∶ "var(--agdelte-surface, #fff)"
+      ∷ "background" ∶ "var(--agdelte-bg, #fff)"
       ∷ "color" ∶ "var(--agdelte-primary)"
       ∷ "font-weight" ∶ "bold"
       ∷ "font-size" ∶ "14px"

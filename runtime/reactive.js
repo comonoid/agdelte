@@ -85,7 +85,7 @@ const BOOL_ATTRS = new Set([
   'hidden', 'autofocus', 'multiple', 'open', 'novalidate',
   'formnovalidate', 'autoplay', 'controls', 'loop', 'muted',
   'default', 'reversed', 'allowfullscreen', 'async', 'defer',
-  'inert', 'popover',
+  'inert', 'popover', 'ismap', 'nomodule', 'playsinline', 'itemscope',
 ]);
 
 // Namespaced attributes (xlink:href, xml:lang, etc.)
@@ -419,7 +419,15 @@ function cloneSlot(s) {
   }
   if (!s) return s;
   if (typeof s === 'object' && s !== null) {
-    try { return structuredClone(s); } catch { return s; }
+    try {
+      return structuredClone(s);
+    } catch {
+      // structuredClone fails on circular refs or non-cloneable objects.
+      // Shallow-clone as best effort to preserve snapshot isolation.
+      try {
+        return Array.isArray(s) ? [...s] : Object.assign({}, s);
+      } catch { return s; }
+    }
   }
   return s;
 }
@@ -719,13 +727,16 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     }
 
     _batchDepth++;
-    isUpdating = true;
     try {
-      applyBatch(msgs);
+      isUpdating = true;
+      try {
+        applyBatch(msgs);
+      } finally {
+        isUpdating = false;
+      }
     } finally {
-      isUpdating = false;
+      _batchDepth--;
     }
-    _batchDepth--;
     // Process deferred immediate messages in same frame
     // (messages pushed to p1Queue by dispatchImmediate during isUpdating)
     // Loop instead of recursion to avoid stacking up to MAX_BATCH_DEPTH frames
@@ -733,13 +744,16 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       const deferred = p1Queue;
       p1Queue = [];
       _batchDepth++;
-      isUpdating = true;
       try {
-        applyBatch(deferred);
+        isUpdating = true;
+        try {
+          applyBatch(deferred);
+        } finally {
+          isUpdating = false;
+        }
       } finally {
-        isUpdating = false;
+        _batchDepth--;
       }
-      _batchDepth--;
     }
   }
 
@@ -761,7 +775,8 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       console.error('flushP1: batch processing failed:', e);
     }
 
-    // If more messages arrived during flush, schedule another
+    // If more messages arrived during flush (or queue was non-empty before),
+    // schedule another frame to ensure recovery after crash
     if (p1Queue.length > 0) {
       p1RafId = requestAnimationFrame(flushP1);
     } else {
@@ -977,14 +992,20 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         if (shouldShow) {
           const childScope = createScope(currentScope);
           const rendered = withScope(childScope, () => renderNode(innerNode));
-          // Apply enter class, remove on next frame
+          // Apply enter class, remove after duration (or next frame if duration=0)
           if (rendered && rendered.classList) {
             rendered.classList.add(enterClass);
-            requestAnimationFrame(() => {
-              requestAnimationFrame(() => {
+            if (duration > 0) {
+              setTimeout(() => {
                 if (rendered.classList) rendered.classList.remove(enterClass);
+              }, duration);
+            } else {
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  if (rendered.classList) rendered.classList.remove(enterClass);
+                });
               });
-            });
+            }
           }
           currentScope.conditionals.push({
             cond, innerNode, node: rendered, rendered: true, scope: childScope,
@@ -1142,17 +1163,21 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
    * Set attribute with namespace support
    */
   function setAttr(el, name, value) {
-    const ns = ATTR_NS[name];
-    if (ns) {
-      el.setAttributeNS(ns, name, value);
-    } else if (BOOL_ATTRS.has(name)) {
-      if (value === 'true' || value === true) el.setAttribute(name, '');
-      else el.removeAttribute(name);
-    } else if (name === 'value' && 'value' in el) {
-      // For input/textarea/select, set the property (not attribute) to update displayed value
-      el.value = value;
-    } else {
-      el.setAttribute(name, value);
+    try {
+      const ns = ATTR_NS[name];
+      if (ns) {
+        el.setAttributeNS(ns, name, value);
+      } else if (BOOL_ATTRS.has(name)) {
+        if (value === 'true' || value === true) el.setAttribute(name, '');
+        else el.removeAttribute(name);
+      } else if (name === 'value' && 'value' in el) {
+        // For input/textarea/select, set the property (not attribute) to update displayed value
+        el.value = value;
+      } else {
+        el.setAttribute(name, value);
+      }
+    } catch (e) {
+      console.warn('setAttr failed:', name, e.message);
     }
   }
 
@@ -1274,7 +1299,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
   /** Create a visible truncation marker for lists that exceed the iteration limit */
   function makeTruncatedMarker() {
-    const el = document.createElement('li');
+    const el = document.createElement('div');
     el.className = 'agdelte-list-truncated';
     el.textContent = '[List truncated — exceeded iteration limit]';
     return el;
@@ -2053,7 +2078,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     cmdFunc = NodeModule.ReactiveApp.cmd(newAppRecord);
     subsFunc = NodeModule.ReactiveApp.subs(newAppRecord);
 
-    // Tear down old DOM
+    // Tear down old DOM and clear stale queues
     if (currentSubscription) {
       unsubscribe(currentSubscription);
       currentSubscription = null;
@@ -2062,6 +2087,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     destroyScope(rootScope);
     container.replaceChildren();
     afterUpdateCallbacks.length = 0;
+    p2Queue = [];
 
     // Reset root scope — explicitly reset known properties to avoid
     // fragile delete-all-keys pattern that could leak non-enumerable props.

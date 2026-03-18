@@ -152,6 +152,7 @@ simpleLineChart : ∀ {M Msg}
                 → List DataPoint
                 → LineStyle
                 → Node M Msg
+simpleLineChart px py w h [] sty = g [] []  -- empty data → empty chart
 simpleLineChart px py w h points sty =
   let xs = extractX points
       ys = extractY points

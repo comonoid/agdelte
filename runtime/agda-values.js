@@ -221,7 +221,12 @@ export function deepEqual(a, b, depth) {
   }
   const ta = typeof a, tb = typeof b;
   if (ta !== tb) return false;
-  if (ta !== 'function' && ta !== 'object') return a === b;
+  if (ta !== 'function' && ta !== 'object') {
+    // NaN === NaN is false in JS, but for model diffing we treat NaN as equal
+    // to avoid infinite re-render loops when a slot contains NaN.
+    if (ta === 'number' && Number.isNaN(a) && Number.isNaN(b)) return true;
+    return a === b;
+  }
   if (a === null || b === null) return a === b;
 
   // Plain objects (e.g. from FFI) are not compared structurally — only
@@ -374,6 +379,12 @@ export function probeCtor(model) {
  * Detect which top-level slots changed between cached args and new model.
  * scope.cachedArgs stores previous probe result; updated in-place.
  * Returns a Set of changed slot indices, or null if not trackable.
+ *
+ * NOTE: Uses reference equality (===) for slot comparison, not deepEqual.
+ * This means two structurally identical Scott-encoded values with different
+ * object references will be considered "changed", causing a re-render.
+ * This is a deliberate performance trade-off: calling deepEqual on every
+ * slot for every update would be too expensive for large models.
  */
 export function changedSlotsFromCache(scope, newModel) {
   const newArgs = probeSlots(newModel);
@@ -522,6 +533,10 @@ export function numberToNat(num) {
 export function ensureNumber(n) {
   if (typeof n === 'number') return n;
   if (typeof n === 'bigint') return Number(n);
+  if (n === null || n === undefined) {
+    console.warn('ensureNumber: received', n, '— returning 0');
+    return 0;
+  }
   return natToNumber(n);
 }
 

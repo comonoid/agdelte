@@ -144,5 +144,81 @@ test('fromMillis: creates date from BigInt millis', () => {
   assertEqual(result.getFullYear(), 2024);
 });
 
+// ========================================
+// DateTime Edge Cases (A53, T4)
+// ========================================
+
+console.log('\n=== DateTime Edge Cases ===\n');
+
+test('leap year: Feb 29 2024', () => {
+  const d = new Date(2024, 1, 29); // Feb 29
+  assertEqual(getMonth(d), 2n, 'February');
+  assertEqual(getDay(d), 29n, 'day 29');
+});
+
+test('leap year: Feb 29 via ISO', () => {
+  const result = matchMaybe(fromISOString("2024-02-29T00:00:00Z"));
+  assert(result !== null, 'Feb 29 2024 should parse');
+  assertEqual(getDay(result), 29n);
+});
+
+test('non-leap year: Feb 28 2023', () => {
+  const d = new Date(2023, 1, 28);
+  assertEqual(getDay(d), 28n, '2023 is not leap year, max day is 28');
+});
+
+test('epoch boundary: Jan 1 1970', () => {
+  const d = fromMillis(0n);
+  assert(d instanceof Date);
+  // getTime should be 0 (UTC epoch)
+  assertEqual(d.getTime(), 0);
+});
+
+test('negative millis: dates before epoch', () => {
+  // Dec 31 1969 in UTC is -86400000 ms
+  const d = fromMillis(-86400000n);
+  assert(d instanceof Date);
+  assert(d.getTime() < 0, 'should be before epoch');
+});
+
+test('diffDates: same date = 0', () => {
+  const d = new Date(2024, 5, 15);
+  const dur = extractDuration(diffDates(d)(d));
+  assertEqual(dur, 0n, 'same date diff should be 0');
+});
+
+test('diffDates: reverse order gives absolute value', () => {
+  const d1 = new Date(2024, 0, 2);
+  const d2 = new Date(2024, 0, 1);
+  const dur = extractDuration(diffDates(d1)(d2));
+  // diffDates computes |d2 - d1| or d1 - d2, result is positive
+  assertEqual(dur, 86400000n, 'reverse order gives positive (absolute) diff');
+});
+
+test('isBefore: same date returns false', () => {
+  const d = new Date(2024, 0, 1);
+  assertEqual(matchBool(isBefore(d)(d)), false, 'same date is not before itself');
+});
+
+test('isAfter: same date returns false', () => {
+  const d = new Date(2024, 0, 1);
+  assertEqual(matchBool(isAfter(d)(d)), false, 'same date is not after itself');
+});
+
+test('addDuration then subDuration is identity', () => {
+  const d = new Date(2024, 6, 15, 12, 30, 0);
+  const dur = mkDuration(3600000n); // 1 hour
+  const added = addDuration(dur)(d);
+  const result = subDuration(dur)(added);
+  assertEqual(result.getTime(), d.getTime(), 'add then sub should be identity');
+});
+
+test('format: year 999 (3 digits)', () => {
+  const d = new Date(999, 5, 15);
+  const formatted = format("YYYY")(d);
+  // Date constructor with year < 100 maps to 1900+year, but 999 is fine
+  assert(formatted.includes('999'), `should contain 999, got: ${formatted}`);
+});
+
 console.log(`\nPassed: ${passed}, Failed: ${failed}, Total: ${passed + failed}`);
 process.exit(failed > 0 ? 1 : 0);

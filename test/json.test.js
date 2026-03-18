@@ -186,5 +186,84 @@ test('map2 with field decoders', () => {
   assertEqual(result.value.age, 30);
 });
 
+// ========================================
+// JSON Roundtrip / Edge Case Tests (A53)
+// ========================================
+
+console.log('\n=== Json Roundtrip & Edge Cases ===\n');
+
+test('encodeString roundtrip via decodeString', () => {
+  const original = "hello world";
+  const encoded = encodeString.encode(original);
+  const json = JSON.stringify(encoded);
+  const result = matchResult(decodeStringFn(stringDecoder)(json));
+  assertEqual(result.tag, 'ok');
+  assertEqual(result.value, original);
+});
+
+test('encodeString: emoji (4-byte UTF-8)', () => {
+  const emoji = "\u{1F600}"; // grinning face
+  const encoded = encodeString.encode(emoji);
+  assertEqual(encoded, emoji, 'emoji should encode without corruption');
+});
+
+test('encodeString: surrogate pairs', () => {
+  const surrogate = "\uD83D\uDE00"; // same emoji as surrogate pair
+  const encoded = encodeString.encode(surrogate);
+  assert(encoded.length > 0, 'surrogate pair should encode');
+});
+
+test('encodeString: special chars', () => {
+  for (const s of ['"quoted"', 'back\\slash', 'new\nline', 'tab\there', '\x00null']) {
+    const encoded = encodeString.encode(s);
+    assertEqual(typeof encoded, 'string', `should encode ${JSON.stringify(s)}`);
+  }
+});
+
+test('encodeFloat: NaN', () => {
+  const result = encodeFloat.encode(NaN);
+  assert(result === null || Number.isNaN(result), 'NaN should encode as null or NaN');
+});
+
+test('encodeFloat: Infinity', () => {
+  const result = encodeFloat.encode(Infinity);
+  assert(result === null || result === Infinity, 'Infinity should encode');
+});
+
+test('encodeFloat: negative zero', () => {
+  const result = encodeFloat.encode(-0);
+  assert(result === 0 || Object.is(result, -0), 'negative zero should encode');
+});
+
+test('encodeList: nested lists', () => {
+  const innerList = scottCons("a", scottCons("b", scottNil));
+  const outerList = scottCons(innerList, scottNil);
+  const encoded = encodeList(encodeList(encodeString)).encode(outerList);
+  assertDeepEqual(encoded, [["a", "b"]], 'nested list should encode');
+});
+
+test('decodeString: empty JSON object', () => {
+  const result = matchResult(decodeStringFn(stringDecoder)('{}'));
+  assertEqual(result.tag, 'err', 'empty object is not a string');
+});
+
+test('decodeString: empty string JSON', () => {
+  const result = matchResult(decodeStringFn(stringDecoder)('""'));
+  assertEqual(result.tag, 'ok');
+  assertEqual(result.value, '', 'empty string should decode');
+});
+
+test('field decoder: missing field', () => {
+  const decoder = fieldDecoder("missing")(stringDecoder);
+  const result = decoder.decode({name: "Alice"});
+  assertEqual(result.tag, 'err', 'missing field should fail');
+});
+
+test('field decoder: null field value', () => {
+  const decoder = fieldDecoder("name")(stringDecoder);
+  const result = decoder.decode({name: null});
+  assertEqual(result.tag, 'err', 'null string field should fail');
+});
+
 console.log(`\nPassed: ${passed}, Failed: ${failed}, Total: ${passed + failed}`);
 process.exit(failed > 0 ? 1 : 0);

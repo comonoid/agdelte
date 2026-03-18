@@ -76,6 +76,7 @@ scatterPlot : ∀ {M A}
             → Float → Float → Float → Float  -- x, y, width, height
             → List (ScatterPoint A)
             → Node M A
+scatterPlot {M} {A} px py w h [] = g [] []
 scatterPlot {M} {A} px py w h points =
   let xs = extractXs points
       ys = extractYs points
@@ -147,6 +148,7 @@ bubbleChart : ∀ {M A}
             → Float                            -- max bubble radius
             → List (ScatterPoint A)
             → Node M A
+bubbleChart {M} {A} px py w h maxR [] = g [] []
 bubbleChart {M} {A} px py w h maxR points =
   let maxSize = findMaxSize points 0.0
   in g ( attr "class" "svg-bubble-chart" ∷ [] )

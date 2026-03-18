@@ -37,6 +37,7 @@ private
 data WsMsg : Set where
   WsConnected : WsMsg
   WsMessage   : String → WsMsg
+  WsBinary    : String → WsMsg    -- binary frame (base64-encoded data)
   WsClosed    : WsMsg
   WsError     : String → WsMsg
 
@@ -178,6 +179,9 @@ module SubDef where
     -- === Buffer Registry ===
     allocImage : ℕ → ℕ → (BufferHandle → A) → Sub A
     allocBuffer : ℕ → (BufferHandle → A) → Sub A
+    -- Variants with error callback (dispatches onError when COOP/COEP headers missing)
+    allocImageE : ℕ → ℕ → (BufferHandle → A) → (String → A) → Sub A
+    allocBufferE : ℕ → (BufferHandle → A) → (String → A) → Sub A
 
 open SubDef public using (Sub)
 
@@ -212,6 +216,8 @@ mapSub f (Sub.allocShared n h) = Sub.allocShared n (f ∘ h)
 mapSub f (Sub.workerShared buf url input onOk onErr) = Sub.workerShared buf url input (f ∘ onOk) (f ∘ onErr)
 mapSub f (Sub.allocImage w h handler) = Sub.allocImage w h (f ∘ handler)
 mapSub f (Sub.allocBuffer n handler) = Sub.allocBuffer n (f ∘ handler)
+mapSub f (Sub.allocImageE w h handler onErr) = Sub.allocImageE w h (f ∘ handler) (f ∘ onErr)
+mapSub f (Sub.allocBufferE n handler onErr) = Sub.allocBufferE n (f ∘ handler) (f ∘ onErr)
 
 ------------------------------------------------------------------------
 -- Event: structural combinators (AST) - stays in Set
@@ -338,6 +344,13 @@ allocImage w h handler = sub (Sub.allocImage w h handler)
 
 allocBuffer : ℕ → (BufferHandle → A) → Event A
 allocBuffer n handler = sub (Sub.allocBuffer n handler)
+
+-- Variants with error callback (for handling COOP/COEP header absence)
+allocImageE : ℕ → ℕ → (BufferHandle → A) → (String → A) → Event A
+allocImageE w h handler onErr = sub (Sub.allocImageE w h handler onErr)
+
+allocBufferE : ℕ → (BufferHandle → A) → (String → A) → Event A
+allocBufferE n handler onErr = sub (Sub.allocBufferE n handler onErr)
 
 ------------------------------------------------------------------------
 -- mapE - wraps in mapFilterE (no recursion needed)

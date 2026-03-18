@@ -77,7 +77,7 @@ export function createSvgDrag(target, callbacks) {
     if (!pt) return;
     isDragging = true;
     startPoint = pt;
-    target.setPointerCapture(e.pointerId);
+    try { target.setPointerCapture(e.pointerId); } catch {}
     if (callbacks.onStart) {
       callbacks.onStart(startPoint, e);
     }
@@ -100,7 +100,7 @@ export function createSvgDrag(target, callbacks) {
     if (!isDragging) return;
     isDragging = false;
     const end = screenToSvg(svg, e.clientX, e.clientY);
-    target.releasePointerCapture(e.pointerId);
+    try { target.releasePointerCapture(e.pointerId); } catch {}
     if (callbacks.onEnd) {
       callbacks.onEnd(end, e);
     }

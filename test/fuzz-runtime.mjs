@@ -267,14 +267,13 @@ test('deepEqual: identical primitives', () => {
   assert(deepEqual('a', 'a', 0));
 });
 
-test('deepEqual: NaN slots', () => {
+test('deepEqual: NaN slots treated as equal', () => {
   const a = construct('rec', NaN);
   const b = construct('rec', NaN);
-  // NaN !== NaN, so Scott probing will get NaN args; deepEqual recurses
-  // but at primitive level NaN !== NaN
+  // NaN === NaN is false in JS, but deepEqual treats NaN as equal
+  // to prevent infinite re-render loops when model slots contain NaN.
   const result = deepEqual(a, b, 0);
-  // NaN args should compare as not equal since NaN !== NaN
-  assert(!result, 'NaN slots should not be equal');
+  assert(result, 'NaN slots should be treated as equal to avoid re-render loops');
 });
 
 test('deepEqual: Symbol slots', () => {
@@ -720,6 +719,20 @@ test('ensureNumber: zero', () => {
   assert(ensureNumber(0) === 0);
 });
 
+test('ensureNumber: null returns 0 with warning', () => {
+  hush();
+  try {
+    assert(ensureNumber(null) === 0, 'null should return 0');
+  } finally { unhush(); }
+});
+
+test('ensureNumber: undefined returns 0 with warning', () => {
+  hush();
+  try {
+    assert(ensureNumber(undefined) === 0, 'undefined should return 0');
+  } finally { unhush(); }
+});
+
 test('ensureNumber: negative number', () => {
   assert(ensureNumber(-42) === -42);
 });
@@ -1088,6 +1101,939 @@ test('toBool: roundtrip with fromBool', () => {
   assert(fromBool(toBool(1)) === true);
   assert(fromBool(toBool(0)) === false);
   assert(fromBool(toBool(null)) === false);
+});
+
+// =====================================================================
+// 12. FUZZ ensureString edge cases
+// =====================================================================
+
+test('ensureString: circular object', () => {
+  const obj = {};
+  obj.self = obj;
+  const result = ensureString(obj);
+  // JSON.stringify will throw on circular, fallback to String(obj)
+  assert(typeof result === 'string', 'should return a string for circular object');
+});
+
+test('ensureString: Symbol', () => {
+  const result = ensureString(Symbol('test'));
+  assert(typeof result === 'string');
+  assert(result.includes('test'), `symbol string should contain name, got: ${result}`);
+});
+
+test('ensureString: BigInt', () => {
+  const result = ensureString(42n);
+  assert(result === '42', `BigInt should stringify, got: ${result}`);
+});
+
+test('ensureString: function', () => {
+  const result = ensureString(() => {});
+  assert(result === '[function]', `function should return [function], got: ${result}`);
+});
+
+test('ensureString: null', () => {
+  assert(ensureString(null) === 'null');
+});
+
+test('ensureString: undefined', () => {
+  assert(ensureString(undefined) === 'undefined');
+});
+
+test('ensureString: nested object', () => {
+  const result = ensureString({ a: 1, b: [2, 3] });
+  assert(result.includes('"a"'), 'should JSON.stringify nested object');
+});
+
+test('ensureString: empty string passthrough', () => {
+  assert(ensureString('') === '');
+});
+
+// =====================================================================
+// 13. FUZZ isScottEncoded / isAgdaValue
+// =====================================================================
+
+import { isScottEncoded, isAgdaValue, replaceSlot } from '../runtime/agda-values.js';
+
+test('isScottEncoded: Scott function', () => {
+  const val = construct('pair', 1, 2);
+  assert(isScottEncoded(val) === true, 'Scott function should be detected');
+});
+
+test('isScottEncoded: plain function is also true (any function)', () => {
+  // isScottEncoded simply checks typeof === 'function'
+  assert(isScottEncoded(() => {}) === true, 'any function is considered Scott-encoded');
+});
+
+test('isScottEncoded: object-format Scott', () => {
+  const val = { pair: (c) => c.pair(1, 2) };
+  // isScottEncoded checks for single-key object with function value
+  const result = isScottEncoded(val);
+  assert(typeof result === 'boolean', 'should return boolean');
+});
+
+test('isScottEncoded: primitives', () => {
+  assert(isScottEncoded(null) === false);
+  assert(isScottEncoded(undefined) === false);
+  assert(isScottEncoded(42) === false);
+  assert(isScottEncoded('hello') === false);
+  assert(isScottEncoded(true) === false);
+});
+
+test('isAgdaValue: Scott-encoded', () => {
+  const val = construct('just', 42);
+  assert(isAgdaValue(val) === true, 'Scott function should be Agda value');
+});
+
+test('isAgdaValue: primitives', () => {
+  assert(isAgdaValue(null) === false);
+  assert(isAgdaValue(42) === false);
+});
+
+// =====================================================================
+// 14. FUZZ replaceSlot
+// =====================================================================
+
+test('replaceSlot: returns a function wrapper', () => {
+  // replaceSlot returns a Scott-encoded value that, when called with cases,
+  // invokes the original but with slot[idx] replaced by a sentinel Symbol
+  const val = construct('pair', 'a', 'b');
+  const replaced = replaceSlot(val, 0);
+  assert(typeof replaced === 'function', 'replaceSlot should return function');
+
+  // Call with cases to extract slots
+  let gotSlots = null;
+  replaced({ pair: (...args) => { gotSlots = args; } });
+  assert(gotSlots !== null, 'should invoke cases');
+  assert(typeof gotSlots[0] === 'symbol', 'slot 0 should be replaced with sentinel Symbol');
+  assert(gotSlots[1] === 'b', `slot 1 should be unchanged, got ${gotSlots[1]}`);
+});
+
+test('replaceSlot: replace last slot', () => {
+  const val = construct('triple', 1, 2, 3);
+  const replaced = replaceSlot(val, 2);
+  let gotSlots = null;
+  replaced({ triple: (...args) => { gotSlots = args; } });
+  assert(typeof gotSlots[2] === 'symbol', 'slot 2 should be sentinel');
+  assert(gotSlots[0] === 1, 'slot 0 unchanged');
+  assert(gotSlots[1] === 2, 'slot 1 unchanged');
+});
+
+// =====================================================================
+// 15. FUZZ arrayToList / listToArray roundtrip
+// =====================================================================
+
+test('arrayToList -> listToArray roundtrip: empty', () => {
+  const list = arrayToList([]);
+  const result = listToArray(list);
+  assert(result.items.length === 0, 'empty roundtrip');
+  assert(!result.incomplete, 'should be complete');
+});
+
+test('arrayToList -> listToArray roundtrip: 5 elements', () => {
+  const original = [1, 2, 3, 4, 5];
+  const list = arrayToList(original);
+  const result = listToArray(list);
+  for (let i = 0; i < 5; i++) {
+    assert(result.items[i] === original[i], `element ${i} should match`);
+  }
+});
+
+test('arrayToList -> listToArray roundtrip: strings', () => {
+  const original = ['hello', 'world', ''];
+  const list = arrayToList(original);
+  const result = listToArray(list);
+  assert(result.items.length === 3);
+  assert(result.items[0] === 'hello');
+  assert(result.items[2] === '', 'empty string preserved');
+});
+
+test('arrayToList -> listToArray roundtrip: 1000 elements', () => {
+  const original = Array.from({length: 1000}, (_, i) => i);
+  const list = arrayToList(original);
+  const result = listToArray(list);
+  assert(result.items.length === 1000, `expected 1000, got ${result.items.length}`);
+  assert(result.items[0] === 0);
+  assert(result.items[999] === 999);
+});
+
+// =====================================================================
+// 16. FUZZ numberToNat / natToNumber roundtrip
+// =====================================================================
+
+test('numberToNat -> natToNumber roundtrip: 0', () => {
+  const nat = numberToNat(0);
+  assert(natToNumber(nat) === 0, 'roundtrip 0');
+});
+
+test('numberToNat -> natToNumber roundtrip: 1', () => {
+  const nat = numberToNat(1);
+  assert(natToNumber(nat) === 1, 'roundtrip 1');
+});
+
+test('numberToNat -> natToNumber roundtrip: 100', () => {
+  const nat = numberToNat(100);
+  assert(natToNumber(nat) === 100, 'roundtrip 100');
+});
+
+test('numberToNat -> natToNumber roundtrip: negative clamped to 0', () => {
+  const nat = numberToNat(-5);
+  const result = natToNumber(nat);
+  assert(result === 0, `negative should clamp, got ${result}`);
+});
+
+// =====================================================================
+// 17. FUZZ mixed Scott-encoding formats (object vs function)
+// =====================================================================
+
+test('matchOr: object-format Scott value', () => {
+  // Object-format: { ctor: (cases) => cases.ctor(slots...) }
+  const objScott = { just: (c) => c.just(42) };
+  const result = matchOr(objScott, { just: (x) => x * 2, nothing: () => 0 }, -1);
+  // matchOr should handle object-format
+  assert(typeof result === 'number', `should return number, got ${typeof result}`);
+});
+
+test('probe: object-format Scott value', () => {
+  const objScott = { pair: (c) => c.pair('a', 'b') };
+  const result = probe(objScott);
+  if (result !== null) {
+    assert(result.ctor === 'pair', `expected pair, got ${result.ctor}`);
+    assert(result.slots.length === 2);
+  }
+  // null is also acceptable if object-format not supported by probe
+});
+
+test('getCtor: object-format vs function-format', () => {
+  const funcScott = construct('left', 42);
+  const ctorFunc = getCtor(funcScott);
+  assert(ctorFunc === 'left', 'function-format getCtor');
+
+  // Object-format
+  const objScott = { left: (c) => c.left(42) };
+  const ctorObj = getCtor(objScott);
+  if (ctorObj !== null) {
+    assert(ctorObj === 'left', `object-format getCtor should return "left", got "${ctorObj}"`);
+  }
+});
+
+test('deepEqual: mixed format comparison', () => {
+  const func = construct('pair', 1, 2);
+  const other = construct('pair', 1, 2);
+  assert(deepEqual(func, other, 0), 'same format should be equal');
+});
+
+// =====================================================================
+// 18. FUZZ construct edge cases
+// =====================================================================
+
+test('construct: nullary constructor', () => {
+  const val = construct('nothing');
+  const probed = probe(val);
+  assert(probed !== null);
+  assert(probed.ctor === 'nothing');
+  assert(probed.slots.length === 0);
+});
+
+test('construct: 10 slots', () => {
+  const val = construct('big', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+  const probed = probe(val);
+  assert(probed !== null);
+  assert(probed.ctor === 'big');
+  assert(probed.slots.length === 10);
+  assert(probed.slots[9] === 10);
+});
+
+test('construct: special character constructor name', () => {
+  const val = construct('_∷_', 'head', 'tail');
+  const probed = probe(val);
+  assert(probed !== null);
+  assert(probed.ctor === '_∷_');
+});
+
+// =====================================================================
+// 19. PROPERTY: deepEqual(x, x) === true (reflexivity)
+// =====================================================================
+
+test('deepEqual reflexivity: number', () => {
+  for (const x of [0, -0, 1, -1, NaN, Infinity, -Infinity, 3.14, Number.MAX_SAFE_INTEGER]) {
+    assert(deepEqual(x, x, 0), `deepEqual(${x}, ${x}) should be true`);
+  }
+});
+
+test('deepEqual reflexivity: string', () => {
+  for (const x of ['', 'hello', '\u0000', 'a'.repeat(10000)]) {
+    assert(deepEqual(x, x, 0), `deepEqual(string, string) should be true`);
+  }
+});
+
+test('deepEqual reflexivity: null and undefined', () => {
+  assert(deepEqual(null, null, 0), 'null');
+  assert(deepEqual(undefined, undefined, 0), 'undefined');
+});
+
+test('deepEqual reflexivity: Scott-encoded values', () => {
+  const vals = [
+    construct('nothing'),
+    construct('just', 42),
+    construct('pair', NaN, Infinity),
+    construct('nested', construct('inner', 'x')),
+    construct('deep', construct('a', construct('b', construct('c')))),
+  ];
+  for (const x of vals) {
+    assert(deepEqual(x, x, 0), `deepEqual(Scott, Scott) reflexivity failed`);
+  }
+});
+
+test('deepEqual reflexivity: BigInt and boolean', () => {
+  assert(deepEqual(42n, 42n, 0), 'BigInt');
+  assert(deepEqual(true, true, 0), 'true');
+  assert(deepEqual(false, false, 0), 'false');
+});
+
+// =====================================================================
+// 20. PROPERTY: deepEqual(x, y) === deepEqual(y, x) (symmetry)
+// =====================================================================
+
+test('deepEqual symmetry: primitives', () => {
+  const pairs = [
+    [1, 2], [1, 1], ['a', 'b'], [null, undefined], [0, -0],
+    [NaN, NaN], [true, false], [42n, 43n], [42n, 42n],
+  ];
+  for (const [a, b] of pairs) {
+    const ab = deepEqual(a, b, 0);
+    const ba = deepEqual(b, a, 0);
+    assert(ab === ba, `symmetry: deepEqual(${a}, ${b})=${ab} but deepEqual(${b}, ${a})=${ba}`);
+  }
+});
+
+test('deepEqual symmetry: Scott-encoded values', () => {
+  const pairs = [
+    [construct('left', 1), construct('right', 1)],
+    [construct('pair', 1, 2), construct('pair', 1, 2)],
+    [construct('pair', 1, 2), construct('pair', 2, 1)],
+    [construct('just', NaN), construct('just', NaN)],
+    [construct('a'), construct('b')],
+    [construct('x', 1, 2), construct('x', 1)],
+  ];
+  for (const [a, b] of pairs) {
+    const ab = deepEqual(a, b, 0);
+    const ba = deepEqual(b, a, 0);
+    assert(ab === ba, `symmetry: deepEqual(Scott, Scott) mismatch`);
+  }
+});
+
+test('deepEqual symmetry: cross-type', () => {
+  const pairs = [
+    [construct('x'), null],
+    [construct('x'), 42],
+    [null, construct('x')],
+    [42, construct('x')],
+  ];
+  for (const [a, b] of pairs) {
+    const ab = deepEqual(a, b, 0);
+    const ba = deepEqual(b, a, 0);
+    assert(ab === ba, `symmetry: cross-type deepEqual mismatch`);
+  }
+});
+
+// =====================================================================
+// 21. PROPERTY: cloneSlot(wrapMutable(x)) deep-equals x
+// =====================================================================
+
+test('cloneSlot(wrapMutable(x)) deep-equals x: primitives in Scott', () => {
+  const vals = [
+    construct('rec', 42),
+    construct('rec', 'hello'),
+    construct('rec', true),
+    construct('rec', null),
+    construct('rec', 3.14),
+  ];
+  for (const x of vals) {
+    const wrapped = wrapMutable(x);
+    const cloned = cloneSlot(wrapped);
+    assert(deepEqual(cloned, x, 0), 'cloneSlot(wrapMutable(x)) should deep-equal x');
+  }
+});
+
+test('cloneSlot(wrapMutable(x)) deep-equals x: nested Scott values', () => {
+  const inner = construct('inner', 1, 2);
+  const outer = construct('outer', inner, 'x');
+  const wrapped = wrapMutable(outer);
+  const cloned = cloneSlot(wrapped);
+  assert(deepEqual(cloned, outer, 0), 'nested Scott clone should deep-equal original');
+});
+
+test('cloneSlot(wrapMutable(x)) deep-equals x: deeply nested', () => {
+  let val = construct('leaf', 42);
+  for (let i = 0; i < 10; i++) {
+    val = construct('node', val);
+  }
+  const wrapped = wrapMutable(val);
+  const cloned = cloneSlot(wrapped);
+  assert(deepEqual(cloned, val, 0), 'deeply nested clone should deep-equal original');
+});
+
+test('cloneSlot(wrapMutable(x)) deep-equals x: multiple slots', () => {
+  const val = construct('record', 1, 'two', construct('three'), true, 42n);
+  const wrapped = wrapMutable(val);
+  const cloned = cloneSlot(wrapped);
+  // Verify structure matches
+  const origSlots = getSlots(val);
+  const cloneSlots = getSlots(cloned);
+  assert(origSlots.length === cloneSlots.length, 'slot count should match');
+  assert(cloneSlots[0] === 1, 'slot 0');
+  assert(cloneSlots[1] === 'two', 'slot 1');
+  assert(cloneSlots[3] === true, 'slot 3');
+});
+
+test('cloneSlot(wrapMutable(x)) deep-equals x: nullary constructor', () => {
+  const val = construct('nothing');
+  const wrapped = wrapMutable(val);
+  const cloned = cloneSlot(wrapped);
+  assert(deepEqual(cloned, val, 0), 'nullary constructor clone should deep-equal original');
+});
+
+// =====================================================================
+// 22. PROPERTY: listToArray(arrayToList(arr)) roundtrip identity
+// =====================================================================
+
+test('listToArray(arrayToList(arr)) roundtrip: random int arrays', () => {
+  const testArrays = [
+    [],
+    [0],
+    [1, 2, 3, 4, 5],
+    [-1, 0, 1],
+    Array.from({length: 100}, (_, i) => i * 7),
+    [NaN, Infinity, -Infinity, -0],
+  ];
+  for (const arr of testArrays) {
+    const result = listToArray(arrayToList(arr));
+    assert(!result.incomplete, 'should be complete');
+    assert(result.items.length === arr.length, `length ${result.items.length} !== ${arr.length}`);
+    for (let i = 0; i < arr.length; i++) {
+      if (Number.isNaN(arr[i])) {
+        assert(Number.isNaN(result.items[i]), `element ${i} should be NaN`);
+      } else {
+        assert(Object.is(result.items[i], arr[i]), `element ${i}: ${result.items[i]} !== ${arr[i]}`);
+      }
+    }
+  }
+});
+
+test('listToArray(arrayToList(arr)) roundtrip: mixed types', () => {
+  const arr = ['hello', 42, true, null, undefined, 99n, construct('just', 1)];
+  const result = listToArray(arrayToList(arr));
+  assert(result.items.length === arr.length, 'length should match');
+  assert(result.items[0] === 'hello');
+  assert(result.items[1] === 42);
+  assert(result.items[2] === true);
+  assert(result.items[3] === null);
+  assert(result.items[4] === undefined);
+  assert(result.items[5] === 99n);
+});
+
+test('listToArray(arrayToList(arr)) roundtrip: single element', () => {
+  for (const x of [0, '', false, null, undefined]) {
+    const result = listToArray(arrayToList([x]));
+    assert(result.items.length === 1, 'single element array');
+    assert(result.items[0] === x, `single element: ${result.items[0]} !== ${x}`);
+  }
+});
+
+// =====================================================================
+// 23. PROPERTY: ensureString/ensureNumber with every JS type
+// =====================================================================
+
+test('ensureString: every JS type', () => {
+  hush();
+  try {
+    const values = [
+      42n,                          // BigInt
+      Symbol('test'),               // Symbol
+      new Proxy({}, {}),            // Proxy
+      null,
+      undefined,
+      { toString() { throw new Error('boom'); } },  // throwing toString
+      true,
+      false,
+      0,
+      '',
+      'hello',
+      NaN,
+      Infinity,
+      -Infinity,
+      [],
+      {},
+      () => {},
+      new Date(),
+      /regex/,
+      new Map(),
+      new Set(),
+    ];
+    for (const v of values) {
+      const result = ensureString(v);
+      assert(typeof result === 'string', `ensureString should return string for ${typeof v}, got ${typeof result}`);
+    }
+  } finally { unhush(); }
+});
+
+test('ensureNumber: every JS type', () => {
+  hush();
+  try {
+    const values = [
+      42n,                          // BigInt
+      null,
+      undefined,
+      true,
+      false,
+      0,
+      '',
+      'hello',
+      NaN,
+      Infinity,
+      -Infinity,
+      [],
+      {},
+      () => {},
+      new Date(),
+      /regex/,
+      new Map(),
+      new Set(),
+    ];
+    for (const v of values) {
+      const result = ensureNumber(v);
+      assert(typeof result === 'number', `ensureNumber should return number for ${typeof v}, got ${typeof result}`);
+    }
+  } finally { unhush(); }
+});
+
+test('ensureNumber: Symbol does not crash', () => {
+  hush();
+  try {
+    const result = ensureNumber(Symbol('test'));
+    assert(typeof result === 'number', 'Symbol should produce a number');
+  } finally { unhush(); }
+});
+
+test('ensureNumber: Proxy does not crash', () => {
+  hush();
+  try {
+    const result = ensureNumber(new Proxy({}, {}));
+    assert(typeof result === 'number', 'Proxy should produce a number');
+  } finally { unhush(); }
+});
+
+test('ensureString: object with throwing toString', () => {
+  const obj = { toString() { throw new Error('toString bomb'); } };
+  const result = ensureString(obj);
+  assert(typeof result === 'string', 'should still return a string');
+});
+
+test('ensureNumber: object with throwing valueOf', () => {
+  hush();
+  try {
+    const obj = { valueOf() { throw new Error('valueOf bomb'); } };
+    const result = ensureNumber(obj);
+    assert(typeof result === 'number', 'should still return a number');
+  } finally { unhush(); }
+});
+
+// =====================================================================
+// serializeEvent fuzz tests
+// =====================================================================
+
+// Replicate serializeEvent from reactive.js (unexported closure)
+function serializeEvent(event) {
+  if (!event) return 'null';
+  const cases = {
+    never: () => 'never',
+    sub: (subEvent) => `sub(${serializeEvent(subEvent)})`,
+    interval: (ms, msg) => `interval(${ms})`,
+    timeout: (ms, msg) => `timeout(${ms})`,
+    animationFrame: (msg) => 'animationFrame',
+    animationFrameWithTime: (handler) => 'animationFrameWithTime',
+    springLoop: (cfg, onTick, onSettled) => {
+      let pos, vel, tgt, stiff, damp;
+      cfg({ mkSpringConfig: (p, v, t, s, d) => { pos = p; vel = v; tgt = t; stiff = s; damp = d; } });
+      return `springLoop(${pos},${vel},${tgt},${stiff},${damp})`;
+    },
+    onKeyDown: (handler) => 'onKeyDown',
+    onKeyUp: (handler) => 'onKeyUp',
+    onMouseDown: (handler) => 'onMouseDown',
+    onMouseUp: (handler) => 'onMouseUp',
+    onMouseMove: (handler) => 'onMouseMove',
+    onClick: (handler) => 'onClick',
+    onKeys: (pairs) => {
+      const pairArray = listToArray(pairs).items;
+      const keys = [];
+      for (const pair of pairArray) {
+        let k;
+        try {
+          if (typeof pair === 'function') {
+            pair({ '_,_': (a) => { k = a; } });
+          } else if (pair && typeof pair['_,_'] === 'function') {
+            pair['_,_']({ '_,_': (a) => { k = a; } });
+          }
+        } catch { /* ignore */ }
+        if (k !== undefined) keys.push(k);
+      }
+      return `onKeys(${keys.join(',')})`;
+    },
+    httpGet: (url, ok, err) => `httpGet(${url})`,
+    httpPost: (url, body, ok, err) => `httpPost(${url})`,
+    merge: (e1, e2) => `merge(${serializeEvent(e1)},${serializeEvent(e2)})`,
+    debounce: (ms, inner) => `debounce(${ms},${serializeEvent(inner)})`,
+    throttle: (ms, inner) => `throttle(${ms},${serializeEvent(inner)})`,
+    wsConnect: (url, handler) => `wsConnect(${url})`,
+    onUrlChange: (handler) => 'onUrlChange',
+    worker: (url, input) => `worker(${url},${input})`,
+    workerWithProgress: (url, input) => `workerWithProgress(${url},${input})`,
+    parallel: (_typeB, eventList, mapFn) => 'parallel',
+    race: (eventList) => 'race',
+    poolWorker: (poolSize, url, input) => `poolWorker(${poolSize},${url},${input})`,
+    poolWorkerWithProgress: (poolSize, url, input) => `poolWorkerWithProgress(${poolSize},${url},${input})`,
+    workerChannel: (url) => `workerChannel(${url})`,
+    allocShared: (n) => `allocShared(${n})`,
+    workerShared: (buf, url, input) => `workerShared(${url},${input})`,
+    allocImage: (w, h) => `allocImage(${w},${h})`,
+    allocBuffer: (n) => `allocBuffer(${n})`,
+    foldE: (_typeB, init, step, inner) => `foldE(${serializeEvent(inner)})`,
+    mapFilterE: (_typeB, f, inner) => `mapFilterE(${serializeEvent(inner)})`,
+    switchE: (initial, meta) => `switchE(${serializeEvent(initial)},${serializeEvent(meta)})`
+  };
+  const proxy = new Proxy(cases, {
+    get: (target, prop) => target[prop] || ((...args) => {
+      return `unknown(${String(prop)})`;
+    })
+  });
+  return event(proxy);
+}
+
+// --- serializeEvent: all Event constructors produce string fingerprints ---
+
+test('serializeEvent: never', () => {
+  const event = (c) => c.never();
+  const fp = serializeEvent(event);
+  assert(typeof fp === 'string', 'fingerprint should be a string');
+  assert(fp === 'never', `expected 'never', got '${fp}'`);
+});
+
+test('serializeEvent: sub wraps inner event', () => {
+  const inner = (c) => c.never();
+  const event = (c) => c.sub(inner);
+  const fp = serializeEvent(event);
+  assert(typeof fp === 'string', 'fingerprint should be a string');
+  assert(fp === 'sub(never)', `expected 'sub(never)', got '${fp}'`);
+});
+
+test('serializeEvent: merge combines two events', () => {
+  const e1 = (c) => c.never();
+  const e2 = (c) => c.onClick(() => {});
+  const event = (c) => c.merge(e1, e2);
+  const fp = serializeEvent(event);
+  assert(typeof fp === 'string', 'fingerprint should be a string');
+  assert(fp === 'merge(never,onClick)', `expected 'merge(never,onClick)', got '${fp}'`);
+});
+
+test('serializeEvent: debounce wraps inner', () => {
+  const inner = (c) => c.onKeyDown(() => {});
+  const event = (c) => c.debounce(300, inner);
+  const fp = serializeEvent(event);
+  assert(fp === 'debounce(300,onKeyDown)', `expected 'debounce(300,onKeyDown)', got '${fp}'`);
+});
+
+test('serializeEvent: throttle wraps inner', () => {
+  const inner = (c) => c.onMouseMove(() => {});
+  const event = (c) => c.throttle(100, inner);
+  const fp = serializeEvent(event);
+  assert(fp === 'throttle(100,onMouseMove)', `expected 'throttle(100,onMouseMove)', got '${fp}'`);
+});
+
+test('serializeEvent: foldE uses inner event fingerprint', () => {
+  const inner = (c) => c.onClick(() => {});
+  const event = (c) => c.foldE(null, 0, (x) => (s) => s + x, inner);
+  const fp = serializeEvent(event);
+  assert(fp === 'foldE(onClick)', `expected 'foldE(onClick)', got '${fp}'`);
+});
+
+test('serializeEvent: mapFilterE uses inner event fingerprint', () => {
+  const inner = (c) => c.onKeyUp(() => {});
+  const event = (c) => c.mapFilterE(null, (x) => x, inner);
+  const fp = serializeEvent(event);
+  assert(fp === 'mapFilterE(onKeyUp)', `expected 'mapFilterE(onKeyUp)', got '${fp}'`);
+});
+
+test('serializeEvent: switchE uses both event fingerprints', () => {
+  const initial = (c) => c.never();
+  const meta = (c) => c.onClick(() => {});
+  const event = (c) => c.switchE(initial, meta);
+  const fp = serializeEvent(event);
+  assert(fp === 'switchE(never,onClick)', `expected 'switchE(never,onClick)', got '${fp}'`);
+});
+
+test('serializeEvent: parallel returns fixed string', () => {
+  const event = (c) => c.parallel(null, [], () => {});
+  const fp = serializeEvent(event);
+  assert(fp === 'parallel', `expected 'parallel', got '${fp}'`);
+});
+
+test('serializeEvent: race returns fixed string', () => {
+  const event = (c) => c.race([]);
+  const fp = serializeEvent(event);
+  assert(fp === 'race', `expected 'race', got '${fp}'`);
+});
+
+test('serializeEvent: interval', () => {
+  const event = (c) => c.interval(1000, 'tick');
+  const fp = serializeEvent(event);
+  assert(fp === 'interval(1000)', `expected 'interval(1000)', got '${fp}'`);
+});
+
+test('serializeEvent: timeout', () => {
+  const event = (c) => c.timeout(500, 'done');
+  const fp = serializeEvent(event);
+  assert(fp === 'timeout(500)', `expected 'timeout(500)', got '${fp}'`);
+});
+
+test('serializeEvent: animationFrame', () => {
+  const event = (c) => c.animationFrame(() => {});
+  const fp = serializeEvent(event);
+  assert(fp === 'animationFrame', `expected 'animationFrame', got '${fp}'`);
+});
+
+test('serializeEvent: httpGet', () => {
+  const event = (c) => c.httpGet('/api/data', () => {}, () => {});
+  const fp = serializeEvent(event);
+  assert(fp === 'httpGet(/api/data)', `expected 'httpGet(/api/data)', got '${fp}'`);
+});
+
+test('serializeEvent: httpPost', () => {
+  const event = (c) => c.httpPost('/api/submit', '{}', () => {}, () => {});
+  const fp = serializeEvent(event);
+  assert(fp === 'httpPost(/api/submit)', `expected 'httpPost(/api/submit)', got '${fp}'`);
+});
+
+test('serializeEvent: wsConnect', () => {
+  const event = (c) => c.wsConnect('ws://localhost:8080', () => {});
+  const fp = serializeEvent(event);
+  assert(fp === 'wsConnect(ws://localhost:8080)', `expected wsConnect fingerprint, got '${fp}'`);
+});
+
+test('serializeEvent: onUrlChange', () => {
+  const event = (c) => c.onUrlChange(() => {});
+  const fp = serializeEvent(event);
+  assert(fp === 'onUrlChange', `expected 'onUrlChange', got '${fp}'`);
+});
+
+test('serializeEvent: worker', () => {
+  const event = (c) => c.worker('worker.js', 'input');
+  const fp = serializeEvent(event);
+  assert(fp === 'worker(worker.js,input)', `expected worker fingerprint, got '${fp}'`);
+});
+
+test('serializeEvent: springLoop', () => {
+  const cfg = (c) => c.mkSpringConfig(0, 0, 100, 170, 26);
+  const event = (c) => c.springLoop(cfg, () => {}, () => {});
+  const fp = serializeEvent(event);
+  assert(fp === 'springLoop(0,0,100,170,26)', `expected springLoop fingerprint, got '${fp}'`);
+});
+
+test('serializeEvent: allocShared', () => {
+  const event = (c) => c.allocShared(1024);
+  const fp = serializeEvent(event);
+  assert(fp === 'allocShared(1024)', `expected 'allocShared(1024)', got '${fp}'`);
+});
+
+test('serializeEvent: allocImage', () => {
+  const event = (c) => c.allocImage(800, 600);
+  const fp = serializeEvent(event);
+  assert(fp === 'allocImage(800,600)', `expected 'allocImage(800,600)', got '${fp}'`);
+});
+
+test('serializeEvent: allocBuffer', () => {
+  const event = (c) => c.allocBuffer(4096);
+  const fp = serializeEvent(event);
+  assert(fp === 'allocBuffer(4096)', `expected 'allocBuffer(4096)', got '${fp}'`);
+});
+
+// --- serializeEvent: null/falsy input ---
+
+test('serializeEvent: null event returns "null"', () => {
+  assert(serializeEvent(null) === 'null', 'null should serialize to "null"');
+  assert(serializeEvent(undefined) === 'null', 'undefined should serialize to "null"');
+  assert(serializeEvent(false) === 'null', 'false should serialize to "null"');
+  assert(serializeEvent(0) === 'null', '0 should serialize to "null"');
+  assert(serializeEvent('') === 'null', 'empty string should serialize to "null"');
+});
+
+// --- serializeEvent: unknown constructor triggers Proxy fallback ---
+
+test('serializeEvent: unknown constructor uses Proxy fallback', () => {
+  hush();
+  try {
+    const event = (c) => c.totallyNewConstructor(1, 2, 3);
+    const fp = serializeEvent(event);
+    assert(typeof fp === 'string', 'fingerprint should be a string');
+    assert(fp === 'unknown(totallyNewConstructor)', `expected unknown fallback, got '${fp}'`);
+  } finally { unhush(); }
+});
+
+// --- serializeEvent: DOM events with throwing getters ---
+
+test('serializeEvent: non-function truthy value throws (not silently handled)', () => {
+  // serializeEvent only guards against falsy values. A truthy non-function
+  // (like a DOM event object) will throw when called as event(proxy).
+  // This documents the actual behavior — callers must ensure they pass functions.
+  const domEvent = {};
+  Object.defineProperty(domEvent, 'type', {
+    get() { throw new Error('SecurityError: blocked'); }
+  });
+  let threw = false;
+  try {
+    serializeEvent(domEvent);
+  } catch (e) {
+    threw = true;
+    assert(e instanceof TypeError, `expected TypeError, got ${e.constructor.name}`);
+  }
+  assert(threw, 'truthy non-function should throw TypeError');
+});
+
+test('serializeEvent: function that throws when called', () => {
+  const badEvent = () => { throw new TypeError('Cannot read properties'); };
+  let threw = false;
+  try {
+    serializeEvent(badEvent);
+  } catch (e) {
+    threw = true;
+  }
+  // serializeEvent does not try/catch internally, so a throwing event propagates
+  assert(threw, 'throwing event function should propagate the error');
+});
+
+test('serializeEvent: event function calling a non-existent constructor via Proxy', () => {
+  hush();
+  try {
+    // Simulates a future Event constructor not yet in the cases object
+    const futureEvent = (c) => c.futureWebTransport('url', () => {});
+    const fp = serializeEvent(futureEvent);
+    assert(fp === 'unknown(futureWebTransport)', `expected unknown fallback, got '${fp}'`);
+  } finally { unhush(); }
+});
+
+// --- Proxy fallback edge cases ---
+
+test('Proxy fallback: handler returning empty string, 0, null, false, undefined', () => {
+  // The Proxy uses `target[prop] || fallback`. Since target[prop] is a function
+  // reference (always truthy), the fallback only triggers for missing keys.
+  // But if someone puts a non-function falsy value in the cases object, || would trigger.
+  const cases = {
+    emptyStr: '',     // falsy
+    zero: 0,          // falsy
+    nullVal: null,     // falsy
+    falseVal: false,   // falsy
+    undefVal: undefined, // falsy
+    goodFn: () => 'ok', // truthy function
+  };
+  const proxy = new Proxy(cases, {
+    get: (target, prop) => target[prop] || ((...args) => `fallback(${String(prop)})`)
+  });
+
+  // Falsy values cause fallback to trigger — this is the known || behavior
+  assert(typeof proxy.emptyStr === 'function', 'empty string triggers fallback function');
+  assert(proxy.emptyStr() === 'fallback(emptyStr)', 'empty string falls back');
+  assert(typeof proxy.zero === 'function', '0 triggers fallback function');
+  assert(proxy.zero() === 'fallback(zero)', '0 falls back');
+  assert(typeof proxy.nullVal === 'function', 'null triggers fallback function');
+  assert(proxy.nullVal() === 'fallback(nullVal)', 'null falls back');
+  assert(typeof proxy.falseVal === 'function', 'false triggers fallback function');
+  assert(proxy.falseVal() === 'fallback(falseVal)', 'false falls back');
+  assert(typeof proxy.undefVal === 'function', 'undefined triggers fallback function');
+  assert(proxy.undefVal() === 'fallback(undefVal)', 'undefined falls back');
+
+  // Truthy function does NOT trigger fallback
+  assert(proxy.goodFn() === 'ok', 'truthy function does not fall back');
+});
+
+test('Proxy fallback: Symbol and numeric property access', () => {
+  const cases = { known: () => 'ok' };
+  const proxy = new Proxy(cases, {
+    get: (target, prop) => target[prop] || ((...args) => `fallback(${String(prop)})`)
+  });
+  // Symbol access
+  const sym = Symbol('test');
+  assert(typeof proxy[sym] === 'function', 'Symbol property triggers fallback');
+  assert(proxy[sym]() === 'fallback(Symbol(test))', 'Symbol property falls back correctly');
+});
+
+// --- Fingerprint stability: same input produces same fingerprint ---
+
+test('serializeEvent: fingerprint stability — same event always same fingerprint', () => {
+  const events = [
+    (c) => c.never(),
+    (c) => c.onClick(() => {}),
+    (c) => c.interval(1000, 'tick'),
+    (c) => c.merge((c2) => c2.never(), (c2) => c2.onClick(() => {})),
+    (c) => c.debounce(300, (c2) => c2.onKeyDown(() => {})),
+    (c) => c.foldE(null, 0, (x) => (s) => s + x, (c2) => c2.onClick(() => {})),
+    (c) => c.switchE((c2) => c2.never(), (c2) => c2.onClick(() => {})),
+    (c) => c.httpGet('/api', () => {}, () => {}),
+    (c) => c.wsConnect('ws://localhost', () => {}),
+    (c) => c.parallel(null, [], () => {}),
+    (c) => c.race([]),
+  ];
+
+  for (const event of events) {
+    const fp1 = serializeEvent(event);
+    const fp2 = serializeEvent(event);
+    const fp3 = serializeEvent(event);
+    assert(fp1 === fp2, `fingerprint should be stable: '${fp1}' !== '${fp2}'`);
+    assert(fp2 === fp3, `fingerprint should be stable across 3 calls: '${fp2}' !== '${fp3}'`);
+    assert(typeof fp1 === 'string', `fingerprint should be a string, got ${typeof fp1}`);
+    assert(fp1.length > 0, 'fingerprint should be non-empty');
+  }
+});
+
+test('serializeEvent: different events produce different fingerprints', () => {
+  const events = [
+    (c) => c.never(),
+    (c) => c.onClick(() => {}),
+    (c) => c.interval(1000, 'tick'),
+    (c) => c.interval(2000, 'tick'),
+    (c) => c.httpGet('/a', () => {}, () => {}),
+    (c) => c.httpGet('/b', () => {}, () => {}),
+    (c) => c.debounce(100, (c2) => c2.onClick(() => {})),
+    (c) => c.debounce(200, (c2) => c2.onClick(() => {})),
+  ];
+
+  const fingerprints = events.map(e => serializeEvent(e));
+  const unique = new Set(fingerprints);
+  assert(unique.size === fingerprints.length,
+    `expected ${fingerprints.length} unique fingerprints, got ${unique.size}: [${fingerprints.join(', ')}]`);
+});
+
+test('serializeEvent: deeply nested merge tree', () => {
+  // Build merge(merge(merge(never, never), never), never) — 10 levels deep
+  let event = (c) => c.never();
+  for (let i = 0; i < 10; i++) {
+    const inner = event;
+    event = (c) => c.merge(inner, (c2) => c2.never());
+  }
+  const fp = serializeEvent(event);
+  assert(typeof fp === 'string', 'deeply nested merge should produce a string');
+  assert(fp.length > 0, 'deeply nested merge fingerprint should be non-empty');
+  // Verify stability
+  assert(fp === serializeEvent(event), 'deeply nested merge fingerprint should be stable');
+});
+
+test('serializeEvent: deeply nested foldE/mapFilterE/switchE chain', () => {
+  let event = (c) => c.onClick(() => {});
+  event = ((inner) => (c) => c.foldE(null, 0, () => {}, inner))(event);
+  event = ((inner) => (c) => c.mapFilterE(null, (x) => x, inner))(event);
+  event = ((initial) => (c) => c.switchE(initial, (c2) => c2.never()))(event);
+  const fp = serializeEvent(event);
+  assert(typeof fp === 'string', 'chained combinators should produce a string');
+  assert(fp === 'switchE(mapFilterE(foldE(onClick)),never)',
+    `expected chained fingerprint, got '${fp}'`);
 });
 
 // =====================================================================

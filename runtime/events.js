@@ -30,6 +30,7 @@ function mkWsMsg(tag, value) {
     switch (tag) {
       case 'WsConnected': return cb.WsConnected();
       case 'WsMessage': return cb.WsMessage(value);
+      case 'WsBinary': return cb.WsBinary(value);
       case 'WsClosed': return cb.WsClosed();
       case 'WsError': return cb.WsError(value);
     }
@@ -557,7 +558,28 @@ function makeLeafHandlers(dispatchImmediate, dispatchNormal, dispatchBackground)
       }
       const connId = ++_wsConnectionCounter;
       ws.onopen = () => dispatchNormal(handler(mkWsMsg('WsConnected')));
-      ws.onmessage = (e) => dispatchBackground(handler(mkWsMsg('WsMessage', e.data)));
+      ws.onmessage = (e) => {
+        if (typeof e.data === 'string') {
+          dispatchBackground(handler(mkWsMsg('WsMessage', e.data)));
+        } else {
+          // Binary frame (ArrayBuffer or Blob) — convert to base64 string
+          const toBase64 = (ab) => {
+            const bytes = new Uint8Array(ab);
+            let binary = '';
+            for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+            return btoa(binary);
+          };
+          if (e.data instanceof ArrayBuffer) {
+            dispatchBackground(handler(mkWsMsg('WsBinary', toBase64(e.data))));
+          } else if (e.data instanceof Blob) {
+            e.data.arrayBuffer().then(ab => {
+              dispatchBackground(handler(mkWsMsg('WsBinary', toBase64(ab))));
+            });
+          } else {
+            dispatchBackground(handler(mkWsMsg('WsMessage', String(e.data))));
+          }
+        }
+      };
       ws.onerror = (e) => {
         const errorMsg = e.error?.message || (ws.readyState === WebSocket.CLOSED ? 'Connection failed' : 'WebSocket error');
         dispatchNormal(handler(mkWsMsg('WsError', errorMsg)));
@@ -662,6 +684,20 @@ function makeLeafHandlers(dispatchImmediate, dispatchNormal, dispatchBackground)
       if (id !== -1) { dispatchNormal(handler(mkBufferHandle(id, bufferRegistry.version(id), n, 1))); }
       else { console.error('allocBuffer failed (COOP/COEP headers required)'); }
       return { unsubscribe: () => {} };
+    },
+    allocImageE: (width, height, handler, onError) => {
+      const w = ensureNumber(width); const h = ensureNumber(height);
+      const id = bufferRegistry.allocateImage(w, h);
+      if (id !== -1) { dispatchNormal(handler(mkBufferHandle(id, bufferRegistry.version(id), w, h))); }
+      else { dispatchNormal(onError('allocImage failed: COOP/COEP headers required')); }
+      return { unsubscribe: () => {} };
+    },
+    allocBufferE: (size, handler, onError) => {
+      const n = ensureNumber(size);
+      const id = bufferRegistry.allocate(n);
+      if (id !== -1) { dispatchNormal(handler(mkBufferHandle(id, bufferRegistry.version(id), n, 1))); }
+      else { dispatchNormal(onError('allocBuffer failed: COOP/COEP headers required')); }
+      return { unsubscribe: () => {} };
     }
   };
 }
@@ -713,7 +749,7 @@ function mkKeyboardEvent(e) {
     toBool(e.shiftKey),
     toBool(e.metaKey),
     toBool(e.repeat),
-    BigInt(e.location)
+    BigInt(e.location ?? 0)
   )};
 }
 
@@ -726,8 +762,8 @@ function mkMouseEvent(e) {
     e.clientY,            // Float (mouseY)
     e.pageX,              // Float (pageX)
     e.pageY,              // Float (pageY)
-    BigInt(e.button),     // ℕ (button)
-    BigInt(e.buttons)     // ℕ (buttons)
+    BigInt(e.button ?? 0),     // ℕ (button)
+    BigInt(e.buttons ?? 0)     // ℕ (buttons)
   )};
 }
 

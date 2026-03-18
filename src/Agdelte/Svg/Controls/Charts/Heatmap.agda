@@ -84,6 +84,7 @@ heatmap : ∀ {M A}
         → List (List Float)              -- data[row][col]
         → Maybe (ℕ → ℕ → A)              -- onClick (row, col)
         → Node M A
+heatmap {M} {A} px py w h colorFn [] onClick' = g [] []
 heatmap {M} {A} px py w h colorFn grid onClick' =
   let numRows = listLen grid
       numCols = maxRowLen grid
