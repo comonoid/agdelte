@@ -7,7 +7,7 @@ module Agdelte.Css.Controls.Popover where
 
 open import Data.List using (List; []; _∷_)
 
-open import Agdelte.Css.Decl using (Style; _∶_)
+open import Agdelte.Css.Decl using (Style; _∶_; borderRadius; focusOutline; transitionAll; transitionBg; cursorPointer)
 open import Agdelte.Css.Stylesheet using (Rule; rule; Stylesheet)
 
 ------------------------------------------------------------------------
@@ -23,7 +23,7 @@ popoverRules =
   ∷ rule ".agdelte-popover__trigger"
       ( "background" ∶ "transparent"
       ∷ "border" ∶ "none"
-      ∷ "cursor" ∶ "pointer"
+      ∷ cursorPointer
       ∷ "padding" ∶ "0"
       ∷ "font" ∶ "inherit"
       ∷ "color" ∶ "inherit"
@@ -34,7 +34,7 @@ popoverRules =
       ∷ "padding" ∶ "var(--agdelte-spacing-md)"
       ∷ "background" ∶ "var(--agdelte-bg)"
       ∷ "border" ∶ "1px solid var(--agdelte-border)"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
+      ∷ borderRadius
       ∷ "box-shadow" ∶ "var(--agdelte-shadow-lg)"
       ∷ "animation" ∶ "agdelte-scale-in var(--agdelte-transition)"
       ∷ "min-width" ∶ "200px"
@@ -81,7 +81,7 @@ popoverRules =
       ∷ "padding" ∶ "0"
       ∷ "background" ∶ "transparent"
       ∷ "border" ∶ "none"
-      ∷ "cursor" ∶ "pointer"
+      ∷ cursorPointer
       ∷ "font-size" ∶ "1.25rem"
       ∷ "color" ∶ "var(--agdelte-text-muted)"
       ∷ "line-height" ∶ "1"
@@ -90,9 +90,7 @@ popoverRules =
       ( "color" ∶ "var(--agdelte-text)"
       ∷ [])
   ∷ rule ".agdelte-popover__close:focus-visible"
-      ( "outline" ∶ "2px solid var(--agdelte-primary)"
-      ∷ "outline-offset" ∶ "2px"
-      ∷ [])
+      focusOutline
   -- Menu variant
   ∷ rule ".agdelte-popover--menu"
       ( "padding" ∶ "var(--agdelte-spacing-xs)"
@@ -103,20 +101,18 @@ popoverRules =
       ∷ "padding" ∶ "var(--agdelte-spacing-sm) var(--agdelte-spacing-md)"
       ∷ "background" ∶ "transparent"
       ∷ "border" ∶ "none"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
-      ∷ "cursor" ∶ "pointer"
+      ∷ borderRadius
+      ∷ cursorPointer
       ∷ "color" ∶ "var(--agdelte-text)"
       ∷ "text-align" ∶ "left"
       ∷ "font-size" ∶ "inherit"
-      ∷ "transition" ∶ "background var(--agdelte-transition)"
+      ∷ transitionBg
       ∷ [])
   ∷ rule ".agdelte-popover__menu-item:hover"
       ( "background" ∶ "var(--agdelte-bg-hover)"
       ∷ [])
   ∷ rule ".agdelte-popover__menu-item:focus-visible"
-      ( "outline" ∶ "2px solid var(--agdelte-primary)"
-      ∷ "outline-offset" ∶ "2px"
-      ∷ [])
+      focusOutline
   -- Confirm variant
   ∷ rule ".agdelte-popover--confirm"
       ( "min-width" ∶ "240px"
@@ -133,10 +129,10 @@ popoverRules =
   ∷ rule ".agdelte-popover__btn"
       ( "padding" ∶ "var(--agdelte-spacing-sm) var(--agdelte-spacing-md)"
       ∷ "border" ∶ "1px solid var(--agdelte-border)"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
-      ∷ "cursor" ∶ "pointer"
+      ∷ borderRadius
+      ∷ cursorPointer
       ∷ "font-size" ∶ "inherit"
-      ∷ "transition" ∶ "all var(--agdelte-transition)"
+      ∷ transitionAll
       ∷ [])
   ∷ rule ".agdelte-popover__btn--cancel"
       ( "background" ∶ "var(--agdelte-bg)"

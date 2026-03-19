@@ -7,7 +7,7 @@ module Agdelte.Css.Controls.TreeView where
 
 open import Data.List using (List; []; _∷_)
 
-open import Agdelte.Css.Decl using (Style; _∶_)
+open import Agdelte.Css.Decl using (Style; _∶_; borderRadius; focusOutline; transitionBg; cursorPointer)
 open import Agdelte.Css.Stylesheet using (Rule; rule; Stylesheet)
 
 ------------------------------------------------------------------------
@@ -37,7 +37,7 @@ treeViewRules =
       ∷ "padding" ∶ "0"
       ∷ "background" ∶ "transparent"
       ∷ "border" ∶ "none"
-      ∷ "cursor" ∶ "pointer"
+      ∷ cursorPointer
       ∷ "color" ∶ "var(--agdelte-text-muted)"
       ∷ "font-size" ∶ "0.625rem"
       ∷ "transition" ∶ "transform var(--agdelte-transition)"
@@ -46,9 +46,7 @@ treeViewRules =
       ( "color" ∶ "var(--agdelte-text)"
       ∷ [])
   ∷ rule ".agdelte-tree__toggle:focus-visible"
-      ( "outline" ∶ "2px solid var(--agdelte-primary)"
-      ∷ "outline-offset" ∶ "2px"
-      ∷ [])
+      focusOutline
   ∷ rule ".agdelte-tree__toggle--open"
       ( "transform" ∶ "rotate(90deg)"
       ∷ [])
@@ -60,10 +58,10 @@ treeViewRules =
       ( "background" ∶ "transparent"
       ∷ "border" ∶ "none"
       ∷ "padding" ∶ "var(--agdelte-spacing-xs) var(--agdelte-spacing-sm)"
-      ∷ "cursor" ∶ "pointer"
+      ∷ cursorPointer
       ∷ "color" ∶ "var(--agdelte-text)"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
-      ∷ "transition" ∶ "background var(--agdelte-transition)"
+      ∷ borderRadius
+      ∷ transitionBg
       ∷ "text-align" ∶ "left"
       ∷ "font-size" ∶ "inherit"
       ∷ [])
@@ -71,9 +69,7 @@ treeViewRules =
       ( "background" ∶ "var(--agdelte-bg-hover)"
       ∷ [])
   ∷ rule ".agdelte-tree__label:focus-visible"
-      ( "outline" ∶ "2px solid var(--agdelte-primary)"
-      ∷ "outline-offset" ∶ "2px"
-      ∷ [])
+      focusOutline
   ∷ rule ".agdelte-tree__children"
       ( "border-left" ∶ "1px solid var(--agdelte-border)"
       ∷ "animation" ∶ "agdelte-slide-down var(--agdelte-transition)"

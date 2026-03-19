@@ -7,7 +7,7 @@ module Agdelte.Css.Controls.DataGrid where
 
 open import Data.List using (List; []; _∷_)
 
-open import Agdelte.Css.Decl using (Style; _∶_)
+open import Agdelte.Css.Decl using (Style; _∶_; borderRadius; transitionBg; cursorPointer)
 open import Agdelte.Css.Stylesheet using (Rule; rule; Stylesheet)
 
 ------------------------------------------------------------------------
@@ -21,7 +21,7 @@ dataGridRules =
       ( "display" ∶ "flex"
       ∷ "flex-direction" ∶ "column"
       ∷ "border" ∶ "1px solid var(--agdelte-border)"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
+      ∷ borderRadius
       ∷ "overflow" ∶ "hidden"
       ∷ [])
   ∷ rule ".agdelte-grid__header"
@@ -37,7 +37,7 @@ dataGridRules =
   ∷ rule ".agdelte-grid__row"
       ( "display" ∶ "flex"
       ∷ "border-bottom" ∶ "1px solid var(--agdelte-border)"
-      ∷ "transition" ∶ "background var(--agdelte-transition)"
+      ∷ transitionBg
       ∷ [])
   ∷ rule ".agdelte-grid__row:last-child"
       ( "border-bottom" ∶ "none"
@@ -46,7 +46,7 @@ dataGridRules =
       ( "background" ∶ "var(--agdelte-bg-hover)"
       ∷ [])
   ∷ rule ".agdelte-grid__row--clickable"
-      ( "cursor" ∶ "pointer"
+      ( cursorPointer
       ∷ [])
   ∷ rule ".agdelte-grid__row--clickable:hover"
       ( "background" ∶ "var(--agdelte-bg-active)"
@@ -66,8 +66,8 @@ dataGridRules =
       ∷ "background" ∶ "var(--agdelte-primary)"
       ∷ "color" ∶ "var(--agdelte-text-light)"
       ∷ "border" ∶ "none"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
-      ∷ "cursor" ∶ "pointer"
+      ∷ borderRadius
+      ∷ cursorPointer
       ∷ "font-size" ∶ "0.875rem"
       ∷ [])
   ∷ rule ".agdelte-grid__action:hover"

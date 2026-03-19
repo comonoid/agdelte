@@ -17,6 +17,7 @@ open import Agdelte.Svg.Attributes
   hiding (x_; y_)
   renaming (cxF to attrCx; cyF to attrCy)
 open import Agdelte.Css.Show using (showFloat)
+open import Function using (case_of_)
 
 ------------------------------------------------------------------------
 -- Connector Type
@@ -175,8 +176,6 @@ svgConnectorCurved x1 y1 x2 y2 sty =
                      ∷ []) ++L dashAttrs ++L arrowAttrs ) []
        ∷ [] )
   where
-    case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
-    case x of f = f x
 
 ------------------------------------------------------------------------
 -- Orthogonal Connector (right angles)
@@ -207,8 +206,6 @@ svgConnectorOrthogonal x1 y1 x2 y2 sty =
                      ∷ []) ++L dashAttrs ++L arrowAttrs ) []
        ∷ [] )
   where
-    case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
-    case x of f = f x
 
 ------------------------------------------------------------------------
 -- Generic Connector

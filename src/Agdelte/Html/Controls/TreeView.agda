@@ -17,6 +17,15 @@ open import Function using (_∘_)
 open import Agdelte.Reactive.Node
 open import Agdelte.Html.Controls.Util using (eqStr)
 
+private
+  depthPaddingUnit : ℕ
+  depthPaddingUnit = 16
+
+  hasChildren : ∀ {A} → TreeNode A → Bool
+  hasChildren n with nodeChildren n
+  ... | [] = false
+  ... | _ = true
+
 ------------------------------------------------------------------------
 -- Tree node definition
 ------------------------------------------------------------------------
@@ -51,12 +60,7 @@ simpleTree {M} {A} onNodeClick roots =
     open import Data.String using (_++_)
 
     depthPadding : ℕ → String
-    depthPadding d = primShowNat (d * 16) ++ "px"
-
-    hasChildren : TreeNode A → Bool
-    hasChildren n with nodeChildren n
-    ... | [] = false
-    ... | _ = true
+    depthPadding d = primShowNat (d * depthPaddingUnit) ++ "px"
 
     mutual
       renderNode : ℕ → TreeNode A → Node M A
@@ -103,12 +107,7 @@ collapsibleTree {M} {A} isExpanded toggleNode onNodeClick roots =
     open import Data.List using (_++_)
 
     depthPadding : ℕ → String
-    depthPadding d = primShowNat (d * 16) ++ˢ "px"
-
-    hasChildren : TreeNode A → Bool
-    hasChildren n with nodeChildren n
-    ... | [] = false
-    ... | _ = true
+    depthPadding d = primShowNat (d * depthPaddingUnit) ++ˢ "px"
 
     -- Lazy children: returns the children list only when expanded,
     -- empty list otherwise. foreach defers renderNode calls to the runtime.
@@ -188,12 +187,7 @@ draggableTree {M} {A} isExpanded toggleNode onNodeClick onDrag roots =
     open import Data.List using (_++_)
 
     depthPadding : ℕ → String
-    depthPadding d = primShowNat (d * 16) ++ˢ "px"
-
-    hasChildren : TreeNode A → Bool
-    hasChildren n with nodeChildren n
-    ... | [] = false
-    ... | _ = true
+    depthPadding d = primShowNat (d * depthPaddingUnit) ++ˢ "px"
 
     lazyChildren : String → List (TreeNode A) → M → List (TreeNode A)
     lazyChildren nid cs m = if isExpanded nid m then cs else []

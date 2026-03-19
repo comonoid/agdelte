@@ -51,6 +51,9 @@ const CONFIG = {
   FONT_RENDER_SIZE: 48,        // Font rendering size for atlas
   PICK_HOVER_THROTTLE: 16,     // Hover event throttle (ms) ~60fps
   DRAG_THRESHOLD: 3,           // Pixels before drag starts
+  GEO_CACHE_MAX: 256,          // Maximum geometry cache entries
+  CLEAR_COLOR: [0.1, 0.1, 0.1, 1.0],  // Default scene clear color
+  TEXT_ALPHA_THRESHOLD: 0.1,   // Alpha test threshold for text rendering
 };
 
 // ---------------------------------------------------------------------------
@@ -366,6 +369,20 @@ function listToArray(list) {
 // Shader sources
 // ---------------------------------------------------------------------------
 
+// Shared GLSL uniform blocks
+const GLSL_LIGHT_UNIFORMS = `
+// Lights: up to 8
+uniform int u_numLights;
+uniform int u_lightType[8];         // 0=ambient, 1=directional, 2=point, 3=spot
+uniform vec3 u_lightColor[8];
+uniform float u_lightIntensity[8];
+uniform vec3 u_lightDir[8];         // direction (directional/spot)
+uniform vec3 u_lightPos[8];         // position (point/spot)
+uniform float u_lightRange[8];      // range (point/spot)
+uniform float u_lightAngle[8];      // cone angle in radians (spot)
+uniform float u_lightFalloff[8];    // edge falloff (spot)
+`;
+
 const VERT_SRC = `#version 300 es
 precision highp float;
 
@@ -427,16 +444,7 @@ uniform float u_shininess;
 uniform vec3 u_cameraPos;
 uniform int u_flatMode;              // 1 = flat material (ambient only)
 
-// Lights: up to 8
-uniform int u_numLights;
-uniform int u_lightType[8];         // 0=ambient, 1=directional, 2=point, 3=spot
-uniform vec3 u_lightColor[8];
-uniform float u_lightIntensity[8];
-uniform vec3 u_lightDir[8];         // direction (directional/spot)
-uniform vec3 u_lightPos[8];         // position (point/spot)
-uniform float u_lightRange[8];      // range (point/spot)
-uniform float u_lightAngle[8];      // cone angle in radians (spot)
-uniform float u_lightFalloff[8];    // edge falloff (spot)
+${GLSL_LIGHT_UNIFORMS}
 
 in vec3 v_normal;
 in vec3 v_worldPos;
@@ -2350,7 +2358,7 @@ function createTextureCache(gl, scheduleFrame, isDisposed, maxSize = 128) {
  * Each glyph: { x, y, w, h, advance, xOff, yOff } in atlas pixel coords.
  */
 function createFontAtlas(gl, fontFamily, fontSize) {
-  const atlasSize = 1024;
+  const atlasSize = CONFIG.FONT_ATLAS_SIZE;
   const canvas2d = document.createElement('canvas');
   canvas2d.width = atlasSize;
   canvas2d.height = atlasSize;
@@ -2690,7 +2698,7 @@ uniform vec4 u_color;
 out vec4 fragColor;
 void main() {
   float alpha = texture(u_atlas, v_uv).a;
-  if (alpha < 0.1) discard;
+  if (alpha < ${CONFIG.TEXT_ALPHA_THRESHOLD}) discard;
   fragColor = vec4(u_color.rgb, u_color.a * alpha);
 }
 `;
@@ -3008,7 +3016,7 @@ function geometryKey(geom) {
   }
 }
 
-const GEO_CACHE_MAX = 256;
+const GEO_CACHE_MAX = CONFIG.GEO_CACHE_MAX;
 
 function getOrCreateGeometry(gl, cache, geom) {
   const key = geometryKey(geom);
@@ -4455,7 +4463,7 @@ function entryDepth(entry, cameraPos) {
 
 function renderScene(gl, programs, geoCache, texCache, fontCache, renderList, projMat, viewMat, lights, cameraPos) {
   gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-  gl.clearColor(0.1, 0.1, 0.1, 1.0);
+  gl.clearColor(...CONFIG.CLEAR_COLOR);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.enable(gl.DEPTH_TEST);
 
@@ -4833,12 +4841,20 @@ function initGLCanvas(canvas) {
     requestAnimationFrame(doFrame);
   }
 
-  // --- Mouse event handling (color picking + ray casting) ---
+  // --- Input event handling (color picking + ray casting + keyboard) ---
 
   let hoveredId = 0;  // currently hovered pick ID (0 = none)
   let focusedId = 0;  // currently focused pick ID for keyboard events
   let dragState = null; // { pickId, startPoint: Vec3, viewMat, projMat } — active drag
   let didDrag = false;  // true if mousemove occurred during drag — suppresses click
+
+  // Event listener tracking for cleanup
+  const eventCleanups = [];
+  function addCanvasListener(type, handler, options) {
+    canvas.addEventListener(type, handler, options);
+    eventCleanups.push({ type, handler, options });
+  }
+  let handleWindowMouseUp = null;
 
   function ensurePickBuffer() {
     if (pickDirty && pickFB) {
@@ -4852,7 +4868,6 @@ function initGLCanvas(canvas) {
     const rect = canvas.getBoundingClientRect();
     const cssX = event.clientX - rect.left;
     const cssY = event.clientY - rect.top;
-    // Convert CSS coords to canvas pixel coords
     const x = Math.floor(cssX * (canvas.width / rect.width));
     const y = Math.floor(cssY * (canvas.height / rect.height));
     if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) return 0;
@@ -4864,47 +4879,25 @@ function initGLCanvas(canvas) {
     const entry = pickRegistry.map.get(pickId);
     if (!entry) return;
     for (const attr of entry.attrs) {
-      if (attr.type === attrType) {
-        dispatch(attr.msg);
-      }
+      if (attr.type === attrType) dispatch(attr.msg);
     }
   }
 
-  /**
-   * Get the ray-cast hit point for the entry under the cursor.
-   * Returns Vec3 or null.
-   */
   function getRayHitAt(event, pickId) {
     if (!pickId || pickId === 0) return null;
     const ray = screenToRay(event.clientX, event.clientY, canvas, projMat, viewMat);
     if (!ray) return null;
-    // Use rayPickEntries which correctly handles group parent transforms
     const result = rayPickEntries(ray, renderList, pickRegistry);
     if (result && result.pickId === pickId) return result.point;
-    // Fallback: if the closest hit is a different object, still try to find our pickId
-    // by scanning all hits (rare case when objects overlap)
     return rayPickForId(ray, renderList, pickId);
   }
 
-  /**
-   * Check if a pick registry entry has an attribute of a given type.
-   */
   function entryHasAttr(pickId, attrType) {
     if (!pickId || pickId === 0) return false;
     const entry = pickRegistry.map.get(pickId);
     if (!entry) return false;
     return entry.attrs.some(a => a.type === attrType);
   }
-
-  // Event listener tracking for cleanup
-  const eventCleanups = [];
-  function addCanvasListener(type, handler, options) {
-    canvas.addEventListener(type, handler, options);
-    eventCleanups.push({ type, handler, options });
-  }
-
-  // Window-level mouseup for drag release outside canvas
-  let handleWindowMouseUp = null;
 
   if (hasPickables) {
     let lastHoverTime = 0;
@@ -5153,7 +5146,7 @@ function initGLCanvas(canvas) {
   }
 
   // Register model update callback
-  canvas.__glUpdate = (oldModel, newModel) => {
+  function handleModelUpdate(oldModel, newModel) {
     const now = performance.now();
     let dirty = false;
 
@@ -5164,43 +5157,50 @@ function initGLCanvas(canvas) {
 
     // Update camera if fromModel
     if (cameraData.type === 'fromModel') {
-      const newPos = cameraData.posExtract(newModel);
-      const newTarget = cameraData.targetExtract(newModel);
-      const newProj = interpretProjection(cameraData.projExtract(newModel));
-      const posChanged = !cameraBindings
-        || newPos.x !== cameraBindings.lastPos.x
-        || newPos.y !== cameraBindings.lastPos.y
-        || newPos.z !== cameraBindings.lastPos.z;
-      const targetChanged = !cameraBindings
-        || newTarget.x !== cameraBindings.lastTarget.x
-        || newTarget.y !== cameraBindings.lastTarget.y
-        || newTarget.z !== cameraBindings.lastTarget.z;
-      const projChanged = !cameraBindings
-        || newProj.type !== cameraBindings.lastProj.type
-        || newProj.fov !== cameraBindings.lastProj.fov
-        || newProj.size !== cameraBindings.lastProj.size
-        || newProj.near !== cameraBindings.lastProj.near
-        || newProj.far !== cameraBindings.lastProj.far;
-
-      if (posChanged || targetChanged || projChanged) {
-        const built = buildCameraMatrices(cameraData, aspect, newModel);
-        projMat = built.projMat;
-        viewMat = built.viewMat;
-        cameraPos = built.cameraPos;
-        if (cameraBindings) {
-          cameraBindings.lastPos = newPos;
-          cameraBindings.lastTarget = newTarget;
-          cameraBindings.lastProj = newProj;
-        }
-        dirty = true;
-      }
+      dirty = updateCameraFromModel(cameraData, cameraBindings, newModel, dirty);
     }
 
     if (dirty) {
-      pickDirty = hasPickables;  // mark pick buffer for re-render
+      pickDirty = hasPickables;
       scheduleFrame();
     }
-  };
+  }
+
+  function updateCameraFromModel(camData, bindings, newModel, alreadyDirty) {
+    const newPos = camData.posExtract(newModel);
+    const newTarget = camData.targetExtract(newModel);
+    const newProj = interpretProjection(camData.projExtract(newModel));
+    const posChanged = !bindings
+      || newPos.x !== bindings.lastPos.x
+      || newPos.y !== bindings.lastPos.y
+      || newPos.z !== bindings.lastPos.z;
+    const targetChanged = !bindings
+      || newTarget.x !== bindings.lastTarget.x
+      || newTarget.y !== bindings.lastTarget.y
+      || newTarget.z !== bindings.lastTarget.z;
+    const projChanged = !bindings
+      || newProj.type !== bindings.lastProj.type
+      || newProj.fov !== bindings.lastProj.fov
+      || newProj.size !== bindings.lastProj.size
+      || newProj.near !== bindings.lastProj.near
+      || newProj.far !== bindings.lastProj.far;
+
+    if (posChanged || targetChanged || projChanged) {
+      const built = buildCameraMatrices(camData, aspect, newModel);
+      projMat = built.projMat;
+      viewMat = built.viewMat;
+      cameraPos = built.cameraPos;
+      if (bindings) {
+        bindings.lastPos = newPos;
+        bindings.lastTarget = newTarget;
+        bindings.lastProj = newProj;
+      }
+      return true;
+    }
+    return alreadyDirty;
+  }
+
+  canvas.__glUpdate = handleModelUpdate;
 
   canvas.__glRender = () => renderScene(gl, programs, geoCache, texCache, fontCache, renderList, projMat, viewMat, lights, cameraPos);
   canvas.__glContext = gl;

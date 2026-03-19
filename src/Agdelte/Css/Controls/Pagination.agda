@@ -7,7 +7,7 @@ module Agdelte.Css.Controls.Pagination where
 
 open import Data.List using (List; []; _∷_)
 
-open import Agdelte.Css.Decl using (Style; _∶_)
+open import Agdelte.Css.Decl using (Style; _∶_; borderRadius; focusOutline; transitionAll; cursorPointer)
 open import Agdelte.Css.Stylesheet using (Rule; rule; Stylesheet)
 
 ------------------------------------------------------------------------
@@ -28,19 +28,17 @@ paginationRules =
       ( "padding" ∶ "var(--agdelte-spacing-xs) var(--agdelte-spacing-sm)"
       ∷ "background" ∶ "var(--agdelte-bg)"
       ∷ "border" ∶ "1px solid var(--agdelte-border)"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
-      ∷ "cursor" ∶ "pointer"
+      ∷ borderRadius
+      ∷ cursorPointer
       ∷ "color" ∶ "var(--agdelte-text)"
-      ∷ "transition" ∶ "all var(--agdelte-transition)"
+      ∷ transitionAll
       ∷ [])
   ∷ rule ".agdelte-pagination__btn:hover:not(:disabled)"
       ( "background" ∶ "var(--agdelte-bg-hover)"
       ∷ "border-color" ∶ "var(--agdelte-primary)"
       ∷ [])
   ∷ rule ".agdelte-pagination__btn:focus-visible"
-      ( "outline" ∶ "2px solid var(--agdelte-primary)"
-      ∷ "outline-offset" ∶ "2px"
-      ∷ [])
+      focusOutline
   ∷ rule ".agdelte-pagination__btn:disabled"
       ( "opacity" ∶ "0.5"
       ∷ "cursor" ∶ "not-allowed"
@@ -51,19 +49,17 @@ paginationRules =
       ∷ "padding" ∶ "var(--agdelte-spacing-xs)"
       ∷ "background" ∶ "var(--agdelte-bg)"
       ∷ "border" ∶ "1px solid var(--agdelte-border)"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
-      ∷ "cursor" ∶ "pointer"
+      ∷ borderRadius
+      ∷ cursorPointer
       ∷ "color" ∶ "var(--agdelte-text)"
-      ∷ "transition" ∶ "all var(--agdelte-transition)"
+      ∷ transitionAll
       ∷ [])
   ∷ rule ".agdelte-pagination__page:hover"
       ( "background" ∶ "var(--agdelte-bg-hover)"
       ∷ "border-color" ∶ "var(--agdelte-primary)"
       ∷ [])
   ∷ rule ".agdelte-pagination__page:focus-visible"
-      ( "outline" ∶ "2px solid var(--agdelte-primary)"
-      ∷ "outline-offset" ∶ "2px"
-      ∷ [])
+      focusOutline
   ∷ rule ".agdelte-pagination__page--active"
       ( "background" ∶ "var(--agdelte-primary)"
       ∷ "border-color" ∶ "var(--agdelte-primary)"

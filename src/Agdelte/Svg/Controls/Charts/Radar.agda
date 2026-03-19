@@ -18,39 +18,7 @@ open import Agdelte.Reactive.Node using (Node; Attr; elem; attr; text)
 open import Agdelte.Svg.Elements using (svg; g; path'; circle'; svgText; line'; polygon')
 open import Agdelte.Svg.Attributes
 open import Agdelte.Css.Show using (showFloat)
-
-------------------------------------------------------------------------
--- Constants
-------------------------------------------------------------------------
-
-private
-  pi : Float
-  pi = 3.14159265359
-
-  -- Normalize angle to [-π, π] by repeated subtraction/addition of 2π
-  normalize : Float → Float
-  normalize x = go x 20
-    where
-      twoPi : Float
-      twoPi = 2.0 * pi
-      go : Float → ℕ → Float
-      go y zero = y
-      go y (suc n) = if pi ≤ᵇ y       then go (y - twoPi) n
-                     else if y ≤ᵇ (0.0 - pi) then go (y + twoPi) n
-                     else y
-
-  -- Taylor series approximations for sin/cos (with range reduction)
-  sin : Float → Float
-  sin x' = let x = normalize x'
-           in x - (x * x * x ÷ 6.0)
-            + (x * x * x * x * x ÷ 120.0)
-            - (x * x * x * x * x * x * x ÷ 5040.0)
-
-  cos : Float → Float
-  cos x' = let x = normalize x'
-           in 1.0 - (x * x ÷ 2.0)
-            + (x * x * x * x ÷ 24.0)
-            - (x * x * x * x * x * x ÷ 720.0)
+open import Agdelte.Svg.Math using (sin; cos; π)
 
 ------------------------------------------------------------------------
 -- Data types
@@ -96,15 +64,11 @@ private
   maxFloat : Float → Float → Float
   maxFloat a b = if a <ᵇ b then b else a
 
-  listLen : ∀ {A : Set} → List A → ℕ
-  listLen [] = 0
-  listLen (_ ∷ xs) = suc (listLen xs)
-
   -- Get angle for axis n of total axes
   axisAngle : ℕ → ℕ → Float
   axisAngle n total =
-    let angle = (fromℕ n ÷ fromℕ total) * 2.0 * pi
-    in angle - (pi ÷ 2.0)  -- start from top
+    let angle = (fromℕ n ÷ fromℕ total) * 2.0 * π
+    in angle - (π ÷ 2.0)  -- start from top
 
   -- Convert polar to cartesian
   polarToCart : Float → Float → Float → Float → Float × Float
@@ -171,7 +135,7 @@ private
 
 private
   renderAxisLabels : ∀ {M A} → Float → Float → Float → List RadarAxis → List (Node M A)
-  renderAxisLabels {M} {A} cx cy radius axes = go axes 0 (listLen axes)
+  renderAxisLabels {M} {A} cx cy radius axes = go axes 0 (length axes)
     where
       go : List RadarAxis → ℕ → ℕ → List (Node M A)
       go [] _ _ = []
@@ -202,7 +166,7 @@ private
                       → Bool → Float
                       → Node M A
   renderSeriesPolygon {M} {A} cx cy radius axes series showDots opacity =
-    let numAxes = listLen axes
+    let numAxes = length axes
         points = buildPoints axes (radarValues series) 0 numAxes
     in g ( attr "class" ("radar-series-" ++ radarName series) ∷ [] )
          ( -- Filled polygon
@@ -226,7 +190,7 @@ private
             safeMax = if axisMax ax ≤ᵇ 0.0 then 1.0 else axisMax ax
             valueR = maxFloat 0.0 ((v ÷ safeMax) * radius)
             (px , py) = polarToCart cx cy valueR angle
-            sep = if listLen restAx ≡ᵇ 0 then "" else " "
+            sep = if length restAx ≡ᵇ 0 then "" else " "
         in showFloat px ++ "," ++ showFloat py ++ sep
            ++ buildPoints restAx restV (suc idx) total
         where
@@ -261,7 +225,7 @@ radarChart : ∀ {M A}
            → Node M A
 radarChart {M} {A} cx cy config axes series =
   let radius = rcRadius config
-      numAxes = listLen axes
+      numAxes = length axes
   in g ( attr "class" "svg-radar-chart" ∷ [] )
        ( -- Background grid
          (if rcShowGrid config

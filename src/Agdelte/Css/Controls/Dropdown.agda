@@ -7,7 +7,7 @@ module Agdelte.Css.Controls.Dropdown where
 
 open import Data.List using (List; []; _∷_)
 
-open import Agdelte.Css.Decl using (Style; _∶_)
+open import Agdelte.Css.Decl using (Style; _∶_; borderRadius; transitionAll; transitionBg; cursorPointer)
 open import Agdelte.Css.Stylesheet using (Rule; rule; Stylesheet)
 
 ------------------------------------------------------------------------
@@ -28,11 +28,11 @@ dropdownRules =
       ∷ "padding" ∶ "var(--agdelte-spacing-sm) var(--agdelte-spacing-md)"
       ∷ "background" ∶ "var(--agdelte-bg)"
       ∷ "border" ∶ "1px solid var(--agdelte-border)"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
-      ∷ "cursor" ∶ "pointer"
+      ∷ borderRadius
+      ∷ cursorPointer
       ∷ "font-size" ∶ "inherit"
       ∷ "min-width" ∶ "150px"
-      ∷ "transition" ∶ "all var(--agdelte-transition)"
+      ∷ transitionAll
       ∷ [])
   ∷ rule ".agdelte-dropdown__trigger:hover"
       ( "border-color" ∶ "var(--agdelte-primary)"
@@ -64,7 +64,7 @@ dropdownRules =
       ∷ "margin-top" ∶ "var(--agdelte-spacing-xs)"
       ∷ "background" ∶ "var(--agdelte-bg)"
       ∷ "border" ∶ "1px solid var(--agdelte-border)"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
+      ∷ borderRadius
       ∷ "box-shadow" ∶ "var(--agdelte-shadow)"
       ∷ "max-height" ∶ "200px"
       ∷ "overflow" ∶ "auto"
@@ -73,9 +73,9 @@ dropdownRules =
       ∷ [])
   ∷ rule ".agdelte-dropdown__option"
       ( "padding" ∶ "var(--agdelte-spacing-sm) var(--agdelte-spacing-md)"
-      ∷ "cursor" ∶ "pointer"
+      ∷ cursorPointer
       ∷ "color" ∶ "var(--agdelte-text)"
-      ∷ "transition" ∶ "background var(--agdelte-transition)"
+      ∷ transitionBg
       ∷ [])
   ∷ rule ".agdelte-dropdown__option:hover"
       ( "background" ∶ "var(--agdelte-bg-hover)"

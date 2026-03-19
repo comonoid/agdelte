@@ -13,13 +13,9 @@ open import Data.Nat using (ℕ; zero; suc; _+_; _≤ᵇ_; _<ᵇ_; _≡ᵇ_)
 open import Data.Bool using (Bool; true; false; if_then_else_; not)
 open import Function using (_∘_)
 
+open import Data.Nat.Show renaming (show to showℕ)
+
 open import Agdelte.Reactive.Node
-
-open import Agda.Builtin.String using (primShowNat)
-
-private
-  showℕ : ℕ → String
-  showℕ = primShowNat
 
 ------------------------------------------------------------------------
 -- Simple pagination (prev/next only)

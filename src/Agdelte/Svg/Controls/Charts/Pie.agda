@@ -18,14 +18,8 @@ open import Agdelte.Reactive.Node using (Node; Attr; elem; attr; text; on)
 open import Agdelte.Svg.Elements using (svg; g; path'; circle'; svgText)
 open import Agdelte.Svg.Attributes
 open import Agdelte.Css.Show using (showFloat)
-
-------------------------------------------------------------------------
--- Constants
-------------------------------------------------------------------------
-
-private
-  pi : Float
-  pi = 3.14159265359
+open import Agdelte.Svg.Math using (sin; cos; π)
+open import Function using (case_of_)
 
 ------------------------------------------------------------------------
 -- Data types
@@ -58,32 +52,13 @@ private
         y1 = cy + radius * sin startA
         x2 = cx + radius * cos endA
         y2 = cy + radius * sin endA
-        largeArc = if (endA - startA) ≤ᵇ pi then "0" else "1"
+        largeArc = if (endA - startA) ≤ᵇ π then "0" else "1"
     in "M " ++ showFloat cx ++ " " ++ showFloat cy
        ++ " L " ++ showFloat x1 ++ " " ++ showFloat y1
        ++ " A " ++ showFloat radius ++ " " ++ showFloat radius
        ++ " 0 " ++ largeArc ++ " 1 "
        ++ showFloat x2 ++ " " ++ showFloat y2
        ++ " Z"
-    where
-      -- Normalize angle to [-π, π] by repeated subtraction/addition of 2π
-      normalize : Float → Float
-      normalize x = go x 20
-        where
-          twoPi : Float
-          twoPi = 2.0 * pi
-          go : Float → ℕ → Float
-          go y zero = y
-          go y (suc n) = if pi ≤ᵇ y       then go (y - twoPi) n
-                         else if y ≤ᵇ (0.0 - pi) then go (y + twoPi) n
-                         else y
-      cos sin : Float → Float
-      cos x' = let x = normalize x'
-               in 1.0 - (x * x ÷ 2.0) + (x * x * x * x ÷ 24.0)
-                - (x * x * x * x * x * x ÷ 720.0)
-      sin x' = let x = normalize x'
-               in x - (x * x * x ÷ 6.0) + (x * x * x * x * x ÷ 120.0)
-                - (x * x * x * x * x * x * x ÷ 5040.0)
 
   -- Donut arc (two arcs connected)
   donutArcPath : Float → Float → Float → Float → Float → Float → String
@@ -96,7 +71,7 @@ private
         iy1 = cy + inner * sin endA
         ix2 = cx + inner * cos startA
         iy2 = cy + inner * sin startA
-        largeArc = if (endA - startA) ≤ᵇ pi then "0" else "1"
+        largeArc = if (endA - startA) ≤ᵇ π then "0" else "1"
     in "M " ++ showFloat ox1 ++ " " ++ showFloat oy1
        ++ " A " ++ showFloat outer ++ " " ++ showFloat outer
        ++ " 0 " ++ largeArc ++ " 1 "
@@ -106,24 +81,6 @@ private
        ++ " 0 " ++ largeArc ++ " 0 "
        ++ showFloat ix2 ++ " " ++ showFloat iy2
        ++ " Z"
-    where
-      normalize : Float → Float
-      normalize x = go x 20
-        where
-          twoPi : Float
-          twoPi = 2.0 * pi
-          go : Float → ℕ → Float
-          go y zero = y
-          go y (suc n) = if pi ≤ᵇ y       then go (y - twoPi) n
-                         else if y ≤ᵇ (0.0 - pi) then go (y + twoPi) n
-                         else y
-      cos sin : Float → Float
-      cos x' = let x = normalize x'
-               in 1.0 - (x * x ÷ 2.0) + (x * x * x * x ÷ 24.0)
-                - (x * x * x * x * x * x ÷ 720.0)
-      sin x' = let x = normalize x'
-               in x - (x * x * x ÷ 6.0) + (x * x * x * x * x ÷ 120.0)
-                - (x * x * x * x * x * x * x ÷ 5040.0)
 
 ------------------------------------------------------------------------
 -- Pie Chart
@@ -138,17 +95,17 @@ pieChart : ∀ {M A}
 pieChart {M} {A} cx cy radius slices =
   let total = sumValues slices
   in g ( attr "class" "svg-pie-chart" ∷ [] )
-       (renderSlices cx cy radius total slices (0.0 - (pi ÷ 2.0)))
+       (renderSlices cx cy radius total slices (0.0 - (π ÷ 2.0)))
   where
     renderSlices : Float → Float → Float → Float
                  → List (PieSlice A) → Float → List (Node M A)
     renderSlices _ _ _ _ [] _ = []
     renderSlices pcx pcy r tot (s ∷ ss) startA =
       let fraction = if tot ≤ᵇ 0.0 then 0.0 else sliceValue s ÷ tot
-          sweep = fraction * 2.0 * pi
+          sweep = fraction * 2.0 * π
           endA = startA + sweep
           -- When a single slice is (nearly) 100%, arc degenerates; use circle
-          fullCircle = (2.0 * pi - 0.00001) ≤ᵇ sweep
+          fullCircle = (2.0 * π - 0.00001) ≤ᵇ sweep
           sliceNode = if fullCircle
             then (case sliceOnClick s of λ where
               nothing →
@@ -182,8 +139,6 @@ pieChart {M} {A} cx cy radius slices =
       in sliceNode
          ∷ renderSlices pcx pcy r tot ss endA
       where
-        case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
-        case x of f = f x
 
 ------------------------------------------------------------------------
 -- Donut Chart
@@ -198,16 +153,16 @@ donutChart : ∀ {M A}
 donutChart {M} {A} cx cy outer inner slices =
   let total = sumValues slices
   in g ( attr "class" "svg-donut-chart" ∷ [] )
-       (renderSlices cx cy outer inner total slices (0.0 - (pi ÷ 2.0)))
+       (renderSlices cx cy outer inner total slices (0.0 - (π ÷ 2.0)))
   where
     renderSlices : Float → Float → Float → Float → Float
                  → List (PieSlice A) → Float → List (Node M A)
     renderSlices _ _ _ _ _ [] _ = []
     renderSlices pcx pcy outr inr tot (s ∷ ss) startA =
       let fraction = if tot ≤ᵇ 0.0 then 0.0 else sliceValue s ÷ tot
-          sweep = fraction * 2.0 * pi
+          sweep = fraction * 2.0 * π
           endA = startA + sweep
-          fullCircle = (2.0 * pi - 0.00001) ≤ᵇ sweep
+          fullCircle = (2.0 * π - 0.00001) ≤ᵇ sweep
           sliceNode = if fullCircle
             then g ( attr "class" "donut-slice" ∷ [] )
                    ( circle' ( cxF pcx ∷ cyF pcy ∷ rF outr ∷ fill_ (sliceColor s) ∷ [] ) []

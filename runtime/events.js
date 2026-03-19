@@ -14,6 +14,13 @@ import { formatWorkerError, getPool } from './worker-pool.js';
 import { listToArray, arrayToList, toBool, fromMaybe, ensureNumber, ensureString } from './agda-values.js';
 import { bufferRegistry, mkBufferHandle } from './buffer-registry.js';
 
+// --- Spring physics constants ---
+const SPRING_POS_THRESHOLD_MIN = 0.01;
+const SPRING_VEL_THRESHOLD_MIN = 0.01;
+const SPRING_RANGE_SCALE = 0.001;
+const SPRING_DT_CAP = 64;       // ms — cap per-frame dt to avoid spiral of death
+const SPRING_TICK_STEP = 4;     // ms — fixed sub-step for integration
+
 // WebSocket connections pool (shared with commands)
 // Keyed by URL → Map of connectionId → WebSocket
 export const wsConnections = new Map();
@@ -439,18 +446,18 @@ function makeLeafHandlers(dispatchImmediate, dispatchNormal, dispatchBackground)
         pos = pos + vel * dtSec;
       };
       const range = Math.abs(ensureNumber(position) - tgt);
-      const posThreshold = Math.max(0.01, range * 0.001);
-      const velThreshold = Math.max(0.01, range * 0.001);
+      const posThreshold = Math.max(SPRING_POS_THRESHOLD_MIN, range * SPRING_RANGE_SCALE);
+      const velThreshold = Math.max(SPRING_VEL_THRESHOLD_MIN, range * SPRING_RANGE_SCALE);
       const isSettled = () => Math.abs(pos - tgt) < posThreshold && Math.abs(vel) < velThreshold;
       let rafId = 0;
       const loop = (timestamp) => {
         if (!running) return;
         if (lastTime === null) { lastTime = timestamp; rafId = requestAnimationFrame(loop); return; }
-        const dt = Math.min(timestamp - lastTime, 64);
+        const dt = Math.min(timestamp - lastTime, SPRING_DT_CAP);
         lastTime = timestamp;
         if (dt <= 0) { rafId = requestAnimationFrame(loop); return; }
         let remaining = dt;
-        while (remaining >= 4) { tick(4); remaining -= 4; }
+        while (remaining >= SPRING_TICK_STEP) { tick(SPRING_TICK_STEP); remaining -= SPRING_TICK_STEP; }
         if (remaining > 0) tick(remaining);
         dispatchNormal(onTick(pos));
         if (isSettled()) { running = false; dispatchNormal(onSettled); }
@@ -459,96 +466,63 @@ function makeLeafHandlers(dispatchImmediate, dispatchNormal, dispatchBackground)
       rafId = requestAnimationFrame(loop);
       return { unsubscribe: () => { running = false; cancelAnimationFrame(rafId); } };
     },
-    onKeyDown: (handler) => {
-      const ac = new AbortController();
-      document.addEventListener('keydown', (e) => {
-        const msg = fromMaybe(handler(mkKeyboardEvent(e)));
-        if (msg !== null) dispatchImmediate(msg);
-      }, { signal: ac.signal });
-      return { unsubscribe: () => ac.abort() };
-    },
-    onKeyUp: (handler) => {
-      const ac = new AbortController();
-      document.addEventListener('keyup', (e) => {
-        const msg = fromMaybe(handler(mkKeyboardEvent(e)));
-        if (msg !== null) dispatchImmediate(msg);
-      }, { signal: ac.signal });
-      return { unsubscribe: () => ac.abort() };
-    },
-    onMouseDown: (handler) => {
-      const ac = new AbortController();
-      document.addEventListener('mousedown', (e) => {
-        const msg = fromMaybe(handler(mkMouseEvent(e)));
-        if (msg !== null) dispatchImmediate(msg);
-      }, { signal: ac.signal });
-      return { unsubscribe: () => ac.abort() };
-    },
-    onMouseUp: (handler) => {
-      const ac = new AbortController();
-      document.addEventListener('mouseup', (e) => {
-        const msg = fromMaybe(handler(mkMouseEvent(e)));
-        if (msg !== null) dispatchImmediate(msg);
-      }, { signal: ac.signal });
-      return { unsubscribe: () => ac.abort() };
-    },
-    onMouseMove: (handler) => {
-      const ac = new AbortController();
-      document.addEventListener('mousemove', (e) => {
-        const msg = fromMaybe(handler(mkMouseEvent(e)));
-        if (msg !== null) dispatchNormal(msg);
-      }, { signal: ac.signal });
-      return { unsubscribe: () => ac.abort() };
-    },
-    onClick: (handler) => {
-      const ac = new AbortController();
-      document.addEventListener('click', (e) => {
-        const msg = fromMaybe(handler(mkMouseEvent(e)));
-        if (msg !== null) dispatchImmediate(msg);
-      }, { signal: ac.signal });
-      return { unsubscribe: () => ac.abort() };
-    },
-    httpGet: (url, onSuccess, onError) => {
-      const controller = new AbortController();
-      let completed = false;
-      fetch(url, { signal: controller.signal })
-        .then(async (response) => {
-          if (completed) return;
-          if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-          const text = await response.text();
-          if (completed) return;
-          completed = true;
-          dispatchBackground(onSuccess(text));
-        })
-        .catch((error) => {
-          if (completed || error.name === 'AbortError') return;
-          completed = true;
-          dispatchBackground(onError(error.message));
-        });
-      return { unsubscribe: () => { completed = true; controller.abort(); } };
-    },
-    httpPost: (url, body, onSuccess, onError) => {
-      const controller = new AbortController();
-      let completed = false;
-      let contentType = 'text/plain';
-      if (typeof body === 'string' && /^\s*[\[{]/.test(body)) {
-        contentType = 'application/json';
-      }
-      fetch(url, { method: 'POST', headers: { 'Content-Type': contentType }, body, signal: controller.signal })
-        .then(async (response) => {
-          if (completed) return;
-          if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-          const text = await response.text();
-          if (completed) return;
-          completed = true;
-          dispatchBackground(onSuccess(text));
-        })
-        .catch((error) => {
-          if (completed || error.name === 'AbortError') return;
-          completed = true;
-          dispatchBackground(onError(error.message));
-        });
-      return { unsubscribe: () => { completed = true; controller.abort(); } };
-    },
+    // Global event listener factory: creates AbortController-managed listeners
+    ...(() => {
+      const mkGlobalListener = (eventName, mkEvent, dispatch) => (handler) => {
+        const ac = new AbortController();
+        document.addEventListener(eventName, (e) => {
+          const msg = fromMaybe(handler(mkEvent(e)));
+          if (msg !== null) dispatch(msg);
+        }, { signal: ac.signal });
+        return { unsubscribe: () => ac.abort() };
+      };
+      const keyImm   = (name) => mkGlobalListener(name, mkKeyboardEvent, dispatchImmediate);
+      const mouseImm = (name) => mkGlobalListener(name, mkMouseEvent, dispatchImmediate);
+      return {
+        onKeyDown:   keyImm('keydown'),
+        onKeyUp:     keyImm('keyup'),
+        onMouseDown: mouseImm('mousedown'),
+        onMouseUp:   mouseImm('mouseup'),
+        onMouseMove: mkGlobalListener('mousemove', mkMouseEvent, dispatchNormal),
+        onClick:     mouseImm('click'),
+      };
+    })(),
+    // Shared HTTP fetch helper
+    ...(() => {
+      const httpFetch = (fetchOpts, onSuccess, onError) => {
+        const controller = new AbortController();
+        let completed = false;
+        fetch(fetchOpts.url, { ...fetchOpts.init, signal: controller.signal })
+          .then(async (response) => {
+            if (completed) return;
+            if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            const text = await response.text();
+            if (completed) return;
+            completed = true;
+            dispatchBackground(onSuccess(text));
+          })
+          .catch((error) => {
+            if (completed || error.name === 'AbortError') return;
+            completed = true;
+            dispatchBackground(onError(error.message));
+          });
+        return { unsubscribe: () => { completed = true; controller.abort(); } };
+      };
+      return {
+        httpGet: (url, onSuccess, onError) =>
+          httpFetch({ url }, onSuccess, onError),
+        httpPost: (url, body, onSuccess, onError) => {
+          let contentType = 'text/plain';
+          if (typeof body === 'string' && /^\s*[\[{]/.test(body)) {
+            contentType = 'application/json';
+          }
+          return httpFetch(
+            { url, init: { method: 'POST', headers: { 'Content-Type': contentType }, body } },
+            onSuccess, onError
+          );
+        },
+      };
+    })(),
     wsConnect: (url, handler) => {
       let ws;
       try { ws = new WebSocket(url); }

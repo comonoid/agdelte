@@ -7,7 +7,7 @@ module Agdelte.Css.Controls.DatePicker where
 
 open import Data.List using (List; []; _∷_)
 
-open import Agdelte.Css.Decl using (Style; _∶_)
+open import Agdelte.Css.Decl using (Style; _∶_; borderRadius; focusOutline; transitionAll; transitionBg; cursorPointer)
 open import Agdelte.Css.Stylesheet using (Rule; rule; Stylesheet)
 
 ------------------------------------------------------------------------
@@ -21,7 +21,7 @@ datePickerRules =
       ∷ "flex-direction" ∶ "column"
       ∷ "background" ∶ "var(--agdelte-bg)"
       ∷ "border" ∶ "1px solid var(--agdelte-border)"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
+      ∷ borderRadius
       ∷ "padding" ∶ "var(--agdelte-spacing-md)"
       ∷ "min-width" ∶ "280px"
       ∷ [])
@@ -44,19 +44,17 @@ datePickerRules =
       ∷ "padding" ∶ "0"
       ∷ "background" ∶ "transparent"
       ∷ "border" ∶ "none"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
-      ∷ "cursor" ∶ "pointer"
+      ∷ borderRadius
+      ∷ cursorPointer
       ∷ "color" ∶ "var(--agdelte-text)"
       ∷ "font-size" ∶ "0.875rem"
-      ∷ "transition" ∶ "background var(--agdelte-transition)"
+      ∷ transitionBg
       ∷ [])
   ∷ rule ".agdelte-datepicker__nav:hover"
       ( "background" ∶ "var(--agdelte-bg-hover)"
       ∷ [])
   ∷ rule ".agdelte-datepicker__nav:focus-visible"
-      ( "outline" ∶ "2px solid var(--agdelte-primary)"
-      ∷ "outline-offset" ∶ "2px"
-      ∷ [])
+      focusOutline
   ∷ rule ".agdelte-datepicker__title"
       ( "font-weight" ∶ "600"
       ∷ "color" ∶ "var(--agdelte-text)"
@@ -90,19 +88,17 @@ datePickerRules =
       ∷ "padding" ∶ "0"
       ∷ "background" ∶ "transparent"
       ∷ "border" ∶ "none"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
-      ∷ "cursor" ∶ "pointer"
+      ∷ borderRadius
+      ∷ cursorPointer
       ∷ "color" ∶ "var(--agdelte-text)"
       ∷ "font-size" ∶ "0.875rem"
-      ∷ "transition" ∶ "all var(--agdelte-transition)"
+      ∷ transitionAll
       ∷ [])
   ∷ rule ".agdelte-datepicker__day:hover"
       ( "background" ∶ "var(--agdelte-bg-hover)"
       ∷ [])
   ∷ rule ".agdelte-datepicker__day:focus-visible"
-      ( "outline" ∶ "2px solid var(--agdelte-primary)"
-      ∷ "outline-offset" ∶ "2px"
-      ∷ [])
+      focusOutline
   ∷ rule ".agdelte-datepicker__day--selected"
       ( "background" ∶ "var(--agdelte-primary)"
       ∷ "color" ∶ "var(--agdelte-text-light)"
@@ -138,11 +134,11 @@ datePickerRules =
       ( "padding" ∶ "var(--agdelte-spacing-sm)"
       ∷ "background" ∶ "transparent"
       ∷ "border" ∶ "1px solid transparent"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
-      ∷ "cursor" ∶ "pointer"
+      ∷ borderRadius
+      ∷ cursorPointer
       ∷ "color" ∶ "var(--agdelte-text)"
       ∷ "font-size" ∶ "0.875rem"
-      ∷ "transition" ∶ "all var(--agdelte-transition)"
+      ∷ transitionAll
       ∷ [])
   ∷ rule ".agdelte-datepicker__year:hover, .agdelte-datepicker__month:hover"
       ( "background" ∶ "var(--agdelte-bg-hover)"
@@ -156,11 +152,11 @@ datePickerRules =
       ( "padding" ∶ "var(--agdelte-spacing-xs) var(--agdelte-spacing-sm)"
       ∷ "background" ∶ "transparent"
       ∷ "border" ∶ "1px solid var(--agdelte-border)"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
-      ∷ "cursor" ∶ "pointer"
+      ∷ borderRadius
+      ∷ cursorPointer
       ∷ "color" ∶ "var(--agdelte-text)"
       ∷ "font-size" ∶ "0.875rem"
-      ∷ "transition" ∶ "all var(--agdelte-transition)"
+      ∷ transitionAll
       ∷ [])
   ∷ rule ".agdelte-datepicker__today:hover, .agdelte-datepicker__clear:hover"
       ( "background" ∶ "var(--agdelte-bg-hover)"
@@ -177,8 +173,8 @@ datePickerRules =
       ∷ "padding" ∶ "var(--agdelte-spacing-sm) var(--agdelte-spacing-md)"
       ∷ "background" ∶ "var(--agdelte-bg)"
       ∷ "border" ∶ "1px solid var(--agdelte-border)"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
-      ∷ "cursor" ∶ "pointer"
+      ∷ borderRadius
+      ∷ cursorPointer
       ∷ "color" ∶ "var(--agdelte-text)"
       ∷ "min-width" ∶ "180px"
       ∷ "transition" ∶ "border-color var(--agdelte-transition)"
@@ -236,12 +232,12 @@ datePickerRules =
       ( "padding" ∶ "var(--agdelte-spacing-xs) var(--agdelte-spacing-sm)"
       ∷ "background" ∶ "transparent"
       ∷ "border" ∶ "1px solid var(--agdelte-border)"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
-      ∷ "cursor" ∶ "pointer"
+      ∷ borderRadius
+      ∷ cursorPointer
       ∷ "color" ∶ "var(--agdelte-text)"
       ∷ "font-size" ∶ "0.875rem"
       ∷ "text-align" ∶ "left"
-      ∷ "transition" ∶ "all var(--agdelte-transition)"
+      ∷ transitionAll
       ∷ [])
   ∷ rule ".agdelte-daterange__preset:hover"
       ( "background" ∶ "var(--agdelte-bg-hover)"
@@ -269,11 +265,11 @@ datePickerRules =
       ∷ "padding" ∶ "0"
       ∷ "background" ∶ "transparent"
       ∷ "border" ∶ "1px solid var(--agdelte-border)"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
-      ∷ "cursor" ∶ "pointer"
+      ∷ borderRadius
+      ∷ cursorPointer
       ∷ "color" ∶ "var(--agdelte-text)"
       ∷ "font-size" ∶ "0.75rem"
-      ∷ "transition" ∶ "all var(--agdelte-transition)"
+      ∷ transitionAll
       ∷ [])
   ∷ rule ".agdelte-timepicker__btn:hover"
       ( "background" ∶ "var(--agdelte-bg-hover)"

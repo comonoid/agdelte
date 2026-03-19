@@ -40,14 +40,17 @@ open SelectOption public
 -- Internal helpers
 ------------------------------------------------------------------------
 
+defaultPlaceholder : String
+defaultPlaceholder = "Select..."
+
 private
   getOptionLabelByIdx : ℕ → List String → String
-  getOptionLabelByIdx _ [] = "Select..."
+  getOptionLabelByIdx _ [] = defaultPlaceholder
   getOptionLabelByIdx zero (lbl ∷ _) = lbl
   getOptionLabelByIdx (suc n) (_ ∷ rest) = getOptionLabelByIdx n rest
 
   findOptionLabel : ∀ {V} → (V → V → Bool) → V → List (SelectOption V) → String
-  findOptionLabel _ _ [] = "Select..."
+  findOptionLabel _ _ [] = defaultPlaceholder
   findOptionLabel eq v (opt ∷ rest) with eq v (optValue opt)
   ... | true  = optLabel opt
   ... | false = findOptionLabel eq v rest
@@ -110,7 +113,7 @@ dropdownIdx {M} getSelected getHighlighted getOpen toggleMsg selectMsg keyMsg op
   let
     displayText : M → String
     displayText m = case getSelected m of λ where
-      nothing → "Select..."
+      nothing → defaultPlaceholder
       (just idx) → getOptionLabelByIdx idx options
   in
   div ( classBind (λ m →
@@ -193,7 +196,7 @@ dropdown {_} {M} eqV getSelected getHighlighted getOpen toggleMsg selectMsg keyM
   let
     displayText : M → String
     displayText m = case getSelected m of λ where
-      nothing → "Select..."
+      nothing → defaultPlaceholder
       (just sel) → findOptionLabel eqV sel options
   in
   div ( classBind (λ m →

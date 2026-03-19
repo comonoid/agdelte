@@ -7,7 +7,7 @@ module Agdelte.Css.Controls.Stepper where
 
 open import Data.List using (List; []; _∷_)
 
-open import Agdelte.Css.Decl using (Style; _∶_)
+open import Agdelte.Css.Decl using (Style; _∶_; borderRadius; focusOutline; transitionAll; transitionBg; cursorPointer)
 open import Agdelte.Css.Stylesheet using (Rule; rule; Stylesheet)
 
 ------------------------------------------------------------------------
@@ -49,7 +49,7 @@ stepperRules =
       ∷ "color" ∶ "var(--agdelte-text-muted)"
       ∷ "font-weight" ∶ "600"
       ∷ "font-size" ∶ "0.875rem"
-      ∷ "transition" ∶ "all var(--agdelte-transition)"
+      ∷ transitionAll
       ∷ [])
   ∷ rule ".agdelte-stepper__step--active .agdelte-stepper__number"
       ( "background" ∶ "var(--agdelte-primary)"
@@ -97,18 +97,16 @@ stepperRules =
       ∷ [])
   -- Clickable stepper
   ∷ rule ".agdelte-stepper--clickable .agdelte-stepper__step"
-      ( "cursor" ∶ "pointer"
+      ( cursorPointer
       ∷ "background" ∶ "none"
       ∷ "border" ∶ "none"
       ∷ "padding" ∶ "var(--agdelte-spacing-xs)"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
-      ∷ "transition" ∶ "background var(--agdelte-transition)"
+      ∷ borderRadius
+      ∷ transitionBg
       ∷ [])
   ∷ rule ".agdelte-stepper--clickable .agdelte-stepper__step:hover"
       ( "background" ∶ "var(--agdelte-bg-hover)"
       ∷ [])
   ∷ rule ".agdelte-stepper--clickable .agdelte-stepper__step:focus-visible"
-      ( "outline" ∶ "2px solid var(--agdelte-primary)"
-      ∷ "outline-offset" ∶ "2px"
-      ∷ [])
+      focusOutline
   ∷ []

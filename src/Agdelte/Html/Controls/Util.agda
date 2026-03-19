@@ -12,6 +12,7 @@ open import Data.Bool using (Bool; true; false)
 open import Relation.Nullary using (yes; no)
 
 open import Data.String using (_≟_)
+open import Function using (case_of_) public
 
 ------------------------------------------------------------------------
 -- String equality as Bool
@@ -23,8 +24,8 @@ eqStr a b with a ≟ b
 ... | no _  = false
 
 ------------------------------------------------------------------------
--- case_of_ (local case expression)
+-- Default text constants
 ------------------------------------------------------------------------
 
-case_of_ : ∀ {a b} {A : Set a} {B : Set b} → A → (A → B) → B
-case x of f = f x
+noDataText : String
+noDataText = "No data available"

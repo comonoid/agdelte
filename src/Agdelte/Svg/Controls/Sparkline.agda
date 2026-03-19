@@ -7,8 +7,8 @@ module Agdelte.Svg.Controls.Sparkline where
 
 open import Data.String using (String; _++_)
 open import Data.Float using (Float; _+_; _-_; _*_)
-open import Data.Float.Base using (_÷_; _≤ᵇ_; _<ᵇ_; fromℕ)
-open import Data.List using (List; []; _∷_)
+open import Data.Float.Base using (_÷_; _≤ᵇ_; fromℕ)
+open import Data.List using (List; []; _∷_; length)
 open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.Nat using (ℕ; zero; suc; _∸_)
 
@@ -18,6 +18,7 @@ open import Agdelte.Svg.Attributes
   hiding (x_; y_)
   renaming (cxF to attrCx; cyF to attrCy)
 open import Agdelte.Css.Show using (showFloat)
+open import Agdelte.Svg.Math using (findMin; findMax; getLast)
 
 ------------------------------------------------------------------------
 -- Sparkline Style
@@ -52,24 +53,6 @@ redSparklineStyle = mkSparklineStyle "#ef4444" 1.5 "none" "#ef4444" 2.0
 -- Helpers
 ------------------------------------------------------------------------
 
-private
-  listLen : List Float → ℕ
-  listLen [] = 0
-  listLen (_ ∷ xs) = suc (listLen xs)
-
-  findMin : List Float → Float → Float
-  findMin [] acc = acc
-  findMin (x ∷ xs) acc = findMin xs (if x <ᵇ acc then x else acc)
-
-  findMax : List Float → Float → Float
-  findMax [] acc = acc
-  findMax (x ∷ xs) acc = findMax xs (if acc <ᵇ x then x else acc)
-
-  getLast : List Float → Float
-  getLast [] = 0.0
-  getLast (x ∷ []) = x
-  getLast (_ ∷ xs) = getLast xs
-
 ------------------------------------------------------------------------
 -- Path generation
 ------------------------------------------------------------------------
@@ -99,7 +82,7 @@ svgSparkline : ∀ {M Msg}
              → SparklineStyle
              → Node M Msg
 svgSparkline px py w h dataVals sty =
-  let total = listLen dataVals
+  let total = length dataVals
       minV = findMin dataVals 1.0e10
       maxV = findMax dataVals (0.0 - 1.0e10)
       range = if (maxV - minV) ≤ᵇ 0.0 then 1.0 else maxV - minV

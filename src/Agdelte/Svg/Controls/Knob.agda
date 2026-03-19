@@ -10,7 +10,6 @@ open import Data.Float using (Float; _+_; _-_; _*_)
 open import Data.Float.Base using (_÷_; _≤ᵇ_)
 open import Data.List using (List; []; _∷_)
 open import Data.Bool using (Bool; true; false; if_then_else_)
-open import Data.Nat using (ℕ; zero; suc)
 
 open import Agdelte.Reactive.Node using (Node; Attr; elem; attr; on; text)
 open import Agdelte.Svg.Elements using (g; circle'; svgText)
@@ -22,6 +21,8 @@ open import Agdelte.Css.Show using (showFloat)
 open import Agdelte.Svg.Events using (onSvgClick)
 open import Agdelte.Svg.Path using (Point)
   renaming (x to ptX; y to ptY)
+open import Agdelte.Svg.Math using (π; degToRad; clamp01)
+  renaming (sin to sin'; cos to cos')
 
 ------------------------------------------------------------------------
 -- Math constants
@@ -30,40 +31,6 @@ open import Agdelte.Svg.Path using (Point)
 postulate
   atan2F : Float → Float → Float
 {-# COMPILE JS atan2F = y => x => Math.atan2(y, x) #-}
-
-private
-  π : Float
-  π = 3.14159265359
-
-  -- Convert degrees to radians
-  degToRad : Float → Float
-  degToRad deg = deg * π ÷ 180.0
-
-  -- Normalize angle to [-π, π] by repeated subtraction/addition of 2π
-  normalize : Float → Float
-  normalize x = go x 20
-    where
-      twoPi : Float
-      twoPi = 2.0 * π
-      go : Float → ℕ → Float
-      go y zero = y
-      go y (suc n) = if π ≤ᵇ y       then go (y - twoPi) n
-                     else if y ≤ᵇ (0.0 - π) then go (y + twoPi) n
-                     else y
-
-  -- Sine approximation (Taylor series with range reduction)
-  sin' : Float → Float
-  sin' x' = let x = normalize x'
-            in x - (x * x * x ÷ 6.0)
-             + (x * x * x * x * x ÷ 120.0)
-             - (x * x * x * x * x * x * x ÷ 5040.0)
-
-  -- Cosine approximation (Taylor series with range reduction)
-  cos' : Float → Float
-  cos' x' = let x = normalize x'
-            in 1.0 - (x * x ÷ 2.0)
-             + (x * x * x * x ÷ 24.0)
-             - (x * x * x * x * x * x ÷ 720.0)
 
 ------------------------------------------------------------------------
 -- Knob Style
@@ -136,12 +103,27 @@ minimalKnobStyle = mkKnobStyle
 ------------------------------------------------------------------------
 
 private
-  clamp01 : Float → Float
-  clamp01 v = if v ≤ᵇ 0.0 then 0.0 else if 1.0 ≤ᵇ v then 1.0 else v
+  -- Knob geometry: rotates from -135° to +135°
+  angleRange : Float
+  angleRange = 270.0
 
-  -- Knob rotates from -135° to +135° (270° range)
+  halfAngle : Float
+  halfAngle = 135.0
+
+  -- Fraction of full circle covered by active arc (270°/360°)
+  arcFraction : Float
+  arcFraction = 0.75
+
+  -- Arc offset from knob edge
+  arcPadding : Float
+  arcPadding = 8.0
+
+  -- Indicator line reaches 60% of radius
+  indicatorScale : Float
+  indicatorScale = 0.6
+
   valueToAngle : Float → Float
-  valueToAngle ratio = (ratio - 0.5) * 270.0
+  valueToAngle ratio = (ratio - 0.5) * angleRange
 
   -- Compute [0,1] value from click position relative to knob center.
   -- Uses atan2 to get angle, then maps the -135°..+135° range to 0..1.
@@ -157,9 +139,9 @@ private
         -- rawDeg is in (-180, 180]. Active range is -135..+135 (270°).
         -- Dead zone is the bottom 90° arc (from +135 CW to -135 = 225..315 if measured 0..360).
         -- Clamp: if rawDeg > 135, clamp to 1; if rawDeg < -135, clamp to 0.
-    in if 135.0 ≤ᵇ rawDeg then 1.0
-       else if rawDeg ≤ᵇ (0.0 - 135.0) then 0.0
-       else clamp01 ((rawDeg + 135.0) ÷ 270.0)
+    in if halfAngle ≤ᵇ rawDeg then 1.0
+       else if rawDeg ≤ᵇ (0.0 - halfAngle) then 0.0
+       else clamp01 ((rawDeg + halfAngle) ÷ angleRange)
 
 
 ------------------------------------------------------------------------
@@ -177,7 +159,7 @@ svgKnob cx cy val sty onChange =
       r = knobRadius sty
       angle = valueToAngle ratio
       -- Indicator line endpoint
-      indicatorR = r * 0.6
+      indicatorR = r * indicatorScale
       indicatorRad = degToRad (angle - 90.0)
       indX = cx + indicatorR * cos' indicatorRad
       indY = cy + indicatorR * sin' indicatorRad
@@ -191,26 +173,26 @@ svgKnob cx cy val sty onChange =
           else g [] ( -- Track arc
                       elem "circle" ( attrCx cx
                                     ∷ attrCy cy
-                                    ∷ rF (r + 8.0)
+                                    ∷ rF (r + arcPadding)
                                     ∷ fill_ "none"
                                     ∷ stroke_ (trackColor sty)
                                     ∷ strokeWidthF (arcWidth sty)
                                     ∷ attr "stroke-linecap" "round"
-                                    ∷ attr "stroke-dasharray" (showFloat (2.0 * π * (r + 8.0) * 0.75))
-                                    ∷ attr "stroke-dashoffset" (showFloat (2.0 * π * (r + 8.0) * 0.125))
-                                    ∷ attr "transform" ("rotate(-135 " ++ showFloat cx ++ " " ++ showFloat cy ++ ")")
+                                    ∷ attr "stroke-dasharray" (showFloat (2.0 * π * (r + arcPadding) * arcFraction))
+                                    ∷ attr "stroke-dashoffset" (showFloat (2.0 * π * (r + arcPadding) * ((1.0 - arcFraction) ÷ 2.0)))
+                                    ∷ attr "transform" ("rotate(" ++ showFloat (0.0 - halfAngle) ++ " " ++ showFloat cx ++ " " ++ showFloat cy ++ ")")
                                     ∷ [] ) []
                     -- Value arc
                     ∷ elem "circle" ( attrCx cx
                                     ∷ attrCy cy
-                                    ∷ rF (r + 8.0)
+                                    ∷ rF (r + arcPadding)
                                     ∷ fill_ "none"
                                     ∷ stroke_ (valueColor sty)
                                     ∷ strokeWidthF (arcWidth sty)
                                     ∷ attr "stroke-linecap" "round"
-                                    ∷ attr "stroke-dasharray" (showFloat (2.0 * π * (r + 8.0) * 0.75 * ratio)
-                                                            ++ " " ++ showFloat (2.0 * π * (r + 8.0)))
-                                    ∷ attr "transform" ("rotate(-135 " ++ showFloat cx ++ " " ++ showFloat cy ++ ")")
+                                    ∷ attr "stroke-dasharray" (showFloat (2.0 * π * (r + arcPadding) * arcFraction * ratio)
+                                                            ++ " " ++ showFloat (2.0 * π * (r + arcPadding)))
+                                    ∷ attr "transform" ("rotate(" ++ showFloat (0.0 - halfAngle) ++ " " ++ showFloat cx ++ " " ++ showFloat cy ++ ")")
                                     ∷ [] ) []
                     ∷ [] ))
        -- Knob circle

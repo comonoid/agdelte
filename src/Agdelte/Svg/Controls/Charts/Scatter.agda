@@ -18,6 +18,8 @@ open import Agdelte.Reactive.Node using (Node; Attr; elem; attr; text; on)
 open import Agdelte.Svg.Elements using (svg; g; circle'; svgText)
 open import Agdelte.Svg.Attributes
 open import Agdelte.Css.Show using (showFloat)
+open import Agdelte.Svg.Math using (zeroMin; zeroMax)
+open import Function using (case_of_)
 
 ------------------------------------------------------------------------
 -- Data types
@@ -59,13 +61,6 @@ private
   scaleVal minV maxV size offset v =
     let range = if (maxV - minV) ≤ᵇ 0.0 then 1.0 else maxV - minV
     in offset + ((v - minV) ÷ range) * size
-
-  -- Zero-anchoring: ensure range always includes zero
-  zeroMin : Float → Float
-  zeroMin v = if v <ᵇ 0.0 then v else 0.0
-
-  zeroMax : Float → Float
-  zeroMax v = if 0.0 <ᵇ v then v else 0.0
 
 ------------------------------------------------------------------------
 -- Scatter Plot
@@ -115,8 +110,6 @@ scatterPlot {M} {A} px py w h points =
                       ∷ [] ) [])
          ∷ renderPoints px' py' w' h' minX maxX minY maxY ps
       where
-        case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
-        case x of f = f x
 
 ------------------------------------------------------------------------
 -- Simple scatter plot

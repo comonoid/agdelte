@@ -18,6 +18,7 @@ open import Agdelte.Reactive.Node using (Node; Attr; elem; attr; text; on)
 open import Agdelte.Svg.Elements using (svg; g; circle'; line'; svgText; path')
 open import Agdelte.Svg.Attributes
 open import Agdelte.Css.Show using (showFloat)
+open import Function using (case_of_)
 
 ------------------------------------------------------------------------
 -- Data types
@@ -107,8 +108,6 @@ networkGraph {M} {A} px py w h nodes edges =
             ∷ [] )
         _ → g [] []
       where
-        case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
-        case x of f = f x
 
         -- Simple arrow head, offset back from target center by node radius
         renderArrow : Float → Float → Float → Float → Node M A
@@ -133,8 +132,6 @@ networkGraph {M} {A} px py w h nodes edges =
           where
             postulate sqrt : Float → Float
             {-# COMPILE JS sqrt = Math.sqrt #-}
-            case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
-            case x of f = f x
 
     renderEdges : List (GraphNode A) → List GraphEdge → List (Node M A)
     renderEdges _ [] = []
@@ -175,8 +172,6 @@ networkGraph {M} {A} px py w h nodes edges =
                ( text (nodeLabel n) ∷ [] )
            ∷ [] )
       where
-        case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
-        case x of f = f x
 
     renderNodes : List (GraphNode A) → List (Node M A)
     renderNodes [] = []

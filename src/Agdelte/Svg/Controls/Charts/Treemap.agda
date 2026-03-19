@@ -8,7 +8,7 @@ module Agdelte.Svg.Controls.Charts.Treemap where
 open import Data.String using (String; _++_)
 open import Data.Float using (Float; _+_; _-_; _*_)
 open import Data.Float.Base using (_÷_; _≤ᵇ_; _<ᵇ_; fromℕ)
-open import Data.List using (List; []; _∷_; map; foldr)
+open import Data.List using (List; []; _∷_; map; foldr; length)
 open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.Nat using (ℕ; zero; suc)
 open import Data.Maybe using (Maybe; just; nothing)
@@ -18,6 +18,7 @@ open import Agdelte.Reactive.Node using (Node; Attr; elem; attr; text; on)
 open import Agdelte.Svg.Elements using (svg; g; rect'; svgText)
 open import Agdelte.Svg.Attributes
 open import Agdelte.Css.Show using (showFloat)
+open import Function using (case_of_)
 
 ------------------------------------------------------------------------
 -- Data types
@@ -57,10 +58,6 @@ open TreemapRect public
 ------------------------------------------------------------------------
 
 private
-  listLen : ∀ {A : Set} → List A → ℕ
-  listLen [] = 0
-  listLen (_ ∷ xs) = suc (listLen xs)
-
   sumValues : ∀ {A} → List (TreemapNode A) → Float
   sumValues [] = 0.0
   sumValues (n ∷ ns) = tmValue n + sumValues ns
@@ -102,8 +99,6 @@ private
   open import Data.List renaming (_++_ to _++ᴸ_)
   open import Data.Nat using (_≡ᵇ_) renaming (_+_ to _+ᴺ_)
 
-  case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
-  case x of f = f x
 
   -- Filter out nodes with non-positive values
   positiveNodes : ∀ {A} → List (TreemapNode A) → List (TreemapNode A)
@@ -172,15 +167,13 @@ private
       layoutRow [] px' py' w' h' _ cidx _ = ([] , px' , py' , w' , h' , cidx)
       layoutRow row px' py' w' h' tot cidx dep =
         let rowSum = sumFloats (Data.List.map (λ n → tmValue n) row)
-        in if w' <ᵇ h'
-           then -- Tall: lay row as horizontal strip at top, height = rowSum/total * h
-             let stripH = if tot ≤ᵇ 0.0 then 0.0 else (rowSum ÷ tot) * h'
-             in (layHoriz row px' py' w' stripH rowSum cidx dep
-                , px' , py' + stripH , w' , h' - stripH , cidx)
-           else -- Wide: lay row as vertical strip at left, width = rowSum/total * w
-             let stripW = if tot ≤ᵇ 0.0 then 0.0 else (rowSum ÷ tot) * w'
-             in (layVert row px' py' stripW h' rowSum cidx dep
-                , px' + stripW , py' , w' - stripW , h' , cidx)
+        in (if w' <ᵇ h'
+           then (let stripH = if tot ≤ᵇ 0.0 then 0.0 else (rowSum ÷ tot) * h'
+                 in (layHoriz row px' py' w' stripH rowSum cidx dep
+                    , px' , py' + stripH , w' , h' - stripH , cidx))
+           else (let stripW = if tot ≤ᵇ 0.0 then 0.0 else (rowSum ÷ tot) * w'
+                 in (layVert row px' py' stripW h' rowSum cidx dep
+                    , px' + stripW , py' , w' - stripW , h' , cidx)))
         where
           layHoriz : List (TreemapNode A) → Float → Float → Float → Float → Float → ℕ → ℕ → List (TreemapRect A)
           layHoriz [] _ _ _ _ _ _ _ = []
@@ -192,7 +185,7 @@ private
                   (just c) → c
                 rect = mkTreemapRect lx ly nodeW lh (tmLabel n) (tmValue n) nodeColor dp (tmOnClick n)
                 kids = positiveNodes (tmChildren n)
-                childRects = if listLen kids ≡ᵇ 0 then []
+                childRects = if length kids ≡ᵇ 0 then []
                              else if (nodeW ≤ᵇ 4.0) then []
                              else if (lh ≤ᵇ 4.0) then []
                              else layoutChildren (lx + 2.0) (ly + 2.0) (nodeW - 4.0) (lh - 4.0)
@@ -209,7 +202,7 @@ private
                   (just c) → c
                 rect = mkTreemapRect lx ly lw nodeH (tmLabel n) (tmValue n) nodeColor dp (tmOnClick n)
                 kids = positiveNodes (tmChildren n)
-                childRects = if listLen kids ≡ᵇ 0 then []
+                childRects = if length kids ≡ᵇ 0 then []
                              else if (lw ≤ᵇ 4.0) then []
                              else if (nodeH ≤ᵇ 4.0) then []
                              else layoutChildren (lx + 2.0) (ly + 2.0) (lw - 4.0) (nodeH - 4.0)
@@ -251,7 +244,7 @@ private
              squarify fuel' rest (row ++ᴸ (n ∷ [])) px' py' w' h' tot cidx dep
            else -- Adding candidate worsens ratio, finalize row and start new one
              let (rects , px'' , py'' , w'' , h'' , cidx') = layoutRow row px' py' w' h' tot cidx dep
-                 newCidx = cidx +ᴺ listLen row
+                 newCidx = cidx +ᴺ length row
              in rects ++ᴸ squarify fuel' (n ∷ rest) [] px'' py'' w'' h'' (tot - sumValues row) newCidx dep
 
 ------------------------------------------------------------------------
@@ -302,8 +295,6 @@ private
              ∷ [] )
     where
       open import Data.Bool renaming (_∧_ to _∧ᵇ_)
-      case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
-      case x of f = f x
 
   renderRects : ∀ {M A} → List (TreemapRect A) → Bool → List (Node M A)
   renderRects [] _ = []

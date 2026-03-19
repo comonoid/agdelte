@@ -20,6 +20,7 @@ open import Agdelte.WebGL.Builder.Geometry.Primitives
 open import Agdelte.WebGL.Controls.Theme
 open import Agdelte.WebGL.Controls.Buttons
 open import Agdelte.WebGL.Controls.Text
+open import Function using (case_of_)
 
 ------------------------------------------------------------------------
 -- Menu item
@@ -207,12 +208,8 @@ radialMenu3D {M} {Msg} theme config isOpen items t =
   where
     postulate natToFloat : ℕ → Float
     postulate recip : Float → Float
-    postulate sinF : Float → Float
-    postulate cosF : Float → Float
     {-# COMPILE JS natToFloat = n => Number(n) #-}
     {-# COMPILE JS recip = x => 1 / x #-}
-    {-# COMPILE JS sinF = x => Math.sin(x) #-}
-    {-# COMPILE JS cosF = x => Math.cos(x) #-}
 
     buildSlices : ControlTheme → Float → Float → Float → Float → ℕ
                 → List (MenuItem Msg) → List (SceneNode M Msg)
@@ -296,5 +293,3 @@ contextMenu3D {M} {Msg} theme getPosition items =
            ∷ [])
          ∷ buildMenuItems (suc idx) rest
 
-    case_of_ : ∀ {A B : Set} → A → (A → B) → B
-    case x of f = f x

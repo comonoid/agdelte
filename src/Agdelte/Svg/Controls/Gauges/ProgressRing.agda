@@ -18,35 +18,7 @@ open import Agdelte.Reactive.Node using (Node; Attr; elem; attr; text)
 open import Agdelte.Svg.Elements using (svg; g; path'; circle'; svgText)
 open import Agdelte.Svg.Attributes
 open import Agdelte.Css.Show using (showFloat)
-
-------------------------------------------------------------------------
--- Constants
-------------------------------------------------------------------------
-
-private
-  pi : Float
-  pi = 3.14159265359
-
-  normalize : Float → Float
-  normalize x = go x 20
-    where go : Float → ℕ → Float
-          go y zero = y
-          go y (suc n) =
-            if pi <ᵇ y then go (y - 2.0 * pi) n
-            else if y <ᵇ (0.0 - pi) then go (y + 2.0 * pi) n
-            else y
-
-  sin : Float → Float
-  sin x' = let x = normalize x' in
-    x - (x * x * x ÷ 6.0)
-    + (x * x * x * x * x ÷ 120.0)
-    - (x * x * x * x * x * x * x ÷ 5040.0)
-
-  cos : Float → Float
-  cos x' = let x = normalize x' in
-    1.0 - (x * x ÷ 2.0)
-    + (x * x * x * x ÷ 24.0)
-    - (x * x * x * x * x * x ÷ 720.0)
+open import Agdelte.Svg.Math using (sin; cos; π)
 
 ------------------------------------------------------------------------
 -- Simple Progress Ring
@@ -63,7 +35,7 @@ progressRing : ∀ {M A}
 progressRing cx cy radius strokeW color progress =
   let clampedP = if progress <ᵇ 0.0 then 0.0
                  else if 1.0 <ᵇ progress then 1.0 else progress
-      circumference = 2.0 * pi * radius
+      circumference = 2.0 * π * radius
       offset = circumference * (1.0 - clampedP)
   in g ( attr "class" "svg-progress-ring" ∷ [] )
        ( -- Background circle
@@ -144,7 +116,7 @@ multiProgressRing : ∀ {M A}
                   → Node M A
 multiProgressRing {M} {A} cx cy radius strokeW segments =
   let total = sumValues segments
-      circumference = 2.0 * pi * radius
+      circumference = 2.0 * π * radius
   in g ( attr "class" "svg-multi-progress-ring" ∷ [] )
        ( -- Background
          circle' ( cxF cx ∷ cyF cy
@@ -204,7 +176,7 @@ indeterminateRing : ∀ {M A}
                   → String
                   → Node M A
 indeterminateRing cx cy radius strokeW color =
-  let circumference = 2.0 * pi * radius
+  let circumference = 2.0 * π * radius
   in g ( attr "class" "svg-indeterminate-ring" ∷ [] )
        ( -- Background
          circle' ( cxF cx ∷ cyF cy

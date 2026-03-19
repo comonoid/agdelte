@@ -71,7 +71,7 @@ utilityRules : Stylesheet
 utilityRules =
   -- List truncation marker (injected by reactive.js at runtime)
     rule ".agdelte-list-truncated"
-      ( "color" ∶ "var(--agdelte-error, #f44)"
+      ( "color" ∶ "var(--agdelte-error)"
       ∷ "font-style" ∶ "italic"
       ∷ "list-style" ∶ "none"
       ∷ "padding" ∶ "4px 0"

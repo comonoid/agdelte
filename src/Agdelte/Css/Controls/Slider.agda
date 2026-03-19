@@ -7,7 +7,7 @@ module Agdelte.Css.Controls.Slider where
 
 open import Data.List using (List; []; _∷_)
 
-open import Agdelte.Css.Decl using (Style; _∶_)
+open import Agdelte.Css.Decl using (Style; _∶_; borderRadius; focusOutline; cursorPointer)
 open import Agdelte.Css.Stylesheet using (Rule; rule; Stylesheet)
 
 ------------------------------------------------------------------------
@@ -34,24 +34,22 @@ sliderRules =
   ∷ rule ".agdelte-slider__input"
       ( "width" ∶ "100%"
       ∷ "height" ∶ "6px"
-      ∷ "cursor" ∶ "pointer"
+      ∷ cursorPointer
       ∷ "accent-color" ∶ "var(--agdelte-primary)"
       ∷ "-webkit-appearance" ∶ "none"
       ∷ "appearance" ∶ "none"
       ∷ "background" ∶ "var(--agdelte-border)"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
+      ∷ borderRadius
       ∷ [])
   ∷ rule ".agdelte-slider__input:focus-visible"
-      ( "outline" ∶ "2px solid var(--agdelte-primary)"
-      ∷ "outline-offset" ∶ "2px"
-      ∷ [])
+      focusOutline
   ∷ rule ".agdelte-slider__input::-webkit-slider-thumb"
       ( "-webkit-appearance" ∶ "none"
       ∷ "width" ∶ "18px"
       ∷ "height" ∶ "18px"
       ∷ "background" ∶ "var(--agdelte-primary)"
       ∷ "border-radius" ∶ "50%"
-      ∷ "cursor" ∶ "pointer"
+      ∷ cursorPointer
       ∷ "transition" ∶ "transform var(--agdelte-transition)"
       ∷ [])
   ∷ rule ".agdelte-slider__input::-webkit-slider-thumb:hover"
@@ -63,11 +61,11 @@ sliderRules =
       ∷ "background" ∶ "var(--agdelte-primary)"
       ∷ "border" ∶ "none"
       ∷ "border-radius" ∶ "50%"
-      ∷ "cursor" ∶ "pointer"
+      ∷ cursorPointer
       ∷ [])
   ∷ rule ".agdelte-slider__input::-moz-range-track"
       ( "background" ∶ "var(--agdelte-border)"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
+      ∷ borderRadius
       ∷ "height" ∶ "6px"
       ∷ [])
   ∷ rule ".agdelte-slider__value"
@@ -126,7 +124,7 @@ sliderRules =
       ∷ "height" ∶ "6px"
       ∷ "transform" ∶ "translateY(-50%)"
       ∷ "background" ∶ "var(--agdelte-border)"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
+      ∷ borderRadius
       ∷ "pointer-events" ∶ "none"
       ∷ [])
   ∷ rule ".agdelte-range-slider__input"
@@ -146,7 +144,7 @@ sliderRules =
       ∷ "height" ∶ "18px"
       ∷ "background" ∶ "var(--agdelte-primary)"
       ∷ "border-radius" ∶ "50%"
-      ∷ "cursor" ∶ "pointer"
+      ∷ cursorPointer
       ∷ "pointer-events" ∶ "auto"
       ∷ [])
   ∷ rule ".agdelte-range-slider__input::-moz-range-thumb"
@@ -155,7 +153,7 @@ sliderRules =
       ∷ "background" ∶ "var(--agdelte-primary)"
       ∷ "border" ∶ "none"
       ∷ "border-radius" ∶ "50%"
-      ∷ "cursor" ∶ "pointer"
+      ∷ cursorPointer
       ∷ "pointer-events" ∶ "auto"
       ∷ [])
   ∷ rule ".agdelte-range-slider__values"

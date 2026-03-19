@@ -17,13 +17,12 @@ open import Data.Product using (_×_; _,_; proj₁; proj₂)
 
 open import Agdelte.WebGL.Types
 open import Agdelte.WebGL.Builder.Geometry.Primitives
+open import Function using (case_of_)
 
 ------------------------------------------------------------------------
 -- Module-level helpers
 ------------------------------------------------------------------------
 
-case_of_ : ∀ {A B : Set} → A → (A → B) → B
-case x of f = f x
 
 infixr 5 _++L_
 _++L_ : ∀ {A : Set} → List A → List A → List A
@@ -82,9 +81,6 @@ boundingBox3D {M} {Msg} style getBounds =
   where
     lw = SelectionStyle.lineWidth style
     lc = SelectionStyle.lineColor style
-
-    postulate sqrtF : Float → Float
-    {-# COMPILE JS sqrtF = x => Math.sqrt(x) #-}
 
     edge : Float → Float → Float → Float → Float → Float → SceneNode M Msg
     edge sx sy sz ddx ddy ddz =
@@ -248,9 +244,6 @@ selectionPulse {M} color size getTime t =
       let time = getTime m
           scale = 1.0 + sinF (time * 6.28) * 0.1
       in mkTransform (vec3 0.0 0.0 0.0) identityQuat (vec3 scale scale scale)
-      where
-        postulate sinF : Float → Float
-        {-# COMPILE JS sinF = x => Math.sin(x) #-}
 
 ------------------------------------------------------------------------
 -- Selection bracket corners

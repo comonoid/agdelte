@@ -7,7 +7,7 @@ module Agdelte.Css.Controls.Breadcrumb where
 
 open import Data.List using (List; []; _∷_)
 
-open import Agdelte.Css.Decl using (Style; _∶_)
+open import Agdelte.Css.Decl using (Style; _∶_; borderRadius; focusOutline; transitionAll; cursorPointer)
 open import Agdelte.Css.Stylesheet using (Rule; rule; Stylesheet)
 
 ------------------------------------------------------------------------
@@ -40,19 +40,17 @@ breadcrumbRules =
       ∷ "border" ∶ "none"
       ∷ "padding" ∶ "var(--agdelte-spacing-xs) var(--agdelte-spacing-sm)"
       ∷ "color" ∶ "var(--agdelte-primary)"
-      ∷ "cursor" ∶ "pointer"
+      ∷ cursorPointer
       ∷ "font-size" ∶ "inherit"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
-      ∷ "transition" ∶ "all var(--agdelte-transition)"
+      ∷ borderRadius
+      ∷ transitionAll
       ∷ [])
   ∷ rule ".agdelte-breadcrumb__link:hover"
       ( "background" ∶ "var(--agdelte-bg-hover)"
       ∷ "text-decoration" ∶ "underline"
       ∷ [])
   ∷ rule ".agdelte-breadcrumb__link:focus-visible"
-      ( "outline" ∶ "2px solid var(--agdelte-primary)"
-      ∷ "outline-offset" ∶ "2px"
-      ∷ [])
+      focusOutline
   ∷ rule ".agdelte-breadcrumb__separator"
       ( "color" ∶ "var(--agdelte-text-muted)"
       ∷ "margin" ∶ "0 var(--agdelte-spacing-xs)"

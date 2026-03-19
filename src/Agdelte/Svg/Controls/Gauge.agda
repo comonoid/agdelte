@@ -7,10 +7,9 @@ module Agdelte.Svg.Controls.Gauge where
 
 open import Data.String using (String; _++_)
 open import Data.Float using (Float; _+_; _-_; _*_)
-open import Data.Float.Base using (_÷_; _≤ᵇ_)
+open import Data.Float.Base using (_÷_)
 open import Data.List using (List; []; _∷_)
 open import Data.Bool using (Bool; true; false; if_then_else_)
-open import Data.Nat using (ℕ; zero; suc)
 
 open import Agdelte.Reactive.Node using (Node; Attr; elem; attr; on; text)
 open import Agdelte.Svg.Elements using (g; circle'; svgText)
@@ -19,44 +18,36 @@ open import Agdelte.Svg.Attributes
   renaming (xF to attrX; yF to attrY; cxF to attrCx; cyF to attrCy;
             fontSize_ to attrFontSize; fontFamily_ to attrFontFamily)
 open import Agdelte.Css.Show using (showFloat)
+open import Agdelte.Svg.Math using (π; degToRad; normalize; clamp01)
+  renaming (sin to sin'; cos to cos')
 
 ------------------------------------------------------------------------
--- Math
+-- Gauge geometry constants
 ------------------------------------------------------------------------
 
 private
-  π : Float
-  π = 3.14159265359
+  -- Gauge arc spans 270° from -135° to +135°
+  gaugeAngleRange : Float
+  gaugeAngleRange = 270.0
 
-  degToRad : Float → Float
-  degToRad d = d * π ÷ 180.0
+  gaugeStartAngle : Float
+  gaugeStartAngle = -135.0
 
-  -- Normalize angle to [-π, π] by repeated subtraction/addition of 2π
-  normalize : Float → Float
-  normalize x = go x 20
-    where
-      twoPi : Float
-      twoPi = 2.0 * π
-      go : Float → ℕ → Float
-      go y zero = y
-      go y (suc n) = if π ≤ᵇ y       then go (y - twoPi) n
-                     else if y ≤ᵇ (0.0 - π) then go (y + twoPi) n
-                     else y
+  -- 270°/360° fraction of full circle
+  gaugeArcFraction : Float
+  gaugeArcFraction = 0.75
 
-  sin' : Float → Float
-  sin' x' = let x = normalize x'
-            in x - (x * x * x ÷ 6.0)
-             + (x * x * x * x * x ÷ 120.0)
-             - (x * x * x * x * x * x * x ÷ 5040.0)
+  -- Needle length as fraction of radius
+  needleScale : Float
+  needleScale = 0.75
 
-  cos' : Float → Float
-  cos' x' = let x = normalize x'
-            in 1.0 - (x * x ÷ 2.0)
-             + (x * x * x * x ÷ 24.0)
-             - (x * x * x * x * x * x ÷ 720.0)
+  -- Center dot radius
+  centerDotR : Float
+  centerDotR = 6.0
 
-  clamp01 : Float → Float
-  clamp01 v = if v ≤ᵇ 0.0 then 0.0 else if 1.0 ≤ᵇ v then 1.0 else v
+  -- Label Y offset as fraction of radius
+  labelOffsetScale : Float
+  labelOffsetScale = 0.4
 
 ------------------------------------------------------------------------
 -- Gauge Style
@@ -117,17 +108,15 @@ svgGauge cx cy val sty =
   let ratio = clamp01 val
       r = gaugeRadius sty
       -- Gauge arc from -135° to +135° (270° range)
-      startAngle = -135.0
-      angleRange = 270.0
-      currentAngle = startAngle + ratio * angleRange
+      currentAngle = gaugeStartAngle + ratio * gaugeAngleRange
       -- Needle endpoint
-      needleR = r * 0.75
+      needleR = r * needleScale
       needleRad = degToRad currentAngle
       needleX = cx + needleR * cos' needleRad
       needleY = cy + needleR * sin' needleRad
       -- Arc calculations
       circumference = 2.0 * π * r
-      arcLen = circumference * 0.75  -- 270° = 75% of circle
+      arcLen = circumference * gaugeArcFraction
       valueLen = arcLen * ratio
   in g ( attr "class" "svg-gauge" ∷ [] )
        ( -- Track arc
@@ -139,7 +128,7 @@ svgGauge cx cy val sty =
                  ∷ strokeWidthF (arcWidth sty)
                  ∷ attr "stroke-linecap" "round"
                  ∷ attr "stroke-dasharray" (showFloat arcLen ++ " " ++ showFloat circumference)
-                 ∷ attr "transform" ("rotate(135 " ++ showFloat cx ++ " " ++ showFloat cy ++ ")")
+                 ∷ attr "transform" ("rotate(" ++ showFloat (0.0 - gaugeStartAngle) ++ " " ++ showFloat cx ++ " " ++ showFloat cy ++ ")")
                  ∷ [] ) []
        -- Value arc
        ∷ circle' ( attrCx cx
@@ -150,7 +139,7 @@ svgGauge cx cy val sty =
                  ∷ strokeWidthF (arcWidth sty)
                  ∷ attr "stroke-linecap" "round"
                  ∷ attr "stroke-dasharray" (showFloat valueLen ++ " " ++ showFloat circumference)
-                 ∷ attr "transform" ("rotate(135 " ++ showFloat cx ++ " " ++ showFloat cy ++ ")")
+                 ∷ attr "transform" ("rotate(" ++ showFloat (0.0 - gaugeStartAngle) ++ " " ++ showFloat cx ++ " " ++ showFloat cy ++ ")")
                  ∷ [] ) []
        -- Needle
        ∷ elem "line" ( attr "x1" (showFloat cx)
@@ -164,13 +153,13 @@ svgGauge cx cy val sty =
        -- Center circle
        ∷ circle' ( attrCx cx
                  ∷ attrCy cy
-                 ∷ rF 6.0
+                 ∷ rF centerDotR
                  ∷ fill_ (centerColor sty)
                  ∷ [] ) []
        -- Value label
        ∷ (if showValue sty
           then svgText ( attrX cx
-                       ∷ attrY (cy + r * 0.4)
+                       ∷ attrY (cy + r * labelOffsetScale)
                        ∷ fill_ (labelColor sty)
                        ∷ attrFontSize (labelSize sty)
                        ∷ attrFontFamily "system-ui, sans-serif"

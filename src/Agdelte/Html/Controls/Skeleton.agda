@@ -12,51 +12,57 @@ open import Data.String using (String; _++_)
 open import Data.List using (List; []; _∷_)
 open import Data.Nat using (ℕ; zero; suc)
 open import Data.Bool using (Bool; true; false; if_then_else_; not)
+open import Data.Maybe using (Maybe; just; nothing)
 open import Function using (_∘_)
 
 open import Agdelte.Reactive.Node
 open import Agdelte.Html.Controls.Util using (eqStr)
 
 ------------------------------------------------------------------------
--- Basic skeleton
+-- Skeleton shape configuration
 ------------------------------------------------------------------------
 
--- | Rectangular skeleton with custom dimensions
-skeleton : ∀ {M A} → String → String → Node M A
-skeleton w h =
+data SkeletonShape : Set where
+  rect    : String → String → SkeletonShape   -- width, height
+  circle' : String → SkeletonShape             -- diameter
+  line    : SkeletonShape                      -- full-width text line
+  lineW   : String → SkeletonShape             -- text line with custom width
+
+-- | Core skeleton renderer from shape config
+skeletonShape : ∀ {M A} → SkeletonShape → Node M A
+skeletonShape (rect w h) =
   div ( class "agdelte-skeleton"
       ∷ attr "aria-hidden" "true"
-      ∷ style "width" w
-      ∷ style "height" h
-      ∷ [] ) []
-
-------------------------------------------------------------------------
--- Common skeleton shapes
-------------------------------------------------------------------------
-
--- | Circle skeleton (avatar placeholder)
-skeletonCircle : ∀ {M A} → String → Node M A
-skeletonCircle size =
+      ∷ style "width" w ∷ style "height" h ∷ [] ) []
+skeletonShape (circle' size) =
   div ( class "agdelte-skeleton agdelte-skeleton--circle"
       ∷ attr "aria-hidden" "true"
-      ∷ style "width" size
-      ∷ style "height" size
-      ∷ [] ) []
-
--- | Text line skeleton (single line)
-skeletonLine : ∀ {M A} → Node M A
-skeletonLine = div (class "agdelte-skeleton agdelte-skeleton--text" ∷ attr "aria-hidden" "true" ∷ []) []
-
--- | Text line with custom width
-skeletonLineW : ∀ {M A} → String → Node M A
-skeletonLineW w =
+      ∷ style "width" size ∷ style "height" size ∷ [] ) []
+skeletonShape line =
+  div (class "agdelte-skeleton agdelte-skeleton--text" ∷ attr "aria-hidden" "true" ∷ []) []
+skeletonShape (lineW w) =
   div ( class "agdelte-skeleton agdelte-skeleton--text"
       ∷ attr "aria-hidden" "true"
-      ∷ style "width" w
-      ∷ [] ) []
+      ∷ style "width" w ∷ [] ) []
 
 ------------------------------------------------------------------------
--- Multi-line text skeleton
+-- Backward-compatible convenience functions
+------------------------------------------------------------------------
+
+skeleton : ∀ {M A} → String → String → Node M A
+skeleton w h = skeletonShape (rect w h)
+
+skeletonCircle : ∀ {M A} → String → Node M A
+skeletonCircle size = skeletonShape (circle' size)
+
+skeletonLine : ∀ {M A} → Node M A
+skeletonLine = skeletonShape line
+
+skeletonLineW : ∀ {M A} → String → Node M A
+skeletonLineW w = skeletonShape (lineW w)
+
+------------------------------------------------------------------------
+-- Composite skeleton patterns
 ------------------------------------------------------------------------
 
 -- | Multiple text line skeletons
@@ -67,7 +73,6 @@ skeletonText n =
     renderLines : ℕ → List (Node _ _)
     renderLines zero = []
     renderLines (suc zero) =
-      -- Last line shorter
       div ( class "agdelte-skeleton agdelte-skeleton--text"
           ∷ style "width" "60%"
           ∷ [] ) []
@@ -76,25 +81,15 @@ skeletonText n =
       div (class "agdelte-skeleton agdelte-skeleton--text" ∷ []) []
       ∷ renderLines m
 
-------------------------------------------------------------------------
--- Card skeleton
-------------------------------------------------------------------------
-
 -- | Card placeholder with image and text
 skeletonCard : ∀ {M A} → Node M A
 skeletonCard =
   div (class "agdelte-skeleton-card" ∷ attr "aria-hidden" "true" ∷ [])
-    ( -- Image placeholder
-      div ( class "agdelte-skeleton"
-          ∷ style "width" "100%"
-          ∷ style "height" "150px"
-          ∷ [] ) []
-    -- Title
+    ( skeletonShape (rect "100%" "150px")
     ∷ div ( class "agdelte-skeleton agdelte-skeleton--text"
           ∷ style "width" "70%"
           ∷ style "margin-top" "12px"
           ∷ [] ) []
-    -- Description lines
     ∷ div ( class "agdelte-skeleton agdelte-skeleton--text"
           ∷ style "margin-top" "8px"
           ∷ [] ) []
@@ -103,10 +98,6 @@ skeletonCard =
           ∷ style "margin-top" "4px"
           ∷ [] ) []
     ∷ [] )
-
-------------------------------------------------------------------------
--- Avatar with text skeleton
-------------------------------------------------------------------------
 
 -- | Avatar circle with text lines
 skeletonAvatarText : ∀ {M A} → Node M A
@@ -117,13 +108,11 @@ skeletonAvatarText =
       ∷ style "gap" "12px"
       ∷ style "align-items" "center"
       ∷ [] )
-    ( -- Avatar
-      div ( class "agdelte-skeleton agdelte-skeleton--circle"
+    ( div ( class "agdelte-skeleton agdelte-skeleton--circle"
           ∷ style "width" "40px"
           ∷ style "height" "40px"
           ∷ style "flex-shrink" "0"
           ∷ [] ) []
-    -- Text lines
     ∷ div (style "flex" "1" ∷ [])
         ( div ( class "agdelte-skeleton agdelte-skeleton--text"
               ∷ style "width" "60%"
@@ -134,10 +123,6 @@ skeletonAvatarText =
               ∷ [] ) []
         ∷ [] )
     ∷ [] )
-
-------------------------------------------------------------------------
--- Table skeleton
-------------------------------------------------------------------------
 
 -- | Table placeholder with rows and columns
 skeletonTable : ∀ {M A} → ℕ → ℕ → Node M A
@@ -161,10 +146,6 @@ skeletonTable rows cols =
           ∷ [] )
         (renderCells cols)
       ∷ renderRows n
-
-------------------------------------------------------------------------
--- List skeleton
-------------------------------------------------------------------------
 
 -- | List of avatar-text placeholders
 skeletonList : ∀ {M A} → ℕ → Node M A

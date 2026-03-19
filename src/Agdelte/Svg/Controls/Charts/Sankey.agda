@@ -7,8 +7,8 @@ module Agdelte.Svg.Controls.Charts.Sankey where
 
 open import Data.String using (String; _++_)
 open import Data.Float using (Float; _+_; _-_; _*_)
-open import Data.Float.Base using (_÷_; _≤ᵇ_; _<ᵇ_; fromℕ)
-open import Data.List using (List; []; _∷_; map; filter)
+open import Data.Float.Base using (_÷_; _≤ᵇ_; fromℕ) renaming (_<ᵇ_ to _<ᶠ_)
+open import Data.List using (List; []; _∷_; map; filter; length)
 open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.Nat using (ℕ; zero; suc)
 open import Data.Maybe using (Maybe; just; nothing)
@@ -18,6 +18,7 @@ open import Agdelte.Reactive.Node using (Node; Attr; elem; attr; text; on)
 open import Agdelte.Svg.Elements using (svg; g; rect'; path'; svgText)
 open import Agdelte.Svg.Attributes
 open import Agdelte.Css.Show using (showFloat)
+open import Function using (case_of_)
 
 ------------------------------------------------------------------------
 -- Data types
@@ -61,10 +62,6 @@ open PositionedNode public
 ------------------------------------------------------------------------
 
 private
-  listLen : ∀ {A : Set} → List A → ℕ
-  listLen [] = 0
-  listLen (_ ∷ xs) = suc (listLen xs)
-
   -- String equality check
   open import Data.String using (_≟_)
   open import Relation.Nullary using (yes; no)
@@ -95,7 +92,7 @@ private
   nodeValue nodeId links =
     let out' = sumOutgoing nodeId links
         in' = sumIncoming nodeId links
-    in if out' <ᵇ in' then in' else out'
+    in if out' <ᶠ in' then in' else out'
 
   -- Default colors
   defaultColors : List String
@@ -155,7 +152,7 @@ private
   computeColumns : List SankeyNode → List SankeyLink → ColumnMap
   computeColumns nodes links' =
     let cm0 = initColumnMap nodes
-    in iteratePropagate (listLen nodes) links' cm0
+    in iteratePropagate (length nodes) links' cm0
 
   -- Find the maximum column number
   maxColumn : ColumnMap → ℕ
@@ -187,7 +184,7 @@ private
         colSpan = if numCols ≡ᵇ 1 then 0.0 else (w - nodeWidth) ÷ fromℕ (numCols ∸ 1)
     in layoutAllColumns 0 numCols px py w h nodeWidth colSpan nodes links cm 0
     where
-      open import Data.Nat using (_≡ᵇ_; _∸_; _<ᵇ_) renaming (_+_ to _+ℕ_)
+      open import Data.Nat using (_≡ᵇ_; _∸_) renaming (_+_ to _+ℕ_)
       open import Data.List renaming (_++_ to _++ᴸ_)
 
       sumNodeValues : List SankeyNode → List SankeyLink → Float
@@ -207,22 +204,17 @@ private
               (just c) → c
         in mkPosNode (snId n) (snLabel n) color colX nodeY nw nodeH
            ∷ positionColumn colX colY colH nw total ns ls (yOffset + nodeH + 10.0) (suc colorIdx)
-        where
-          case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
-          case x of f = f x
 
       layoutAllColumns : ℕ → ℕ → Float → Float → Float → Float → Float → Float
                        → List SankeyNode → List SankeyLink → ColumnMap → ℕ
                        → List PositionedNode
-      layoutAllColumns col numCols px' py' w' h' nw colW nodes' links' cm colorIdx =
-        if numCols ≡ᵇ 0 then []
-        else if col <ᵇ numCols
-        then let colNodes = filterByColumn col nodes' cm
-                 colTotal = sumNodeValues colNodes links'
-                 colX = px' + fromℕ col * colW
-                 positioned = positionColumn colX py' h' nw colTotal colNodes links' 0.0 colorIdx
-             in positioned ++ᴸ layoutAllColumns (suc col) numCols px' py' w' h' nw colW nodes' links' cm (colorIdx +ℕ listLen colNodes)
-        else []
+      layoutAllColumns _ zero _ _ _ _ _ _ _ _ _ _ = []
+      layoutAllColumns col (suc remaining) px' py' w' h' nw colW nodes' links' cm colorIdx =
+        let colNodes = filterByColumn col nodes' cm
+            colTotal = sumNodeValues colNodes links'
+            colX = px' + fromℕ col * colW
+            positioned = positionColumn colX py' h' nw colTotal colNodes links' 0.0 colorIdx
+        in positioned ++ᴸ layoutAllColumns (suc col) remaining px' py' w' h' nw colW nodes' links' cm (colorIdx +ℕ length colNodes)
 
 ------------------------------------------------------------------------
 -- Link rendering (curved paths)
@@ -255,8 +247,6 @@ private
                  ∷ [] ) []
       _ → g [] []
     where
-      case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
-      case x of f = f x
 
       buildFlowPath : Float → Float → Float → Float → Float → Float → Float → String
       buildFlowPath sx sy tx ty lh cx1 cx2 =
@@ -275,7 +265,7 @@ private
            ++ " Z"
 
   renderLinks : ∀ {M A} → List PositionedNode → List SankeyLink → List (Node M A)
-  renderLinks nodes allLinks = go nodes allLinks allLinks []
+  renderLinks {M} {A} nodes allLinks = go nodes allLinks allLinks []
     where
       go : List PositionedNode → List SankeyLink → List SankeyLink → List SankeyLink → List (Node M A)
       go _ _ [] _ = []
@@ -293,16 +283,13 @@ private
           sumPrevOffset _ [] _ _ = 0.0
           sumPrevOffset sid (p ∷ ps) posNodes all' =
             (if slSource p ≡ˢ sid
-             then let tot = sumOutgoing sid all'
-                  in case findNode sid posNodes of λ where
-                       (just src) → if tot ≤ᵇ 0.0 then 2.0
-                                    else (slValue p ÷ tot) * pnHeight src
-                       nothing → 0.0
+             then (let tot = sumOutgoing sid all'
+                   in case findNode sid posNodes of λ where
+                        (just src) → (if tot ≤ᵇ 0.0 then 2.0
+                                      else (slValue p ÷ tot) * pnHeight src)
+                        nothing → 0.0)
              else 0.0)
             + sumPrevOffset sid ps posNodes all'
-            where
-              case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
-              case x of f = f x
 
 ------------------------------------------------------------------------
 -- Node rendering
@@ -374,13 +361,6 @@ simpleSankey {M} {A} px py w h flows =
         hasId : String → List SankeyNode → Bool
         hasId _ [] = false
         hasId id' (n ∷ ns) = if snId n ≡ˢ id' then true else hasId id' ns
-          where
-            open import Data.String using (_≟_)
-            open import Relation.Nullary using (yes; no)
-            _≡ˢ_ : String → String → Bool
-            s ≡ˢ t with s ≟ t
-            ... | yes _ = true
-            ... | no _ = false
 
         dedup : List SankeyNode → List SankeyNode
         dedup [] = []

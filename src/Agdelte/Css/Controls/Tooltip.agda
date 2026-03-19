@@ -7,7 +7,7 @@ module Agdelte.Css.Controls.Tooltip where
 
 open import Data.List using (List; []; _∷_)
 
-open import Agdelte.Css.Decl using (Style; _∶_)
+open import Agdelte.Css.Decl using (Style; _∶_; borderRadius)
 open import Agdelte.Css.Stylesheet using (Rule; rule; Stylesheet)
 
 ------------------------------------------------------------------------
@@ -29,7 +29,7 @@ tooltipRules =
       ∷ "padding" ∶ "var(--agdelte-spacing-xs) var(--agdelte-spacing-sm)"
       ∷ "background" ∶ "var(--agdelte-tooltip-bg)"
       ∷ "color" ∶ "var(--agdelte-tooltip-text)"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
+      ∷ borderRadius
       ∷ "font-size" ∶ "0.875rem"
       ∷ "white-space" ∶ "nowrap"
       ∷ "opacity" ∶ "0"

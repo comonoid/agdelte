@@ -8,7 +8,7 @@ module Agdelte.Svg.Controls.Charts.OrgChart where
 open import Data.String using (String; _++_)
 open import Data.Float using (Float; _+_; _-_; _*_)
 open import Data.Float.Base using (_÷_; _≤ᵇ_; _<ᵇ_; fromℕ)
-open import Data.List using (List; []; _∷_)
+open import Data.List using (List; []; _∷_; length)
 open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.Nat using (ℕ; zero; suc)
 open import Data.Maybe using (Maybe; just; nothing)
@@ -18,6 +18,7 @@ open import Agdelte.Reactive.Node using (Node; Attr; elem; attr; text; on)
 open import Agdelte.Svg.Elements using (svg; g; rect'; path'; circle'; svgText; line')
 open import Agdelte.Svg.Attributes
 open import Agdelte.Css.Show using (showFloat)
+open import Function using (case_of_)
 
 ------------------------------------------------------------------------
 -- Data types
@@ -57,14 +58,10 @@ defaultOrgConfig = mkOrgConfig 120.0 60.0 30.0 50.0 true true
 ------------------------------------------------------------------------
 
 private
-  listLen : ∀ {A : Set} → List A → ℕ
-  listLen [] = 0
-  listLen (_ ∷ xs) = suc (listLen xs)
-
   -- Calculate subtree width
   subtreeWidth : ∀ {A} → OrgConfig → OrgNode A → Float
   subtreeWidth cfg node =
-    let childCount = listLen (orgChildren node)
+    let childCount = length (orgChildren node)
     in if childCount ≡ᵇ 0
        then ocNodeWidth cfg
        else sumChildWidths cfg (orgChildren node) + fromℕ (childCount ∸ 1) * ocHGap cfg
@@ -166,8 +163,6 @@ private
                       ( text sub ∷ [] ))
              ∷ [] )
     where
-      case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
-      case x of f = f x
 
 ------------------------------------------------------------------------
 -- Connection Lines
@@ -202,7 +197,7 @@ private
         nodeX = cx - w ÷ 2.0
         childY = cy + h + ocVGap cfg
         children = orgChildren node
-        childCount = listLen children
+        childCount = length children
         totalChildWidth = getTotalChildWidth cfg children
         startX = cx - totalChildWidth ÷ 2.0
     in renderOrgNode cfg nodeX cy node

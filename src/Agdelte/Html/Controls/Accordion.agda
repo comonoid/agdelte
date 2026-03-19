@@ -40,15 +40,63 @@ record AccordionItem (M : Set) (A : Set) : Set where
 open AccordionItem public
 
 ------------------------------------------------------------------------
+-- Collapsible configuration
+------------------------------------------------------------------------
+
+record CollapsibleConfig (M A : Set) : Set where
+  constructor mkCollapsible
+  field
+    panelId   : String       -- unique ID prefix
+    title     : String       -- section header
+    isOpen    : M → Bool     -- extract open state from model
+    toggleMsg : A            -- message to toggle open state
+    content   : Node M A     -- section content
+
+open CollapsibleConfig public
+
+------------------------------------------------------------------------
 -- Single collapsible section
 ------------------------------------------------------------------------
 
--- | Single collapsible section.
--- | panelId: unique ID prefix (generates <panelId>-header and <panelId>-panel)
--- | title: section header
--- | isOpen: extract open state from model
--- | toggleMsg: message to toggle open state
--- | content: section content
+collapsibleWith : ∀ {M A} → CollapsibleConfig M A → Node M A
+collapsibleWith = collapsible'
+  where
+    collapsible' : _
+    collapsible' cfg =
+      let open CollapsibleConfig cfg renaming (panelId to pid; title to t; isOpen to io; toggleMsg to tm; content to c)
+          headerId  = pid ++ "-header"
+          contentId = pid ++ "-panel"
+      in
+      div ( class "agdelte-accordion__item" ∷ [] )
+        ( button ( class "agdelte-accordion__header"
+                 ∷ id' headerId
+                 ∷ attr "aria-controls" contentId
+                 ∷ attrBind "aria-expanded" (mkBinding
+                     (λ m → if io m then "true" else "false")
+                     eqStr)
+                 ∷ onClick tm
+                 ∷ [] )
+            ( span ( class "agdelte-accordion__title" ∷ [] )
+                ( text t ∷ [] )
+            ∷ span ( attrBind "class" (mkBinding
+                       (λ m → if io m
+                              then "agdelte-accordion__icon agdelte-accordion__icon--open"
+                              else "agdelte-accordion__icon")
+                       eqStr)
+                   ∷ attr "aria-hidden" "true"
+                   ∷ [] )
+                ( text "▼" ∷ [] )
+            ∷ [] )
+        ∷ whenT io accordionTransition
+            (div ( class "agdelte-accordion__content"
+                 ∷ id' contentId
+                 ∷ attr "role" "region"
+                 ∷ attr "aria-labelledby" headerId
+                 ∷ [] )
+              ( c ∷ [] ))
+        ∷ [] )
+
+-- | Backward-compatible positional-args version
 collapsible : ∀ {M A}
             → String         -- panel ID prefix
             → String         -- title

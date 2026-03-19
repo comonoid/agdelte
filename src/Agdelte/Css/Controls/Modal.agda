@@ -7,7 +7,7 @@ module Agdelte.Css.Controls.Modal where
 
 open import Data.List using (List; []; _∷_)
 
-open import Agdelte.Css.Decl using (Style; _∶_)
+open import Agdelte.Css.Decl using (Style; _∶_; borderRadius; focusOutline; transitionAll; cursorPointer)
 open import Agdelte.Css.Stylesheet using (Rule; rule; Stylesheet)
 
 ------------------------------------------------------------------------
@@ -39,7 +39,7 @@ modalRules =
   ∷ rule ".agdelte-modal__content"
       ( "position" ∶ "relative"
       ∷ "background" ∶ "var(--agdelte-bg)"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
+      ∷ borderRadius
       ∷ "box-shadow" ∶ "var(--agdelte-shadow-lg)"
       ∷ "max-width" ∶ "90vw"
       ∷ "max-height" ∶ "90vh"
@@ -67,10 +67,10 @@ modalRules =
   ∷ rule ".agdelte-modal__btn"
       ( "padding" ∶ "var(--agdelte-spacing-sm) var(--agdelte-spacing-md)"
       ∷ "border" ∶ "1px solid var(--agdelte-border)"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
-      ∷ "cursor" ∶ "pointer"
+      ∷ borderRadius
+      ∷ cursorPointer
       ∷ "font-size" ∶ "inherit"
-      ∷ "transition" ∶ "all var(--agdelte-transition)"
+      ∷ transitionAll
       ∷ [])
   ∷ rule ".agdelte-modal__btn--cancel"
       ( "background" ∶ "var(--agdelte-bg)"
@@ -89,9 +89,7 @@ modalRules =
       ∷ "border-color" ∶ "var(--agdelte-primary-hover)"
       ∷ [])
   ∷ rule ".agdelte-modal__btn:focus-visible"
-      ( "outline" ∶ "2px solid var(--agdelte-primary)"
-      ∷ "outline-offset" ∶ "2px"
-      ∷ [])
+      focusOutline
   -- Nested modals: use absolute positioning so the backdrop covers
   -- only the parent modal, not the entire viewport.  CSS stacking
   -- context handles z-order naturally since the inner modal DOM

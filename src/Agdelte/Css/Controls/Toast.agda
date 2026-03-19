@@ -7,7 +7,7 @@ module Agdelte.Css.Controls.Toast where
 
 open import Data.List using (List; []; _∷_)
 
-open import Agdelte.Css.Decl using (Style; _∶_)
+open import Agdelte.Css.Decl using (Style; _∶_; borderRadius; focusOutline; cursorPointer)
 open import Agdelte.Css.Stylesheet using (Rule; rule; Stylesheet)
 
 ------------------------------------------------------------------------
@@ -31,7 +31,7 @@ toastRules =
       ∷ "align-items" ∶ "center"
       ∷ "gap" ∶ "var(--agdelte-spacing-sm)"
       ∷ "padding" ∶ "var(--agdelte-spacing-sm) var(--agdelte-spacing-md)"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
+      ∷ borderRadius
       ∷ "box-shadow" ∶ "var(--agdelte-shadow)"
       ∷ "color" ∶ "var(--agdelte-text-light)"
       ∷ "pointer-events" ∶ "auto"
@@ -57,7 +57,7 @@ toastRules =
       ( "background" ∶ "transparent"
       ∷ "border" ∶ "none"
       ∷ "color" ∶ "inherit"
-      ∷ "cursor" ∶ "pointer"
+      ∷ cursorPointer
       ∷ "font-size" ∶ "1.25rem"
       ∷ "line-height" ∶ "1"
       ∷ "opacity" ∶ "0.7"
@@ -68,7 +68,5 @@ toastRules =
       ( "opacity" ∶ "1"
       ∷ [])
   ∷ rule ".agdelte-toast__close:focus-visible"
-      ( "outline" ∶ "2px solid var(--agdelte-primary)"
-      ∷ "outline-offset" ∶ "2px"
-      ∷ [])
+      focusOutline
   ∷ []

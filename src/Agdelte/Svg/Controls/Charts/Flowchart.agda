@@ -18,6 +18,7 @@ open import Agdelte.Reactive.Node using (Node; Attr; elem; attr; text; on)
 open import Agdelte.Svg.Elements using (svg; g; rect'; path'; circle'; svgText; line'; polygon')
 open import Agdelte.Svg.Attributes
 open import Agdelte.Css.Show using (showFloat)
+open import Function using (case_of_)
 
 ------------------------------------------------------------------------
 -- Data types
@@ -97,8 +98,6 @@ private
 ------------------------------------------------------------------------
 
 private
-  case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
-  case x of f = f x
 
   renderShape : ∀ {M A} → FlowNode A → Node M A
   renderShape n = case fnShape n of λ where
@@ -313,32 +312,28 @@ private
       buildPath : Float → Float → Float → Float → String → String
       buildPath sx sy tx ty dir =
         if dir ≡ˢ "down"
-        then -- Down: vertical from source, horizontal to align, vertical to target
-          let midY = (sy + ty) ÷ 2.0
-          in "M " ++ showFloat sx ++ " " ++ showFloat sy
-             ++ " L " ++ showFloat sx ++ " " ++ showFloat midY
-             ++ " L " ++ showFloat tx ++ " " ++ showFloat midY
-             ++ " L " ++ showFloat tx ++ " " ++ showFloat ty
-        else if dir ≡ˢ "up"
-        then -- Up: mirror of down
-          let midY = (sy + ty) ÷ 2.0
-          in "M " ++ showFloat sx ++ " " ++ showFloat sy
-             ++ " L " ++ showFloat sx ++ " " ++ showFloat midY
-             ++ " L " ++ showFloat tx ++ " " ++ showFloat midY
-             ++ " L " ++ showFloat tx ++ " " ++ showFloat ty
-        else if dir ≡ˢ "right"
-        then -- Right: horizontal from source, vertical to align, horizontal to target
-          let midX = (sx + tx) ÷ 2.0
-          in "M " ++ showFloat sx ++ " " ++ showFloat sy
-             ++ " L " ++ showFloat midX ++ " " ++ showFloat sy
-             ++ " L " ++ showFloat midX ++ " " ++ showFloat ty
-             ++ " L " ++ showFloat tx ++ " " ++ showFloat ty
-        else -- left: mirror of right
-          let midX = (sx + tx) ÷ 2.0
-          in "M " ++ showFloat sx ++ " " ++ showFloat sy
-             ++ " L " ++ showFloat midX ++ " " ++ showFloat sy
-             ++ " L " ++ showFloat midX ++ " " ++ showFloat ty
-             ++ " L " ++ showFloat tx ++ " " ++ showFloat ty
+        then (let midY = (sy + ty) ÷ 2.0
+              in "M " ++ showFloat sx ++ " " ++ showFloat sy
+                 ++ " L " ++ showFloat sx ++ " " ++ showFloat midY
+                 ++ " L " ++ showFloat tx ++ " " ++ showFloat midY
+                 ++ " L " ++ showFloat tx ++ " " ++ showFloat ty)
+        else (if dir ≡ˢ "up"
+        then (let midY = (sy + ty) ÷ 2.0
+              in "M " ++ showFloat sx ++ " " ++ showFloat sy
+                 ++ " L " ++ showFloat sx ++ " " ++ showFloat midY
+                 ++ " L " ++ showFloat tx ++ " " ++ showFloat midY
+                 ++ " L " ++ showFloat tx ++ " " ++ showFloat ty)
+        else (if dir ≡ˢ "right"
+        then (let midX = (sx + tx) ÷ 2.0
+              in "M " ++ showFloat sx ++ " " ++ showFloat sy
+                 ++ " L " ++ showFloat midX ++ " " ++ showFloat sy
+                 ++ " L " ++ showFloat midX ++ " " ++ showFloat ty
+                 ++ " L " ++ showFloat tx ++ " " ++ showFloat ty)
+        else (let midX = (sx + tx) ÷ 2.0
+              in "M " ++ showFloat sx ++ " " ++ showFloat sy
+                 ++ " L " ++ showFloat midX ++ " " ++ showFloat sy
+                 ++ " L " ++ showFloat midX ++ " " ++ showFloat ty
+                 ++ " L " ++ showFloat tx ++ " " ++ showFloat ty)))
         where
           open import Data.String using (_≟_)
           open import Relation.Nullary using (yes; no)

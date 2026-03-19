@@ -7,7 +7,7 @@ module Agdelte.Svg.Controls.Charts.Line where
 
 open import Data.String using (String; _++_)
 open import Data.Float using (Float; _+_; _-_; _*_)
-open import Data.Float.Base using (_÷_; _≤ᵇ_; _<ᵇ_; fromℕ)
+open import Data.Float.Base using (_÷_; _≤ᵇ_; fromℕ)
 open import Data.List using (List; []; _∷_; length)
 open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.Nat using (ℕ; zero; suc)
@@ -19,18 +19,13 @@ open import Agdelte.Reactive.Node using (Node; Attr; elem; attr; text;
 open import Agdelte.Svg.Elements using (svg; g; rect'; path'; circle'; svgText)
 open import Agdelte.Svg.Attributes
 open import Agdelte.Css.Show using (showFloat)
+open import Agdelte.Svg.Math using (findMin; findMax; zeroMin; zeroMax)
+open import Agdelte.Svg.Controls.Charts.Helpers
+  using (DataPoint; mkDataPoint; dpX; dpY; extractX; extractY; scaleX; scaleY)
 
 ------------------------------------------------------------------------
 -- Data types
 ------------------------------------------------------------------------
-
-record DataPoint : Set where
-  constructor mkDataPoint
-  field
-    dpX : Float
-    dpY : Float
-
-open DataPoint public
 
 record LineStyle : Set where
   constructor mkLineStyle
@@ -50,37 +45,7 @@ defaultLineStyle = mkLineStyle "#3b82f6" 2.0 "none" true 3.0
 -- Helpers
 ------------------------------------------------------------------------
 
-private
-  findMin : List Float → Float → Float
-  findMin [] acc = acc
-  findMin (v ∷ vs) acc = findMin vs (if v <ᵇ acc then v else acc)
 
-  findMax : List Float → Float → Float
-  findMax [] acc = acc
-  findMax (v ∷ vs) acc = findMax vs (if acc <ᵇ v then v else acc)
-
-  extractX extractY : List DataPoint → List Float
-  extractX [] = []
-  extractX (p ∷ ps) = dpX p ∷ extractX ps
-  extractY [] = []
-  extractY (p ∷ ps) = dpY p ∷ extractY ps
-
-  scaleX : Float → Float → Float → Float → Float → Float
-  scaleX minX maxX w px vx =
-    let range = if (maxX - minX) ≤ᵇ 0.0 then 1.0 else maxX - minX
-    in px + ((vx - minX) ÷ range) * w
-
-  scaleY : Float → Float → Float → Float → Float → Float
-  scaleY minY maxY h py vy =
-    let range = if (maxY - minY) ≤ᵇ 0.0 then 1.0 else maxY - minY
-    in py + h - ((vy - minY) ÷ range) * h
-
-  -- Zero-anchoring: ensure range always includes zero
-  zeroMin : Float → Float
-  zeroMin v = if v <ᵇ 0.0 then v else 0.0
-
-  zeroMax : Float → Float
-  zeroMax v = if 0.0 <ᵇ v then v else 0.0
 
 ------------------------------------------------------------------------
 -- Path building

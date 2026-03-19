@@ -60,3 +60,26 @@ singleton d = d ∷ []
 -- Empty style
 none : Style
 none = []
+
+-- Standard :focus-visible outline styles
+focusOutline : Style
+focusOutline =
+    "outline" ∶ "2px solid var(--agdelte-primary)"
+  ∷ "outline-offset" ∶ "2px"
+  ∷ []
+
+------------------------------------------------------------------------
+-- Common single-declaration helpers
+------------------------------------------------------------------------
+
+borderRadius : Decl
+borderRadius = "border-radius" ∶ "var(--agdelte-border-radius)"
+
+cursorPointer : Decl
+cursorPointer = "cursor" ∶ "pointer"
+
+transitionAll : Decl
+transitionAll = "transition" ∶ "all var(--agdelte-transition)"
+
+transitionBg : Decl
+transitionBg = "transition" ∶ "background var(--agdelte-transition)"

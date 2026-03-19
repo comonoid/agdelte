@@ -12,6 +12,7 @@ open import Data.List using (List; []; _∷_; length)
 open import Data.Product using (_×_; _,_)
 
 open import Agdelte.WebGL.Types
+open import Function using (case_of_)
 
 ------------------------------------------------------------------------
 -- Plane specification
@@ -71,8 +72,6 @@ gridAuto {M} {Msg} cols spacing pl children =
     cols' : ℕ
     cols' = suc (case cols of λ { zero → zero ; (suc n) → n })
       where
-        case_of_ : ∀ {A B : Set} → A → (A → B) → B
-        case x of f = f x
 
     go : ℕ → List (SceneNode M Msg) → List (SceneNode M Msg)
     go _ [] = []
@@ -100,8 +99,6 @@ grid {M} {Msg} (cols , rows) (spX , spY) pl children =
     cols' : ℕ
     cols' = suc (case cols of λ { zero → zero ; (suc n) → n })
       where
-        case_of_ : ∀ {A B : Set} → A → (A → B) → B
-        case x of f = f x
 
     go : ℕ → List (SceneNode M Msg) → List (SceneNode M Msg)
     go _ [] = []

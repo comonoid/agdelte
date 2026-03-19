@@ -7,7 +7,7 @@ module Agdelte.Svg.Controls.Progress where
 
 open import Data.String using (String; _++_)
 open import Data.Float using (Float; _+_; _-_; _*_)
-open import Data.Float.Base using (_÷_; _≤ᵇ_)
+open import Data.Float.Base using (_÷_; fromℕ)
 open import Data.List using (List; []; _∷_)
 open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.Nat using (ℕ; zero; suc; _<ᵇ_)
@@ -19,6 +19,7 @@ open import Agdelte.Svg.Attributes
   renaming (xF to attrX; yF to attrY; cxF to attrCx; cyF to attrCy;
             fontSize_ to attrFontSize; fontFamily_ to attrFontFamily)
 open import Agdelte.Css.Show using (showFloat)
+open import Agdelte.Svg.Math using (π; clamp01)
 
 ------------------------------------------------------------------------
 -- Progress Style
@@ -97,18 +98,11 @@ errorProgressStyle = mkProgressStyle
 ------------------------------------------------------------------------
 
 private
-  clamp01 : Float → Float
-  clamp01 v = if v ≤ᵇ 0.0 then 0.0 else if 1.0 ≤ᵇ v then 1.0 else v
-
   -- Format percentage (0-100)
   formatPercent : Float → String
   formatPercent ratio =
     let pct = ratio * 100.0
     in showFloat pct ++ "%"
-
-  -- π constant
-  π : Float
-  π = 3.14159265359
 
 ------------------------------------------------------------------------
 -- Linear Progress Bar

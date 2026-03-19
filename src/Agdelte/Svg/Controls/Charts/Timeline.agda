@@ -18,6 +18,7 @@ open import Agdelte.Reactive.Node using (Node; Attr; elem; attr; text; on)
 open import Agdelte.Svg.Elements using (svg; g; rect'; circle'; line'; svgText)
 open import Agdelte.Svg.Attributes
 open import Agdelte.Css.Show using (showFloat)
+open import Function using (case_of_)
 
 ------------------------------------------------------------------------
 -- Data types
@@ -118,8 +119,6 @@ horizontalTimeline {M} {A} px py w h events =
              ( text (evLabel e) ∷ [] )
          ∷ []
       where
-        case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
-        case x of f = f x
 
     -- Check if current event is too close to the previous one
     -- and stagger labels: even-indexed labels go above, odd go below

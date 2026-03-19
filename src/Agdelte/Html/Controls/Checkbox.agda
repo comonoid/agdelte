@@ -11,7 +11,7 @@ open import Data.List using (List; []; _∷_; map; any)
 open import Data.Nat using (ℕ)
 open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.Maybe using (Maybe; just; nothing)
-open import Function using (_∘_)
+open import Function using (_∘_; case_of_)
 
 open import Agdelte.Reactive.Node
 open import Agdelte.Html.Controls.Util using (eqStr)
@@ -93,8 +93,6 @@ checkboxIndeterminate lbl getState toggleMsg =
     ∷ [] )
   where
     open import Data.Maybe using (Maybe; just; nothing)
-    case_of_ : ∀ {a b} {A : Set a} {B : Set b} → A → (A → B) → B
-    case x of f = f x
 
 ------------------------------------------------------------------------
 -- Checkbox group (multiple selection)

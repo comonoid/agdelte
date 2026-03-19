@@ -8,7 +8,7 @@ module Agdelte.Css.Controls.Progress where
 open import Data.List using (List; []; _∷_)
 open import Data.Product using (_×_; _,_)
 
-open import Agdelte.Css.Decl using (Style; _∶_)
+open import Agdelte.Css.Decl using (Style; _∶_; borderRadius)
 open import Agdelte.Css.Stylesheet using (Rule; rule; keyframe; Stylesheet)
 
 ------------------------------------------------------------------------
@@ -22,13 +22,13 @@ progressRules =
       ( "width" ∶ "100%"
       ∷ "height" ∶ "8px"
       ∷ "background" ∶ "var(--agdelte-bg-active)"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
+      ∷ borderRadius
       ∷ "overflow" ∶ "hidden"
       ∷ [])
   ∷ rule ".agdelte-progress__bar"
       ( "height" ∶ "100%"
       ∷ "background" ∶ "var(--agdelte-primary)"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
+      ∷ borderRadius
       ∷ "transition" ∶ "width var(--agdelte-transition)"
       ∷ [])
   ∷ rule ".agdelte-progress--indeterminate .agdelte-progress__bar"
@@ -103,7 +103,7 @@ progressRules =
       ( "background" ∶ "linear-gradient(90deg, var(--agdelte-bg-active) 25%, var(--agdelte-bg-hover) 50%, var(--agdelte-bg-active) 75%)"
       ∷ "background-size" ∶ "200% 100%"
       ∷ "animation" ∶ "agdelte-skeleton-shimmer 1.5s infinite"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
+      ∷ borderRadius
       ∷ [])
   ∷ rule ".agdelte-skeleton--text"
       ( "height" ∶ "1em"

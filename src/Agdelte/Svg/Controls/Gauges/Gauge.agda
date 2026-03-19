@@ -18,38 +18,8 @@ open import Agdelte.Reactive.Node using (Node; Attr; elem; attr; text)
 open import Agdelte.Svg.Elements using (svg; g; path'; circle'; svgText; line')
 open import Agdelte.Svg.Attributes
 open import Agdelte.Css.Show using (showFloat)
-
-------------------------------------------------------------------------
--- Constants
-------------------------------------------------------------------------
-
-private
-  pi : Float
-  pi = 3.14159265359
-
-  -- Normalize angle to [-π, π] by repeated subtraction/addition of 2π
-  normalize : Float → Float
-  normalize x = go x 20
-    where
-      twoPi : Float
-      twoPi = 2.0 * pi
-      go : Float → ℕ → Float
-      go y zero = y
-      go y (suc n) = if pi ≤ᵇ y       then go (y - twoPi) n
-                     else if y ≤ᵇ (0.0 - pi) then go (y + twoPi) n
-                     else y
-
-  sin : Float → Float
-  sin x' = let x = normalize x'
-           in x - (x * x * x ÷ 6.0)
-            + (x * x * x * x * x ÷ 120.0)
-            - (x * x * x * x * x * x * x ÷ 5040.0)
-
-  cos : Float → Float
-  cos x' = let x = normalize x'
-           in 1.0 - (x * x ÷ 2.0)
-            + (x * x * x * x ÷ 24.0)
-            - (x * x * x * x * x * x ÷ 720.0)
+open import Agdelte.Svg.Math using (sin; cos; π)
+open import Function using (case_of_)
 
 ------------------------------------------------------------------------
 -- Data types
@@ -126,7 +96,7 @@ private
         (x2 , y2) = polarToCart cx cy r endA
         diff = endA - startA
         absDiff = absFloat diff
-        largeArc = if absDiff ≤ᵇ pi then "0" else "1"
+        largeArc = if absDiff ≤ᵇ π then "0" else "1"
         -- sweep=1 (CW) when going forward in angle, sweep=0 (CCW) when backward
         sweep = if 0.0 ≤ᵇ diff then "1" else "0"
     in "M " ++ showFloat x1 ++ " " ++ showFloat y1
@@ -146,7 +116,7 @@ semicircleGauge : ∀ {M A}
                 → Float                   -- current value
                 → Node M A
 semicircleGauge {M} {A} cx cy radius config value =
-  let startAngle = pi            -- left (180 degrees)
+  let startAngle = π            -- left (180 degrees)
       endAngle = 0.0             -- right (0 degrees)
       minV = gcMin config
       maxV = gcMax config
@@ -201,8 +171,6 @@ semicircleGauge {M} {A} cx cy radius config value =
                 ( text lbl ∷ [] ))
        ∷ [] )
   where
-    case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
-    case x of f = f x
 
     renderNeedle : Float → Float → Float → Float → String → Node M A
     renderNeedle ncx ncy length angle color =
@@ -243,8 +211,8 @@ fullGauge : ∀ {M A}
           → Float
           → Node M A
 fullGauge {M} {A} cx cy radius config value =
-  let startAngle = pi * 0.75     -- 135 degrees (bottom-left)
-      endAngle = pi * 2.25       -- 405 degrees (bottom-right)
+  let startAngle = π * 0.75     -- 135 degrees (bottom-left)
+      endAngle = π * 2.25       -- 405 degrees (bottom-right)
       minV = gcMin config
       maxV = gcMax config
       clampedV = if value <ᵇ minV then minV
@@ -290,8 +258,6 @@ fullGauge {M} {A} cx cy radius config value =
                 ( text lbl ∷ [] ))
        ∷ [] )
   where
-    case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
-    case x of f = f x
 
 ------------------------------------------------------------------------
 -- Linear Gauge (horizontal/vertical bar)

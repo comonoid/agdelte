@@ -19,6 +19,7 @@ open import Agdelte.Svg.Attributes
 open import Agdelte.Css.Show using (showFloat)
 open import Agdelte.Svg.Events using (onSvgClick)
 open import Agdelte.Svg.Path using (Point; x; y)
+open import Agdelte.Svg.Math using (clamp)
 
 ------------------------------------------------------------------------
 -- Slider Orientation
@@ -101,12 +102,6 @@ open SliderConfig public
 ------------------------------------------------------------------------
 
 private
-  clamp : Float → Float → Float → Float
-  clamp lo hi v =
-    if v ≤ᵇ lo then lo
-    else if hi ≤ᵇ v then hi
-    else v
-
   -- Convert value to position (0-1 range)
   valueToRatio : Float → Float → Float → Float
   valueToRatio minV maxV val =
@@ -133,8 +128,7 @@ svgSliderH px py len minV maxV val sty onChange =
       thumbX = px + ratio * len
       hitH = if thumbR * 2.0 ≤ᵇ thick then thick else thumbR * 2.0
       hitY = py - hitH ÷ 2.0
-      computeVal : Point → Msg
-      computeVal pt = let clickRatio = clamp 0.0 1.0 ((x pt - px) ÷ len)
+      computeVal = λ (pt : Point) → let clickRatio = clamp 0.0 1.0 ((x pt - px) ÷ len)
                       in onChange (minV + clickRatio * (maxV - minV))
   in g ( attr "class" "svg-slider-h" ∷ [] )
        ( -- Track background
@@ -196,9 +190,8 @@ svgSliderV px py len minV maxV val sty onChange =
       thumbY = py + invRatio * len
       hitW = if thumbR * 2.0 ≤ᵇ thick then thick else thumbR * 2.0
       hitX = px - hitW ÷ 2.0
-      computeVal : Point → Msg
-      computeVal pt = let clickRatio = clamp 0.0 1.0 (1.0 - (y pt - py) ÷ len)
-                      in onChange (minV + clickRatio * (maxV - minV))
+      computeVal = λ (pt : Point) → let clickRatio = clamp 0.0 1.0 (1.0 - (y pt - py) ÷ len)
+                                    in onChange (minV + clickRatio * (maxV - minV))
   in g ( attr "class" "svg-slider-v" ∷ [] )
        ( -- Track background
          rect' ( attrX trackX

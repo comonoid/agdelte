@@ -7,7 +7,7 @@ module Agdelte.Css.Controls.Accordion where
 
 open import Data.List using (List; []; _∷_)
 
-open import Agdelte.Css.Decl using (Style; _∶_)
+open import Agdelte.Css.Decl using (Style; _∶_; borderRadius; focusOutline; transitionBg; cursorPointer)
 open import Agdelte.Css.Stylesheet using (Rule; rule; Stylesheet)
 
 ------------------------------------------------------------------------
@@ -20,7 +20,7 @@ accordionRules =
       ( "display" ∶ "flex"
       ∷ "flex-direction" ∶ "column"
       ∷ "border" ∶ "1px solid var(--agdelte-border)"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
+      ∷ borderRadius
       ∷ "overflow" ∶ "hidden"
       ∷ [])
   ∷ rule ".agdelte-accordion__item"
@@ -37,19 +37,17 @@ accordionRules =
       ∷ "padding" ∶ "var(--agdelte-spacing-md)"
       ∷ "background" ∶ "var(--agdelte-bg)"
       ∷ "border" ∶ "none"
-      ∷ "cursor" ∶ "pointer"
+      ∷ cursorPointer
       ∷ "font-size" ∶ "inherit"
       ∷ "color" ∶ "var(--agdelte-text)"
       ∷ "text-align" ∶ "left"
-      ∷ "transition" ∶ "background var(--agdelte-transition)"
+      ∷ transitionBg
       ∷ [])
   ∷ rule ".agdelte-accordion__header:hover"
       ( "background" ∶ "var(--agdelte-bg-hover)"
       ∷ [])
   ∷ rule ".agdelte-accordion__header:focus-visible"
-      ( "outline" ∶ "2px solid var(--agdelte-primary)"
-      ∷ "outline-offset" ∶ "2px"
-      ∷ [])
+      focusOutline
   ∷ rule ".agdelte-accordion__title"
       ( "font-weight" ∶ "500"
       ∷ [])

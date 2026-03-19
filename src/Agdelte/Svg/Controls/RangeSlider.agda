@@ -19,6 +19,7 @@ open import Agdelte.Svg.Attributes
 open import Agdelte.Css.Show using (showFloat)
 open import Agdelte.Svg.Events using (onSvgClick)
 open import Agdelte.Svg.Path using (Point; x; y)
+open import Agdelte.Svg.Math using (clamp)
 
 ------------------------------------------------------------------------
 -- Range Slider Style (reusing concepts from Slider)
@@ -52,9 +53,6 @@ defaultRangeSliderStyle = mkRangeSliderStyle
 ------------------------------------------------------------------------
 
 private
-  clamp : Float → Float → Float → Float
-  clamp lo hi v = if v ≤ᵇ lo then lo else if hi ≤ᵇ v then hi else v
-
   valueToRatio : Float → Float → Float → Float
   valueToRatio minV maxV val =
     let range = maxV - minV
@@ -83,13 +81,10 @@ svgRangeSlider px py len minV maxV lowV highV sty onLow onHigh =
       fillX = lowX
       fillW = if lowX ≤ᵇ highX then highX - lowX else 0.0
       -- Compute value from click/drag position on the track
-      posToVal : Point → Float
-      posToVal pt = let clickRatio = clamp 0.0 1.0 ((x pt - px) ÷ len)
-                    in minV + clickRatio * (maxV - minV)
-      computeLow : Point → Msg
-      computeLow pt = onLow (posToVal pt)
-      computeHigh : Point → Msg
-      computeHigh pt = onHigh (posToVal pt)
+      posToVal = λ (pt : Point) → let clickRatio = clamp 0.0 1.0 ((x pt - px) ÷ len)
+                                   in minV + clickRatio * (maxV - minV)
+      computeLow = λ (pt : Point) → onLow (posToVal pt)
+      computeHigh = λ (pt : Point) → onHigh (posToVal pt)
       hitH = if thumbR * 2.0 ≤ᵇ thick then thick else thumbR * 2.0
       hitY = py - hitH ÷ 2.0
   in g ( attr "class" "svg-range-slider" ∷ [] )

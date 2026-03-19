@@ -12,93 +12,7 @@ import {
   probe, matchOr, fromMaybe, toMaybe, fromBool, toBool
 } from '../runtime/agda-values.js';
 
-// ─────────────────────────────────────────────────────────────────────
-// Extract unexported functions from reactive.js
-// We replicate them here since they are not exported.
-// ─────────────────────────────────────────────────────────────────────
-
-function wrapMutable(model, _visited) {
-  if (model && model._slots) return model;
-  if (model === null || model === undefined) return model;
-  if (typeof model !== 'function' && typeof model !== 'object') return model;
-  if (!_visited) _visited = new WeakMap();
-  if (_visited.has(model)) return _visited.get(model);
-  const args = probeSlots(model);
-  const ctor = probeCtor(model);
-  if (!args || !ctor) return model;
-  const slots = [];
-  let wrapper;
-  if (typeof model === 'function') {
-    wrapper = (cases) => cases[ctor](...slots);
-  } else {
-    wrapper = { [ctor]: (c) => c[ctor](...slots) };
-  }
-  wrapper._slots = slots;
-  wrapper._ctor = ctor;
-  _visited.set(model, wrapper);
-  for (const a of args) {
-    slots.push(
-      (typeof a === 'function' || (typeof a === 'object' && a !== null))
-        ? wrapMutable(a, _visited)
-        : a
-    );
-  }
-  return wrapper;
-}
-
-function cloneSlot(s) {
-  if (s && s._slots && s._ctor) {
-    const clonedSlots = s._slots.map(c => {
-      if (c && c._slots && c._ctor) return cloneSlot(c);
-      if (typeof c === 'object' && c !== null) {
-        try { return structuredClone(c); } catch { return c; }
-      }
-      return c;
-    });
-    const ctor = s._ctor;
-    if (typeof s === 'function') {
-      const w = (cases) => cases[ctor](...clonedSlots);
-      w._slots = clonedSlots;
-      w._ctor = ctor;
-      return w;
-    } else {
-      const w = { [ctor]: (c) => c[ctor](...clonedSlots) };
-      w._slots = clonedSlots;
-      w._ctor = ctor;
-      return w;
-    }
-  }
-  if (!s) return s;
-  if (typeof s === 'object' && s !== null) {
-    try { return structuredClone(s); } catch { return s; }
-  }
-  return s;
-}
-
-function reconcile(oldModel, newModel) {
-  if (!oldModel || !oldModel._slots) {
-    return wrapMutable(newModel);
-  }
-  const newSlots = getSlots(newModel);
-  if (!newSlots) return wrapMutable(newModel);
-  const newCtor = getCtor(newModel);
-  if (!newCtor || oldModel._ctor !== newCtor) {
-    return wrapMutable(newModel);
-  }
-  const oldSlots = oldModel._slots;
-  if (oldSlots.length !== newSlots.length) {
-    return wrapMutable(newModel);
-  }
-  for (let i = 0; i < oldSlots.length; i++) {
-    if (oldSlots[i] !== newSlots[i]) {
-      const v = newSlots[i];
-      oldSlots[i] = (typeof v === 'function' || (typeof v === 'object' && v !== null))
-        ? wrapMutable(v)
-        : v;
-    }
-  }
-  return oldModel;
-}
+import { wrapMutable, cloneSlot, reconcile } from '../runtime/reactive.js';
 
 // ─────────────────────────────────────────────────────────────────────
 // Test infrastructure
@@ -638,9 +552,10 @@ test('cloneSlot: plain object (structuredClone)', () => {
 
 test('cloneSlot: object that fails structuredClone (has function)', () => {
   const obj = { fn: () => 42, x: 1 };
-  // structuredClone can't handle functions; should fallback to returning obj
+  // structuredClone can't handle functions; should fallback to shallow clone
   const cloned = cloneSlot(obj);
-  assert(cloned === obj, 'should fallback to same reference');
+  assert(cloned !== obj, 'should return a shallow clone, not the same reference');
+  assert(cloned.x === 1, 'should preserve primitive properties');
 });
 
 test('reconcile: null oldModel', () => {

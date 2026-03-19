@@ -16,6 +16,7 @@ open import Data.Bool using (Bool; true; false; not)
 open import Function using (_∘_)
 
 open import Agdelte.Reactive.Node
+open import Agdelte.Html.Controls.Util using (noDataText)
 
 ------------------------------------------------------------------------
 -- Internal helpers
@@ -56,14 +57,14 @@ private
     ∷ renderHeaders hs
 
   -- Empty-data placeholder row
-  emptyRow : ∀ {R M A} → List String → (M → List R) → Node M A
+  emptyRow : ∀ {M A} {R : Set} → List String → (M → List R) → Node M A
   emptyRow headers getData =
     when (null ∘ getData)
       (tr []
         ( td ( class "agdelte-table__cell"
              ∷ attr "colspan" (show (length headers))
              ∷ [] )
-            ( text "No data available" ∷ [] )
+            ( text noDataText ∷ [] )
         ∷ [] ))
 
 ------------------------------------------------------------------------

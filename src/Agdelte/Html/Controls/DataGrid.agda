@@ -10,13 +10,13 @@ module Agdelte.Html.Controls.DataGrid where
 open import Data.String using (String)
 open import Data.List using (List; []; _∷_; map; null)
 open import Data.Nat using (ℕ; zero; suc; _≡ᵇ_)
-open import Data.Bool using (Bool; true; false; not)
+open import Data.Bool using (Bool; true; false; not; if_then_else_)
 open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Product using (_×_; _,_; proj₁; proj₂)
 open import Function using (_∘_)
 
 open import Agdelte.Reactive.Node
-open import Agdelte.Html.Controls.Util using (case_of_)
+open import Agdelte.Html.Controls.Util using (case_of_; noDataText)
 open import Agdelte.Data.Array as Arr using (Array; CmpResult; cmpLT; cmpEQ; cmpGT; fromList; toList; sortBy)
 
 ------------------------------------------------------------------------
@@ -102,7 +102,7 @@ dataGrid cfg getData =
             (div ( class "agdelte-grid__row agdelte-grid__empty"
                  ∷ attr "role" "row"
                  ∷ [] )
-              ( text "No data available" ∷ [] ))
+              ( text noDataText ∷ [] ))
         ∷ foreachKeyed getData (rowKey cfg) (renderRow cfg)
         ∷ [] )
     ∷ [] )
@@ -126,7 +126,7 @@ simpleTable headers renderRowCells getData =
         ( when (null ∘ getData)
             (elem "tr" []
               ( elem "td" ( attr "colspan" (show (length headers)) ∷ [] )
-                  ( text "No data available" ∷ [] )
+                  ( text noDataText ∷ [] )
               ∷ [] ))
         ∷ foreach getData (λ row _ →
             elem "tr" []
@@ -247,7 +247,7 @@ private
 sortableGrid : ∀ {R M A} → SortableGridConfig R M A → (M → List R) → Node M A
 sortableGrid cfg getData =
   div ( class "agdelte-grid agdelte-grid--sortable" ∷ attr "role" "grid" ∷ [] )
-    ( withModel (λ m →
+    ( foreach (λ m → m ∷ []) (λ m _ →
         let ss = sgSortState cfg m
             sortedData = sortRows ss (sgComparators cfg) (getData m)
             gridCfg = mkGridConfig (sgColumns cfg) (sgRowKey cfg) (sgOnRowClick cfg)
@@ -259,7 +259,7 @@ sortableGrid cfg getData =
                   (div ( class "agdelte-grid__row agdelte-grid__empty"
                        ∷ attr "role" "row"
                        ∷ [] )
-                    ( text "No data available" ∷ [] ))
+                    ( text noDataText ∷ [] ))
               ∷ foreach (λ _ → sortedData) (renderRow gridCfg)
               ∷ [] )
           ∷ [] ))

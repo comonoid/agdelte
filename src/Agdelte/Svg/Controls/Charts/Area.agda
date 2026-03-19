@@ -18,18 +18,10 @@ open import Agdelte.Reactive.Node using (Node; Attr; elem; attr; text)
 open import Agdelte.Svg.Elements using (svg; g; path'; circle'; svgText; line')
 open import Agdelte.Svg.Attributes
 open import Agdelte.Css.Show using (showFloat)
-
-------------------------------------------------------------------------
--- Data types
-------------------------------------------------------------------------
-
-record DataPoint : Set where
-  constructor mkDataPoint
-  field
-    dpX : Float
-    dpY : Float
-
-open DataPoint public
+open import Agdelte.Svg.Math using (findMin; findMax; zeroMin; zeroMax)
+open import Agdelte.Svg.Controls.Charts.Helpers
+open import Function using (case_of_)
+  using (DataPoint; mkDataPoint; dpX; dpY; extractX; extractY; scaleX; scaleY)
 
 record AreaSeries : Set where
   constructor mkAreaSeries
@@ -61,37 +53,6 @@ defaultAreaConfig w h = mkAreaConfig w h true false true 0.4 false
 ------------------------------------------------------------------------
 
 private
-  findMin : List Float → Float → Float
-  findMin [] acc = acc
-  findMin (v ∷ vs) acc = findMin vs (if v <ᵇ acc then v else acc)
-
-  findMax : List Float → Float → Float
-  findMax [] acc = acc
-  findMax (v ∷ vs) acc = findMax vs (if acc <ᵇ v then v else acc)
-
-  extractX extractY : List DataPoint → List Float
-  extractX [] = []
-  extractX (p ∷ ps) = dpX p ∷ extractX ps
-  extractY [] = []
-  extractY (p ∷ ps) = dpY p ∷ extractY ps
-
-  scaleX : Float → Float → Float → Float → Float → Float
-  scaleX minX maxX w px vx =
-    let range = if (maxX - minX) ≤ᵇ 0.0 then 1.0 else maxX - minX
-    in px + ((vx - minX) ÷ range) * w
-
-  scaleY : Float → Float → Float → Float → Float → Float
-  scaleY minY maxY h py vy =
-    let range = if (maxY - minY) ≤ᵇ 0.0 then 1.0 else maxY - minY
-    in py + h - ((vy - minY) ÷ range) * h
-
-  -- Zero-anchoring: ensure range always includes zero
-  zeroMin : Float → Float
-  zeroMin v = if v <ᵇ 0.0 then v else 0.0
-
-  zeroMax : Float → Float
-  zeroMax v = if 0.0 <ᵇ v then v else 0.0
-
   -- Collect all X/Y from all series
   allXs : List AreaSeries → List Float
   allXs [] = []
@@ -375,8 +336,6 @@ stackedAreaChart {M} {A} px py w h colors allData =
                ∷ [] ) []
          ∷ renderStacked px' py' w' h' minX' maxX' minY' maxY' cs rest (top ∷ prev)
       where
-        case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
-        case x of f = f x
     renderStacked _ _ _ _ _ _ _ _ [] _ _ = []
 
 ------------------------------------------------------------------------

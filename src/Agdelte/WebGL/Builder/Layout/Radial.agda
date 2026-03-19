@@ -11,6 +11,7 @@ open import Data.Float as F using (Float)
 open import Data.List using (List; []; _∷_; length)
 
 open import Agdelte.WebGL.Types
+open import Function using (case_of_)
 
 ------------------------------------------------------------------------
 -- Math helpers (postulates for JS FFI)
@@ -106,8 +107,6 @@ arc3D {M} {Msg} radius startAngle endAngle children =
                     (suc (suc _)) → arcLength ÷ natToFloat (pred n)
   in group identityTransform (go 0 startAngle angleStep children)
   where
-    case_of_ : ∀ {A B : Set} → A → (A → B) → B
-    case x of f = f x
 
     pred : ℕ → ℕ
     pred zero = zero

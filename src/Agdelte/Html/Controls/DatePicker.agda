@@ -9,7 +9,7 @@ module Agdelte.Html.Controls.DatePicker where
 
 open import Data.String as Str using (String; _++_)
 open import Data.List as List using (List; []; _∷_) renaming (_++_ to _++ᴸ_)
-open import Data.Nat using (ℕ; zero; suc; _+_; _∸_; _<ᵇ_)
+open import Data.Nat using (ℕ; zero; suc; _+_; _∸_; _<ᵇ_; _≡ᵇ_)
 open import Data.Nat.Show using (show)
 open import Data.Bool using (Bool; true; false; if_then_else_; _∧_)
 open import Data.Maybe using (Maybe; just; nothing)
@@ -36,16 +36,10 @@ open Date public
 ------------------------------------------------------------------------
 
 private
-  -- Nat equality
-  _==ℕ_ : ℕ → ℕ → Bool
-  zero ==ℕ zero = true
-  zero ==ℕ suc _ = false
-  suc _ ==ℕ zero = false
-  suc m ==ℕ suc n = m ==ℕ n
 
 -- Check date equality
 eqDate : Date → Date → Bool
-eqDate d1 d2 = (year d1 ==ℕ year d2) ∧ (month d1 ==ℕ month d2) ∧ (day d1 ==ℕ day d2)
+eqDate d1 d2 = (year d1 ≡ᵇ year d2) ∧ (month d1 ≡ᵇ month d2) ∧ (day d1 ≡ᵇ day d2)
 
 -- Month name
 monthName : ℕ → String
@@ -96,7 +90,7 @@ private
     let mod4 = modN y 4
         mod100 = modN y 100
         mod400 = modN y 400
-    in (mod4 ==ℕ 0 ∧ not (mod100 ==ℕ 0)) ∨ (mod400 ==ℕ 0)
+    in ((mod4 ≡ᵇ 0) ∧ not (mod100 ≡ᵇ 0)) ∨ (mod400 ≡ᵇ 0)
     where
       open import Data.Bool using (not; _∨_)
 
@@ -267,9 +261,9 @@ nextMonth y m = (y , m + 1)
 dateLt : Date → Date → Bool
 dateLt d1 d2 =
   if year d1 <ᵇ year d2 then true
-  else if year d1 ==ℕ year d2 then
+  else if year d1 ≡ᵇ year d2 then
     if month d1 <ᵇ month d2 then true
-    else if month d1 ==ℕ month d2 then day d1 <ᵇ day d2
+    else if month d1 ≡ᵇ month d2 then day d1 <ᵇ day d2
     else false
   else false
 
@@ -453,7 +447,7 @@ yearSelector {M} {A} currentYear range onSelect =
     renderYears : ℕ → ℕ → List (Node M A)
     renderYears _ zero = []
     renderYears y (suc n) =
-      button ( class (if y ==ℕ currentYear
+      button ( class (if y ≡ᵇ currentYear
                       then "agdelte-datepicker__year agdelte-datepicker__year--current"
                       else "agdelte-datepicker__year")
              ∷ onClick (onSelect y)
@@ -474,7 +468,7 @@ monthSelector {M} {A} locale currentMonth onSelect =
     renderMonths : ℕ → ℕ → List (Node M A)
     renderMonths _ zero = []
     renderMonths m (suc remaining) =
-      button ( class (if m ==ℕ currentMonth
+      button ( class (if m ≡ᵇ currentMonth
                       then "agdelte-datepicker__month agdelte-datepicker__month--current"
                       else "agdelte-datepicker__month")
              ∷ onClick (onSelect m)

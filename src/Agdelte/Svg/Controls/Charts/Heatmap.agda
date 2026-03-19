@@ -8,7 +8,7 @@ module Agdelte.Svg.Controls.Charts.Heatmap where
 open import Data.String using (String; _++_)
 open import Data.Float using (Float; _+_; _-_; _*_)
 open import Data.Float.Base using (_÷_; _≤ᵇ_; _<ᵇ_; fromℕ)
-open import Data.List using (List; []; _∷_)
+open import Data.List using (List; []; _∷_; length)
 open import Data.Bool using (Bool; if_then_else_)
 open import Data.Nat using (ℕ; zero; suc)
 open import Data.Maybe using (Maybe; just; nothing)
@@ -18,6 +18,7 @@ open import Agdelte.Reactive.Node using (Node; Attr; elem; attr; text; on)
 open import Agdelte.Svg.Elements using (svg; g; rect'; svgText)
 open import Agdelte.Svg.Attributes
 open import Agdelte.Css.Show using (showFloat)
+open import Function using (case_of_)
 
 ------------------------------------------------------------------------
 -- Color interpolation
@@ -47,10 +48,6 @@ private
 ------------------------------------------------------------------------
 
 private
-  listLen : ∀ {A : Set} → List A → ℕ
-  listLen [] = 0
-  listLen (_ ∷ xs) = suc (listLen xs)
-
   maxNat : ℕ → ℕ → ℕ
   maxNat a b = if a ≤ᵇₙ b then b else a
     where
@@ -58,7 +55,7 @@ private
 
   maxRowLen : List (List Float) → ℕ
   maxRowLen [] = 0
-  maxRowLen (row ∷ rows) = maxNat (listLen row) (maxRowLen rows)
+  maxRowLen (row ∷ rows) = maxNat (length row) (maxRowLen rows)
 
   findMinMaxList : List Float → Float → Float → Float × Float
   findMinMaxList [] minA maxA = (minA , maxA)
@@ -86,7 +83,7 @@ heatmap : ∀ {M A}
         → Node M A
 heatmap {M} {A} px py w h colorFn [] onClick' = g [] []
 heatmap {M} {A} px py w h colorFn grid onClick' =
-  let numRows = listLen grid
+  let numRows = length grid
       numCols = maxRowLen grid
       (minV , maxV) = findMinMaxGrid grid 1.0e10 (0.0 - 1.0e10)
   in g ( attr "class" "svg-heatmap" ∷ [] )
@@ -118,8 +115,6 @@ heatmap {M} {A} px py w h colorFn grid onClick' =
                     ∷ [] ) [])
          ∷ renderCells (cx + cellW) cy cellW cellH minV maxV colFn vs (suc colIdx) rowIdx numCols onClick''
       where
-        case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
-        case x of f = f x
 
     renderRows : Float → Float → Float → Float
                → Float → Float
@@ -166,8 +161,8 @@ labeledHeatmap {M} {A} px py w h colLabels rowLabels grid =
       chartY = py + labelSpace
       chartW = w - labelSpace
       chartH = h - labelSpace
-      nCols = listLen colLabels
-      nRows = listLen rowLabels
+      nCols = length colLabels
+      nRows = length rowLabels
       colCellW = if nCols ≡ᵇ 0 then 0.0 else chartW ÷ fromℕ nCols
       rowCellH = if nRows ≡ᵇ 0 then 0.0 else chartH ÷ fromℕ nRows
   in g ( attr "class" "svg-labeled-heatmap" ∷ [] )

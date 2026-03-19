@@ -7,7 +7,7 @@ module Agdelte.Css.Controls.TabBar where
 
 open import Data.List using (List; []; _∷_)
 
-open import Agdelte.Css.Decl using (Style; _∶_)
+open import Agdelte.Css.Decl using (Style; _∶_; focusOutline; transitionAll; cursorPointer)
 open import Agdelte.Css.Stylesheet using (Rule; rule; Stylesheet)
 
 ------------------------------------------------------------------------
@@ -31,18 +31,16 @@ tabBarRules =
       ∷ "border" ∶ "none"
       ∷ "border-bottom" ∶ "2px solid transparent"
       ∷ "color" ∶ "var(--agdelte-text-muted)"
-      ∷ "cursor" ∶ "pointer"
+      ∷ cursorPointer
       ∷ "font-size" ∶ "inherit"
-      ∷ "transition" ∶ "all var(--agdelte-transition)"
+      ∷ transitionAll
       ∷ [])
   ∷ rule ".agdelte-tabs__tab:hover"
       ( "color" ∶ "var(--agdelte-text)"
       ∷ "background" ∶ "var(--agdelte-bg-hover)"
       ∷ [])
   ∷ rule ".agdelte-tabs__tab:focus-visible"
-      ( "outline" ∶ "2px solid var(--agdelte-primary)"
-      ∷ "outline-offset" ∶ "2px"
-      ∷ [])
+      focusOutline
   ∷ rule ".agdelte-tabs__tab--active"
       ( "color" ∶ "var(--agdelte-primary)"
       ∷ "border-bottom-color" ∶ "var(--agdelte-primary)"

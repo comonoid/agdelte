@@ -25,19 +25,15 @@ open import Agdelte.WebGL.Controls.Text
 
 postulate
   natToFloat : ℕ → Float
-  sqrtF : Float → Float
   stringEq : String → String → Bool
 
 {-# COMPILE JS natToFloat = n => Number(n) #-}
-{-# COMPILE JS sqrtF = x => Math.sqrt(x) #-}
 {-# COMPILE JS stringEq = a => b => a === b ? (cases) => cases["true"]() : (cases) => cases["false"]() #-}
 
 ------------------------------------------------------------------------
 -- Module-level helpers
 ------------------------------------------------------------------------
 
-case_of_ : ∀ {A B : Set} → A → (A → B) → B
-case x of f = f x
 
 infixr 5 _++L_
 _++L_ : ∀ {A : Set} → List A → List A → List A
@@ -45,6 +41,7 @@ _++L_ : ∀ {A : Set} → List A → List A → List A
 (x ∷ xs) ++L ys = x ∷ (xs ++L ys)
 
 open import Data.Product using (_×_; _,_; proj₁; proj₂)
+open import Function using (case_of_)
 
 ------------------------------------------------------------------------
 -- Network data types

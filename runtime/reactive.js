@@ -120,6 +120,11 @@ function detectContentType(body) {
  */
 const MAX_TASK_DEPTH = 1000;
 
+// --- Scheduling constants ---
+const IDLE_TIMEOUT_MS = 1000;     // requestIdleCallback timeout
+const SAFARI_BUDGET_MS = 8;       // Fallback time budget when rIC unavailable
+const SAFARI_DELAY_MS = 100;      // setTimeout delay for Safari fallback
+
 function executeTask(task, onSuccess, onError, _depth = 0) {
   if (_depth > MAX_TASK_DEPTH) {
     onError('Task recursion depth exceeded (possible infinite pure/fail chain)');
@@ -813,13 +818,13 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     if (p2Queue.length > 0) {
       p2Scheduled = true;
       if (typeof requestIdleCallback !== 'undefined') {
-        requestIdleCallback(flushP2, { timeout: 1000 });
+        requestIdleCallback(flushP2, { timeout: IDLE_TIMEOUT_MS });
       } else {
         // Fallback for Safari: use setTimeout with real time budget (8ms)
         setTimeout(() => {
           const start = performance.now();
-          flushP2({ timeRemaining: () => Math.max(0, 8 - (performance.now() - start)) });
-        }, 100);
+          flushP2({ timeRemaining: () => Math.max(0, SAFARI_BUDGET_MS - (performance.now() - start)) });
+        }, SAFARI_DELAY_MS);
       }
     }
   }
@@ -892,13 +897,13 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     if (!p2Scheduled) {
       p2Scheduled = true;
       if (typeof requestIdleCallback !== 'undefined') {
-        requestIdleCallback(flushP2, { timeout: 1000 });
+        requestIdleCallback(flushP2, { timeout: IDLE_TIMEOUT_MS });
       } else {
         // Fallback for Safari: use real time budget (8ms)
         setTimeout(() => {
           const start = performance.now();
-          flushP2({ timeRemaining: () => Math.max(0, 8 - (performance.now() - start)) });
-        }, 100);
+          flushP2({ timeRemaining: () => Math.max(0, SAFARI_BUDGET_MS - (performance.now() - start)) });
+        }, SAFARI_DELAY_MS);
       }
     }
   }
@@ -1336,6 +1341,151 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
    * @param {*} oldModel - Previous model value
    * @param {*} newModel - New model value
    */
+
+  /** Update text, attribute, and style bindings in a scope */
+  function updateBindings(scope, changed, ensureSlots, newModel) {
+    // Text bindings
+    for (const b of scope.bindings) {
+      ensureSlots(b);
+      if (changed && b.slots && !b.slots.some(s => changed.has(s))) continue;
+      const extract = NodeModule.Binding.extract(b.binding);
+      const newVal = extract(newModel);
+      if (newVal !== b.lastValue) {
+        b.node.textContent = newVal;
+        b.lastValue = newVal;
+      }
+    }
+
+    // Attribute bindings
+    for (const b of scope.attrBindings) {
+      ensureSlots(b);
+      if (changed && b.slots && !b.slots.some(s => changed.has(s))) continue;
+      const extract = NodeModule.Binding.extract(b.binding);
+      const newVal = extract(newModel);
+      if (newVal !== b.lastValue) {
+        setAttr(b.node, b.attrName, newVal);
+        b.lastValue = newVal;
+      }
+    }
+
+    // Style bindings
+    for (const b of scope.styleBindings) {
+      ensureSlots(b);
+      if (changed && b.slots && !b.slots.some(s => changed.has(s))) continue;
+      const extract = NodeModule.Binding.extract(b.binding);
+      const newVal = extract(newModel);
+      if (newVal !== b.lastValue) {
+        b.node.style.setProperty(b.styleName, newVal);
+        b.lastValue = newVal;
+      } else if (b.styleName === 'animation' && newVal !== 'none' && newVal !== '') {
+        // Re-trigger same animation: browser ignores setting the same value,
+        // so briefly clear and re-apply on next frame
+        const el = b.node, val = newVal;
+        if (el._pendingAnimationRaf) {
+          cancelAnimationFrame(el._pendingAnimationRaf);
+          el._pendingAnimationRaf = null;
+        }
+        el.style.animation = 'none';
+        el._pendingAnimationRaf = requestAnimationFrame(() => {
+          el._pendingAnimationRaf = null;
+          if (el.isConnected) el.style.animation = val;
+        });
+      }
+    }
+  }
+
+  /** Show a conditional node: render into new child scope with optional enter transition */
+  function showConditional(scope, cond) {
+    if (cond.leaveTimeoutId) {
+      clearTimeout(cond.leaveTimeoutId);
+      cond.leaveTimeoutId = null;
+    }
+    const childScope = createScope(scope);
+    const newNode = withScope(childScope, () => renderNode(cond.innerNode));
+
+    if (cond.transition && newNode && newNode.classList) {
+      newNode.classList.add(cond.transition.enterClass);
+      if (cond.transition.duration > 0) {
+        cond.enterTimeoutId = setTimeout(() => {
+          cond.enterTimeoutId = null;
+          if (newNode.classList) newNode.classList.remove(cond.transition.enterClass);
+        }, cond.transition.duration);
+      } else {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            if (newNode.classList) newNode.classList.remove(cond.transition.enterClass);
+          });
+        });
+      }
+    }
+
+    const replacement = newNode || document.createComment('when-empty');
+    cond.node.replaceWith(replacement);
+    cond.node = replacement;
+    cond.rendered = true;
+    cond.scope = childScope;
+    if (newNode) startSmilAnimations(newNode);
+  }
+
+  /** Hide a conditional node: destroy child scope with optional leave transition */
+  function hideConditional(cond) {
+    if (cond.enterTimeoutId) {
+      clearTimeout(cond.enterTimeoutId);
+      cond.enterTimeoutId = null;
+    }
+    if (cond.scope) destroyScope(cond.scope);
+
+    if (cond.transition && cond.transition.duration > 0 && cond.node.classList) {
+      const leaving = cond.node;
+      leaving.classList.add(cond.transition.leaveClass);
+      const placeholder = document.createComment(cond.transition ? 'whenT' : 'when');
+      cond.leaveTimeoutId = setTimeout(() => {
+        cond.leaveTimeoutId = null;
+        if (leaving.parentNode) {
+          leaving.replaceWith(placeholder);
+          if (cond.node === leaving) cond.node = placeholder;
+        }
+      }, cond.transition.duration);
+      cond.rendered = false;
+      cond.scope = null;
+    } else {
+      const placeholder = document.createComment('when');
+      cond.node.replaceWith(placeholder);
+      cond.node = placeholder;
+      cond.rendered = false;
+      cond.scope = null;
+    }
+  }
+
+  /** Update a single conditional (when/whenT) entry */
+  function updateConditional(scope, cond, oldModel, newModel) {
+    const showBool = !!cond.cond(newModel);
+    if (showBool !== cond.rendered) {
+      if (showBool) showConditional(scope, cond);
+      else hideConditional(cond);
+    } else if (showBool && cond.scope) {
+      updateScopeImmediate(cond.scope, oldModel, newModel);
+    }
+  }
+
+  /** Recurse into structural child scopes, skipping those owned by conditionals or lists */
+  function updateStructuralChildren(scope, oldModel, newModel) {
+    const ownedScopes = new Set();
+    for (const cond of scope.conditionals) {
+      if (cond.scope) ownedScopes.add(cond.scope);
+    }
+    for (const list of scope.lists) {
+      for (const entry of list.renderedItems) {
+        if (entry.scope) ownedScopes.add(entry.scope);
+      }
+    }
+    for (const child of scope.children) {
+      if (!ownedScopes.has(child)) {
+        updateScopeImmediate(child, oldModel, newModel);
+      }
+    }
+  }
+
   function updateScopeImmediate(scope, oldModel, newModel) {
     // zoomRT: apply model transformation and set up dispatch wrapping
     // for any renderNode calls during this scope's update (conditional show, list items)
@@ -1387,135 +1537,12 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       }
     }
 
-    // Text bindings
-    for (const b of scope.bindings) {
-      ensureSlots(b);
-      if (changed && b.slots && !b.slots.some(s => changed.has(s))) continue;
-      const extract = NodeModule.Binding.extract(b.binding);
-      const newVal = extract(newModel);
-      if (newVal !== b.lastValue) {
-        b.node.textContent = newVal;
-        b.lastValue = newVal;
-      }
-    }
-
-    // Attribute bindings
-    for (const b of scope.attrBindings) {
-      ensureSlots(b);
-      if (changed && b.slots && !b.slots.some(s => changed.has(s))) continue;
-      const extract = NodeModule.Binding.extract(b.binding);
-      const newVal = extract(newModel);
-      if (newVal !== b.lastValue) {
-        setAttr(b.node, b.attrName, newVal);
-        b.lastValue = newVal;
-      }
-    }
-
-    // Style bindings
-    for (const b of scope.styleBindings) {
-      ensureSlots(b);
-      if (changed && b.slots && !b.slots.some(s => changed.has(s))) continue;
-      const extract = NodeModule.Binding.extract(b.binding);
-      const newVal = extract(newModel);
-      if (newVal !== b.lastValue) {
-        b.node.style.setProperty(b.styleName, newVal);
-        b.lastValue = newVal;
-      } else if (b.styleName === 'animation' && newVal !== 'none' && newVal !== '') {
-        // Re-trigger same animation: browser ignores setting the same value,
-        // so briefly clear and re-apply on next frame
-        const el = b.node, val = newVal;
-        // Cancel any pending animation reset to prevent race conditions
-        if (el._pendingAnimationRaf) {
-          cancelAnimationFrame(el._pendingAnimationRaf);
-          el._pendingAnimationRaf = null;
-        }
-        el.style.animation = 'none';
-        el._pendingAnimationRaf = requestAnimationFrame(() => {
-          el._pendingAnimationRaf = null;
-          if (el.isConnected) el.style.animation = val;
-        });
-      }
-    }
+    // Update all bindings (text, attribute, style)
+    updateBindings(scope, changed, ensureSlots, newModel);
 
     // Conditionals (when / whenT)
     for (const cond of scope.conditionals) {
-      const showBool = !!cond.cond(newModel);
-
-      if (showBool !== cond.rendered) {
-        if (showBool) {
-          // Cancel any pending leave transition timeout
-          if (cond.leaveTimeoutId) {
-            clearTimeout(cond.leaveTimeoutId);
-            cond.leaveTimeoutId = null;
-          }
-          // Show: render into new child scope
-          const childScope = createScope(scope);
-          const newNode = withScope(childScope, () => renderNode(cond.innerNode));
-
-          // Enter transition
-          if (cond.transition && newNode && newNode.classList) {
-            newNode.classList.add(cond.transition.enterClass);
-            // Use duration if specified, otherwise remove on next frame
-            if (cond.transition.duration > 0) {
-              cond.enterTimeoutId = setTimeout(() => {
-                cond.enterTimeoutId = null;
-                if (newNode.classList) newNode.classList.remove(cond.transition.enterClass);
-              }, cond.transition.duration);
-            } else {
-              requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                  if (newNode.classList) newNode.classList.remove(cond.transition.enterClass);
-                });
-              });
-            }
-          }
-
-          const replacement = newNode || document.createComment('when-empty');
-          cond.node.replaceWith(replacement);
-          cond.node = replacement;
-          cond.rendered = true;
-          cond.scope = childScope;
-          // Start SMIL animations on newly inserted subtree
-          if (newNode) startSmilAnimations(newNode);
-        } else {
-          // Cancel any pending enter transition timeout
-          if (cond.enterTimeoutId) {
-            clearTimeout(cond.enterTimeoutId);
-            cond.enterTimeoutId = null;
-          }
-          // Hide: destroy child scope
-          if (cond.scope) destroyScope(cond.scope);
-
-          if (cond.transition && cond.transition.duration > 0 && cond.node.classList) {
-            // Leave transition: add class, wait, then remove
-            const leaving = cond.node;
-            leaving.classList.add(cond.transition.leaveClass);
-            const placeholder = document.createComment(cond.transition ? 'whenT' : 'when');
-            // Store timeout ID so it can be cancelled on destroy
-            cond.leaveTimeoutId = setTimeout(() => {
-              cond.leaveTimeoutId = null;
-              if (leaving.parentNode) {
-                leaving.replaceWith(placeholder);
-                // Update tracking if this cond still points to leaving
-                if (cond.node === leaving) cond.node = placeholder;
-              }
-            }, cond.transition.duration);
-            // Immediately update tracking to placeholder for logic
-            // but keep DOM node until transition ends
-            cond.rendered = false;
-            cond.scope = null;
-          } else {
-            const placeholder = document.createComment('when');
-            cond.node.replaceWith(placeholder);
-            cond.node = placeholder;
-            cond.rendered = false;
-            cond.scope = null;
-          }
-        }
-      } else if (showBool && cond.scope) {
-        // Condition unchanged, but update child scope bindings
-        updateScopeImmediate(cond.scope, oldModel, newModel);
-      }
+      updateConditional(scope, cond, oldModel, newModel);
     }
 
     // Lists (foreach / foreachKeyed)
@@ -1528,21 +1555,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
     }
 
     // Recurse into structural child scopes (scope / scopeProj).
-    // Skip children owned by conditionals or lists — they're updated above.
-    const ownedScopes = new Set();
-    for (const cond of scope.conditionals) {
-      if (cond.scope) ownedScopes.add(cond.scope);
-    }
-    for (const list of scope.lists) {
-      for (const entry of list.renderedItems) {
-        if (entry.scope) ownedScopes.add(entry.scope);
-      }
-    }
-    for (const child of scope.children) {
-      if (!ownedScopes.has(child)) {
-        updateScopeImmediate(child, oldModel, newModel);
-      }
-    }
+    updateStructuralChildren(scope, oldModel, newModel);
 
     } finally {
       // Restore model/dispatch state after zoomRT scope update (or on exception)
@@ -2222,3 +2235,6 @@ export { interpretEvent, unsubscribe } from './events.js';
 
 // Re-exported from agda-values.js for testing and external use
 export { deepEqual, countSlots, detectSlots, probeCtor, probeSlots, changedSlotsFromCache } from './agda-values.js';
+
+// Internal helpers exported for testing (used by fuzz-runtime.mjs)
+export { wrapMutable, cloneSlot, reconcile };

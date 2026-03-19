@@ -10,7 +10,7 @@
 
 import { writeFileSync, mkdirSync } from 'fs';
 import { dirname, resolve } from 'path';
-import { pathToFileURL } from 'url';
+import { loadAgdaDefault } from './load-agda-module.js';
 
 const output = process.argv[2];
 if (!output) {
@@ -18,14 +18,11 @@ if (!output) {
   process.exit(1);
 }
 
-const buildDir = resolve(process.cwd(), '_build');
-const load = name => import(pathToFileURL(`${buildDir}/${name}.mjs`).href).then(m => m.default);
-
 let Demo, Spring;
 try {
   [Demo, Spring] = await Promise.all([
-    load('jAgda.AnimDemo'),
-    load('jAgda.Agdelte.Anim.Spring'),
+    loadAgdaDefault('jAgda.AnimDemo'),
+    loadAgdaDefault('jAgda.Agdelte.Anim.Spring'),
   ]);
 } catch (e) {
   console.error('Error: failed to import compiled modules.');

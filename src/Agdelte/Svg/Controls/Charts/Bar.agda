@@ -18,6 +18,7 @@ open import Agdelte.Reactive.Node using (Node; Attr; elem; attr; text; on)
 open import Agdelte.Svg.Elements using (svg; g; rect'; svgText)
 open import Agdelte.Svg.Attributes
 open import Agdelte.Css.Show using (showFloat)
+open import Function using (case_of_)
 
 ------------------------------------------------------------------------
 -- Data types
@@ -49,10 +50,6 @@ private
   findMaxAbsValue (b ∷ bs) acc =
     findMaxAbsValue bs (maxFloat acc (absFloat (barValue b)))
 
-  listLen : ∀ {A : Set} → List A → ℕ
-  listLen [] = 0
-  listLen (_ ∷ xs) = suc (listLen xs)
-
 ------------------------------------------------------------------------
 -- Bar Chart (Vertical)
 ------------------------------------------------------------------------
@@ -64,7 +61,7 @@ barChart : ∀ {M A}
          → List (BarData A)
          → Node M A
 barChart {M} {A} px py w h gap bars =
-  let count = listLen bars
+  let count = length bars
       maxVal = findMaxAbsValue bars 0.0
       barW = if count ≡ᵇ 0 then 0.0 else (w - fromℕ count * gap) ÷ fromℕ count
   in g ( attr "class" "svg-bar-chart" ∷ [] )
@@ -99,8 +96,6 @@ barChart {M} {A} px py w h gap bars =
                     ∷ [] ) [])
          ∷ renderBars bx by barW' h' maxV gp bs (suc idx)
       where
-        case_of_ : ∀ {a b} {X : Set a} {Y : Set b} → X → (X → Y) → Y
-        case x of f = f x
 
 ------------------------------------------------------------------------
 -- Simple bar chart
@@ -145,7 +140,7 @@ horizontalBarChart : ∀ {M A}
                    → List (BarData A)
                    → Node M A
 horizontalBarChart {M} {A} px py w h gap bars =
-  let count = listLen bars
+  let count = length bars
       maxVal = findMaxAbsValue bars 0.0
       barH = if count ≡ᵇ 0 then 0.0 else (h - fromℕ count * gap) ÷ fromℕ count
   in g ( attr "class" "svg-bar-chart-h" ∷ [] )
@@ -178,7 +173,7 @@ stackedBarChart : ∀ {M A}
                 → List (List Float)              -- data[category][series]
                 → Node M A
 stackedBarChart {M} {A} px py w h names colors dataRows =
-  let count = listLen dataRows
+  let count = length dataRows
       barW = if count ≡ᵇ 0 then 0.0 else w ÷ fromℕ count
       maxStack = findMaxStack dataRows
   in g ( attr "class" "svg-stacked-bar-chart" ∷ [] )

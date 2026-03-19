@@ -8,7 +8,7 @@ module Agdelte.Svg.Controls.Gauges.Sparkline where
 open import Data.String using (String; _++_)
 open import Data.Float using (Float; _+_; _-_; _*_)
 open import Data.Float.Base using (_÷_; _≤ᵇ_; _<ᵇ_; fromℕ)
-open import Data.List using (List; []; _∷_)
+open import Data.List using (List; []; _∷_; length)
 open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.Nat using (ℕ; zero; suc)
 open import Data.Maybe using (Maybe; just; nothing)
@@ -18,28 +18,11 @@ open import Agdelte.Reactive.Node using (Node; Attr; elem; attr; text)
 open import Agdelte.Svg.Elements using (svg; g; path'; circle'; rect'; line')
 open import Agdelte.Svg.Attributes
 open import Agdelte.Css.Show using (showFloat)
+open import Agdelte.Svg.Math using (findMin; findMax; getLast)
 
 ------------------------------------------------------------------------
 -- Helpers
 ------------------------------------------------------------------------
-
-private
-  listLen : ∀ {A : Set} → List A → ℕ
-  listLen [] = 0
-  listLen (_ ∷ xs) = suc (listLen xs)
-
-  findMin : List Float → Float → Float
-  findMin [] acc = acc
-  findMin (v ∷ vs) acc = findMin vs (if v <ᵇ acc then v else acc)
-
-  findMax : List Float → Float → Float
-  findMax [] acc = acc
-  findMax (v ∷ vs) acc = findMax vs (if acc <ᵇ v then v else acc)
-
-  getLast : List Float → Float
-  getLast [] = 0.0
-  getLast (v ∷ []) = v
-  getLast (_ ∷ vs) = getLast vs
 
 ------------------------------------------------------------------------
 -- Line Sparkline
@@ -54,7 +37,7 @@ sparkline : ∀ {M A}
 sparkline px py w h color values =
   let minV = findMin values 1.0e10
       maxV = findMax values (0.0 - 1.0e10)
-      n = listLen values
+      n = length values
       pathD = buildPath px py w h minV maxV values 0 n
   in g ( attr "class" "svg-sparkline" ∷ [] )
        ( path' ( d_ pathD
@@ -95,7 +78,7 @@ sparklineArea px py w h color opacity [] = g [] []
 sparklineArea px py w h color opacity values =
   let minV = findMin values 1.0e10
       maxV = findMax values (0.0 - 1.0e10)
-      n = listLen values
+      n = length values
       linePath = buildLine px py w h minV maxV values 0 n
       areaPath = linePath
                  ++ " L " ++ showFloat (px + w) ++ " " ++ showFloat (py + h)
@@ -143,7 +126,7 @@ sparklineBar : ∀ {M A}
 sparklineBar {M} {A} px py w h color gap values =
   let minV = 0.0  -- bars start from 0
       maxV = findMax values 1.0
-      n = listLen values
+      n = length values
       barW = if n ≡ᵇ 0 then 0.0 else (w - fromℕ n * gap) ÷ fromℕ n
   in g ( attr "class" "svg-sparkline-bar" ∷ [] )
        (renderBars px py w h minV maxV barW gap values 0)
@@ -182,7 +165,7 @@ sparklineWithDots px py w h lineColor startColor endColor [] = g [] []
 sparklineWithDots px py w h lineColor startColor endColor values =
   let minV = findMin values 1.0e10
       maxV = findMax values (0.0 - 1.0e10)
-      n = listLen values
+      n = length values
       firstY = getFirstY py h minV maxV values
       lastY = getLastY py h minV maxV values n
   in g ( attr "class" "svg-sparkline-dots" ∷ [] )
@@ -223,7 +206,7 @@ sparklineWinLoss : ∀ {M A}
                  → List Float                -- positive = win, negative = loss
                  → Node M A
 sparklineWinLoss {M} {A} px py w h winColor lossColor values =
-  let n = listLen values
+  let n = length values
       barW = if n ≡ᵇ 0 then 0.0 else w ÷ fromℕ n * 0.8
       gap = w ÷ fromℕ n * 0.2
       halfH = h ÷ 2.0

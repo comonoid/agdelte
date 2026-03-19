@@ -15,21 +15,13 @@ open import Data.Bool using (Bool; true; false; if_then_else_)
 
 open import Agdelte.WebGL.Types
 open import Agdelte.WebGL.Builder.Geometry.Primitives
+open import Function using (case_of_)
 
 ------------------------------------------------------------------------
 -- Helper postulates
 ------------------------------------------------------------------------
 
-postulate
-  sinF : Float → Float
-  cosF : Float → Float
-
-{-# COMPILE JS sinF = x => Math.sin(x) #-}
-{-# COMPILE JS cosF = x => Math.cos(x) #-}
-
 -- Module-level case helper
-case_of_ : ∀ {A B : Set} → A → (A → B) → B
-case x of f = f x
 
 -- Transform field accessors
 getPosition : Transform → Vec3

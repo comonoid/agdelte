@@ -7,7 +7,7 @@ module Agdelte.Css.Controls.Checkbox where
 
 open import Data.List using (List; []; _∷_)
 
-open import Agdelte.Css.Decl using (Style; _∶_)
+open import Agdelte.Css.Decl using (Style; _∶_; focusOutline; cursorPointer)
 open import Agdelte.Css.Stylesheet using (Rule; rule; Stylesheet)
 
 ------------------------------------------------------------------------
@@ -20,20 +20,18 @@ checkboxRules =
       ( "display" ∶ "flex"
       ∷ "align-items" ∶ "center"
       ∷ "gap" ∶ "var(--agdelte-spacing-sm)"
-      ∷ "cursor" ∶ "pointer"
+      ∷ cursorPointer
       ∷ "padding" ∶ "var(--agdelte-spacing-xs) 0"
       ∷ [])
   ∷ rule ".agdelte-checkbox__input"
       ( "width" ∶ "18px"
       ∷ "height" ∶ "18px"
       ∷ "margin" ∶ "0"
-      ∷ "cursor" ∶ "pointer"
+      ∷ cursorPointer
       ∷ "accent-color" ∶ "var(--agdelte-primary)"
       ∷ [])
   ∷ rule ".agdelte-checkbox__input:focus-visible"
-      ( "outline" ∶ "2px solid var(--agdelte-primary)"
-      ∷ "outline-offset" ∶ "2px"
-      ∷ [])
+      focusOutline
   ∷ rule ".agdelte-checkbox__label"
       ( "color" ∶ "var(--agdelte-text)"
       ∷ "user-select" ∶ "none"
@@ -63,7 +61,7 @@ checkboxRules =
       ∷ "height" ∶ "18px"
       ∷ "border" ∶ "2px solid var(--agdelte-primary)"
       ∷ "border-radius" ∶ "3px"
-      ∷ "background" ∶ "var(--agdelte-bg, #fff)"
+      ∷ "background" ∶ "var(--agdelte-bg)"
       ∷ "color" ∶ "var(--agdelte-primary)"
       ∷ "font-weight" ∶ "bold"
       ∷ "font-size" ∶ "14px"

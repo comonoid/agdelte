@@ -29,7 +29,7 @@
 import { writeFileSync, mkdirSync, statSync, existsSync } from 'fs';
 import { createHash } from 'crypto';
 import { dirname, basename, extname, join, resolve } from 'path';
-import { pathToFileURL } from 'url';
+import { loadAgdaModule, buildDir } from './load-agda-module.js';
 
 const args = process.argv.slice(2);
 const hashFlag = args.includes('--hash');
@@ -47,9 +47,7 @@ if (positional.length < 3) {
 const [moduleName, exportName, outputPath] = positional;
 
 // Resolve paths
-const buildDir = resolve(process.cwd(), '_build');
 const modulePath = join(buildDir, `${moduleName}.mjs`);
-const stylesheetPath = join(buildDir, 'jAgda.Agdelte.Css.Stylesheet.mjs');
 const outputResolved = resolve(outputPath);
 
 // Check if CSS is up to date (skip if output is newer than compiled module)
@@ -74,8 +72,8 @@ if (!forceFlag && !hashFlag && existsSync(outputResolved) && existsSync(modulePa
 let stylesheetMod, userMod;
 try {
   [stylesheetMod, userMod] = await Promise.all([
-    import(pathToFileURL(stylesheetPath).href),
-    import(pathToFileURL(modulePath).href),
+    loadAgdaModule('jAgda.Agdelte.Css.Stylesheet'),
+    loadAgdaModule(moduleName),
   ]);
 } catch (e) {
   console.error(`Error: failed to import compiled modules.`);

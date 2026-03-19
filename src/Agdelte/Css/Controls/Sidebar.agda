@@ -7,7 +7,7 @@ module Agdelte.Css.Controls.Sidebar where
 
 open import Data.List using (List; []; _∷_)
 
-open import Agdelte.Css.Decl using (Style; _∶_)
+open import Agdelte.Css.Decl using (Style; _∶_; borderRadius; focusOutline; transitionAll; transitionBg; cursorPointer)
 open import Agdelte.Css.Stylesheet using (Rule; rule; Stylesheet)
 
 ------------------------------------------------------------------------
@@ -49,18 +49,16 @@ sidebarRules =
       ∷ "padding" ∶ "0"
       ∷ "background" ∶ "transparent"
       ∷ "border" ∶ "none"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
-      ∷ "cursor" ∶ "pointer"
+      ∷ borderRadius
+      ∷ cursorPointer
       ∷ "color" ∶ "var(--agdelte-text)"
-      ∷ "transition" ∶ "background var(--agdelte-transition)"
+      ∷ transitionBg
       ∷ [])
   ∷ rule ".agdelte-sidebar__toggle:hover"
       ( "background" ∶ "var(--agdelte-bg-hover)"
       ∷ [])
   ∷ rule ".agdelte-sidebar__toggle:focus-visible"
-      ( "outline" ∶ "2px solid var(--agdelte-primary)"
-      ∷ "outline-offset" ∶ "2px"
-      ∷ [])
+      focusOutline
   ∷ rule ".agdelte-sidebar__title"
       ( "white-space" ∶ "nowrap"
       ∷ "overflow" ∶ "hidden"
@@ -81,20 +79,18 @@ sidebarRules =
       ∷ "padding" ∶ "var(--agdelte-spacing-sm) var(--agdelte-spacing-md)"
       ∷ "background" ∶ "transparent"
       ∷ "border" ∶ "none"
-      ∷ "border-radius" ∶ "var(--agdelte-border-radius)"
-      ∷ "cursor" ∶ "pointer"
+      ∷ borderRadius
+      ∷ cursorPointer
       ∷ "color" ∶ "var(--agdelte-text)"
       ∷ "text-align" ∶ "left"
       ∷ "font-size" ∶ "inherit"
-      ∷ "transition" ∶ "all var(--agdelte-transition)"
+      ∷ transitionAll
       ∷ [])
   ∷ rule ".agdelte-sidebar__link:hover"
       ( "background" ∶ "var(--agdelte-bg-hover)"
       ∷ [])
   ∷ rule ".agdelte-sidebar__link:focus-visible"
-      ( "outline" ∶ "2px solid var(--agdelte-primary)"
-      ∷ "outline-offset" ∶ "2px"
-      ∷ [])
+      focusOutline
   ∷ rule ".agdelte-sidebar__link--active"
       ( "background" ∶ "var(--agdelte-primary)"
       ∷ "color" ∶ "var(--agdelte-text-light)"

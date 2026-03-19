@@ -18,6 +18,7 @@ open import Agdelte.WebGL.Types
 open import Agdelte.WebGL.Builder.Geometry.Primitives
 open import Agdelte.WebGL.Controls.Theme
 open import Agdelte.WebGL.Controls.Text
+open import Function using (case_of_)
 
 ------------------------------------------------------------------------
 -- Helper postulates
@@ -122,8 +123,6 @@ barChart3D {M} {Msg} theme config getData clickHandler t =
     showVals = BarChartConfig.showValues config
     colors = BarChartConfig.colorScheme config
 
-    case_of_ : ∀ {A B : Set} → A → (A → B) → B
-    case x of f = f x
 
     postulate showFloat : Float → String
     {-# COMPILE JS showFloat = x => x.toFixed(1) #-}
@@ -208,8 +207,6 @@ horizontalBarChart3D {M} {Msg} theme config getData clickHandler t =
     spacing = BarChartConfig.spacing config
     colors = BarChartConfig.colorScheme config
 
-    case_of_ : ∀ {A B : Set} → A → (A → B) → B
-    case x of f = f x
 
     buildBarList : Float → ℕ → List BarData → List (SceneNode M Msg)
     buildBarList _ _ [] = []

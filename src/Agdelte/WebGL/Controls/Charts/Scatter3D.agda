@@ -18,6 +18,7 @@ open import Agdelte.WebGL.Types
 open import Agdelte.WebGL.Builder.Geometry.Primitives
 open import Agdelte.WebGL.Controls.Theme
 open import Agdelte.WebGL.Controls.Text
+open import Function using (case_of_)
 
 ------------------------------------------------------------------------
 -- Helper postulates
@@ -25,10 +26,8 @@ open import Agdelte.WebGL.Controls.Text
 
 postulate
   natToFloat : ℕ → Float
-  sqrtF : Float → Float
 
 {-# COMPILE JS natToFloat = n => Number(n) #-}
-{-# COMPILE JS sqrtF = x => Math.sqrt(x) #-}
 
 ------------------------------------------------------------------------
 -- Scatter plot data
@@ -110,8 +109,6 @@ scatterPlot3D {M} {Msg} theme config getPoints clickHandler t =
     gridC = gridColor config
     divs = gridDivisions config
 
-    case_of_ : ∀ {A B : Set} → A → (A → B) → B
-    case x of f = f x
 
     buildPointList : ℕ → List ScatterPoint → List (SceneNode M Msg)
     buildPointList _ [] = []
