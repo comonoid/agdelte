@@ -23,15 +23,11 @@ open import Agdelte.WebGL.Controls.Theme
 
 postulate
   natToFloat : ℕ → Float
-  sinF : Float → Float
-  cosF : Float → Float
   clamp : Float → Float → Float → Float
   absFloat : Float → Float
   _<F_ : Float → Float → Bool
 
 {-# COMPILE JS natToFloat = n => Number(n) #-}
-{-# COMPILE JS sinF = x => Math.sin(x) #-}
-{-# COMPILE JS cosF = x => Math.cos(x) #-}
 {-# COMPILE JS clamp = min => max => x => Math.min(max, Math.max(min, x)) #-}
 {-# COMPILE JS absFloat = x => Math.abs(x) #-}
 {-# COMPILE JS _<F_ = x => y => x < y ? (cases) => cases["true"]() : (cases) => cases["false"]() #-}

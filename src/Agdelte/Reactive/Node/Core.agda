@@ -80,6 +80,8 @@ data Attr (Model Msg : Set) : Set where
   on : String → Msg → Attr Model Msg
   -- Event with value (e.g., onInput)
   onValue : String → (String → Msg) → Attr Model Msg
+  -- Event with custom property path (e.g., "target.currentTime", "target.duration")
+  onValueFrom : String → String → (String → Msg) → Attr Model Msg
   -- Event with screen coordinates (for drag/pan - no SVG conversion)
   onValueScreen : String → (String → Msg) → Attr Model Msg
   -- Keyboard event filtered to specific keys; calls preventDefault

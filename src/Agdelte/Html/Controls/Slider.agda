@@ -7,8 +7,10 @@
 module Agdelte.Html.Controls.Slider where
 
 open import Data.String using (String; _++_)
-open import Data.List using (List; []; _∷_)
+open import Data.List using (List; []; _∷_) renaming (_++_ to _++ˡ_)
 open import Data.Product using (_×_; proj₁; proj₂)
+open import Data.Maybe using (Maybe; just; nothing)
+open import Data.Bool using (Bool; true; false; if_then_else_)
 
 open import Agdelte.Reactive.Node
 open import Agdelte.Html.Controls.Util using (eqStr)
@@ -55,7 +57,206 @@ postulate rangePercent : String → String → String → String
 }; }; } #-}
 
 ------------------------------------------------------------------------
--- Basic slider (number value)
+-- Slider configuration (record config pattern)
+------------------------------------------------------------------------
+
+record SliderConfig (M A : Set) : Set where
+  constructor mkSlider
+  field
+    slLabel    : Maybe String     -- Nothing → compact (no label)
+    slMin      : String           -- range min bound
+    slMax      : String           -- range max bound
+    slStep     : Maybe String     -- Nothing → browser default
+    slVertical : Bool             -- vertical orientation
+    slTicks    : List String      -- tick mark values ([] → no ticks)
+    slTicksId  : String           -- datalist id (used when ticks non-empty)
+    slGetValue : M → String       -- read current value from model
+    slFormat   : M → String       -- display formatter (often = slGetValue)
+    slOnChange : Maybe (String → A) -- Nothing → disabled slider
+
+open SliderConfig public
+
+-- | Default slider config: labeled, horizontal, no step/ticks, enabled.
+defaultSlider : ∀ {M A} → String → String → String
+              → (M → String) → (String → A) → SliderConfig M A
+defaultSlider lbl mn mx get onChange =
+  mkSlider (just lbl) mn mx nothing false [] "" get get (just onChange)
+
+------------------------------------------------------------------------
+-- Range slider configuration
+------------------------------------------------------------------------
+
+record RangeSliderConfig (M A : Set) : Set where
+  constructor mkRangeSlider
+  field
+    rsLabel      : Maybe String     -- Nothing → compact (no label)
+    rsMin        : String           -- range bound min
+    rsMax        : String           -- range bound max
+    rsStep       : Maybe String     -- Nothing → browser default
+    rsGetMin     : M → String       -- current min value
+    rsGetMax     : M → String       -- current max value
+    rsOnMinChange : String → A      -- min value change handler
+    rsOnMaxChange : String → A      -- max value change handler
+
+open RangeSliderConfig public
+
+------------------------------------------------------------------------
+-- Unified slider (config-based)
+------------------------------------------------------------------------
+
+-- | Render a slider from config. Supports all variants:
+-- | label/compact, step, vertical, ticks, custom format, disabled.
+sliderWith : ∀ {M A} → SliderConfig M A → Node M A
+sliderWith {M} {A} cfg =
+  let mm = guardMinMax (slMin cfg) (slMax cfg)
+      mn = proj₁ mm
+      mx = proj₂ mm
+      getValue = slGetValue cfg
+      formatVal = slFormat cfg
+      isVert = slVertical cfg
+      cls = "agdelte-slider"
+            ++ (case slLabel cfg of λ where
+                  nothing → " agdelte-slider--compact"
+                  (just _) → "")
+            ++ (if isVert then " agdelte-slider--vertical" else "")
+            ++ (case slOnChange cfg of λ where
+                  nothing → " agdelte-slider--disabled"
+                  (just _) → "")
+            ++ (case slTicks cfg of λ where
+                  [] → ""
+                  (_ ∷ _) → " agdelte-slider--ticks")
+      labelNode : List (Node M A)
+      labelNode = case slLabel cfg of λ where
+        nothing → []
+        (just l) → label ( class "agdelte-slider__label" ∷ [] )
+                     ( text l ∷ [] ) ∷ []
+      stepAttrs : List (Attr M A)
+      stepAttrs = case slStep cfg of λ where
+        nothing → []
+        (just s) → attr "step" (guardStep s) ∷ []
+      vertAttrs : List (Attr M A)
+      vertAttrs = if isVert
+        then style "writing-mode" "vertical-lr"
+           ∷ attr "aria-orientation" "vertical" ∷ []
+        else []
+      disabledAttrs : List (Attr M A)
+      disabledAttrs = case slOnChange cfg of λ where
+        nothing → attr "disabled" "true" ∷ []
+        (just _) → []
+      changeAttrs : List (Attr M A)
+      changeAttrs = case slOnChange cfg of λ where
+        nothing → []
+        (just handler) → onInput handler ∷ []
+      tickListAttr : List (Attr M A)
+      tickListAttr = case slTicks cfg of λ where
+        [] → []
+        (_ ∷ _) → attr "list" (slTicksId cfg) ∷ []
+      tickNodes : List (Node M A)
+      tickNodes = case slTicks cfg of λ where
+        [] → []
+        ts → elem "datalist" ( attr "id" (slTicksId cfg) ∷ [] )
+               (renderOptions ts) ∷ []
+  in div ( class cls ∷ [] )
+    ( labelNode
+    ++ˡ ( input ( type' "range"
+               ∷ class "agdelte-slider__input"
+               ∷ attr "min" mn
+               ∷ attr "max" mx
+               ∷ attr "aria-valuemin" mn
+               ∷ attr "aria-valuemax" mx
+               ∷ attrBind "aria-valuenow" (mkBinding getValue eqStr)
+               ∷ valueBind getValue
+               ∷ (stepAttrs ++ˡ vertAttrs ++ˡ disabledAttrs ++ˡ changeAttrs ++ˡ tickListAttr) )
+        ∷ tickNodes
+       ++ˡ ( span ( class "agdelte-slider__value" ∷ [] )
+              ( bindF formatVal ∷ [] )
+          ∷ [] )))
+  where
+    case_of_ : ∀ {a b} {A : Set a} {B : Set b} → A → (A → B) → B
+    case x of f = f x
+    renderOptions : List String → List (Node M A)
+    renderOptions [] = []
+    renderOptions (v ∷ vs) =
+      elem "option" ( attr "value" v ∷ [] ) []
+      ∷ renderOptions vs
+
+-- | Render a range slider from config.
+rangeSliderWith : ∀ {M A} → RangeSliderConfig M A → Node M A
+rangeSliderWith {M} {A} cfg =
+  let bb = guardMinMax (rsMin cfg) (rsMax cfg)
+      mb = proj₁ bb
+      xb = proj₂ bb
+      getMin = rsGetMin cfg
+      getMax = rsGetMax cfg
+      onMinCh = rsOnMinChange cfg
+      onMaxCh = rsOnMaxChange cfg
+      cls = "agdelte-range-slider"
+            ++ (case rsLabel cfg of λ where
+                  nothing → " agdelte-range-slider--compact"
+                  (just _) → "")
+      labelNode : List (Node M A)
+      labelNode = case rsLabel cfg of λ where
+        nothing → []
+        (just l) → label ( class "agdelte-range-slider__label" ∷ [] )
+                     ( text l ∷ [] ) ∷ []
+      stepAttrs : List (Attr M A)
+      stepAttrs = case rsStep cfg of λ where
+        nothing → []
+        (just s) → attr "step" (guardStep s) ∷ []
+  in div ( class cls ∷ [] )
+    ( labelNode
+    ++ˡ ( div ( class "agdelte-range-slider__container" ∷ [] )
+           ( div ( class "agdelte-range-slider__track"
+                 ∷ styleBind "width" (mkBinding
+                     (λ m → let clMax = clampMaxStr (getMin m) (getMax m)
+                            in rangePercent mb xb clMax ++ "%")
+                     eqStr)
+                 ∷ styleBind "margin-left" (mkBinding
+                     (λ m → rangePercent mb xb
+                               (clampMinStr (getMin m) (getMax m))
+                            ++ "%")
+                     eqStr)
+                 ∷ [] ) []
+           ∷ input ( type' "range"
+                   ∷ class "agdelte-range-slider__input agdelte-range-slider__input--min"
+                   ∷ attr "min" mb
+                   ∷ attr "max" xb
+                   ∷ attr "aria-valuemin" mb
+                   ∷ attr "aria-valuemax" xb
+                   ∷ attrBind "aria-valuenow" (mkBinding
+                       (λ m → clampMinStr (getMin m) (getMax m)) eqStr)
+                   ∷ attr "aria-label" "Range minimum"
+                   ∷ valueBind getMin
+                   ∷ onInput onMinCh
+                   ∷ stepAttrs )
+           ∷ input ( type' "range"
+                   ∷ class "agdelte-range-slider__input agdelte-range-slider__input--max"
+                   ∷ attr "min" mb
+                   ∷ attr "max" xb
+                   ∷ attr "aria-valuemin" mb
+                   ∷ attr "aria-valuemax" xb
+                   ∷ attrBind "aria-valuenow" (mkBinding
+                       (λ m → clampMaxStr (getMin m) (getMax m)) eqStr)
+                   ∷ attr "aria-label" "Range maximum"
+                   ∷ valueBind getMax
+                   ∷ onInput onMaxCh
+                   ∷ stepAttrs )
+           ∷ [] )
+       ∷ div ( class "agdelte-range-slider__values" ∷ [] )
+           ( span ( class "agdelte-range-slider__value--min" ∷ [] )
+               ( bindF (λ m → clampMinStr (getMin m) (getMax m)) ∷ [] )
+           ∷ span ( class "agdelte-range-slider__separator" ∷ [] )
+               ( text " - " ∷ [] )
+           ∷ span ( class "agdelte-range-slider__value--max" ∷ [] )
+               ( bindF (λ m → clampMaxStr (getMin m) (getMax m)) ∷ [] )
+           ∷ [] )
+       ∷ [] ))
+  where
+    case_of_ : ∀ {a b} {A : Set a} {B : Set b} → A → (A → B) → B
+    case x of f = f x
+
+------------------------------------------------------------------------
+-- Backward-compatible positional-args API
 ------------------------------------------------------------------------
 
 -- | Basic slider with numeric value.

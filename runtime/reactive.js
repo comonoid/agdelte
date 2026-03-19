@@ -289,6 +289,42 @@ function executeCmd(cmd, dispatch) {
         console.warn(`Cmd.touchBuffer: buffer ${id} not found`);
       }
     },
+    'callMethod': (sel, method) => {
+      try {
+        const el = document.querySelector(sel);
+        if (el && typeof el[method] === 'function') el[method]();
+        else console.warn(`Cmd.callMethod: "${method}" not found on "${sel}"`);
+      } catch (e) {
+        console.warn(`Cmd.callMethod: error on "${sel}".${method}:`, e.message);
+      }
+    },
+    'setProp': (sel, prop, value) => {
+      try {
+        const el = document.querySelector(sel);
+        if (el) {
+          // Auto-convert to number if the property expects it
+          const numVal = Number(value);
+          el[prop] = isNaN(numVal) ? value : numVal;
+        } else console.warn(`Cmd.setProp: element not found: "${sel}"`);
+      } catch (e) {
+        console.warn(`Cmd.setProp: error on "${sel}".${prop}:`, e.message);
+      }
+    },
+    'getProp': (sel, prop, handler) => {
+      try {
+        const el = document.querySelector(sel);
+        if (el) {
+          const value = el[prop];
+          dispatch(handler(value != null ? String(value) : ''));
+        } else {
+          console.warn(`Cmd.getProp: element not found: "${sel}"`);
+          dispatch(handler(''));
+        }
+      } catch (e) {
+        console.warn(`Cmd.getProp: error on "${sel}".${prop}:`, e.message);
+        dispatch(handler(''));
+      }
+    },
     'pushUrl': (url) => history.pushState(null, '', '#' + url),
     'replaceUrl': (url) => history.replaceState(null, '', '#' + url),
     'back': () => history.back(),
@@ -1221,6 +1257,18 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           } else {
             sendNormal(msg);
           }
+        }, { signal: currentScope.abortCtrl.signal });
+      },
+      onValueFrom: (event, path, handler) => {
+        el.addEventListener(event, (e) => {
+          let value = '';
+          try {
+            const parts = path.split('.');
+            let obj = e;
+            for (const p of parts) obj = obj[p];
+            value = obj != null ? String(obj) : '';
+          } catch (_) {}
+          sendNormal(handler(value));
         }, { signal: currentScope.abortCtrl.signal });
       },
       onValue: (event, handler) => {

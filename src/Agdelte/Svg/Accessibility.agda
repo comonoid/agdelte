@@ -5,7 +5,7 @@
 
 module Agdelte.Svg.Accessibility where
 
-open import Data.List using (List; []; _∷_; _++_)
+open import Data.List using (List; []; _∷_)
 open import Data.String using (String)
 open import Agdelte.Reactive.Node using (Node; Attr; attr; elem)
 open import Agdelte.Svg.Elements using (svg; title'; desc')

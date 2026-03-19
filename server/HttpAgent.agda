@@ -38,15 +38,15 @@ main =
   putStrLn "  POST /step  → increment counter" >>
   listen 3000 (λ req → handleReq req ref)
   where
-    handleReq : HttpRequest → IORef (Agent Nat String String) → IO String
+    handleReq : HttpRequest → IORef (Agent Nat String String) → IO HttpResponse
     handleReq req ref with primStringEquality (reqPath req) "/state"
-    ... | true  = readIORef ref >>= λ agent →
-                  pure (observe agent (state agent))
-    ... | false with primStringEquality (reqPath req) "/step"
-    ...   | true with primStringEquality (reqMethod req) "POST"
-    ...     | true  = readIORef ref >>= λ agent →
-                      let result = stepAgent agent (reqBody req)
-                      in writeIORef ref (proj₁ result) >>
-                         pure (proj₂ result)
-    ...     | false = pure "Method not allowed (use POST)"
-    ...   | false = pure "Not found"
+                         | primStringEquality (reqPath req) "/step"
+                         | primStringEquality (reqMethod req) "POST"
+    ... | true  | _     | _     = readIORef ref >>= λ agent →
+                                  pure (mkResponse 200 (observe agent (state agent)))
+    ... | false | true  | true  = readIORef ref >>= λ agent →
+                                  let result = stepAgent agent (reqBody req)
+                                  in writeIORef ref (proj₁ result) >>
+                                     pure (mkResponse 200 (proj₂ result))
+    ... | false | true  | false = pure (mkResponse 405 "Method not allowed (use POST)")
+    ... | false | false | _     = pure (mkResponse 404 "Not found")

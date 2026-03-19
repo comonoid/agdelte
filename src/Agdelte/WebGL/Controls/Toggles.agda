@@ -25,12 +25,8 @@ open import Agdelte.WebGL.Controls.Text
 
 postulate
   natToFloat : ℕ → Float
-  sinF : Float → Float
-  cosF : Float → Float
 
 {-# COMPILE JS natToFloat = n => Number(n) #-}
-{-# COMPILE JS sinF = x => Math.sin(x) #-}
-{-# COMPILE JS cosF = x => Math.cos(x) #-}
 
 natEq : ℕ → ℕ → Bool
 natEq m n with m ≟ n

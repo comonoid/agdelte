@@ -11,7 +11,7 @@ open import Data.Product using (_×_; _,_)
 open import Data.Float using (Float)
 
 open import Agdelte.Core.Event.Core using
-  ( Event; MouseEvent; mouseX; mouseY; button; onClick; onMouseMove
+  ( Event; MouseEvent; mouseX; mouseY; mouseButton; onClickEvent; onMouseMove
   )
 
 private
@@ -22,11 +22,11 @@ Position : Set
 Position = Float × Float
 
 onLeftClick : A → Event A
-onLeftClick msg = onClick (λ e → if button e ≡ᵇ 0 then just msg else nothing)
+onLeftClick msg = onClickEvent (λ e → if mouseButton e ≡ᵇ 0 then just msg else nothing)
   where open import Data.Nat using (_≡ᵇ_)
 
 onRightClick : A → Event A
-onRightClick msg = onClick (λ e → if button e ≡ᵇ 2 then just msg else nothing)
+onRightClick msg = onClickEvent (λ e → if mouseButton e ≡ᵇ 2 then just msg else nothing)
   where open import Data.Nat using (_≡ᵇ_)
 
 mousePosition : (Position → A) → Event A

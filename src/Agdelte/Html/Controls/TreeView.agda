@@ -17,15 +17,6 @@ open import Function using (_∘_)
 open import Agdelte.Reactive.Node
 open import Agdelte.Html.Controls.Util using (eqStr)
 
-private
-  depthPaddingUnit : ℕ
-  depthPaddingUnit = 16
-
-  hasChildren : ∀ {A} → TreeNode A → Bool
-  hasChildren n with nodeChildren n
-  ... | [] = false
-  ... | _ = true
-
 ------------------------------------------------------------------------
 -- Tree node definition
 ------------------------------------------------------------------------
@@ -40,6 +31,15 @@ record TreeNode (A : Set) : Set where
     nodeChildren : List (TreeNode A)
 
 open TreeNode public
+
+private
+  depthPaddingUnit : ℕ
+  depthPaddingUnit = 16
+
+  hasChildren : ∀ {A} → TreeNode A → Bool
+  hasChildren n with nodeChildren n
+  ... | [] = false
+  ... | _ = true
 
 ------------------------------------------------------------------------
 -- Simple tree view (all expanded)
@@ -91,6 +91,7 @@ simpleTree {M} {A} onNodeClick roots =
 -- | isExpanded: check if node ID is expanded
 -- | toggleNode: message to toggle node expansion
 -- | onNodeClick: message when node is clicked
+{-# TERMINATING #-}
 collapsibleTree : ∀ {M A}
                 → (String → M → Bool)   -- is node expanded
                 → (String → A)          -- toggle expansion
@@ -170,6 +171,7 @@ open TreeDrag public
 
 -- | Collapsible tree with drag-drop reorder support.
 -- | onDrag: constructs a message from a TreeDrag (source → target)
+{-# TERMINATING #-}
 draggableTree : ∀ {M A}
               → (String → M → Bool)   -- is node expanded
               → (String → A)          -- toggle expansion

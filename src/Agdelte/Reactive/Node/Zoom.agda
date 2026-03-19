@@ -14,7 +14,7 @@ open import Agdelte.Reactive.Node.Core using
   ( Node; Attr; Binding; mkBinding; extract; equals
   ; text; bind; elem; empty; when; foreach; foreachKeyed
   ; whenT; scope; scopeProj; zoomRT; glCanvas
-  ; attr; attrBind; on; onValue; onValueScreen; onKeyFiltered
+  ; attr; attrBind; on; onValue; onValueFrom; onValueScreen; onKeyFiltered
   ; style; styleBind
   )
 
@@ -34,6 +34,7 @@ zoomAttr get wrap (attr name val) = attr name val
 zoomAttr get wrap (attrBind name b) = attrBind name (focusBinding get b)
 zoomAttr get wrap (on event msg) = on event (wrap msg)
 zoomAttr get wrap (onValue event handler) = onValue event (wrap ∘ handler)
+zoomAttr get wrap (onValueFrom event path handler) = onValueFrom event path (wrap ∘ handler)
 zoomAttr get wrap (onValueScreen event handler) = onValueScreen event (wrap ∘ handler)
 zoomAttr get wrap (onKeyFiltered keys handler) = onKeyFiltered keys (wrap ∘ handler)
 zoomAttr get wrap (style name val) = style name val

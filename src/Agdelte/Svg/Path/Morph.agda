@@ -6,7 +6,7 @@
 module Agdelte.Svg.Path.Morph where
 
 open import Data.Float using (Float; _+_; _-_; _*_)
-open import Data.List using (List; []; _∷_; zipWith; map; length; _++_)
+open import Data.List using (List; []; _∷_; zipWith; map; length) renaming (_++_ to _++ˡ_)
 open import Data.Nat using (ℕ; zero; suc; _∸_)
 open import Data.Nat.Base using (_≤ᵇ_)
 open import Data.String using (String; _++_)
@@ -148,7 +148,7 @@ padTo : ℕ → Path → Path
 padTo n [] = []
 padTo n path =
   let len = length path
-  in if len ≤ᵇ n then path Data.List.++ padCmds (n ∸ len) path else path
+  in if len ≤ᵇ n then path ++ˡ padCmds (n ∸ len) path else path
   where open import Data.Bool using (if_then_else_)
 
 -- Interpolate between two paths, padding the shorter to match

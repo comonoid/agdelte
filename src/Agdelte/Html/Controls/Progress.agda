@@ -90,17 +90,17 @@ spinner = div ( class "agdelte-spinner" ∷ attr "role" "status" ∷ [] )
             ∷ [] )
 
 -- | Spinner with size variant
-data SpinnerSize : Set where
-  Small  : SpinnerSize
-  Medium : SpinnerSize
-  Large  : SpinnerSize
+data ProgressSpinnerSize : Set where
+  Small  : ProgressSpinnerSize
+  Medium : ProgressSpinnerSize
+  Large  : ProgressSpinnerSize
 
-spinnerSizeClass : SpinnerSize → String
+spinnerSizeClass : ProgressSpinnerSize → String
 spinnerSizeClass Small  = "agdelte-spinner--sm"
 spinnerSizeClass Medium = "agdelte-spinner--md"
 spinnerSizeClass Large  = "agdelte-spinner--lg"
 
-spinnerWithSize : ∀ {M A} → SpinnerSize → Node M A
+spinnerWithSize : ∀ {M A} → ProgressSpinnerSize → Node M A
 spinnerWithSize size =
   div ( class ("agdelte-spinner " ++ spinnerSizeClass size)
       ∷ attr "role" "status"

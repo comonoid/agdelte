@@ -66,6 +66,14 @@ data Cmd (A : Set) : Set where
   freeBuffer  : BufferHandle → Cmd A
   touchBuffer : BufferHandle → (BufferHandle → A) → Cmd A
 
+  -- === DOM property access ===
+  -- Call a method on an element (e.g., "play", "pause")
+  callMethod : String → String → Cmd A             -- CSS selector, method name
+  -- Set a property on an element (e.g., currentTime, volume)
+  setProp    : String → String → String → Cmd A     -- CSS selector, property, value
+  -- Read a property from an element, dispatch result as message
+  getProp    : String → String → (String → A) → Cmd A  -- CSS selector, property, handler
+
   -- === Routing ===
   pushUrl    : String → Cmd A
   replaceUrl : String → Cmd A
@@ -104,6 +112,10 @@ mapCmd f (channelSend url msg) = channelSend url msg
 -- Buffer Registry
 mapCmd f (freeBuffer h) = freeBuffer h
 mapCmd f (touchBuffer h handler) = touchBuffer h (f ∘ handler)
+-- DOM property access
+mapCmd f (callMethod sel method) = callMethod sel method
+mapCmd f (setProp sel prop val) = setProp sel prop val
+mapCmd f (getProp sel prop h) = getProp sel prop (f ∘ h)
 -- Routing
 mapCmd f (pushUrl url) = pushUrl url
 mapCmd f (replaceUrl url) = replaceUrl url

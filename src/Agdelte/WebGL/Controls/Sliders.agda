@@ -25,16 +25,12 @@ open import Agdelte.WebGL.Controls.Text
 postulate
   clamp01 : Float → Float
   recip : Float → Float
-  sinF : Float → Float
-  cosF : Float → Float
   natToFloat : ℕ → Float
   floatToNat : Float → ℕ
   roundF : Float → Float
 
 {-# COMPILE JS clamp01 = x => Math.max(0, Math.min(1, x)) #-}
 {-# COMPILE JS recip = x => 1 / x #-}
-{-# COMPILE JS sinF = x => Math.sin(x) #-}
-{-# COMPILE JS cosF = x => Math.cos(x) #-}
 {-# COMPILE JS natToFloat = n => Number(n) #-}
 {-# COMPILE JS floatToNat = f => Math.round(f) | 0 #-}
 {-# COMPILE JS roundF = x => Math.round(x) #-}

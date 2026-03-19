@@ -197,13 +197,6 @@ colorPicker3D {M} {Msg} theme config getColor onChange t =
   where
     pi = 3.14159
 
-    postulate
-      sinF : Float → Float
-      cosF : Float → Float
-
-    {-# COMPILE JS sinF = x => Math.sin(x) #-}
-    {-# COMPILE JS cosF = x => Math.cos(x) #-}
-
     natToFloat : ℕ → Float
     natToFloat zero = 0.0
     natToFloat (suc n) = 1.0 + natToFloat n

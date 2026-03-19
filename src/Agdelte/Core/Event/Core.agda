@@ -60,7 +60,7 @@ record MouseEvent : Set where
     mouseY   : Float
     pageX    : Float
     pageY    : Float
-    button   : ℕ
+    mouseButton : ℕ
     buttons  : ℕ
 
 open MouseEvent public
@@ -220,8 +220,8 @@ onMouseUp h = sub (Sub.onMouseUp h)
 onMouseMove : (MouseEvent → Maybe A) → Event A
 onMouseMove h = sub (Sub.onMouseMove h)
 
-onClick : (MouseEvent → Maybe A) → Event A
-onClick h = sub (Sub.onClick h)
+onClickEvent : (MouseEvent → Maybe A) → Event A
+onClickEvent h = sub (Sub.onClick h)
 
 httpGet : String → (String → A) → (String → A) → Event A
 httpGet url onOk onErr = sub (Sub.httpGet url onOk onErr)

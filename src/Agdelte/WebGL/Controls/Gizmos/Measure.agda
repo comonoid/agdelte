@@ -23,17 +23,13 @@ open import Agdelte.WebGL.Controls.Text
 ------------------------------------------------------------------------
 
 postulate
-  sqrtF : Float → Float
   atan2F : Float → Float → Float
-  acosF : Float → Float
   showFloat : Float → String
   piF : Float
   _<F_ : Float → Float → Bool
   _>F_ : Float → Float → Bool
 
-{-# COMPILE JS sqrtF = x => Math.sqrt(x) #-}
 {-# COMPILE JS atan2F = y => x => Math.atan2(y, x) #-}
-{-# COMPILE JS acosF = x => Math.acos(x) #-}
 {-# COMPILE JS showFloat = x => x.toFixed(2) #-}
 {-# COMPILE JS piF = Math.PI #-}
 {-# COMPILE JS _<F_ = x => y => x < y ? (cases) => cases["true"]() : (cases) => cases["false"]() #-}

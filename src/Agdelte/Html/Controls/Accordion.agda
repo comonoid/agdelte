@@ -138,7 +138,31 @@ collapsible {M} {A} panelId title isOpen toggleMsg content =
     ∷ [] )
 
 ------------------------------------------------------------------------
--- Accordion (single item open at a time)
+-- Accordion configuration (record config pattern)
+------------------------------------------------------------------------
+
+record AccordionConfig (M A : Set) : Set where
+  constructor mkAccordionConfig
+  field
+    accPrefix       : String                  -- ID prefix for aria
+    accGetOpenIndex : M → Maybe ℕ            -- open item index (Nothing = all closed)
+    accToggleMsg    : ℕ → A                  -- toggle message by index
+    accItems        : List (AccordionItem M A) -- accordion items
+
+open AccordionConfig public
+
+record AccordionMultiConfig (M A : Set) : Set where
+  constructor mkAccordionMultiConfig
+  field
+    amPrefix     : String                    -- ID prefix for aria
+    amIsItemOpen : ℕ → M → Bool            -- check if item at index is open
+    amToggleMsg  : ℕ → A                   -- toggle message by index
+    amItems      : List (AccordionItem M A) -- accordion items
+
+open AccordionMultiConfig public
+
+------------------------------------------------------------------------
+-- Backward-compatible positional-args API
 ------------------------------------------------------------------------
 
 -- | Accordion with only one item open at a time.
@@ -156,8 +180,8 @@ accordion {M} {A} prefix getOpenIndex toggleMsg items =
   div ( class "agdelte-accordion" ∷ [] )
     (renderItems 0 items)
   where
-    isOpen : ℕ → M → Bool
-    isOpen idx m with getOpenIndex m
+    isItemOpen : ℕ → M → Bool
+    isItemOpen idx m with getOpenIndex m
     ... | nothing = false
     ... | just openIdx = idx ≡ᵇ openIdx
 
@@ -172,14 +196,14 @@ accordion {M} {A} prefix getOpenIndex toggleMsg items =
                  ∷ id' headerId
                  ∷ attr "aria-controls" contentId
                  ∷ attrBind "aria-expanded" (mkBinding
-                     (λ m → if isOpen idx m then "true" else "false")
+                     (λ m → if isItemOpen idx m then "true" else "false")
                      eqStr)
                  ∷ onClick (toggleMsg idx)
                  ∷ [] )
             ( span ( class "agdelte-accordion__title" ∷ [] )
                 ( text (itemTitle item) ∷ [] )
             ∷ span ( attrBind "class" (mkBinding
-                       (λ m → if isOpen idx m
+                       (λ m → if isItemOpen idx m
                               then "agdelte-accordion__icon agdelte-accordion__icon--open"
                               else "agdelte-accordion__icon")
                        eqStr)
@@ -187,7 +211,7 @@ accordion {M} {A} prefix getOpenIndex toggleMsg items =
                    ∷ [] )
                 ( text "▼" ∷ [] )
             ∷ [] )
-        ∷ whenT (isOpen idx) accordionTransition
+        ∷ whenT (isItemOpen idx) accordionTransition
             (div ( class "agdelte-accordion__content"
                  ∷ id' contentId
                  ∷ attr "role" "region"
@@ -257,3 +281,17 @@ accordionMulti {M} {A} prefix isItemOpen toggleMsg items =
     renderItems : ℕ → List (AccordionItem M A) → List (Node M A)
     renderItems _ [] = []
     renderItems idx (item ∷ rest) = renderItem idx item ∷ renderItems (suc idx) rest
+
+------------------------------------------------------------------------
+-- Config-based API (unified pattern)
+------------------------------------------------------------------------
+
+-- | Accordion (single open) from config.
+accordionWith : ∀ {M A} → AccordionConfig M A → Node M A
+accordionWith cfg = accordion (accPrefix cfg) (accGetOpenIndex cfg)
+                              (accToggleMsg cfg) (accItems cfg)
+
+-- | Accordion (multi open) from config.
+accordionMultiWith : ∀ {M A} → AccordionMultiConfig M A → Node M A
+accordionMultiWith cfg = accordionMulti (amPrefix cfg) (amIsItemOpen cfg)
+                                        (amToggleMsg cfg) (amItems cfg)

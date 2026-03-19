@@ -11,7 +11,7 @@ open import Data.Bool using (Bool)
 
 open import Agdelte.Reactive.Node.Core using
   ( Node; Attr; Binding
-  ; elem; bind; attr; attrBind; on; onValue; onValueScreen; onKeyFiltered
+  ; elem; bind; attr; attrBind; on; onValue; onValueFrom; onValueScreen; onKeyFiltered
   ; style; styleBind
   ; stringBinding; boolBinding
   )
@@ -68,6 +68,19 @@ a = elem "a"
 
 pre : ∀ {Model Msg} → List (Attr Model Msg) → List (Node Model Msg) → Node Model Msg
 pre = elem "pre"
+
+------------------------------------------------------------------------
+-- Media elements
+------------------------------------------------------------------------
+
+video : ∀ {Model Msg} → List (Attr Model Msg) → List (Node Model Msg) → Node Model Msg
+video = elem "video"
+
+audio : ∀ {Model Msg} → List (Attr Model Msg) → List (Node Model Msg) → Node Model Msg
+audio = elem "audio"
+
+source : ∀ {Model Msg} → List (Attr Model Msg) → Node Model Msg
+source attrs = elem "source" attrs []
 
 ------------------------------------------------------------------------
 -- Event handler helpers
@@ -173,3 +186,23 @@ styles = style
 -- Two-way binding: valueBind + onInput in one step
 vmodel : ∀ {Model Msg} → (Model → String) → (String → Msg) → List (Attr Model Msg)
 vmodel get msg = valueBind get ∷ onInput msg ∷ []
+
+------------------------------------------------------------------------
+-- Media event helpers
+------------------------------------------------------------------------
+
+-- Time update: extracts target.currentTime as String
+onTimeUpdate : ∀ {Model Msg} → (String → Msg) → Attr Model Msg
+onTimeUpdate = onValueFrom "timeupdate" "target.currentTime"
+
+-- Loaded metadata: extracts target.duration as String
+onLoadedMetadata : ∀ {Model Msg} → (String → Msg) → Attr Model Msg
+onLoadedMetadata = onValueFrom "loadedmetadata" "target.duration"
+
+-- Media ended
+onEnded : ∀ {Model Msg} → Msg → Attr Model Msg
+onEnded = on "ended"
+
+-- Volume change: extracts target.volume
+onVolumeChange : ∀ {Model Msg} → (String → Msg) → Attr Model Msg
+onVolumeChange = onValueFrom "volumechange" "target.volume"

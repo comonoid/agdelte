@@ -499,7 +499,7 @@ tabForms =
         ∷ [] )
     -- Slider section
     ∷ elem "h4" [] ( text "Slider" ∷ [] )
-    ∷ slider "Volume" "0" "100" sliderValue SetSlider
+    ∷ sliderWith (defaultSlider "Volume" "0" "100" sliderValue SetSlider)
     ∷ div ( class "selected-display" ∷ [] )
         ( text "Value: " ∷ bindF sliderValue ∷ text "%" ∷ [] )
     ∷ [] )
@@ -559,28 +559,28 @@ tabLayout =
     -- Accordion
     ∷ elem "h4" [] ( text "Accordion" ∷ [] )
     ∷ div ( class "demo-section" ∷ [] )
-        ( collapsible "acc-1" "Section 1" (accordion1 ∘ layoutState) ToggleAcc1
-            (p [] ( text "Content of section 1. This is the first panel." ∷ [] ))
-        ∷ collapsible "acc-2" "Section 2" (accordion2 ∘ layoutState) ToggleAcc2
-            (p [] ( text "Content of section 2. More details here." ∷ [] ))
-        ∷ collapsible "acc-3" "Section 3" (accordion3 ∘ layoutState) ToggleAcc3
-            (p [] ( text "Content of section 3. Final panel content." ∷ [] ))
+        ( collapsibleWith (mkCollapsible "acc-1" "Section 1" (accordion1 ∘ layoutState) ToggleAcc1
+            (p [] ( text "Content of section 1. This is the first panel." ∷ [] )))
+        ∷ collapsibleWith (mkCollapsible "acc-2" "Section 2" (accordion2 ∘ layoutState) ToggleAcc2
+            (p [] ( text "Content of section 2. More details here." ∷ [] )))
+        ∷ collapsibleWith (mkCollapsible "acc-3" "Section 3" (accordion3 ∘ layoutState) ToggleAcc3
+            (p [] ( text "Content of section 3. Final panel content." ∷ [] )))
         ∷ [] )
     -- TreeView
     ∷ elem "h4" [] ( text "TreeView" ∷ [] )
     ∷ div ( class "demo-section" ∷ [] )
-        ( collapsible "tree-docs" "📁 Documents" (tree1 ∘ layoutState) ToggleTree1
+        ( collapsibleWith (mkCollapsible "tree-docs" "📁 Documents" (tree1 ∘ layoutState) ToggleTree1
             (div []
               ( div ( style "padding-left" "20px" ∷ [] )
                   ( text "📄 report.pdf" ∷ [] )
               ∷ div ( style "padding-left" "20px" ∷ [] )
                   ( text "📄 notes.txt" ∷ [] )
-              ∷ [] ))
-        ∷ collapsible "tree-images" "📁 Images" (tree2 ∘ layoutState) ToggleTree2
+              ∷ [] )))
+        ∷ collapsibleWith (mkCollapsible "tree-images" "📁 Images" (tree2 ∘ layoutState) ToggleTree2
             (div []
               ( div ( style "padding-left" "20px" ∷ [] )
                   ( text "🖼️ photo.jpg" ∷ [] )
-              ∷ [] ))
+              ∷ [] )))
         ∷ [] )
     ∷ [] )
 
