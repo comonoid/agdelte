@@ -7,6 +7,8 @@
 module Agdelte.Core.Task where
 
 open import Data.String using (String)
+open import Data.List using (List)
+open import Data.Product using (_×_)
 open import Function using (_∘_; id)
 
 -- Import shared Result type
@@ -59,6 +61,17 @@ data Task (A : Set) : Set where
   -- HTTP POST: url, body, onSuccess continuation, onError continuation
   httpPost : String → String → (String → Task A) → (String → Task A) → Task A
 
+  -- HTTP with custom headers
+  httpGetH : String → List (String × String) → (String → Task A) → (String → Task A) → Task A
+  httpPostH : String → List (String × String) → String → (String → Task A) → (String → Task A) → Task A
+
+  -- Fetch URL as ArrayBuffer, return base64-encoded String
+  fetchArrayBuffer : String → (String → Task A) → (String → Task A) → Task A
+
+  -- AES-128-CBC decryption via crypto.subtle
+  -- key (base64), iv (base64), data (base64) → decrypted (base64)
+  decryptAES128 : String → String → String → (String → Task A) → (String → Task A) → Task A
+
 -- httpGet url onOk onErr:
 --   onOk receives the response body as String
 --   onErr receives an error message (network error description or HTTP status text)
@@ -81,6 +94,10 @@ pure a >>= f = f a
 fail e >>= f = fail e
 httpGet url onOk onErr >>= f = httpGet url (λ s → onOk s >>= f) (λ e → fail e)
 httpPost url body onOk onErr >>= f = httpPost url body (λ s → onOk s >>= f) (λ e → fail e)
+httpGetH url hdrs onOk onErr >>= f = httpGetH url hdrs (λ s → onOk s >>= f) (λ e → fail e)
+httpPostH url hdrs body onOk onErr >>= f = httpPostH url hdrs body (λ s → onOk s >>= f) (λ e → fail e)
+fetchArrayBuffer url onOk onErr >>= f = fetchArrayBuffer url (λ s → onOk s >>= f) (λ e → fail e)
+decryptAES128 k iv d onOk onErr >>= f = decryptAES128 k iv d (λ s → onOk s >>= f) (λ e → fail e)
 
 infixl 1 _>>=_ _>>=+_
 
@@ -93,6 +110,10 @@ pure a >>=+ f = f a
 fail e >>=+ f = fail e
 httpGet url onOk onErr >>=+ f = httpGet url (λ s → onOk s >>=+ f) (λ e → onErr e >>=+ f)
 httpPost url body onOk onErr >>=+ f = httpPost url body (λ s → onOk s >>=+ f) (λ e → onErr e >>=+ f)
+httpGetH url hdrs onOk onErr >>=+ f = httpGetH url hdrs (λ s → onOk s >>=+ f) (λ e → onErr e >>=+ f)
+httpPostH url hdrs body onOk onErr >>=+ f = httpPostH url hdrs body (λ s → onOk s >>=+ f) (λ e → onErr e >>=+ f)
+fetchArrayBuffer url onOk onErr >>=+ f = fetchArrayBuffer url (λ s → onOk s >>=+ f) (λ e → onErr e >>=+ f)
+decryptAES128 k iv d onOk onErr >>=+ f = decryptAES128 k iv d (λ s → onOk s >>=+ f) (λ e → onErr e >>=+ f)
 
 -- fmap (<$>)
 _<$>_ : (A → B) → Task A → Task B
@@ -118,6 +139,22 @@ http url = httpGet url pure fail
 httpPost′ : String → String → Task String
 httpPost′ url body = httpPost url body pure fail
 
+-- HTTP GET with headers
+httpH : String → List (String × String) → Task String
+httpH url hdrs = httpGetH url hdrs pure fail
+
+-- HTTP POST with headers
+httpPostH′ : String → List (String × String) → String → Task String
+httpPostH′ url hdrs body = httpPostH url hdrs body pure fail
+
+-- Fetch as ArrayBuffer (returns base64)
+fetchBinary : String → Task String
+fetchBinary url = fetchArrayBuffer url pure fail
+
+-- Decrypt AES-128-CBC (key, iv, data all base64; returns base64)
+decrypt : String → String → String → Task String
+decrypt key iv dat = decryptAES128 key iv dat pure fail
+
 ------------------------------------------------------------------------
 -- Error handling
 ------------------------------------------------------------------------
@@ -131,6 +168,10 @@ private
   alwaysThen (fail _)                 k = k
   alwaysThen (httpGet u onOk onEr)    k = httpGet u (λ s → alwaysThen (onOk s) k) (λ e → alwaysThen (onEr e) k)
   alwaysThen (httpPost u b onOk onEr) k = httpPost u b (λ s → alwaysThen (onOk s) k) (λ e → alwaysThen (onEr e) k)
+  alwaysThen (httpGetH u h onOk onEr) k = httpGetH u h (λ s → alwaysThen (onOk s) k) (λ e → alwaysThen (onEr e) k)
+  alwaysThen (httpPostH u h b onOk onEr) k = httpPostH u h b (λ s → alwaysThen (onOk s) k) (λ e → alwaysThen (onEr e) k)
+  alwaysThen (fetchArrayBuffer u onOk onEr) k = fetchArrayBuffer u (λ s → alwaysThen (onOk s) k) (λ e → alwaysThen (onEr e) k)
+  alwaysThen (decryptAES128 ki iv d onOk onEr) k = decryptAES128 ki iv d (λ s → alwaysThen (onOk s) k) (λ e → alwaysThen (onEr e) k)
 
 -- | Alternative with side-effect preservation: on error, run original
 -- onErr for its effects, THEN continue with the fallback task.
@@ -141,6 +182,10 @@ pure a <|> _ = pure a
 fail _ <|> t₂ = t₂
 httpGet url onOk onErr <|> t₂ = httpGet url onOk (λ e → alwaysThen (onErr e) t₂)
 httpPost url body onOk onErr <|> t₂ = httpPost url body onOk (λ e → alwaysThen (onErr e) t₂)
+httpGetH url hdrs onOk onErr <|> t₂ = httpGetH url hdrs onOk (λ e → alwaysThen (onErr e) t₂)
+httpPostH url hdrs body onOk onErr <|> t₂ = httpPostH url hdrs body onOk (λ e → alwaysThen (onErr e) t₂)
+fetchArrayBuffer url onOk onErr <|> t₂ = fetchArrayBuffer url onOk (λ e → alwaysThen (onErr e) t₂)
+decryptAES128 k iv d onOk onErr <|> t₂ = decryptAES128 k iv d onOk (λ e → alwaysThen (onErr e) t₂)
 
 infixl 3 _<|>_ _<|>!_
 
@@ -152,6 +197,10 @@ pure a <|>! _ = pure a
 fail _ <|>! t₂ = t₂
 httpGet url onOk onErr <|>! t₂ = httpGet url onOk (λ _ → t₂)
 httpPost url body onOk onErr <|>! t₂ = httpPost url body onOk (λ _ → t₂)
+httpGetH url hdrs onOk onErr <|>! t₂ = httpGetH url hdrs onOk (λ _ → t₂)
+httpPostH url hdrs body onOk onErr <|>! t₂ = httpPostH url hdrs body onOk (λ _ → t₂)
+fetchArrayBuffer url onOk onErr <|>! t₂ = fetchArrayBuffer url onOk (λ _ → t₂)
+decryptAES128 k iv d onOk onErr <|>! t₂ = decryptAES128 k iv d onOk (λ _ → t₂)
 
 -- | Recover from immediate failures. Converts `fail e` and HTTP
 -- error callbacks to `pure (f e)`. Does NOT affect nested failures
@@ -163,6 +212,10 @@ recover (pure a) _ = pure a
 recover (fail e) f = pure (f e)
 recover (httpGet url onOk onErr) f = httpGet url onOk (λ e → pure (f e))
 recover (httpPost url body onOk onErr) f = httpPost url body onOk (λ e → pure (f e))
+recover (httpGetH url hdrs onOk onErr) f = httpGetH url hdrs onOk (λ e → pure (f e))
+recover (httpPostH url hdrs body onOk onErr) f = httpPostH url hdrs body onOk (λ e → pure (f e))
+recover (fetchArrayBuffer url onOk onErr) f = fetchArrayBuffer url onOk (λ e → pure (f e))
+recover (decryptAES128 k iv d onOk onErr) f = decryptAES128 k iv d onOk (λ e → pure (f e))
 
 ------------------------------------------------------------------------
 -- Result conversion
@@ -179,3 +232,11 @@ toResult (httpGet url onOk onErr) =
   httpGet url (λ s → toResult (onOk s)) (λ e → toResult (onErr e))
 toResult (httpPost url body onOk onErr) =
   httpPost url body (λ s → toResult (onOk s)) (λ e → toResult (onErr e))
+toResult (httpGetH url hdrs onOk onErr) =
+  httpGetH url hdrs (λ s → toResult (onOk s)) (λ e → toResult (onErr e))
+toResult (httpPostH url hdrs body onOk onErr) =
+  httpPostH url hdrs body (λ s → toResult (onOk s)) (λ e → toResult (onErr e))
+toResult (fetchArrayBuffer url onOk onErr) =
+  fetchArrayBuffer url (λ s → toResult (onOk s)) (λ e → toResult (onErr e))
+toResult (decryptAES128 k iv d onOk onErr) =
+  decryptAES128 k iv d (λ s → toResult (onOk s)) (λ e → toResult (onErr e))

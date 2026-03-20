@@ -46,13 +46,6 @@ private
   sentinelAttrs handler =
       class "agdelte-modal__sentinel"
     ∷ attr "tabindex" "0"
-    ∷ attr "aria-hidden" "true"
-    ∷ style "position" "absolute"
-    ∷ style "width" "1px"
-    ∷ style "height" "1px"
-    ∷ style "overflow" "hidden"
-    ∷ style "clip" "rect(0,0,0,0)"
-    ∷ style "white-space" "nowrap"
     ∷ attr "onfocus" handler
     ∷ []
 
@@ -74,8 +67,6 @@ modal : ∀ {M A} → (M → Bool) → A → Node M A → Node M A
 modal isOpen closeMsg content =
   when isOpen
     ( div ( class "agdelte-modal agdelte-modal--open"
-          ∷ attr "role" "dialog"
-          ∷ attr "aria-modal" "true"
           ∷ onKeyFiltered ("Escape" ∷ []) (λ _ → closeMsg)
           ∷ [] )
         ( startSentinel
@@ -97,8 +88,6 @@ modalT : ∀ {M A} → (M → Bool) → A → Transition → Node M A → Node M
 modalT isOpen closeMsg trans content =
   whenT isOpen trans
     ( div ( class "agdelte-modal agdelte-modal--open"
-          ∷ attr "role" "dialog"
-          ∷ attr "aria-modal" "true"
           ∷ onKeyFiltered ("Escape" ∷ []) (λ _ → closeMsg)
           ∷ [] )
         ( startSentinel
@@ -120,8 +109,6 @@ modalStrict : ∀ {M A} → (M → Bool) → Node M A → Node M A
 modalStrict isOpen content =
   when isOpen
     ( div ( class "agdelte-modal agdelte-modal--open"
-          ∷ attr "role" "dialog"
-          ∷ attr "aria-modal" "true"
           ∷ [] )
         ( div ( class "agdelte-modal__backdrop" ∷ [] )
             []

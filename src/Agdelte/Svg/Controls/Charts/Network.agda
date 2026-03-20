@@ -171,7 +171,6 @@ networkGraph {M} {A} px py w h nodes edges =
                      ∷ [] )
                ( text (nodeLabel n) ∷ [] )
            ∷ [] )
-      where
 
     renderNodes : List (GraphNode A) → List (Node M A)
     renderNodes [] = []

@@ -16,7 +16,7 @@ open import Data.Product using (_×_; _,_)
 
 open import Agdelte.Core.Event public
   using ( Event; MouseEvent; mkMouseEvent
-        ; mouseX; mouseY; pageX; pageY; button; buttons
+        ; mouseX; mouseY; pageX; pageY; mouseButton; buttons
         ; mapFilterE
         )
 
@@ -59,8 +59,8 @@ onGlobalClickAll f = CE.onClick (λ e → just (f e))
 
 -- Left click only (button 0)
 onLeftClick : ∀ {A : Set} → A → Event A
-onLeftClick msg = CE.onClick (λ e → if button e ≡ᵇ 0 then just msg else nothing)
+onLeftClick msg = CE.onClick (λ e → if mouseButton e ≡ᵇ 0 then just msg else nothing)
 
 -- Right click only (button 2)
 onRightClick : ∀ {A : Set} → A → Event A
-onRightClick msg = CE.onClick (λ e → if button e ≡ᵇ 2 then just msg else nothing)
+onRightClick msg = CE.onClick (λ e → if mouseButton e ≡ᵇ 2 then just msg else nothing)

@@ -29,7 +29,7 @@ open import Agdelte.Svg.Controls.Charts.Line public
 
 -- Area charts for filled time series and stacked data
 -- (DataPoint from Line conflicts - use separate import or prefix)
-open import Agdelte.Svg.Controls.Charts.Area public hiding (DataPoint; mkDataPoint; dpX; dpY)
+open import Agdelte.Svg.Controls.Charts.Area public
 
 ------------------------------------------------------------------------
 -- Bar Charts

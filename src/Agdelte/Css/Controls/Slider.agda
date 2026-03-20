@@ -174,4 +174,26 @@ sliderRules =
       ( "flex" ∶ "1"
       ∷ "max-width" ∶ "200px"
       ∷ [])
+  -- Hue slider (standalone class)
+  ∷ rule ".agdelte-slider--hue"
+      ( "background" ∶ "linear-gradient(to right, hsl(0,100%,50%), hsl(60,100%,50%), hsl(120,100%,50%), hsl(180,100%,50%), hsl(240,100%,50%), hsl(300,100%,50%), hsl(360,100%,50%))"
+      ∷ borderRadius
+      ∷ [])
+  -- Percent marker class
+  ∷ rule ".agdelte-slider--percent" []
+  -- Ticks marker class
+  ∷ rule ".agdelte-slider--ticks" []
+  -- Range slider input positioning
+  ∷ rule ".agdelte-range-slider__input--min, .agdelte-range-slider__input--max"
+      ( "position" ∶ "absolute"
+      ∷ "width" ∶ "100%"
+      ∷ "pointer-events" ∶ "none"
+      ∷ "-webkit-appearance" ∶ "none"
+      ∷ "appearance" ∶ "none"
+      ∷ "background" ∶ "transparent"
+      ∷ [])
+  -- Range slider value display
+  ∷ rule ".agdelte-range-slider__value--min, .agdelte-range-slider__value--max"
+      ( "font-variant-numeric" ∶ "tabular-nums"
+      ∷ [])
   ∷ []

@@ -63,11 +63,11 @@ private
     let cls = "agdelte-spinner" ++ sizeClass sz
                 ++ (if inl then " agdelte-spinner--inline" else "")
         tag = if inl then span else div
-    in tag (class cls ∷ attr "role" "status" ∷ sizeAttrs sz) (srOnly ∷ [])
+    in tag (class cls ∷ sizeAttrs sz) (srOnly ∷ [])
 
   renderDot : ∀ {M A} → Node M A
   renderDot =
-    div (class "agdelte-dot-spinner" ∷ attr "role" "status" ∷ [])
+    div (class "agdelte-dot-spinner" ∷ [])
       ( span (class "agdelte-dot-spinner__dot" ∷ []) []
       ∷ span (class "agdelte-dot-spinner__dot" ∷ []) []
       ∷ span (class "agdelte-dot-spinner__dot" ∷ []) []
@@ -75,11 +75,11 @@ private
 
   renderPulse : ∀ {M A} → Node M A
   renderPulse =
-    div (class "agdelte-pulse-spinner" ∷ attr "role" "status" ∷ []) (srOnly ∷ [])
+    div (class "agdelte-pulse-spinner" ∷ []) (srOnly ∷ [])
 
   renderBar : ∀ {M A} → Node M A
   renderBar =
-    div (class "agdelte-bar-spinner" ∷ attr "role" "status" ∷ [])
+    div (class "agdelte-bar-spinner" ∷ [])
       ( div (class "agdelte-bar-spinner__bar" ∷ []) []
       ∷ srOnly ∷ [] )
 
@@ -92,7 +92,7 @@ private
   wrapLabel : ∀ {M A} → Maybe String → Node M A → Node M A
   wrapLabel nothing inner = inner
   wrapLabel (just lbl) inner =
-    div (class "agdelte-spinner-container" ∷ attr "role" "status" ∷ [])
+    div (class "agdelte-spinner-container" ∷ [])
       ( inner
       ∷ span (class "agdelte-spinner__text" ∷ []) (text lbl ∷ [])
       ∷ [] )
@@ -100,7 +100,7 @@ private
   wrapOverlay : ∀ {M A} → Bool → Node M A → Node M A
   wrapOverlay false inner = inner
   wrapOverlay true  inner =
-    div (class "agdelte-spinner-overlay" ∷ attr "role" "status" ∷ []) (inner ∷ [])
+    div (class "agdelte-spinner-overlay" ∷ []) (inner ∷ [])
 
 -- | Main spinner function with full configuration
 spinnerWith : ∀ {M A} → SpinnerConfig → Node M A

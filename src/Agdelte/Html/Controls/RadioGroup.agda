@@ -37,7 +37,7 @@ radioGroup : ∀ {V M A}
            → List (SelectOption V)
            → Node M A
 radioGroup {V} {M} {A} name eqV getSelected selectMsg options =
-  div ( class "agdelte-radio-group" ∷ attr "role" "radiogroup" ∷ [] )
+  div ( class "agdelte-radio-group" ∷ [] )
     (map renderOption options)
   where
     isSelected : V → M → Bool
@@ -53,9 +53,6 @@ radioGroup {V} {M} {A} name eqV getSelected selectMsg options =
                 ∷ class "agdelte-radio__input"
                 ∷ attrBind "checked" (mkBinding
                     (λ m → if isSelected (optValue opt) m then "true" else "")
-                    eqStr)
-                ∷ attrBind "aria-checked" (mkBinding
-                    (λ m → if isSelected (optValue opt) m then "true" else "false")
                     eqStr)
                 ∷ onChange (λ _ → selectMsg (optValue opt))
                 ∷ [] )
@@ -75,7 +72,7 @@ radioGroupIdx : ∀ {M A}
               → List String            -- option labels
               → Node M A
 radioGroupIdx {M} {A} name getSelected selectMsg labels =
-  div ( class "agdelte-radio-group" ∷ attr "role" "radiogroup" ∷ [] )
+  div ( class "agdelte-radio-group" ∷ [] )
     (renderOptions 0 labels)
   where
     isSelected : ℕ → M → Bool
@@ -91,9 +88,6 @@ radioGroupIdx {M} {A} name getSelected selectMsg labels =
                 ∷ class "agdelte-radio__input"
                 ∷ attrBind "checked" (mkBinding
                     (λ m → if isSelected idx m then "true" else "")
-                    eqStr)
-                ∷ attrBind "aria-checked" (mkBinding
-                    (λ m → if isSelected idx m then "true" else "false")
                     eqStr)
                 ∷ onChange (λ _ → selectMsg idx)
                 ∷ [] )
@@ -118,7 +112,7 @@ stringRadioGroup : ∀ {M A}
                  → List String         -- options (value = label)
                  → Node M A
 stringRadioGroup {M} {A} name getSelected selectMsg labels =
-  div ( class "agdelte-radio-group" ∷ attr "role" "radiogroup" ∷ [] )
+  div ( class "agdelte-radio-group" ∷ [] )
     (map renderOption labels)
   where
     isSelected : String → M → Bool
@@ -134,9 +128,6 @@ stringRadioGroup {M} {A} name getSelected selectMsg labels =
                 ∷ class "agdelte-radio__input"
                 ∷ attrBind "checked" (mkBinding
                     (λ m → if isSelected lbl m then "true" else "")
-                    eqStr)
-                ∷ attrBind "aria-checked" (mkBinding
-                    (λ m → if isSelected lbl m then "true" else "false")
                     eqStr)
                 ∷ onChange (λ _ → selectMsg lbl)
                 ∷ [] )

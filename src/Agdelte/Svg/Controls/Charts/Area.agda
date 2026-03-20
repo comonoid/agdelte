@@ -20,8 +20,8 @@ open import Agdelte.Svg.Attributes
 open import Agdelte.Css.Show using (showFloat)
 open import Agdelte.Svg.Math using (findMin; findMax; zeroMin; zeroMax)
 open import Agdelte.Svg.Controls.Charts.Helpers
-open import Function using (case_of_)
   using (DataPoint; mkDataPoint; dpX; dpY; extractX; extractY; scaleX; scaleY)
+open import Function using (case_of_)
 
 record AreaSeries : Set where
   constructor mkAreaSeries

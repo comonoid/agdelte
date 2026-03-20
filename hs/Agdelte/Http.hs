@@ -20,7 +20,11 @@ import qualified Network.Wai.Handler.WebSockets as WaiWS
 
 -- Types preserved for FFI compatibility with Server.agda
 data Request = Request
-  { reqMethod :: Text, reqPath :: Text, reqBody :: Text }
+  { reqMethod  :: Text
+  , reqPath    :: Text
+  , reqBody    :: Text
+  , reqHeaders :: [(Text, Text)]
+  }
   deriving (Show)
 
 data Response = Response
@@ -83,10 +87,14 @@ toWaiApp handler waiReq respond = do
     Left () -> respond $ Wai.responseLBS H.status413
       [("Content-Type", "text/plain")] "Payload too large"
     Right reqBodyBS -> do
-      let req = Request
-            { reqMethod = TE.decodeUtf8With lenientDecode (Wai.requestMethod waiReq)
-            , reqPath   = TE.decodeUtf8With lenientDecode (Wai.rawPathInfo waiReq)
-            , reqBody   = TE.decodeUtf8With lenientDecode reqBodyBS
+      let hdrs = map (\(k,v) -> ( TE.decodeUtf8With lenientDecode (CI.original k)
+                                  , TE.decodeUtf8With lenientDecode v ))
+                      (Wai.requestHeaders waiReq)
+          req = Request
+            { reqMethod  = TE.decodeUtf8With lenientDecode (Wai.requestMethod waiReq)
+            , reqPath    = TE.decodeUtf8With lenientDecode (Wai.rawPathInfo waiReq)
+            , reqBody    = TE.decodeUtf8With lenientDecode reqBodyBS
+            , reqHeaders = hdrs
             }
       handlerResult <- try $ handler req
       case handlerResult of

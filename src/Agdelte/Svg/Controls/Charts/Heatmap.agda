@@ -114,7 +114,6 @@ heatmap {M} {A} px py w h colorFn grid onClick' =
                     ∷ on "click" (handler rowIdx colIdx)
                     ∷ [] ) [])
          ∷ renderCells (cx + cellW) cy cellW cellH minV maxV colFn vs (suc colIdx) rowIdx numCols onClick''
-      where
 
     renderRows : Float → Float → Float → Float
                → Float → Float

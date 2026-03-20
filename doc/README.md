@@ -27,6 +27,9 @@
 | [FFI](api/ffi.md) | Browser/Server postulates, Serialize, Testing |
 | [Html.Controls](api/html-controls.md) | HTML UI widgets: TabBar, Modal, DataGrid, Dropdown, Toast, etc. |
 | [Svg.Controls](api/svg-controls.md) | SVG visualizations: Charts (Line, Bar, Pie, etc.), Gauges, Diagrams |
+| [Video](api/video.md) | MediaSource video player: segmented delivery, controls, keyboard shortcuts |
+| [Auth](api/auth.md) | JWT auth: sign/verify, middleware, client-side token management |
+| [Storage](api/storage.md) | WAL persistence: write-ahead log, snapshots, domain state |
 
 ## Theory
 

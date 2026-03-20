@@ -9,6 +9,7 @@ build/
 # Haskell build artifacts
 *.hi
 *.o
+hs/test-runner
 
 # Agda JS backend intermediate files (use --compile-dir=_build instead)
 jAgda.*.js

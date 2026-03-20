@@ -49,7 +49,6 @@ breadcrumb : ∀ {M A}
            → Node M A
 breadcrumb {M} {A} items =
   nav ( class "agdelte-breadcrumb"
-      ∷ attr "aria-label" "Breadcrumb"
       ∷ [] )
     ( elem "ol" ( class "agdelte-breadcrumb__list" ∷ [] )
         (renderItems 0 (length items) items)
@@ -61,13 +60,11 @@ breadcrumb {M} {A} items =
         ( if isLast idx total
           then (if isSingleItem total
                 then button ( class "agdelte-breadcrumb__current agdelte-breadcrumb__link"
-                            ∷ attr "aria-current" "page"
                             ∷ onClick (crumbMsg item)
                             ∷ [] )
                        ( text (crumbLabel item) ∷ [] )
                      ∷ []
                 else span ( class "agdelte-breadcrumb__current"
-                          ∷ attr "aria-current" "page"
                           ∷ [] )
                        ( text (crumbLabel item) ∷ [] )
                      ∷ [])
@@ -76,7 +73,6 @@ breadcrumb {M} {A} items =
                       ∷ [] )
                  ( text (crumbLabel item) ∷ [] )
                ∷ span ( class "agdelte-breadcrumb__separator"
-                      ∷ attr "aria-hidden" "true"
                       ∷ [] )
                    ( text "/" ∷ [] )
                ∷ [] )
@@ -97,7 +93,6 @@ breadcrumbWith : ∀ {M A}
                → Node M A
 breadcrumbWith {M} {A} sep items =
   nav ( class "agdelte-breadcrumb"
-      ∷ attr "aria-label" "Breadcrumb"
       ∷ [] )
     ( elem "ol" ( class "agdelte-breadcrumb__list" ∷ [] )
         (renderItems 0 (length items) items)
@@ -109,13 +104,11 @@ breadcrumbWith {M} {A} sep items =
         ( if isLast idx total
           then (if isSingleItem total
                 then button ( class "agdelte-breadcrumb__current agdelte-breadcrumb__link"
-                            ∷ attr "aria-current" "page"
                             ∷ onClick (crumbMsg item)
                             ∷ [] )
                        ( text (crumbLabel item) ∷ [] )
                      ∷ []
                 else span ( class "agdelte-breadcrumb__current"
-                          ∷ attr "aria-current" "page"
                           ∷ [] )
                        ( text (crumbLabel item) ∷ [] )
                      ∷ [])
@@ -124,7 +117,6 @@ breadcrumbWith {M} {A} sep items =
                       ∷ [] )
                  ( text (crumbLabel item) ∷ [] )
                ∷ span ( class "agdelte-breadcrumb__separator"
-                      ∷ attr "aria-hidden" "true"
                       ∷ [] )
                    ( text sep ∷ [] )
                ∷ [] )
@@ -146,7 +138,6 @@ simpleBreadcrumb : ∀ {M A}
                  → Node M A
 simpleBreadcrumb {M} {A} handler labels =
   nav ( class "agdelte-breadcrumb"
-      ∷ attr "aria-label" "Breadcrumb"
       ∷ [] )
     ( elem "ol" ( class "agdelte-breadcrumb__list" ∷ [] )
         (renderItems 0 (length labels) labels)
@@ -158,13 +149,11 @@ simpleBreadcrumb {M} {A} handler labels =
         ( if isLast idx total
           then (if isSingleItem total
                 then button ( class "agdelte-breadcrumb__current agdelte-breadcrumb__link"
-                            ∷ attr "aria-current" "page"
                             ∷ onClick (handler idx)
                             ∷ [] )
                        ( text lbl ∷ [] )
                      ∷ []
                 else span ( class "agdelte-breadcrumb__current"
-                          ∷ attr "aria-current" "page"
                           ∷ [] )
                        ( text lbl ∷ [] )
                      ∷ [])
@@ -173,7 +162,6 @@ simpleBreadcrumb {M} {A} handler labels =
                       ∷ [] )
                  ( text lbl ∷ [] )
                ∷ span ( class "agdelte-breadcrumb__separator"
-                      ∷ attr "aria-hidden" "true"
                       ∷ [] )
                    ( text "/" ∷ [] )
                ∷ [] )
@@ -204,7 +192,6 @@ private
                       → Node M A
   breadcrumbBindWith' {M} {A} sep getItems =
     nav ( class "agdelte-breadcrumb"
-        ∷ attr "aria-label" "Breadcrumb"
         ∷ [] )
       ( elem "ol" ( class "agdelte-breadcrumb__list" ∷ [] )
           ( foreach getItems renderItem' ∷ [] )
@@ -224,14 +211,12 @@ private
           -- Last item (single): clickable button with aria-current
           ( when (λ m → isLastItem idx m ∧ isSingleItemM m)
               (button ( class "agdelte-breadcrumb__current agdelte-breadcrumb__link"
-                      ∷ attr "aria-current" "page"
                       ∷ onClick (crumbMsg item)
                       ∷ [] )
                  ( text (crumbLabel item) ∷ [] ))
           -- Last item (multiple): span with aria-current, no separator
           ∷ when (λ m → isLastItem idx m ∧ not (isSingleItemM m))
               (span ( class "agdelte-breadcrumb__current"
-                    ∷ attr "aria-current" "page"
                     ∷ [] )
                  ( text (crumbLabel item) ∷ [] ))
           -- Non-last item: clickable link with separator
@@ -242,7 +227,6 @@ private
                        ∷ [] )
                   ( text (crumbLabel item) ∷ [] )
                 ∷ span ( class "agdelte-breadcrumb__separator"
-                       ∷ attr "aria-hidden" "true"
                        ∷ [] )
                     ( text sep ∷ [] )
                 ∷ [] ))

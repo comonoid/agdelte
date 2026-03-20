@@ -223,6 +223,9 @@ The key difference from Virtual DOM: `template` is **data**, not a function. Bin
 | [doc/api/anim.md](doc/api/anim.md) | Model-driven animations: Tween, Spring |
 | [doc/api/webgl.md](doc/api/webgl.md) | WebGL scene graphs: Camera, Light, Material, SceneNode, Scene |
 | [doc/api/webgl-controls.md](doc/api/webgl-controls.md) | WebGL 3D UI controls: buttons, sliders, charts, gizmos |
+| [doc/api/html-controls.md](doc/api/html-controls.md) | HTML UI widgets: TabBar, Modal, DataGrid, Dropdown, Video Player, etc. |
+| [doc/api/auth.md](doc/api/auth.md) | JWT, Middleware, Client-side token management |
+| [doc/api/storage.md](doc/api/storage.md) | WAL persistence, snapshots, AppStore |
 | [doc/api/ffi.md](doc/api/ffi.md) | Browser/Server postulates, Serialize |
 
 ### Additional Documents
@@ -278,12 +281,32 @@ src/
     │   ├── Elements.agda        -- HTML elements
     │   ├── Events.agda          -- DOM events
     │   ├── Navigation.agda      -- Navigation helpers
-    │   └── Types.agda           -- HTML types
+    │   ├── Types.agda           -- HTML types
+    │   └── Controls/            -- UI widget library
+    │       ├── Video/           -- MediaSource video player
+    │       │   ├── Player.agda  -- State machine, public API
+    │       │   ├── Controls.agda -- UI overlay (play, seek, volume)
+    │       │   ├── Source.agda  -- MediaSource management
+    │       │   ├── SegmentLoader.agda -- Segment fetch pipeline
+    │       │   ├── Types.agda   -- PlayerState, VideoModel, VideoMsg
+    │       │   └── Util.agda    -- Time formatting, manifest parsing
     │
     ├── FFI/                     -- Foreign function interface
     │   ├── Browser.agda         -- Browser postulates
+    │   ├── Crypto.agda          -- HMAC-SHA256, bcrypt, base64, random
+    │   ├── FileSystem.agda      -- File I/O (read, write, append, mkdir)
     │   ├── Server.agda          -- Server postulates
     │   └── Shared.agda          -- Shared FFI types
+    │
+    ├── Auth/                    -- Authentication
+    │   ├── JWT.agda             -- JWT sign/verify (HS256)
+    │   ├── Handler.agda         -- Register/login handlers
+    │   ├── Client.agda          -- Client-side token management
+    │   └── Middleware.agda      -- Bearer auth middleware, CORS
+    │
+    ├── Storage/                 -- Persistence
+    │   ├── WAL.agda             -- Write-ahead log with snapshots
+    │   └── AppStore.agda        -- Domain state + WAL config
     │
     ├── Lens/                    -- Lens utilities
     │   └── Widget.agda          -- Widget lenses
@@ -400,6 +423,9 @@ examples/
     SvgLineDraw.agda             -- Self-drawing paths
     WebGLTest.agda               -- WebGL basics (perspective, phong, animate)
     WebGLFullDemo.agda           -- WebGL full demo (all features)
+    VideoDemo.agda               -- Video player integration
+    ControlsDemo.agda            -- HTML controls showcase
+    WebGLControlsDemo.agda       -- WebGL 3D controls demo
 
 runtime/
     reactive.js                  -- Main runtime: priority scheduling, time-slicing
@@ -414,6 +440,11 @@ runtime/
     workers/
         fibonacci.js             -- Fibonacci worker example
         fibonacci-progress.js    -- Fibonacci with progress reporting
+
+hs/
+    Agdelte/
+        Http.hs                  -- Warp HTTP server (request/response with headers)
+        Crypto.hs                -- HMAC-SHA256, bcrypt, base64 (cryptonite)
 ```
 
 ## Key Properties
@@ -538,6 +569,7 @@ See [examples/README.md](examples/README.md) for details.
 - **Event** — subscriptions (interval, keyboard, WebSocket, workers)
 - **Cmd** — commands (HTTP, DOM, clipboard, storage, routing)
 - **Task** — monadic chains with do-notation
+- **HTTP requests with custom headers** — httpGetH, httpPostH in both Cmd and Task
 
 ### DSLs
 - **CSS** — typed generation: Decl, Length, Color, Layout, Transitions, Animations, Stylesheet
@@ -546,6 +578,13 @@ See [examples/README.md](examples/README.md) for details.
 - **WebGL** — declarative 3D scene graphs: cameras, lights, materials, text3D, groups, events
 - **WebGL Builder** — geometry (CSG, procedural), layout (stack, grid, radial), instancing, LOD, culling
 - **WebGL Controls** — complete 3D UI library: buttons, sliders, toggles, menus, tabs, input fields, charts, audio visualization, gizmos
+
+### Server & Backend
+- **HTTP Server** — Warp via FFI.Server (listen, request/response with headers)
+- **Auth** — JWT signing/verification, bcrypt passwords, Bearer middleware, client-side token management (localStorage)
+- **Crypto FFI** — HMAC-SHA256, bcrypt, base64, random bytes (Haskell via cryptonite)
+- **WAL Persistence** — write-ahead log with snapshots, thread-safe MVar-based state, automatic compaction
+- **File System FFI** — readFile, writeFile, appendFile, exists, mkdir, rename (Haskell IO)
 
 ## WebGL Controls
 

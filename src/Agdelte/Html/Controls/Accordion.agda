@@ -70,10 +70,6 @@ collapsibleWith = collapsible'
       div ( class "agdelte-accordion__item" ∷ [] )
         ( button ( class "agdelte-accordion__header"
                  ∷ id' headerId
-                 ∷ attr "aria-controls" contentId
-                 ∷ attrBind "aria-expanded" (mkBinding
-                     (λ m → if io m then "true" else "false")
-                     eqStr)
                  ∷ onClick tm
                  ∷ [] )
             ( span ( class "agdelte-accordion__title" ∷ [] )
@@ -83,15 +79,12 @@ collapsibleWith = collapsible'
                               then "agdelte-accordion__icon agdelte-accordion__icon--open"
                               else "agdelte-accordion__icon")
                        eqStr)
-                   ∷ attr "aria-hidden" "true"
                    ∷ [] )
                 ( text "▼" ∷ [] )
             ∷ [] )
         ∷ whenT io accordionTransition
             (div ( class "agdelte-accordion__content"
                  ∷ id' contentId
-                 ∷ attr "role" "region"
-                 ∷ attr "aria-labelledby" headerId
                  ∷ [] )
               ( c ∷ [] ))
         ∷ [] )
@@ -111,10 +104,6 @@ collapsible {M} {A} panelId title isOpen toggleMsg content =
   div ( class "agdelte-accordion__item" ∷ [] )
     ( button ( class "agdelte-accordion__header"
              ∷ id' headerId
-             ∷ attr "aria-controls" contentId
-             ∷ attrBind "aria-expanded" (mkBinding
-                 (λ m → if isOpen m then "true" else "false")
-                 eqStr)
              ∷ onClick toggleMsg
              ∷ [] )
         ( span ( class "agdelte-accordion__title" ∷ [] )
@@ -124,15 +113,12 @@ collapsible {M} {A} panelId title isOpen toggleMsg content =
                           then "agdelte-accordion__icon agdelte-accordion__icon--open"
                           else "agdelte-accordion__icon")
                    eqStr)
-               ∷ attr "aria-hidden" "true"
                ∷ [] )
             ( text "▼" ∷ [] )
         ∷ [] )
     ∷ whenT isOpen accordionTransition
         (div ( class "agdelte-accordion__content"
              ∷ id' contentId
-             ∷ attr "role" "region"
-             ∷ attr "aria-labelledby" headerId
              ∷ [] )
           ( content ∷ [] ))
     ∷ [] )
@@ -194,10 +180,6 @@ accordion {M} {A} prefix getOpenIndex toggleMsg items =
       div ( class "agdelte-accordion__item" ∷ [] )
         ( button ( class "agdelte-accordion__header"
                  ∷ id' headerId
-                 ∷ attr "aria-controls" contentId
-                 ∷ attrBind "aria-expanded" (mkBinding
-                     (λ m → if isItemOpen idx m then "true" else "false")
-                     eqStr)
                  ∷ onClick (toggleMsg idx)
                  ∷ [] )
             ( span ( class "agdelte-accordion__title" ∷ [] )
@@ -207,15 +189,12 @@ accordion {M} {A} prefix getOpenIndex toggleMsg items =
                               then "agdelte-accordion__icon agdelte-accordion__icon--open"
                               else "agdelte-accordion__icon")
                        eqStr)
-                   ∷ attr "aria-hidden" "true"
                    ∷ [] )
                 ( text "▼" ∷ [] )
             ∷ [] )
         ∷ whenT (isItemOpen idx) accordionTransition
             (div ( class "agdelte-accordion__content"
                  ∷ id' contentId
-                 ∷ attr "role" "region"
-                 ∷ attr "aria-labelledby" headerId
                  ∷ [] )
               ( itemContent item ∷ [] ))
         ∷ [] )
@@ -252,10 +231,6 @@ accordionMulti {M} {A} prefix isItemOpen toggleMsg items =
       div ( class "agdelte-accordion__item" ∷ [] )
         ( button ( class "agdelte-accordion__header"
                  ∷ id' headerId
-                 ∷ attr "aria-controls" contentId
-                 ∷ attrBind "aria-expanded" (mkBinding
-                     (λ m → if isItemOpen idx m then "true" else "false")
-                     eqStr)
                  ∷ onClick (toggleMsg idx)
                  ∷ [] )
             ( span ( class "agdelte-accordion__title" ∷ [] )
@@ -265,15 +240,12 @@ accordionMulti {M} {A} prefix isItemOpen toggleMsg items =
                               then "agdelte-accordion__icon agdelte-accordion__icon--open"
                               else "agdelte-accordion__icon")
                        eqStr)
-                   ∷ attr "aria-hidden" "true"
                    ∷ [] )
                 ( text "▼" ∷ [] )
             ∷ [] )
         ∷ whenT (isItemOpen idx) accordionTransition
             (div ( class "agdelte-accordion__content"
                  ∷ id' contentId
-                 ∷ attr "role" "region"
-                 ∷ attr "aria-labelledby" headerId
                  ∷ [] )
               ( itemContent item ∷ [] ))
         ∷ [] )

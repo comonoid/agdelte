@@ -95,7 +95,6 @@ barChart {M} {A} px py w h gap bars =
                     ∷ on "click" msg
                     ∷ [] ) [])
          ∷ renderBars bx by barW' h' maxV gp bs (suc idx)
-      where
 
 ------------------------------------------------------------------------
 -- Simple bar chart

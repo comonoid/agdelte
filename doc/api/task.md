@@ -6,10 +6,14 @@ From `Agdelte.Core.Task`.
 
 ```agda
 data Task (A : Set) : Set where
-  pure    : A → Task A
-  fail    : String → Task A
-  httpGet : String → (String → Task A) → (String → Task A) → Task A
-  httpPost : String → String → (String → Task A) → (String → Task A) → Task A
+  pure             : A → Task A
+  fail             : String → Task A
+  httpGet          : String → (String → Task A) → (String → Task A) → Task A
+  httpPost         : String → String → (String → Task A) → (String → Task A) → Task A
+  httpGetH         : String → List (String × String) → (String → Task A) → (String → Task A) → Task A
+  httpPostH        : String → List (String × String) → String → (String → Task A) → (String → Task A) → Task A
+  fetchArrayBuffer : String → (String → Task A) → (String → Task A) → Task A
+  decryptAES128    : String → String → String → (String → Task A) → (String → Task A) → Task A
 ```
 
 ## Monad Operations
@@ -23,8 +27,12 @@ return : A → Task A
 ## Helpers
 
 ```agda
-http : String → Task String                    -- GET, fail on error
-httpPost′ : String → String → Task String      -- POST, fail on error
+http        : String → Task String                                    -- GET, fail on error
+httpPost′   : String → String → Task String                           -- POST, fail on error
+httpH       : String → List (String × String) → Task String           -- GET with headers
+httpPostH′  : String → List (String × String) → String → Task String  -- POST with headers
+fetchBinary : String → Task String                                    -- Fetch URL as base64 ArrayBuffer
+decrypt     : String → String → String → Task String                  -- AES-128-CBC decrypt (key, iv, data — all base64)
 ```
 
 ## Usage with do-notation

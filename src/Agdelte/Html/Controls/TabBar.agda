@@ -45,11 +45,6 @@ private
           then "agdelte-tabs__tab agdelte-tabs__tab--active"
           else "agdelte-tabs__tab")
       ∷ id' tabId
-      ∷ attr "role" "tab"
-      ∷ attr "aria-controls" panelId
-      ∷ attrBind "aria-selected" (mkBinding
-          (λ m → if getActive m ≡ᵇ idx then "true" else "false")
-          eqStr)
       ∷ attrBind "tabindex" (mkBinding
           (λ m → if getActive m ≡ᵇ idx then "0" else "-1")
           eqStr)
@@ -74,8 +69,6 @@ private
       ( div
           ( class "agdelte-tabs__panel"
           ∷ id' panelId
-          ∷ attr "role" "tabpanel"
-          ∷ attr "aria-labelledby" tabId
           ∷ [] )
           ( Tab.tabContent tab ∷ [] ) )
 
@@ -100,7 +93,6 @@ tabBar : ∀ {M A} → String → (M → ℕ) → (ℕ → A) → (String → A)
 tabBar prefix getActive selectMsg keyMsg tabs =
   div ( class "agdelte-tabs" ∷ [] )
     ( div ( class "agdelte-tabs__header"
-          ∷ attr "role" "tablist"
           ∷ onKeyFiltered ("ArrowLeft" ∷ "ArrowRight" ∷ "Home" ∷ "End" ∷ []) keyMsg
           ∷ [] )
         (renderTabHeaders prefix getActive selectMsg 0 tabs)
@@ -121,8 +113,6 @@ private
     whenT (λ m → getActive m ≡ᵇ idx) trans
       ( div ( class "agdelte-tabs__panel"
             ∷ id' panelId
-            ∷ attr "role" "tabpanel"
-            ∷ attr "aria-labelledby" tabId
             ∷ [] )
           ( Tab.tabContent tab ∷ [] ) )
 
@@ -136,7 +126,6 @@ tabBarT : ∀ {M A} → String → (M → ℕ) → (ℕ → A) → (String → A
 tabBarT prefix getActive selectMsg keyMsg trans tabs =
   div ( class "agdelte-tabs" ∷ [] )
     ( div ( class "agdelte-tabs__header"
-          ∷ attr "role" "tablist"
           ∷ onKeyFiltered ("ArrowLeft" ∷ "ArrowRight" ∷ "Home" ∷ "End" ∷ []) keyMsg
           ∷ [] )
         (renderTabHeaders prefix getActive selectMsg 0 tabs)

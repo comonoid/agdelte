@@ -48,3 +48,6 @@ open import Agdelte.Html.Controls.Skeleton public
 
 -- Wizard
 open import Agdelte.Html.Controls.Stepper public
+
+-- Media
+open import Agdelte.Html.Controls.Video.Player public

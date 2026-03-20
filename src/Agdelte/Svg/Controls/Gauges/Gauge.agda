@@ -257,7 +257,6 @@ fullGauge {M} {A} cx cy radius config value =
                       ∷ [] )
                 ( text lbl ∷ [] ))
        ∷ [] )
-  where
 
 ------------------------------------------------------------------------
 -- Linear Gauge (horizontal/vertical bar)

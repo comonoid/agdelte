@@ -109,7 +109,6 @@ scatterPlot {M} {A} px py w h points =
                       ∷ on "click" msg
                       ∷ [] ) [])
          ∷ renderPoints px' py' w' h' minX maxX minY maxY ps
-      where
 
 ------------------------------------------------------------------------
 -- Simple scatter plot

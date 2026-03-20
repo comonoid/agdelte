@@ -77,13 +77,7 @@ private
                   nothing → false
                   (just hl) → hl ≡ᵇ idx
             in optionClass isSel isHl)
-        ∷ attr "role" "option"
         ∷ attr "tabindex" "0"
-        ∷ attrBind "aria-selected" (mkBinding
-            (λ m → case getSelected m of λ where
-              nothing → "false"
-              (just sel) → if sel ≡ᵇ idx then "true" else "false")
-            eqStr)
         ∷ attrBind "data-highlighted" (mkBinding
             (λ m → case getHighlighted m of λ where
               nothing → "false"
@@ -125,10 +119,6 @@ dropdownIdx {M} getSelected getHighlighted getOpen toggleMsg selectMsg keyMsg op
     ( button ( class "agdelte-dropdown__trigger"
              ∷ attr "type" "button"
              ∷ onClick toggleMsg
-             ∷ attr "aria-haspopup" "listbox"
-             ∷ attrBind "aria-expanded" (mkBinding
-                 (λ m → if getOpen m then "true" else "false")
-                 eqStr)
              ∷ [] )
         ( bindF displayText ∷ [] )
     ∷ when getOpen
@@ -137,7 +127,6 @@ dropdownIdx {M} getSelected getHighlighted getOpen toggleMsg selectMsg keyMsg op
               ∷ [] ) [] )
     ∷ when getOpen
         ( div ( class "agdelte-dropdown__menu"
-              ∷ attr "role" "listbox"
               ∷ [] )
             (renderOptionsIdx getSelected getHighlighted selectMsg 0 options) )
     ∷ [] )
@@ -158,13 +147,7 @@ private
                   nothing → false
                   (just hl) → hl ≡ᵇ idx
             in optionClass isSel isHl)
-        ∷ attr "role" "option"
         ∷ attr "tabindex" "0"
-        ∷ attrBind "aria-selected" (mkBinding
-            (λ m → case getSelected m of λ where
-              nothing → "false"
-              (just sel) → if eqV sel (optValue opt) then "true" else "false")
-            eqStr)
         ∷ attrBind "data-highlighted" (mkBinding
             (λ m → case getHighlighted m of λ where
               nothing → "false"
@@ -208,10 +191,6 @@ dropdown {_} {M} eqV getSelected getHighlighted getOpen toggleMsg selectMsg keyM
     ( button ( class "agdelte-dropdown__trigger"
              ∷ attr "type" "button"
              ∷ onClick toggleMsg
-             ∷ attr "aria-haspopup" "listbox"
-             ∷ attrBind "aria-expanded" (mkBinding
-                 (λ m → if getOpen m then "true" else "false")
-                 eqStr)
              ∷ [] )
         ( bindF displayText ∷ [] )
     ∷ when getOpen
@@ -220,7 +199,6 @@ dropdown {_} {M} eqV getSelected getHighlighted getOpen toggleMsg selectMsg keyM
               ∷ [] ) [] )
     ∷ when getOpen
         ( div ( class "agdelte-dropdown__menu"
-              ∷ attr "role" "listbox"
               ∷ [] )
             (renderOptionsV eqV getSelected getHighlighted selectMsg 0 options) )
     ∷ [] )

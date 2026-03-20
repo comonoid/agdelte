@@ -52,7 +52,7 @@ simpleTree : ∀ {M A}
            → List (TreeNode A)    -- root nodes
            → Node M A
 simpleTree {M} {A} onNodeClick roots =
-  div ( class "agdelte-tree" ∷ attr "role" "tree" ∷ [] )
+  div ( class "agdelte-tree" ∷ [] )
     (renderNodes 0 roots)
   where
     open import Agda.Builtin.String using (primShowNat)
@@ -66,7 +66,6 @@ simpleTree {M} {A} onNodeClick roots =
       renderNode : ℕ → TreeNode A → Node M A
       renderNode depth node =
         div ( class "agdelte-tree__node"
-            ∷ attr "role" "treeitem"
             ∷ style "padding-left" (depthPadding depth)
             ∷ [] )
           ( button ( class "agdelte-tree__label"
@@ -99,7 +98,7 @@ collapsibleTree : ∀ {M A}
                 → List (TreeNode A)
                 → Node M A
 collapsibleTree {M} {A} isExpanded toggleNode onNodeClick roots =
-  div ( class "agdelte-tree" ∷ attr "role" "tree" ∷ [] )
+  div ( class "agdelte-tree" ∷ [] )
     (renderNodes 0 roots)
   where
     open import Agda.Builtin.String using (primShowNat)
@@ -119,7 +118,6 @@ collapsibleTree {M} {A} isExpanded toggleNode onNodeClick roots =
       renderNode : ℕ → TreeNode A → Node M A
       renderNode depth node =
         div ( class "agdelte-tree__node"
-            ∷ attr "role" "treeitem"
             ∷ style "padding-left" (depthPadding depth)
             ∷ [] )
           ( div ( class "agdelte-tree__header" ∷ [] )
@@ -128,11 +126,6 @@ collapsibleTree {M} {A} isExpanded toggleNode onNodeClick roots =
                                  (λ m → if isExpanded (nodeId node) m
                                         then "agdelte-tree__toggle agdelte-tree__toggle--open"
                                         else "agdelte-tree__toggle")
-                                 eqStr)
-                             ∷ attrBind "aria-expanded" (mkBinding
-                                 (λ m → if isExpanded (nodeId node) m
-                                        then "true"
-                                        else "false")
                                  eqStr)
                              ∷ onClick (toggleNode (nodeId node))
                              ∷ [] )
@@ -180,7 +173,7 @@ draggableTree : ∀ {M A}
               → List (TreeNode A)
               → Node M A
 draggableTree {M} {A} isExpanded toggleNode onNodeClick onDrag roots =
-  div ( class "agdelte-tree" ∷ attr "role" "tree" ∷ [] )
+  div ( class "agdelte-tree" ∷ [] )
     (renderNodes 0 roots)
   where
     open import Agda.Builtin.String using (primShowNat)
@@ -198,11 +191,6 @@ draggableTree {M} {A} isExpanded toggleNode onNodeClick onDrag roots =
       renderNode : ℕ → TreeNode A → Node M A
       renderNode depth node =
         div ( class "agdelte-tree__node"
-            ∷ attr "role" "treeitem"
-            ∷ attr "draggable" "true"
-            ∷ on "dragstart" (onDrag (mkTreeDrag (nodeId node) ""))
-            ∷ on "dragover" (onDrag (mkTreeDrag "" (nodeId node)))
-            ∷ on "drop" (onDrag (mkTreeDrag "" (nodeId node)))
             ∷ style "padding-left" (depthPadding depth)
             ∷ [] )
           ( div ( class "agdelte-tree__header" ∷ [] )
@@ -211,11 +199,6 @@ draggableTree {M} {A} isExpanded toggleNode onNodeClick onDrag roots =
                                  (λ m → if isExpanded (nodeId node) m
                                         then "agdelte-tree__toggle agdelte-tree__toggle--open"
                                         else "agdelte-tree__toggle")
-                                 eqStr)
-                             ∷ attrBind "aria-expanded" (mkBinding
-                                 (λ m → if isExpanded (nodeId node) m
-                                        then "true"
-                                        else "false")
                                  eqStr)
                              ∷ onClick (toggleNode (nodeId node))
                              ∷ [] )

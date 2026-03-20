@@ -124,7 +124,6 @@ popoverWithClose isOpen toggle close trigger content =
         ( div (class "agdelte-popover agdelte-popover--bottom" ∷ [])
             ( -- Close button
               button ( class "agdelte-popover__close"
-                     ∷ attr "aria-label" "Close"
                      ∷ onClick close
                      ∷ [] )
                 ( text "×" ∷ [] )
@@ -166,7 +165,6 @@ popoverWithHeader isOpen toggle close title trigger content =
                 ( span (class "agdelte-popover__title" ∷ [])
                     ( text title ∷ [] )
                 ∷ button ( class "agdelte-popover__close"
-                         ∷ attr "aria-label" "Close"
                          ∷ onClick close
                          ∷ [] )
                     ( text "×" ∷ [] )

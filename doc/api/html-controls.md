@@ -1,6 +1,6 @@
 # Agdelte.Html.Controls
 
-Pure Agda library of common HTML-based UI widgets.
+Pure Agda library of common HTML-based UI widgets, plus a MediaSource-based video player (re-exported from `Video.Player`).
 All components return `Node M A` and compose naturally with other Agdelte elements.
 
 ## Design Principles
@@ -323,6 +323,14 @@ Agdelte/Html/Controls/
   Skeleton.agda
   Pagination.agda
   Stepper.agda
+  Video/
+    Player.agda
+    Controls.agda
+    Source.agda
+    SegmentLoader.agda
+    Types.agda
+    Properties.agda
+    Util.agda
 ```
 
 ## CSS Theming

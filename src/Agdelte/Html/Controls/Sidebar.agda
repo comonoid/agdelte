@@ -65,23 +65,16 @@ simpleSidebar {M} {A} title activeIndex items =
     renderItem : ℕ → SidebarItem A → Node M A
     renderItem idx item =
       li ( class "agdelte-sidebar__item" ∷ [] )
-        ( when (isActive idx)
-            (button ( class "agdelte-sidebar__link agdelte-sidebar__link--active"
-                    ∷ attr "aria-current" "page"
-                    ∷ onClick (sidebarMsg item)
-                    ∷ [] )
-              ( iconNodes item
-              ++ ( span ( class "agdelte-sidebar__label" ∷ [] )
-                     ( text (sidebarLabel item) ∷ [] )
-                 ∷ [] ) ))
-        ∷ when (not ∘ isActive idx)
-            (button ( class "agdelte-sidebar__link"
-                    ∷ onClick (sidebarMsg item)
-                    ∷ [] )
-              ( iconNodes item
-              ++ ( span ( class "agdelte-sidebar__label" ∷ [] )
-                     ( text (sidebarLabel item) ∷ [] )
-                 ∷ [] ) ))
+        ( button ( classBind (λ m →
+                     if isActive idx m
+                     then "agdelte-sidebar__link agdelte-sidebar__link--active"
+                     else "agdelte-sidebar__link")
+                 ∷ onClick (sidebarMsg item)
+                 ∷ [] )
+            ( iconNodes item
+            ++ ( span ( class "agdelte-sidebar__label" ∷ [] )
+                   ( text (sidebarLabel item) ∷ [] )
+               ∷ [] ) )
         ∷ [] )
       where
         open import Data.List using (_++_)
@@ -148,19 +141,14 @@ collapsibleSidebar {M} {A} title isCollapsed toggleMsg activeIndex items =
     renderItem : ℕ → SidebarItem A → Node M A
     renderItem idx item =
       li ( class "agdelte-sidebar__item" ∷ [] )
-        ( when (isActive idx)
-            (button ( class "agdelte-sidebar__link agdelte-sidebar__link--active"
-                    ∷ attr "aria-current" "page"
-                    ∷ attr "title" (sidebarLabel item)
-                    ∷ onClick (sidebarMsg item)
-                    ∷ [] )
-              ( iconNodes item ++ labelNode item ))
-        ∷ when (not ∘ isActive idx)
-            (button ( class "agdelte-sidebar__link"
-                    ∷ attr "title" (sidebarLabel item)
-                    ∷ onClick (sidebarMsg item)
-                    ∷ [] )
-              ( iconNodes item ++ labelNode item ))
+        ( button ( classBind (λ m →
+                     if isActive idx m
+                     then "agdelte-sidebar__link agdelte-sidebar__link--active"
+                     else "agdelte-sidebar__link")
+                 ∷ attr "title" (sidebarLabel item)
+                 ∷ onClick (sidebarMsg item)
+                 ∷ [] )
+            ( iconNodes item ++ labelNode item )
         ∷ [] )
       where
         open import Data.List using (_++_)

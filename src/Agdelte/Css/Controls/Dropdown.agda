@@ -94,4 +94,8 @@ dropdownRules =
       ∷ "outline" ∶ "2px solid var(--agdelte-primary)"
       ∷ "outline-offset" ∶ "-2px"
       ∷ [])
+  -- Open state list visibility
+  ∷ rule ".agdelte-dropdown--open .agdelte-dropdown__list"
+      ( "display" ∶ "block"
+      ∷ [])
   ∷ []

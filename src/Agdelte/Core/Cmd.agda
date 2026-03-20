@@ -7,6 +7,7 @@ module Agdelte.Core.Cmd where
 
 open import Data.String using (String)
 open import Data.List using (List; []; _∷_)
+open import Data.Product using (_×_)
 open import Data.Nat using (ℕ)
 open import Data.Maybe using (Maybe)
 open import Data.Bool using (Bool; true; false)
@@ -37,6 +38,9 @@ data Cmd (A : Set) : Set where
   -- For persistent subscriptions (polling), use Event.httpGet / Event.httpPost.
   httpGet  : String → (String → A) → (String → A) → Cmd A
   httpPost : String → String → (String → A) → (String → A) → Cmd A
+  -- HTTP with custom headers (for auth tokens, content-type, etc.)
+  httpGetH  : String → List (String × String) → (String → A) → (String → A) → Cmd A
+  httpPostH : String → List (String × String) → String → (String → A) → (String → A) → Cmd A
 
   -- Run Task (monadic API)
   attempt : Task String → (Result String String → A) → Cmd A
@@ -74,6 +78,17 @@ data Cmd (A : Set) : Set where
   -- Read a property from an element, dispatch result as message
   getProp    : String → String → (String → A) → Cmd A  -- CSS selector, property, handler
 
+  -- === MediaSource ===
+  -- Initialize MediaSource on a <video> element
+  mediaSourceInit   : String → String → A → (String → A) → Cmd A
+                    -- videoSelector, mimeType, onReady, onError
+  -- Append base64-encoded segment data to SourceBuffer
+  mediaSourceAppend : String → String → A → (String → A) → Cmd A
+                    -- videoSelector, base64data, onDone, onError
+  -- Signal end of stream (all segments appended)
+  mediaSourceEnd    : String → Cmd A
+                    -- videoSelector
+
   -- === Routing ===
   pushUrl    : String → Cmd A
   replaceUrl : String → Cmd A
@@ -92,6 +107,8 @@ mapCmd f (c₁ <> c₂) = mapCmd f c₁ <> mapCmd f c₂
 mapCmd f (delay ms msg) = delay ms (f msg)
 mapCmd f (httpGet url onOk onErr) = httpGet url (f ∘ onOk) (f ∘ onErr)
 mapCmd f (httpPost url body onOk onErr) = httpPost url body (f ∘ onOk) (f ∘ onErr)
+mapCmd f (httpGetH url hdrs onOk onErr) = httpGetH url hdrs (f ∘ onOk) (f ∘ onErr)
+mapCmd f (httpPostH url hdrs body onOk onErr) = httpPostH url hdrs body (f ∘ onOk) (f ∘ onErr)
 mapCmd f (attempt task handler) = attempt task (f ∘ handler)
 -- DOM effects (no message)
 mapCmd f (focus sel) = focus sel
@@ -116,6 +133,10 @@ mapCmd f (touchBuffer h handler) = touchBuffer h (f ∘ handler)
 mapCmd f (callMethod sel method) = callMethod sel method
 mapCmd f (setProp sel prop val) = setProp sel prop val
 mapCmd f (getProp sel prop h) = getProp sel prop (f ∘ h)
+-- MediaSource
+mapCmd f (mediaSourceInit sel mime onReady onErr) = mediaSourceInit sel mime (f onReady) (f ∘ onErr)
+mapCmd f (mediaSourceAppend sel dat onDone onErr) = mediaSourceAppend sel dat (f onDone) (f ∘ onErr)
+mapCmd f (mediaSourceEnd sel) = mediaSourceEnd sel
 -- Routing
 mapCmd f (pushUrl url) = pushUrl url
 mapCmd f (replaceUrl url) = replaceUrl url

@@ -97,6 +97,20 @@ const ATTR_NS = {
 };
 
 /**
+ * Convert Agda List (String × String) to JS headers object.
+ * Scott-encoded: list(cases) where cases = { '[]': ..., '_∷_': (head, tail) => ... }
+ * Each pair: pair(cases) where cases = { '_,_': (fst, snd) => ... }
+ */
+function agdaHeadersToObj(agdaList) {
+  const result = {};
+  const items = listToArray(agdaList).items;
+  for (const pair of items) {
+    pair({ '_,_': (k, v) => { result[k] = v; } });
+  }
+  return result;
+}
+
+/**
  * Detect Content-Type for HTTP POST body.
  * Returns 'application/json' if body looks like valid JSON, otherwise 'text/plain'.
  */
@@ -150,6 +164,63 @@ function executeTask(task, onSuccess, onError, _depth = 0) {
         })
         .then((text) => executeTask(onOk(text), onSuccess, onError, _depth + 1))
         .catch((error) => executeTask(onErr(error.message), onSuccess, onError, _depth + 1));
+    },
+    'httpGetH': (url, headers, onOk, onErr) => {
+      fetch(url, { headers: agdaHeadersToObj(headers) })
+        .then((response) => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.text();
+        })
+        .then((text) => executeTask(onOk(text), onSuccess, onError, _depth + 1))
+        .catch((error) => executeTask(onErr(error.message), onSuccess, onError, _depth + 1));
+    },
+    'httpPostH': (url, headers, body, onOk, onErr) => {
+      const hdrs = agdaHeadersToObj(headers);
+      if (!hdrs['Content-Type'] && !hdrs['content-type']) {
+        hdrs['Content-Type'] = detectContentType(body);
+      }
+      fetch(url, { method: 'POST', headers: hdrs, body })
+        .then((response) => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.text();
+        })
+        .then((text) => executeTask(onOk(text), onSuccess, onError, _depth + 1))
+        .catch((error) => executeTask(onErr(error.message), onSuccess, onError, _depth + 1));
+    },
+    'fetchArrayBuffer': (url, onOk, onErr) => {
+      fetch(url)
+        .then((r) => {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.arrayBuffer();
+        })
+        .then((buf) => {
+          // Convert ArrayBuffer to base64 using chunked approach
+          // to avoid blocking the main thread on large segments
+          const bytes = new Uint8Array(buf);
+          const CHUNK = 8192;
+          const parts = [];
+          for (let i = 0; i < bytes.length; i += CHUNK) {
+            parts.push(String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK)));
+          }
+          const b64 = btoa(parts.join(''));
+          executeTask(onOk(b64), onSuccess, onError, _depth + 1);
+        })
+        .catch((e) => executeTask(onErr(e.message), onSuccess, onError, _depth + 1));
+    },
+    'decryptAES128': (keyB64, ivB64, dataB64, onOk, onErr) => {
+      const toAB = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)).buffer;
+      const CHUNK = 8192;
+      crypto.subtle.importKey('raw', toAB(keyB64), 'AES-CBC', false, ['decrypt'])
+        .then((k) => crypto.subtle.decrypt({ name: 'AES-CBC', iv: toAB(ivB64) }, k, toAB(dataB64)))
+        .then((dec) => {
+          const bytes = new Uint8Array(dec);
+          const parts = [];
+          for (let i = 0; i < bytes.length; i += CHUNK) {
+            parts.push(String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK)));
+          }
+          executeTask(onOk(btoa(parts.join(''))), onSuccess, onError, _depth + 1);
+        })
+        .catch((e) => executeTask(onErr(e.message), onSuccess, onError, _depth + 1));
     }
   });
 }
@@ -186,6 +257,22 @@ function executeCmd(cmd, dispatch) {
     },
     'httpPost': (url, body, onSuccess, onError) => {
       fetch(url, { method: 'POST', headers: { 'Content-Type': detectContentType(body) }, body })
+        .then((r) => r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`)))
+        .then((text) => dispatch(onSuccess(text)))
+        .catch((error) => dispatch(onError(error.message)));
+    },
+    'httpGetH': (url, headers, onSuccess, onError) => {
+      fetch(url, { headers: agdaHeadersToObj(headers) })
+        .then((r) => r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`)))
+        .then((text) => dispatch(onSuccess(text)))
+        .catch((error) => dispatch(onError(error.message)));
+    },
+    'httpPostH': (url, headers, body, onSuccess, onError) => {
+      const hdrs = agdaHeadersToObj(headers);
+      if (!hdrs['Content-Type'] && !hdrs['content-type']) {
+        hdrs['Content-Type'] = detectContentType(body);
+      }
+      fetch(url, { method: 'POST', headers: hdrs, body })
         .then((r) => r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`)))
         .then((text) => dispatch(onSuccess(text)))
         .catch((error) => dispatch(onError(error.message)));
@@ -291,8 +378,15 @@ function executeCmd(cmd, dispatch) {
     },
     'callMethod': (sel, method) => {
       try {
-        const el = document.querySelector(sel);
-        if (el && typeof el[method] === 'function') el[method]();
+        // Special selector: "document" targets the document object itself
+        const el = sel === 'document' ? document : document.querySelector(sel);
+        if (el && typeof el[method] === 'function') {
+          const result = el[method]();
+          // Handle Promise-returning methods (e.g., requestFullscreen, play)
+          if (result && typeof result.catch === 'function') {
+            result.catch(e => console.warn(`Cmd.callMethod: "${method}" on "${sel}" rejected:`, e.message));
+          }
+        }
         else console.warn(`Cmd.callMethod: "${method}" not found on "${sel}"`);
       } catch (e) {
         console.warn(`Cmd.callMethod: error on "${sel}".${method}:`, e.message);
@@ -300,7 +394,7 @@ function executeCmd(cmd, dispatch) {
     },
     'setProp': (sel, prop, value) => {
       try {
-        const el = document.querySelector(sel);
+        const el = sel === 'document' ? document : document.querySelector(sel);
         if (el) {
           // Auto-convert to number if the property expects it
           const numVal = Number(value);
@@ -312,7 +406,7 @@ function executeCmd(cmd, dispatch) {
     },
     'getProp': (sel, prop, handler) => {
       try {
-        const el = document.querySelector(sel);
+        const el = sel === 'document' ? document : document.querySelector(sel);
         if (el) {
           const value = el[prop];
           dispatch(handler(value != null ? String(value) : ''));
@@ -323,6 +417,111 @@ function executeCmd(cmd, dispatch) {
       } catch (e) {
         console.warn(`Cmd.getProp: error on "${sel}".${prop}:`, e.message);
         dispatch(handler(''));
+      }
+    },
+    // === MediaSource management ===
+    'mediaSourceInit': (videoSelector, mimeType, onReady, onError) => {
+      try {
+        const el = document.querySelector(videoSelector);
+        if (!el) { dispatch(onError('Element not found: ' + videoSelector)); return; }
+        if (!('MediaSource' in window)) { dispatch(onError('MediaSource API not supported')); return; }
+        // Prevent double-init: if already initialized with an open MediaSource, reuse it
+        if (el._agdelteMS && el._agdelteMS.mediaSource && el._agdelteMS.mediaSource.readyState === 'open') {
+          dispatch(onReady);
+          return;
+        }
+        // Clean up previous MediaSource if any
+        if (el._agdelteMS && el._agdelteMS.mediaSource) {
+          try {
+            if (el._agdelteMS.mediaSource.readyState === 'open') el._agdelteMS.mediaSource.endOfStream();
+          } catch (e) { /* ignore */ }
+          if (el.src) URL.revokeObjectURL(el.src);
+        }
+        const ms = new MediaSource();
+        el.src = URL.createObjectURL(ms);
+        // Store per-element state
+        const state = { mediaSource: ms, sourceBuffer: null, appendQueue: [], onAppendDone: null };
+        el._agdelteMS = state;
+        ms.addEventListener('sourceopen', () => {
+          try {
+            state.sourceBuffer = ms.addSourceBuffer(mimeType);
+            state.sourceBuffer.addEventListener('updateend', () => {
+              // Dispatch the pending onDone callback
+              const cb = state.onAppendDone;
+              state.onAppendDone = null;
+              if (cb) cb();
+              // Process next item in queue
+              if (state.appendQueue.length > 0) {
+                const next = state.appendQueue.shift();
+                next();
+              }
+            });
+            dispatch(onReady);
+          } catch (e) {
+            dispatch(onError('addSourceBuffer failed: ' + e.message));
+          }
+        }, { once: true });
+        ms.addEventListener('error', () => {
+          dispatch(onError('MediaSource error'));
+        }, { once: true });
+      } catch (e) {
+        dispatch(onError('mediaSourceInit failed: ' + e.message));
+      }
+    },
+    'mediaSourceAppend': (videoSelector, base64data, onDone, onError) => {
+      try {
+        const el = document.querySelector(videoSelector);
+        if (!el || !el._agdelteMS || !el._agdelteMS.sourceBuffer) {
+          dispatch(onError('No MediaSource for ' + videoSelector));
+          return;
+        }
+        const state = el._agdelteMS;
+        const binary = atob(base64data);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const doAppend = () => {
+          try {
+            state.onAppendDone = () => dispatch(onDone);
+            state.sourceBuffer.appendBuffer(bytes);
+          } catch (e) {
+            state.onAppendDone = null;
+            dispatch(onError('appendBuffer failed: ' + e.message));
+          }
+        };
+        if (state.sourceBuffer.updating) {
+          state.appendQueue.push(doAppend);
+        } else {
+          doAppend();
+        }
+      } catch (e) {
+        dispatch(onError('mediaSourceAppend failed: ' + e.message));
+      }
+    },
+    'mediaSourceEnd': (videoSelector) => {
+      try {
+        const el = document.querySelector(videoSelector);
+        if (el && el._agdelteMS && el._agdelteMS.mediaSource) {
+          const state = el._agdelteMS;
+          const ms = state.mediaSource;
+          if (ms.readyState === 'open') {
+            let retries = 0;
+            const tryEnd = () => {
+              if (retries++ > 200) { // 10s max wait
+                console.warn('Cmd.mediaSourceEnd: timeout waiting for pending appends');
+                try { ms.endOfStream(); } catch (e) { /* best effort */ }
+                return;
+              }
+              if (state.sourceBuffer && (state.sourceBuffer.updating || state.appendQueue.length > 0)) {
+                setTimeout(tryEnd, 50);
+              } else {
+                try { ms.endOfStream(); } catch (e) { /* already ended */ }
+              }
+            };
+            tryEnd();
+          }
+        }
+      } catch (e) {
+        console.warn('Cmd.mediaSourceEnd:', e.message);
       }
     },
     'pushUrl': (url) => history.pushState(null, '', '#' + url),
@@ -565,6 +764,30 @@ function destroyScope(scope) {
   }
   // Abort all event listeners registered via this scope's signal
   scope.abortCtrl.abort();
+  // Clean up MediaSource objects on video elements within this scope.
+  // Scan attrBindings for video elements with _agdelteMS (set by mediaSourceInit).
+  for (const b of scope.attrBindings) {
+    const el = b.node;
+    if (el && el._agdelteMS) {
+      try {
+        const ms = el._agdelteMS.mediaSource;
+        if (ms && ms.readyState === 'open') ms.endOfStream();
+      } catch (e) { /* ignore */ }
+      if (el.src) { URL.revokeObjectURL(el.src); el.removeAttribute('src'); }
+      el._agdelteMS = null;
+    }
+  }
+  for (const b of scope.bindings) {
+    const el = b.node;
+    if (el && el._agdelteMS) {
+      try {
+        const ms = el._agdelteMS.mediaSource;
+        if (ms && ms.readyState === 'open') ms.endOfStream();
+      } catch (e) { /* ignore */ }
+      if (el.src) { URL.revokeObjectURL(el.src); el.removeAttribute('src'); }
+      el._agdelteMS = null;
+    }
+  }
   // Clear all arrays
   scope.bindings.length = 0;
   scope.attrBindings.length = 0;
@@ -1263,10 +1486,24 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         el.addEventListener(event, (e) => {
           let value = '';
           try {
-            const parts = path.split('.');
-            let obj = e;
-            for (const p of parts) obj = obj[p];
-            value = obj != null ? String(obj) : '';
+            // Special case: target.buffered is a TimeRanges object, extract end time
+            if (path === 'target.buffered') {
+              const buf = e.target.buffered;
+              value = buf && buf.length > 0 ? String(buf.end(buf.length - 1)) : '0';
+            } else if (path === 'touch.start') {
+              // Touch start: "x,y"
+              const t = e.touches && e.touches[0];
+              value = t ? t.clientX + ',' + t.clientY : '0,0';
+            } else if (path === 'touch.end') {
+              // Touch end: "x,y,screenWidth"
+              const t = e.changedTouches && e.changedTouches[0];
+              value = t ? t.clientX + ',' + t.clientY + ',' + window.innerWidth : '0,0,0';
+            } else {
+              const parts = path.split('.');
+              let obj = e;
+              for (const p of parts) obj = obj[p];
+              value = obj != null ? String(obj) : '';
+            }
           } catch (_) {}
           sendNormal(handler(value));
         }, { signal: currentScope.abortCtrl.signal });
@@ -1333,9 +1570,19 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       onKeyFiltered: (keys, handler) => {
         const keyArray = listToArray(keys).items;
         el.addEventListener('keydown', (e) => {
-          if (!keyArray.includes(e.key)) return;
+          // Build composite key with modifiers: "S-C-A-key" prefix for shift/ctrl/alt
+          const composite = (e.shiftKey ? 'S-' : '') + (e.ctrlKey ? 'C-' : '') + (e.altKey ? 'A-' : '') + e.key;
+          // Match against both bare key and composite key
+          if (!keyArray.includes(e.key) && !keyArray.includes(composite)) return;
           e.preventDefault();
-          sendImmediate(handler(e.key));
+          sendImmediate(handler(composite));
+        }, { signal: currentScope.abortCtrl.signal });
+      },
+      // Event handler that calls e.preventDefault() before dispatching
+      onPreventDefault: (eventName, msg) => {
+        el.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          sendNormal(msg);
         }, { signal: currentScope.abortCtrl.signal });
       },
       style: (name, value) => {
@@ -1753,18 +2000,18 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       }
     }
 
-    // Use marker.nextSibling as stable insertion point AFTER all removals
-    // This ensures correct positioning regardless of what was removed
-    const insertBefore = list.marker.nextSibling;
+    // Insert after marker, in order. Track the last inserted node
+    // so each subsequent insert goes after it (not before a fixed point).
+    let insertAfter = list.marker;
 
-    // Now insert in correct order (insertBefore was saved before removal)
     for (let i = 0; i < newItems.length; i++) {
       const key = newKeys[i];
       const oldEntry = oldKeyMap.get(key);
 
       if (oldEntry) {
         // Reuse existing DOM node
-        parent.insertBefore(oldEntry.node, insertBefore);
+        insertAfter.after(oldEntry.node);
+        insertAfter = oldEntry.node;
         // Update bindings in existing scope
         if (oldEntry.scope) {
           updateScopeImmediate(oldEntry.scope, oldModel, newModel);
@@ -1777,13 +2024,15 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
           renderNode(list.render(newItems[i])(BigInt(i)))
         );
         if (itemNode) {
-          parent.insertBefore(itemNode, insertBefore);
+          insertAfter.after(itemNode);
+          insertAfter = itemNode;
           newRendered.push({ key, item: newItems[i], node: itemNode, scope: itemScope });
         } else {
           // Null render — use comment placeholder to track key, destroy unused scope
           destroyScope(itemScope);
           const placeholder = document.createComment('empty');
-          parent.insertBefore(placeholder, insertBefore);
+          insertAfter.after(placeholder);
+          insertAfter = placeholder;
           newRendered.push({ key, item: newItems[i], node: placeholder, scope: null });
         }
       }

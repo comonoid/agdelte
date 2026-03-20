@@ -51,12 +51,10 @@ private
   renderToast : ∀ {M A} → (ℕ → A) → ToastData → ℕ → Node M A
   renderToast dismissMsg t _ =
     div ( class (toastTypeClass (toastType t))
-        ∷ attr "role" "alert"
         ∷ [] )
       ( span ( class "agdelte-toast__message" ∷ [] )
           ( text (toastMessage t) ∷ [] )
       ∷ button ( class "agdelte-toast__close"
-               ∷ attr "aria-label" "Close"
                ∷ onClick (dismissMsg (toastId t))
                ∷ [] )
           ( text "×" ∷ [] )
@@ -75,7 +73,6 @@ toastContainer : ∀ {M A}
                → Node M A
 toastContainer getToasts dismissMsg =
   div ( class "agdelte-toast-container"
-      ∷ attr "aria-live" "polite"
       ∷ [] )
     ( foreach getToasts (renderToast dismissMsg)
     ∷ [] )
@@ -93,7 +90,6 @@ toastContainerKeyed : ∀ {M A}
                     → Node M A
 toastContainerKeyed getToasts keyFn dismissMsg =
   div ( class "agdelte-toast-container"
-      ∷ attr "aria-live" "polite"
       ∷ [] )
     ( foreachKeyed getToasts keyFn (renderToast dismissMsg)
     ∷ [] )
@@ -113,12 +109,10 @@ toast : ∀ {M A}
 toast isVisible ttype getMessage dismissMsg =
   when isVisible
     ( div ( class (toastTypeClass ttype)
-          ∷ attr "role" "alert"
           ∷ [] )
         ( span ( class "agdelte-toast__message" ∷ [] )
             ( bindF getMessage ∷ [] )
         ∷ button ( class "agdelte-toast__close"
-                 ∷ attr "aria-label" "Close"
                  ∷ onClick dismissMsg
                  ∷ [] )
             ( text "×" ∷ [] )
@@ -139,12 +133,10 @@ toastT : ∀ {M A}
 toastT isVisible ttype getMessage dismissMsg trans =
   whenT isVisible trans
     ( div ( class (toastTypeClass ttype)
-          ∷ attr "role" "alert"
           ∷ [] )
         ( span ( class "agdelte-toast__message" ∷ [] )
             ( bindF getMessage ∷ [] )
         ∷ button ( class "agdelte-toast__close"
-                 ∷ attr "aria-label" "Close"
                  ∷ onClick dismissMsg
                  ∷ [] )
             ( text "×" ∷ [] )
@@ -193,7 +185,6 @@ toastContainerMax : ∀ {M A}
                   → Node M A
 toastContainerMax maxN getToasts dismissMsg =
   div ( class "agdelte-toast-container"
-      ∷ attr "aria-live" "polite"
       ∷ [] )
     ( foreach (λ m → let ts = getToasts m
                      in drop (length ts ∸ maxN) ts)

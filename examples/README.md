@@ -26,6 +26,19 @@ Examples demonstrate Agdelte features:
 | SessionDual | Session duality | Session types, dual proof |
 | SessionFormDemo | Session forms | SessionForm |
 | Worker | Web workers | worker, offload computation |
+| VideoDemo | Video player | MediaSource, segmented delivery, controls |
+| ControlsDemo | HTML controls showcase | All HTML controls in one demo |
+| CssDemo | CSS DSL demo | Typed CSS generation |
+| CssFullDemo | Full CSS demo | Complete CSS features |
+| AnimDemo | Animations demo | Tween, Spring animations |
+| SvgTest | SVG demo | Basic SVG elements |
+| SvgSmil | SMIL animations | Declarative SVG animations |
+| SvgPanZoom | SVG pan/zoom | Interactive SVG |
+| SvgChart | SVG chart | Data-driven bar chart |
+| SvgLineDraw | SVG line drawing | Self-drawing paths |
+| WebGLTest | WebGL basics | Perspective, phong, animate |
+| WebGLFullDemo | WebGL full demo | All WebGL features |
+| WebGLControlsDemo | WebGL controls | 3D UI controls |
 
 ## Building
 
@@ -94,6 +107,18 @@ agda Todo.agda
    - http://localhost:8080/examples_html/combinators.html — Combinators
    - http://localhost:8080/examples_html/optic-dynamic.html — Dynamic Optics
    - http://localhost:8080/examples_html/stress-test.html — Stress Test
+   - http://localhost:8080/examples_html/controls-demo.html — Controls Demo
+   - http://localhost:8080/examples_html/css-demo.html — CSS Demo
+   - http://localhost:8080/examples_html/css-full-demo.html — CSS Full Demo
+   - http://localhost:8080/examples_html/anim-demo.html — Anim Demo
+   - http://localhost:8080/examples_html/svg-test.html — SVG Test
+   - http://localhost:8080/examples_html/svg-smil.html — SVG SMIL
+   - http://localhost:8080/examples_html/svg-panzoom.html — SVG Pan/Zoom
+   - http://localhost:8080/examples_html/svg-chart.html — SVG Chart
+   - http://localhost:8080/examples_html/svg-linedraw.html — SVG Line Draw
+   - http://localhost:8080/examples_html/webgl-test.html — WebGL Test
+   - http://localhost:8080/examples_html/webgl-full-demo.html — WebGL Full Demo
+   - http://localhost:8080/examples_html/webgl-controls-demo.html — WebGL Controls Demo
 
 ## Example structure
 

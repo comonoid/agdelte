@@ -109,4 +109,18 @@ stepperRules =
       ∷ [])
   ∷ rule ".agdelte-stepper--clickable .agdelte-stepper__step:focus-visible"
       focusOutline
+  -- Clickable step cursor
+  ∷ rule ".agdelte-stepper--clickable .agdelte-stepper__step"
+      ( cursorPointer
+      ∷ [])
+  -- Active step number
+  ∷ rule ".agdelte-stepper__step--active .agdelte-stepper__number"
+      ( "background" ∶ "var(--agdelte-primary)"
+      ∷ "color" ∶ "var(--agdelte-text-light)"
+      ∷ [])
+  -- Completed step number
+  ∷ rule ".agdelte-stepper__step--completed .agdelte-stepper__number"
+      ( "background" ∶ "var(--agdelte-success, #22c55e)"
+      ∷ "color" ∶ "var(--agdelte-text-light)"
+      ∷ [])
   ∷ []

@@ -9,6 +9,8 @@ open import Agda.Builtin.IO using (IO)
 open import Agda.Builtin.Unit using (⊤)
 open import Agda.Builtin.String using (String)
 open import Agda.Builtin.Bool using (Bool)
+open import Agda.Builtin.List using (List; []; _∷_)
+open import Data.Bool using (if_then_else_)
 
 ------------------------------------------------------------------------
 -- Basic IO
@@ -113,29 +115,50 @@ postulate
 -- HTTP Server
 ------------------------------------------------------------------------
 
--- HTTP request (method, path, body)
+-- HTTP request (method, path, body, headers)
+open import Data.Product using (_×_; _,_; proj₁; proj₂)
+
 postulate
   HttpRequest : Set
-  reqMethod : HttpRequest → String
-  reqPath   : HttpRequest → String
-  reqBody   : HttpRequest → String
+  reqMethod  : HttpRequest → String
+  reqPath    : HttpRequest → String
+  reqBody    : HttpRequest → String
+  reqHeaders : HttpRequest → List (String × String)
 
 {-# COMPILE GHC HttpRequest = type Http.Request #-}
-{-# COMPILE GHC reqMethod = Http.reqMethod #-}
-{-# COMPILE GHC reqPath   = Http.reqPath   #-}
-{-# COMPILE GHC reqBody   = Http.reqBody   #-}
+{-# COMPILE GHC reqMethod  = Http.reqMethod  #-}
+{-# COMPILE GHC reqPath    = Http.reqPath    #-}
+{-# COMPILE GHC reqBody    = Http.reqBody    #-}
+{-# COMPILE GHC reqHeaders = Http.reqHeaders #-}
 
--- HTTP Response (status + body)
+-- HTTP Response (status + body + optional headers)
 postulate
   HttpResponse : Set
   mkResponse   : Nat → String → HttpResponse
+  mkResponseH  : Nat → String → List (String × String) → HttpResponse
 
 {-# FOREIGN GHC
-  data AgdaResponse = AgdaResponse Integer T.Text
+  data AgdaResponse = AgdaResponse Integer T.Text [(T.Text, T.Text)]
   #-}
 
 {-# COMPILE GHC HttpResponse = type AgdaResponse #-}
-{-# COMPILE GHC mkResponse   = AgdaResponse      #-}
+{-# COMPILE GHC mkResponse   = \s b -> AgdaResponse s b []      #-}
+{-# COMPILE GHC mkResponseH  = AgdaResponse #-}
+
+-- | Lookup a header by name (case-insensitive)
+postulate
+  eqStrCI : String → String → Bool
+
+{-# FOREIGN GHC
+  eqStrCIImpl :: T.Text -> T.Text -> Bool
+  eqStrCIImpl a b = T.toCaseFold a == T.toCaseFold b
+  #-}
+{-# COMPILE GHC eqStrCI = eqStrCIImpl #-}
+
+lookupHeader : String → List (String × String) → Maybe String
+lookupHeader _ [] = nothing
+lookupHeader name ((k , v) ∷ rest) =
+  if eqStrCI name k then just v else lookupHeader name rest
 
 -- Listen on port with request handler
 -- Handler receives request, returns HttpResponse with status code
@@ -145,8 +168,8 @@ postulate
 {-# FOREIGN GHC
   listenImpl :: Integer -> (Http.Request -> IO AgdaResponse) -> IO ()
   listenImpl port handler = Http.serve (fromIntegral port) $ \req -> do
-    AgdaResponse status body <- handler req
-    return (Http.Response (fromIntegral status) body [])
+    AgdaResponse status body hdrs <- handler req
+    return (Http.Response (fromIntegral status) body hdrs)
   #-}
 
 {-# COMPILE GHC listen = listenImpl #-}
@@ -231,7 +254,6 @@ postulate
 {-# COMPILE GHC mkAgentDef = mkAgentDefImpl #-}
 
 -- Run multi-agent server (arbitrary number of agents)
-open import Agda.Builtin.List using (List; []; _∷_)
 
 postulate
   runAgentServerN : Nat → List AgentDef → IO ⊤
@@ -274,7 +296,6 @@ postulate
 -- Wire pure Agent to AgentDef (bridge coalgebra to mutable server)
 ------------------------------------------------------------------------
 
-open import Data.Product using (_×_; _,_; proj₁; proj₂)
 open import Agdelte.Concurrent.Agent using (Agent; state; observe; stepAgent)
 
 wireAgent : ∀ {S} → String → String → Agent S String String → IO AgentDef

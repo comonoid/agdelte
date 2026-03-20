@@ -30,9 +30,6 @@ checkbox lbl isChecked toggleMsg =
     ( input ( type' "checkbox"
             ∷ class "agdelte-checkbox__input"
             ∷ checkedBind isChecked
-            ∷ attrBind "aria-checked" (mkBinding
-                (λ m → if isChecked m then "true" else "false")
-                eqStr)
             ∷ onChange (λ _ → toggleMsg)
             ∷ [] )
     ∷ span ( class "agdelte-checkbox__label" ∷ [] )
@@ -51,9 +48,6 @@ checkboxWithId cbId lbl isChecked toggleMsg =
             ∷ id' cbId
             ∷ class "agdelte-checkbox__input"
             ∷ checkedBind isChecked
-            ∷ attrBind "aria-checked" (mkBinding
-                (λ m → if isChecked m then "true" else "false")
-                eqStr)
             ∷ onChange (λ _ → toggleMsg)
             ∷ [] )
     ∷ label ( attr "for" cbId
@@ -80,19 +74,11 @@ checkboxIndeterminate lbl getState toggleMsg =
             ∷ checkedBind (λ m → case getState m of λ where
                 nothing → false
                 (just b) → b)
-            ∷ attrBind "aria-checked" (mkBinding
-                (λ m → case getState m of λ where
-                    nothing → "mixed"
-                    (just true) → "true"
-                    (just false) → "false")
-                eqStr)
             ∷ onChange (λ _ → toggleMsg)
             ∷ [] )
     ∷ span ( class "agdelte-checkbox__label" ∷ [] )
         ( text lbl ∷ [] )
     ∷ [] )
-  where
-    open import Data.Maybe using (Maybe; just; nothing)
 
 ------------------------------------------------------------------------
 -- Checkbox group (multiple selection)
@@ -121,7 +107,7 @@ checkboxGroup : ∀ {V M A}
               → List (SelectOption V)
               → Node M A
 checkboxGroup {V} {M} {A} eqV getSelected toggleMsg options =
-  div ( class "agdelte-checkbox-group" ∷ attr "role" "group" ∷ [] )
+  div ( class "agdelte-checkbox-group" ∷ [] )
     (map renderOption options)
   where
     open import Agdelte.Html.Controls.Util using (eqStr)
@@ -134,10 +120,6 @@ checkboxGroup {V} {M} {A} eqV getSelected toggleMsg options =
                 ∷ attrBind "checked" (mkBinding
                     (λ m → if elemBy eqV (optValue opt) (getSelected m)
                            then "true" else "")
-                    eqStr)
-                ∷ attrBind "aria-checked" (mkBinding
-                    (λ m → if elemBy eqV (optValue opt) (getSelected m)
-                           then "true" else "false")
                     eqStr)
                 ∷ onChange (λ _ → toggleMsg (optValue opt))
                 ∷ [] )
@@ -156,7 +138,7 @@ checkboxGroupIdx : ∀ {M A}
                  → List String           -- option labels
                  → Node M A
 checkboxGroupIdx {M} {A} getSelected toggleMsg labels =
-  div ( class "agdelte-checkbox-group" ∷ attr "role" "group" ∷ [] )
+  div ( class "agdelte-checkbox-group" ∷ [] )
     (renderOptions 0 labels)
   where
     open import Data.Nat using (_≡ᵇ_)
@@ -175,9 +157,6 @@ checkboxGroupIdx {M} {A} getSelected toggleMsg labels =
                 ∷ class "agdelte-checkbox__input"
                 ∷ attrBind "checked" (mkBinding
                     (λ m → if elemℕ idx (getSelected m) then "true" else "")
-                    eqStr)
-                ∷ attrBind "aria-checked" (mkBinding
-                    (λ m → if elemℕ idx (getSelected m) then "true" else "false")
                     eqStr)
                 ∷ onChange (λ _ → toggleMsg idx)
                 ∷ [] )

@@ -12,6 +12,7 @@ open import Data.Bool using (Bool)
 open import Agdelte.Reactive.Node.Core using
   ( Node; Attr; Binding
   ; elem; bind; attr; attrBind; on; onValue; onValueFrom; onValueScreen; onKeyFiltered
+  ; onPreventDefault
   ; style; styleBind
   ; stringBinding; boolBinding
   )
@@ -206,3 +207,11 @@ onEnded = on "ended"
 -- Volume change: extracts target.volume
 onVolumeChange : ∀ {Model Msg} → (String → Msg) → Attr Model Msg
 onVolumeChange = onValueFrom "volumechange" "target.volume"
+
+-- Prevent default + dispatch (for contextmenu, dragstart, form submit, etc.)
+onPrevent : ∀ {Model Msg} → String → Msg → Attr Model Msg
+onPrevent = onPreventDefault
+
+-- Progress: extracts target.buffered (furthest buffered time as String)
+onProgress : ∀ {Model Msg} → (String → Msg) → Attr Model Msg
+onProgress = onValueFrom "progress" "target.buffered"

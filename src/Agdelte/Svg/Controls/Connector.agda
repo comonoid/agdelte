@@ -175,7 +175,6 @@ svgConnectorCurved x1 y1 x2 y2 sty =
                      ∷ strokeWidthF (lineWidth sty)
                      ∷ []) ++L dashAttrs ++L arrowAttrs ) []
        ∷ [] )
-  where
 
 ------------------------------------------------------------------------
 -- Orthogonal Connector (right angles)
@@ -205,7 +204,6 @@ svgConnectorOrthogonal x1 y1 x2 y2 sty =
                      ∷ strokeWidthF (lineWidth sty)
                      ∷ []) ++L dashAttrs ++L arrowAttrs ) []
        ∷ [] )
-  where
 
 ------------------------------------------------------------------------
 -- Generic Connector

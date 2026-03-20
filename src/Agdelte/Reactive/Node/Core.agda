@@ -86,6 +86,8 @@ data Attr (Model Msg : Set) : Set where
   onValueScreen : String → (String → Msg) → Attr Model Msg
   -- Keyboard event filtered to specific keys; calls preventDefault
   onKeyFiltered : List String → (String → Msg) → Attr Model Msg
+  -- Event handler that calls e.preventDefault() before dispatching
+  onPreventDefault : String → Msg → Attr Model Msg
   -- Style
   style : String → String → Attr Model Msg
   -- Dynamic style

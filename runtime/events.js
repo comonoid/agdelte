@@ -547,7 +547,7 @@ function makeLeafHandlers(dispatchImmediate, dispatchNormal, dispatchBackground)
             dispatchBackground(handler(mkWsMsg('WsBinary', toBase64(e.data))));
           } else if (e.data instanceof Blob) {
             e.data.arrayBuffer().then(ab => {
-              dispatchBackground(handler(mkWsMsg('WsBinary', toBase64(ab))));
+              if (!terminated) dispatchBackground(handler(mkWsMsg('WsBinary', toBase64(ab))));
             });
           } else {
             dispatchBackground(handler(mkWsMsg('WsMessage', String(e.data))));

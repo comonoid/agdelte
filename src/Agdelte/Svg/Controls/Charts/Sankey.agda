@@ -221,8 +221,8 @@ private
 ------------------------------------------------------------------------
 
 private
-  renderLink : ∀ {M A} → List PositionedNode → SankeyLink → Float → Float → Node M A
-  renderLink nodes link totalOut sourceYOffset =
+  renderLink : ∀ {M A} → List PositionedNode → SankeyLink → Float → Float → Float → Node M A
+  renderLink nodes link totalOut sourceYOffset targetYOffset =
     case (findNode (slSource link) nodes , findNode (slTarget link) nodes) of λ where
       (just src , just tgt) →
         let linkHeight = if totalOut ≤ᵇ 0.0 then 2.0
@@ -230,9 +230,9 @@ private
             -- Source point
             sx = pnX src + pnWidth src
             sy = pnY src + sourceYOffset + linkHeight ÷ 2.0
-            -- Target point (find position based on incoming offset)
+            -- Target point (stacked by incoming offset)
             tx = pnX tgt
-            ty = pnY tgt + linkHeight ÷ 2.0
+            ty = pnY tgt + targetYOffset + linkHeight ÷ 2.0
             -- Control points for bezier curve
             cx1 = sx + (tx - sx) ÷ 3.0
             cx2 = tx - (tx - sx) ÷ 3.0
@@ -271,25 +271,28 @@ private
       go _ _ [] _ = []
       go ns all' (l ∷ ls) prev =
         let srcId = slSource l
+            tgtId = slTarget l
             totalOut = sumOutgoing srcId all'
-            -- Sum heights of previous links with same source
-            prevOffset = sumPrevOffset srcId prev ns all'
-        in renderLink ns l totalOut prevOffset
+            -- Sum heights of previous links with same source (source stacking)
+            srcOffset = sumPrevOffset srcId slSource prev ns all'
+            -- Sum heights of previous links with same target (target stacking)
+            tgtOffset = sumPrevOffset tgtId slTarget prev ns all'
+        in renderLink ns l totalOut srcOffset tgtOffset
            ∷ go ns all' ls (prev ++ᴸ (l ∷ []))
         where
           open import Data.List renaming (_++_ to _++ᴸ_)
 
-          sumPrevOffset : String → List SankeyLink → List PositionedNode → List SankeyLink → Float
-          sumPrevOffset _ [] _ _ = 0.0
-          sumPrevOffset sid (p ∷ ps) posNodes all' =
-            (if slSource p ≡ˢ sid
-             then (let tot = sumOutgoing sid all'
-                   in case findNode sid posNodes of λ where
+          sumPrevOffset : String → (SankeyLink → String) → List SankeyLink → List PositionedNode → List SankeyLink → Float
+          sumPrevOffset _ _ [] _ _ = 0.0
+          sumPrevOffset sid getNodeId (p ∷ ps) posNodes all' =
+            (if getNodeId p ≡ˢ sid
+             then (let tot = sumOutgoing (slSource p) all'
+                   in case findNode (slSource p) posNodes of λ where
                         (just src) → (if tot ≤ᵇ 0.0 then 2.0
                                       else (slValue p ÷ tot) * pnHeight src)
                         nothing → 0.0)
              else 0.0)
-            + sumPrevOffset sid ps posNodes all'
+            + sumPrevOffset sid getNodeId ps posNodes all'
 
 ------------------------------------------------------------------------
 -- Node rendering

@@ -22,7 +22,7 @@ open import Agda.Builtin.IO using (IO)
 open import Agda.Builtin.Unit using (⊤)
 open import Agda.Builtin.String using (String)
 open import Agda.Builtin.Nat using (Nat)
-open import Data.Bool using (Bool; true; false; not; _∨_)
+open import Data.Bool using (Bool; true; false; not; _∨_; if_then_else_)
 open import Data.List using (List; []; _∷_; any)
 open import Data.Product using (_×_; _,_)
 
@@ -132,11 +132,14 @@ deploy ds pt = mkDiagram ds pt
 ------------------------------------------------------------------------
 
 -- Check if a slot name exists in a diagram spec (for connection validation)
-private
-  open import Agda.Builtin.String using (primStringEquality)
+open import Agda.Builtin.String using (primStringEquality)
 
 hasSlot : String → DiagramSpec → Bool
-hasSlot n d = any (λ s → primStringEquality n (name s)) (slots d)
+hasSlot n d = anyBool (λ s → primStringEquality n (name s)) (slots d)
+  where
+    anyBool : ∀ {a} {A : Set a} → (A → Bool) → List A → Bool
+    anyBool _ [] = false
+    anyBool p (x ∷ xs) = if p x then true else anyBool p xs
 
 -- Bool-based filter (Data.List.filter requires Dec in stdlib v2.x)
 boolFilter : ∀ {a} {A : Set a} → (A → Bool) → List A → List A

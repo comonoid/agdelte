@@ -210,7 +210,7 @@ const MAX_DEEP_EQUAL_DEPTH = 50;
 let _deepEqualWarnCount = 0;
 const _DEEP_EQUAL_WARN_INTERVAL = 100;
 
-export function deepEqual(a, b, depth) {
+export function deepEqual(a, b, depth = 0) {
   if (a === b) return true;
   if (depth > MAX_DEEP_EQUAL_DEPTH) {
     _deepEqualWarnCount++;

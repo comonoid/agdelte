@@ -38,6 +38,7 @@ open import Agdelte.Css.Controls.Stepper     using (stepperRules)
 open import Agdelte.Css.Controls.DatePicker  using (datePickerRules)
 open import Agdelte.Css.Controls.Animations  using (animationsRules)
 open import Agdelte.Css.Controls.Responsive  using (responsiveRules)
+open import Agdelte.Css.Controls.Video      using (videoRules)
 
 ------------------------------------------------------------------------
 -- Section separators for readability in generated CSS
@@ -96,4 +97,6 @@ controlsCSS =
   -- Animations
   ++ (sep "Animations" ∷ animationsRules)
   -- Responsive
-  ++ (sep "Responsive" ∷ responsiveRules))
+  ++ (sep "Responsive" ∷ responsiveRules)
+  -- Video Player
+  ++ (sep "Video Player" ∷ videoRules))

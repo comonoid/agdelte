@@ -86,7 +86,7 @@ const renderStylesheet = stylesheetMod.default['renderStylesheet'];
 const stylesheet = userMod.default[exportName];
 
 if (!renderStylesheet) {
-  console.error(`Error: renderStylesheet not found in ${stylesheetPath}`);
+  console.error(`Error: renderStylesheet not found in jAgda.Agdelte.Css.Stylesheet`);
   process.exit(1);
 }
 

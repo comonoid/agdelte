@@ -26,11 +26,11 @@ open import Agdelte.WebGL.Controls.Buttons public
 
 -- Sliders and dials
 open import Agdelte.WebGL.Controls.Sliders public
-  hiding (clamp01; recip; sinF; cosF; natToFloat; floatToNat; roundF)
+  hiding (clamp01; recip; natToFloat; floatToNat; roundF)
 
 -- Toggles, checkboxes, radio buttons
 open import Agdelte.WebGL.Controls.Toggles public
-  hiding (natToFloat; sinF; cosF; natEq)
+  hiding (natToFloat; natEq)
 
 -- Menus and dropdowns
 open import Agdelte.WebGL.Controls.Menus public
@@ -60,7 +60,7 @@ open import Agdelte.WebGL.Controls.Charts.Scatter3D public
 
 -- 3D Charts - Surface plots
 open import Agdelte.WebGL.Controls.Charts.Surface public
-  hiding (natToFloat; sinF; cosF; _++L_)
+  hiding (natToFloat; _++L_)
 
 -- 3D Charts - Network graphs
 open import Agdelte.WebGL.Controls.Charts.Network3D public
@@ -72,11 +72,11 @@ open import Agdelte.WebGL.Controls.Charts.Network3D public
 
 -- Audio spectrum visualization
 open import Agdelte.WebGL.Controls.Audio.Spectrum public
-  hiding (natToFloat; sinF; cosF; clamp01; ltNat; _<F_; _>F_)
+  hiding (natToFloat; clamp01; ltNat; _<F_; _>F_)
 
 -- Audio waveform visualization
 open import Agdelte.WebGL.Controls.Audio.Waveform public
-  hiding (natToFloat; sinF; cosF; clamp; absFloat; ltNat; _<F_)
+  hiding (natToFloat; clamp; absFloat; ltNat; _<F_)
 
 ------------------------------------------------------------------------
 -- Gizmos
@@ -84,13 +84,13 @@ open import Agdelte.WebGL.Controls.Audio.Waveform public
 
 -- Transform manipulation gizmos
 open import Agdelte.WebGL.Controls.Gizmos.Transform public
-  hiding (sinF; cosF; case_of_; getPosition; getRotation; getScale)
+  hiding (getPosition; getRotation; getScale)
 
 -- Selection gizmos
 open import Agdelte.WebGL.Controls.Gizmos.Selection public
-  hiding (case_of_; _++L_; _<F_; _>F_)
+  hiding (_++L_; _<F_; _>F_)
 
 -- Measurement gizmos
 open import Agdelte.WebGL.Controls.Gizmos.Measure public
-  hiding (sqrtF; atan2F; acosF; showFloat; piF; _<F_; _>F_; ltNat)
+  hiding (atan2F; showFloat; piF; _<F_; _>F_; ltNat)
 

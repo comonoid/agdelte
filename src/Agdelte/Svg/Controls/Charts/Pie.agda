@@ -138,7 +138,6 @@ pieChart {M} {A} cx cy radius slices =
                       ∷ [] ) [])
       in sliceNode
          ∷ renderSlices pcx pcy r tot ss endA
-      where
 
 ------------------------------------------------------------------------
 -- Donut Chart

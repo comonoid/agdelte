@@ -61,6 +61,21 @@ dataGridRules =
       ( "font-weight" ∶ "600"
       ∷ "color" ∶ "var(--agdelte-text)"
       ∷ [])
+  ∷ rule ".agdelte-grid__cell--sortable"
+      ( cursorPointer
+      ∷ "user-select" ∶ "none"
+      ∷ [])
+  ∷ rule ".agdelte-grid__row--selected"
+      ( "background" ∶ "var(--agdelte-bg-active)"
+      ∷ [])
+  ∷ rule ".agdelte-grid--sortable .agdelte-grid__cell--header:hover"
+      ( "background" ∶ "var(--agdelte-bg-active)"
+      ∷ [])
+  ∷ rule ".agdelte-grid__empty"
+      ( "padding" ∶ "var(--agdelte-spacing-lg)"
+      ∷ "text-align" ∶ "center"
+      ∷ "color" ∶ "var(--agdelte-text-muted)"
+      ∷ [])
   ∷ rule ".agdelte-grid__action"
       ( "padding" ∶ "var(--agdelte-spacing-xs) var(--agdelte-spacing-sm)"
       ∷ "background" ∶ "var(--agdelte-primary)"

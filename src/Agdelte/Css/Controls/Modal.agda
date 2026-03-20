@@ -99,4 +99,11 @@ modalRules =
   ∷ rule ".agdelte-modal .agdelte-modal, .agdelte-modal--nested"
       ( "position" ∶ "absolute"
       ∷ [])
+  ∷ rule ".agdelte-modal__sentinel"
+      ( "position" ∶ "absolute"
+      ∷ "width" ∶ "1px"
+      ∷ "height" ∶ "1px"
+      ∷ "overflow" ∶ "hidden"
+      ∷ "opacity" ∶ "0"
+      ∷ [])
   ∷ []

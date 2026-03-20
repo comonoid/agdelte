@@ -71,7 +71,6 @@ gridAuto {M} {Msg} cols spacing pl children =
   where
     cols' : ℕ
     cols' = suc (case cols of λ { zero → zero ; (suc n) → n })
-      where
 
     go : ℕ → List (SceneNode M Msg) → List (SceneNode M Msg)
     go _ [] = []
@@ -98,7 +97,6 @@ grid {M} {Msg} (cols , rows) (spX , spY) pl children =
 
     cols' : ℕ
     cols' = suc (case cols of λ { zero → zero ; (suc n) → n })
-      where
 
     go : ℕ → List (SceneNode M Msg) → List (SceneNode M Msg)
     go _ [] = []

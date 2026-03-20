@@ -95,8 +95,83 @@ progressRules =
   ∷ rule ".agdelte-spinner__text"
       ( "color" ∶ "var(--agdelte-text-muted)"
       ∷ [])
+  ∷ rule ".agdelte-spinner--md"
+      ( "width" ∶ "32px"
+      ∷ "height" ∶ "32px"
+      ∷ [])
+  ∷ rule ".agdelte-spinner--small"
+      ( "width" ∶ "16px"
+      ∷ "height" ∶ "16px"
+      ∷ [])
+  ∷ rule ".agdelte-spinner--large"
+      ( "width" ∶ "48px"
+      ∷ "height" ∶ "48px"
+      ∷ "border-width" ∶ "3px"
+      ∷ [])
+  ∷ rule ".agdelte-spinner--inline"
+      ( "vertical-align" ∶ "middle"
+      ∷ [])
+  ∷ rule ".agdelte-spinner-wrapper"
+      ( "display" ∶ "inline-flex"
+      ∷ "align-items" ∶ "center"
+      ∷ "gap" ∶ "var(--agdelte-spacing-sm)"
+      ∷ [])
+  ∷ rule ".agdelte-spinner-overlay"
+      ( "position" ∶ "absolute"
+      ∷ "top" ∶ "0"
+      ∷ "right" ∶ "0"
+      ∷ "bottom" ∶ "0"
+      ∷ "left" ∶ "0"
+      ∷ "display" ∶ "flex"
+      ∷ "align-items" ∶ "center"
+      ∷ "justify-content" ∶ "center"
+      ∷ "background" ∶ "var(--agdelte-backdrop)"
+      ∷ [])
+  ∷ rule ".agdelte-dot-spinner"
+      ( "display" ∶ "inline-flex"
+      ∷ "gap" ∶ "4px"
+      ∷ "align-items" ∶ "center"
+      ∷ [])
+  ∷ rule ".agdelte-dot-spinner__dot"
+      ( "width" ∶ "8px"
+      ∷ "height" ∶ "8px"
+      ∷ "border-radius" ∶ "50%"
+      ∷ "background" ∶ "var(--agdelte-primary)"
+      ∷ "animation" ∶ "agdelte-dot-bounce 1.4s ease-in-out infinite both"
+      ∷ [])
+  ∷ rule ".agdelte-pulse-spinner"
+      ( "width" ∶ "24px"
+      ∷ "height" ∶ "24px"
+      ∷ "border-radius" ∶ "50%"
+      ∷ "background" ∶ "var(--agdelte-primary)"
+      ∷ "animation" ∶ "agdelte-pulse 1.5s ease-in-out infinite"
+      ∷ [])
+  ∷ rule ".agdelte-bar-spinner"
+      ( "display" ∶ "inline-flex"
+      ∷ "gap" ∶ "3px"
+      ∷ "align-items" ∶ "center"
+      ∷ "height" ∶ "24px"
+      ∷ [])
+  ∷ rule ".agdelte-bar-spinner__bar"
+      ( "width" ∶ "3px"
+      ∷ "height" ∶ "100%"
+      ∷ "background" ∶ "var(--agdelte-primary)"
+      ∷ "animation" ∶ "agdelte-bar-stretch 1.2s ease-in-out infinite"
+      ∷ [])
   ∷ keyframe "agdelte-spin"
       ( ("to" , "transform" ∶ "rotate(360deg)" ∷ [])
+      ∷ [])
+  ∷ keyframe "agdelte-dot-bounce"
+      ( ("0%, 80%, 100%" , "transform" ∶ "scale(0)" ∷ [])
+      ∷ ("40%" , "transform" ∶ "scale(1)" ∷ [])
+      ∷ [])
+  ∷ keyframe "agdelte-pulse"
+      ( ("0%" , "transform" ∶ "scale(0)" ∷ "opacity" ∶ "1" ∷ [])
+      ∷ ("100%" , "transform" ∶ "scale(1)" ∷ "opacity" ∶ "0" ∷ [])
+      ∷ [])
+  ∷ keyframe "agdelte-bar-stretch"
+      ( ("0%, 40%, 100%" , "transform" ∶ "scaleY(0.4)" ∷ [])
+      ∷ ("20%" , "transform" ∶ "scaleY(1)" ∷ [])
       ∷ [])
   -- Skeleton
   ∷ rule ".agdelte-skeleton"
@@ -127,6 +202,34 @@ progressRules =
   ∷ keyframe "agdelte-skeleton-shimmer"
       ( ("0%"   , "background-position" ∶ "200% 0" ∷ [])
       ∷ ("100%" , "background-position" ∶ "-200% 0" ∷ [])
+      ∷ [])
+  ∷ rule ".agdelte-skeleton-wrapper"
+      ( "position" ∶ "relative"
+      ∷ [])
+  ∷ rule ".agdelte-skeleton-text"
+      ( "display" ∶ "flex"
+      ∷ "flex-direction" ∶ "column"
+      ∷ "gap" ∶ "var(--agdelte-spacing-xs)"
+      ∷ [])
+  ∷ rule ".agdelte-skeleton-card"
+      ( "display" ∶ "flex"
+      ∷ "flex-direction" ∶ "column"
+      ∷ "gap" ∶ "var(--agdelte-spacing-sm)"
+      ∷ [])
+  ∷ rule ".agdelte-skeleton-avatar-text"
+      ( "display" ∶ "flex"
+      ∷ "gap" ∶ "var(--agdelte-spacing-sm)"
+      ∷ "align-items" ∶ "flex-start"
+      ∷ [])
+  ∷ rule ".agdelte-skeleton-table"
+      ( "display" ∶ "flex"
+      ∷ "flex-direction" ∶ "column"
+      ∷ "gap" ∶ "var(--agdelte-spacing-xs)"
+      ∷ [])
+  ∷ rule ".agdelte-skeleton-list"
+      ( "display" ∶ "flex"
+      ∷ "flex-direction" ∶ "column"
+      ∷ "gap" ∶ "var(--agdelte-spacing-sm)"
       ∷ [])
   -- Loading wrapper
   ∷ rule ".agdelte-loading-wrapper"

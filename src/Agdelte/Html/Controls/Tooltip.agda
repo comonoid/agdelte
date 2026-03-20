@@ -59,12 +59,10 @@ tooltip : ∀ {M A}
 tooltip {M} {A} tipId trigger tip position =
   span ( class ("agdelte-tooltip " ++ positionClass position) ∷ [] )
     ( span ( class "agdelte-tooltip__trigger"
-           ∷ attr "aria-describedby" tipId
            ∷ [] )
         ( trigger ∷ [] )
     ∷ span ( class "agdelte-tooltip__content"
            ∷ id' tipId
-           ∷ attr "role" "tooltip"
            ∷ [] )
         ( text tip ∷ [] )
     ∷ [] )
@@ -81,12 +79,10 @@ tooltipCustom : ∀ {M A}
 tooltipCustom {M} {A} tipId trigger content position =
   span ( class ("agdelte-tooltip " ++ positionClass position) ∷ [] )
     ( span ( class "agdelte-tooltip__trigger"
-           ∷ attr "aria-describedby" tipId
            ∷ [] )
         ( trigger ∷ [] )
     ∷ span ( class "agdelte-tooltip__content"
            ∷ id' tipId
-           ∷ attr "role" "tooltip"
            ∷ [] )
         ( content ∷ [] )
     ∷ [] )

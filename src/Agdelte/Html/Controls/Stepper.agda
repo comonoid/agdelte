@@ -61,7 +61,7 @@ stepper : ∀ {M A}
         → List Step
         → Node M A
 stepper {M} {A} currentStep steps =
-  div ( class "agdelte-stepper" ∷ attr "role" "navigation" ∷ [] )
+  div ( class "agdelte-stepper" ∷ [] )
     (renderSteps 0 (length steps) steps)
   where
     renderStep : ℕ → ℕ → Step → Node M A
@@ -104,7 +104,6 @@ clickableStepper : ∀ {M A}
                  → Node M A
 clickableStepper {M} {A} currentStep goToStep steps =
   div ( class "agdelte-stepper agdelte-stepper--clickable"
-      ∷ attr "role" "navigation"
       ∷ [] )
     (renderSteps 0 (length steps) steps)
   where
@@ -122,6 +121,8 @@ clickableStepper {M} {A} currentStep goToStep steps =
         ∷ div ( class "agdelte-stepper__content" ∷ [] )
             ( span ( class "agdelte-stepper__label" ∷ [] )
                 ( text (stepLabel step) ∷ [] )
+            ∷ span ( class "agdelte-stepper__description" ∷ [] )
+                ( text (stepDescription step) ∷ [] )
             ∷ [] )
         ∷ (if suc idx <ᵇ total
            then div ( class "agdelte-stepper__line" ∷ [] ) [] ∷ []
@@ -143,7 +144,6 @@ verticalStepper : ∀ {M A}
                 → Node M A
 verticalStepper {M} {A} currentStep steps =
   div ( class "agdelte-stepper agdelte-stepper--vertical"
-      ∷ attr "role" "navigation"
       ∷ [] )
     (renderSteps 0 (length steps) steps)
   where

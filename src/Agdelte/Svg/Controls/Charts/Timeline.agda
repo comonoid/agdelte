@@ -118,7 +118,6 @@ horizontalTimeline {M} {A} px py w h events =
                    ∷ [] )
              ( text (evLabel e) ∷ [] )
          ∷ []
-      where
 
     -- Check if current event is too close to the previous one
     -- and stagger labels: even-indexed labels go above, odd go below

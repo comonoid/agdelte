@@ -73,4 +73,14 @@ paginationRules =
       ( "color" ∶ "var(--agdelte-text-muted)"
       ∷ "padding" ∶ "0 var(--agdelte-spacing-xs)"
       ∷ [])
+  -- Info display
+  ∷ rule ".agdelte-pagination__info"
+      ( "color" ∶ "var(--agdelte-text)"
+      ∷ "font-variant-numeric" ∶ "tabular-nums"
+      ∷ [])
+  -- Current page indicator
+  ∷ rule ".agdelte-pagination__current"
+      ( "font-weight" ∶ "600"
+      ∷ "font-variant-numeric" ∶ "tabular-nums"
+      ∷ [])
   ∷ []

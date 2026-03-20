@@ -37,10 +37,6 @@ progressBar : ∀ {M A}
             → Node M A
 progressBar {M} {A} getValue =
   div ( class "agdelte-progress"
-      ∷ attr "role" "progressbar"
-      ∷ attrBind "aria-valuenow" (mkBinding (λ m → clampProgressValue (getValue m)) eqStr)
-      ∷ attr "aria-valuemin" "0"
-      ∷ attr "aria-valuemax" "100"
       ∷ [] )
     ( div ( class "agdelte-progress__bar"
           ∷ styleBind "width" (mkBinding (λ m → clampProgressValue (getValue m) ++ "%") eqStr)
@@ -73,7 +69,6 @@ progressBarLabeled {M} {A} lbl getValue =
 progressIndeterminate : ∀ {M A} → Node M A
 progressIndeterminate =
   div ( class "agdelte-progress agdelte-progress--indeterminate"
-      ∷ attr "role" "progressbar"
       ∷ [] )
     ( div ( class "agdelte-progress__bar" ∷ [] ) []
     ∷ [] )
@@ -84,7 +79,7 @@ progressIndeterminate =
 
 -- | Simple loading spinner
 spinner : ∀ {M A} → Node M A
-spinner = div ( class "agdelte-spinner" ∷ attr "role" "status" ∷ [] )
+spinner = div ( class "agdelte-spinner" ∷ [] )
             ( span ( class "agdelte-spinner__sr" ∷ [] )
                 ( text "Loading..." ∷ [] )
             ∷ [] )
@@ -103,7 +98,6 @@ spinnerSizeClass Large  = "agdelte-spinner--lg"
 spinnerWithSize : ∀ {M A} → ProgressSpinnerSize → Node M A
 spinnerWithSize size =
   div ( class ("agdelte-spinner " ++ spinnerSizeClass size)
-      ∷ attr "role" "status"
       ∷ [] )
     ( span ( class "agdelte-spinner__sr" ∷ [] )
         ( text "Loading..." ∷ [] )

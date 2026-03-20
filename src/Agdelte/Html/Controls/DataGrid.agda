@@ -54,7 +54,6 @@ private
   renderHeaderCell : ∀ {R M A} → Column R M A → Node M A
   renderHeaderCell col =
     div ( class "agdelte-grid__cell agdelte-grid__cell--header"
-        ∷ attr "role" "columnheader"
         ∷ style "width" (colWidth col)
         ∷ [] )
       ( text (colHeader col) ∷ [] )
@@ -73,13 +72,11 @@ private
     case onRowClick cfg of λ where
       nothing →
         div ( class "agdelte-grid__row"
-            ∷ attr "role" "row"
             ∷ keyAttr (rowKey cfg row)
             ∷ [] )
           (map (renderDataCell row) (columns cfg))
       (just handler) →
         div ( class "agdelte-grid__row agdelte-grid__row--clickable"
-            ∷ attr "role" "row"
             ∷ keyAttr (rowKey cfg row)
             ∷ onClick (handler row)
             ∷ [] )
@@ -94,13 +91,12 @@ private
 -- | getData: extract list of rows from model
 dataGrid : ∀ {R M A} → GridConfig R M A → (M → List R) → Node M A
 dataGrid cfg getData =
-  div ( class "agdelte-grid" ∷ attr "role" "grid" ∷ [] )
-    ( div ( class "agdelte-grid__header" ∷ attr "role" "row" ∷ [] )
+  div ( class "agdelte-grid" ∷ [] )
+    ( div ( class "agdelte-grid__header" ∷ [] )
         (map renderHeaderCell (columns cfg))
     ∷ div ( class "agdelte-grid__body" ∷ [] )
         ( when (null ∘ getData)
             (div ( class "agdelte-grid__row agdelte-grid__empty"
-                 ∷ attr "role" "row"
                  ∷ [] )
               ( text noDataText ∷ [] ))
         ∷ foreachKeyed getData (rowKey cfg) (renderRow cfg)
@@ -196,7 +192,6 @@ private
             then (if asc then " ▲" else " ▼")
             else ""
     in div ( class "agdelte-grid__cell agdelte-grid__cell--header agdelte-grid__cell--sortable"
-           ∷ attr "role" "columnheader"
            ∷ style "width" (colWidth col)
            ∷ style "cursor" "pointer"
            ∷ onClick (onSort' colIdx)
@@ -246,18 +241,17 @@ private
 -- | getData: extract list of rows from model
 sortableGrid : ∀ {R M A} → SortableGridConfig R M A → (M → List R) → Node M A
 sortableGrid cfg getData =
-  div ( class "agdelte-grid agdelte-grid--sortable" ∷ attr "role" "grid" ∷ [] )
+  div ( class "agdelte-grid agdelte-grid--sortable" ∷ [] )
     ( foreach (λ m → m ∷ []) (λ m _ →
         let ss = sgSortState cfg m
             sortedData = sortRows ss (sgComparators cfg) (getData m)
             gridCfg = mkGridConfig (sgColumns cfg) (sgRowKey cfg) (sgOnRowClick cfg)
         in div []
-          ( div ( class "agdelte-grid__header" ∷ attr "role" "row" ∷ [] )
+          ( div ( class "agdelte-grid__header" ∷ [] )
               (renderSortableHeaders (sgColumns cfg) (sgOnSort cfg) ss 0)
           ∷ div ( class "agdelte-grid__body" ∷ [] )
               ( when (λ _ → null sortedData)
                   (div ( class "agdelte-grid__row agdelte-grid__empty"
-                       ∷ attr "role" "row"
                        ∷ [] )
                     ( text noDataText ∷ [] ))
               ∷ foreach (λ _ → sortedData) (renderRow gridCfg)

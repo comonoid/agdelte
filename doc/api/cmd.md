@@ -8,6 +8,8 @@ From `Agdelte.Core.Cmd`.
 |----------|------|-------------|
 | `httpGet` | `String → (String → A) → (String → A) → Cmd A` | GET request |
 | `httpPost` | `String → String → (String → A) → (String → A) → Cmd A` | POST request |
+| `httpGetH` | `String → List (String × String) → (String → A) → (String → A) → Cmd A` | GET with custom headers |
+| `httpPostH` | `String → List (String × String) → String → (String → A) → (String → A) → Cmd A` | POST with custom headers |
 
 ## Task Integration
 
@@ -23,6 +25,17 @@ From `Agdelte.Core.Cmd`.
 | `blur` | `String → Cmd A` | Blur element |
 | `scrollTo` | `ℕ → ℕ → Cmd A` | Scroll to position |
 | `scrollIntoView` | `String → Cmd A` | Scroll element into view |
+| `callMethod` | `String → String → Cmd A` | Call method on element (selector, method) |
+| `setProp` | `String → String → String → Cmd A` | Set property on element |
+| `getProp` | `String → String → (String → A) → Cmd A` | Read property from element |
+
+## MediaSource (Video)
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `mediaSourceInit` | `String → String → A → (String → A) → Cmd A` | Init MediaSource (selector, mimeType, onReady, onError) |
+| `mediaSourceAppend` | `String → String → A → (String → A) → Cmd A` | Append segment (selector, base64, onDone, onError) |
+| `mediaSourceEnd` | `String → Cmd A` | Signal end of stream |
 
 ## Clipboard
 

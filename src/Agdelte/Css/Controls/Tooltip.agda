@@ -7,7 +7,7 @@ module Agdelte.Css.Controls.Tooltip where
 
 open import Data.List using (List; []; _∷_)
 
-open import Agdelte.Css.Decl using (Style; _∶_; borderRadius)
+open import Agdelte.Css.Decl using (Style; _∶_; borderRadius; cursorPointer)
 open import Agdelte.Css.Stylesheet using (Rule; rule; Stylesheet)
 
 ------------------------------------------------------------------------
@@ -67,5 +67,36 @@ tooltipRules =
       ∷ "top" ∶ "50%"
       ∷ "transform" ∶ "translateY(-50%)"
       ∷ "margin-left" ∶ "var(--agdelte-spacing-xs)"
+      ∷ [])
+  -- Standalone position classes
+  ∷ rule ".agdelte-tooltip--top"
+      ( "bottom" ∶ "100%"
+      ∷ "left" ∶ "50%"
+      ∷ "transform" ∶ "translateX(-50%)"
+      ∷ "margin-bottom" ∶ "8px"
+      ∷ [])
+  ∷ rule ".agdelte-tooltip--bottom"
+      ( "top" ∶ "100%"
+      ∷ "left" ∶ "50%"
+      ∷ "transform" ∶ "translateX(-50%)"
+      ∷ "margin-top" ∶ "8px"
+      ∷ [])
+  ∷ rule ".agdelte-tooltip--left"
+      ( "right" ∶ "100%"
+      ∷ "top" ∶ "50%"
+      ∷ "transform" ∶ "translateY(-50%)"
+      ∷ "margin-right" ∶ "8px"
+      ∷ [])
+  ∷ rule ".agdelte-tooltip--right"
+      ( "left" ∶ "100%"
+      ∷ "top" ∶ "50%"
+      ∷ "transform" ∶ "translateY(-50%)"
+      ∷ "margin-left" ∶ "8px"
+      ∷ [])
+  -- Help/info icon styles
+  ∷ rule ".agdelte-help-icon, .agdelte-info-icon"
+      ( cursorPointer
+      ∷ "display" ∶ "inline-flex"
+      ∷ "align-items" ∶ "center"
       ∷ [])
   ∷ []
