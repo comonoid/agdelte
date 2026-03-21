@@ -80,7 +80,9 @@ withAuth secret handler req with authenticate secret req
 ... | just payload = handler (mkAuthRequest payload req)
 
 ------------------------------------------------------------------------
--- CORS headers (for frontend on different port during dev)
+-- CORS headers
+-- WARNING: Origin "*" is for development only.
+-- In production, restrict to the actual frontend domain.
 ------------------------------------------------------------------------
 
 corsHeaders : List (String × String)

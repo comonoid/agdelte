@@ -1,129 +1,74 @@
 {-# OPTIONS --without-K --guardedness #-}
 
 -- Auth request handlers: register, login.
--- Uses in-memory user store via IORef (WAL persistence added separately).
+-- Uses WAL-backed AppStore for persistence.
 
 module Agdelte.Auth.Handler where
 
 open import Agda.Builtin.IO using (IO)
-open import Agda.Builtin.Nat using (Nat)
 open import Agda.Builtin.String using (String)
 open import Agda.Builtin.Bool using (Bool; true; false)
-open import Data.Bool using (if_then_else_)
 open import Data.String using (_++_; _≟_)
 open import Data.Maybe using (Maybe; just; nothing)
-open import Data.List using (List; []; _∷_)
 open import Data.Product using (_×_; _,_)
+open import Data.Nat using (ℕ)
+open import Data.Nat.Show using (show)
 open import Relation.Nullary using (yes; no)
 
 open import Agdelte.FFI.Server using
   ( HttpRequest; HttpResponse
   ; reqBody; mkResponse; mkResponseH
-  ; IORef; newIORef; readIORef; writeIORef
   ; _>>=_; _>>_; pure
   )
 open import Agdelte.FFI.Crypto using (hashPassword; verifyPassword)
 open import Agdelte.Auth.JWT using (signJWT)
 open import Agdelte.Auth.Middleware using (corsHeaders)
+open import Agdelte.Auth.Role using (Role; Student; showRole)
+open import Agdelte.Storage.WAL using (WalHandle; walRead; walStep; walModify)
+open import Agdelte.Storage.AppStore
+
+open import Agdelte.FFI.Json using (jsonGetField; escapeJsonString) public
+open import Agdelte.Util using (case_of_)
 
 ------------------------------------------------------------------------
--- User record (in-memory)
+-- Input validation (GHC backend)
 ------------------------------------------------------------------------
 
-record User : Set where
-  constructor mkUser
-  field
-    userId       : String
-    userEmail    : String
-    userPassHash : String
-
-open User public
-
-------------------------------------------------------------------------
--- User store (List in IORef)
-------------------------------------------------------------------------
-
-UserStore : Set
-UserStore = IORef (List User)
-
-newUserStore : IO UserStore
-newUserStore = newIORef []
-
-------------------------------------------------------------------------
--- JSON helpers (minimal, for auth endpoints)
-------------------------------------------------------------------------
-
--- Extract field from simple JSON: {"field":"value",...}
--- Minimal parser — handles string fields only, no nesting.
-postulate
-  jsonGetField : String → String → Maybe String
+private
+  postulate
+    isValidEmail    : String → Bool
+    isValidPassword : String → Bool
 
 {-# FOREIGN GHC
   import qualified Data.Text as T
 
-  -- Minimal JSON field extractor (string values only, no nesting)
-  jsonGetFieldImpl :: T.Text -> T.Text -> Maybe T.Text
-  jsonGetFieldImpl fieldName json =
-    let needle = "\"" <> fieldName <> "\""
-    in case T.breakOn needle json of
-         (_, rest)
-           | T.null rest -> Nothing
-           | otherwise ->
-             let afterKey = T.drop (T.length needle) rest
-                 afterColon = T.dropWhile (\c -> c == ':' || c == ' ') afterKey
-             in if T.null afterColon || T.head afterColon /= '"'
-                then Nothing
-                else let valStart = T.tail afterColon
-                         val = T.takeWhile (/= '"') valStart
-                     in Just val
+  isValidEmailHS :: T.Text -> Bool
+  isValidEmailHS t = T.any (== '@') t && T.length t >= 3
+
+  isValidPasswordHS :: T.Text -> Bool
+  isValidPasswordHS t = T.length t >= 8
   #-}
-{-# COMPILE GHC jsonGetField = jsonGetFieldImpl #-}
+{-# COMPILE GHC isValidEmail    = isValidEmailHS #-}
+{-# COMPILE GHC isValidPassword = isValidPasswordHS #-}
 
 ------------------------------------------------------------------------
--- Find user by email
+-- Helpers
 ------------------------------------------------------------------------
 
-findByEmail : String → List User → Maybe User
-findByEmail _ [] = nothing
-findByEmail email (u ∷ us) with userEmail u ≟ email
-... | yes _ = just u
-... | no _  = findByEmail email us
+private
+  mkToken : String → ℕ → String → Role → String
+  mkToken secret uid email role =
+    let esc = escapeJsonString
+    in signJWT secret ("{\"sub\":" ++ show uid
+         ++ ",\"email\":\"" ++ esc email
+         ++ "\",\"role\":\"" ++ showRole role ++ "\"}")
 
-------------------------------------------------------------------------
--- Generate user ID
-------------------------------------------------------------------------
-
-postulate
-  generateId : IO String
-
-{-# FOREIGN GHC
-  import qualified Data.UUID.V4 as UUID
-  import qualified Data.UUID as UUID
-
-  generateIdImpl :: IO T.Text
-  generateIdImpl = T.pack . UUID.toString <$> UUID.nextRandom
-  #-}
-{-# COMPILE GHC generateId = generateIdImpl #-}
-
-------------------------------------------------------------------------
--- JSON string escaping
-------------------------------------------------------------------------
-
-postulate
-  escapeJsonString : String → String
-
-{-# FOREIGN GHC
-  escapeJsonStringImpl :: T.Text -> T.Text
-  escapeJsonStringImpl = T.concatMap escChar
-    where
-      escChar '"'  = "\\\""
-      escChar '\\' = "\\\\"
-      escChar '\n' = "\\n"
-      escChar '\r' = "\\r"
-      escChar '\t' = "\\t"
-      escChar c    = T.singleton c
-  #-}
-{-# COMPILE GHC escapeJsonString = escapeJsonStringImpl #-}
+  mkAuthResp : ℕ → String → ℕ → HttpResponse
+  mkAuthResp status token uid =
+    let esc = escapeJsonString
+    in mkResponseH status
+         ("{\"token\":\"" ++ esc token ++ "\",\"userId\":" ++ show uid ++ "}")
+         corsHeaders
 
 ------------------------------------------------------------------------
 -- Handlers
@@ -131,55 +76,54 @@ postulate
 
 -- | POST /api/register
 -- Body: {"email":"...","password":"..."}
--- Returns: {"token":"...", "userId":"..."}
-handleRegister : String → UserStore → HttpRequest → IO HttpResponse
-handleRegister secret store req =
+-- Returns: {"token":"...", "userId":N}
+-- Uses walModify for atomic email-uniqueness check + user creation.
+handleRegister : String → WalHandle AppState AppOp → HttpRequest → IO HttpResponse
+handleRegister secret wal req =
   let body = reqBody req
   in case (jsonGetField "email" body , jsonGetField "password" body) of λ where
     (nothing , _) → pure (mkResponseH 400 "{\"error\":\"Missing email\"}" corsHeaders)
     (_ , nothing) → pure (mkResponseH 400 "{\"error\":\"Missing password\"}" corsHeaders)
     (just email , just password) →
-      readIORef store >>= λ users →
-      case findByEmail email users of λ where
-        (just _) → pure (mkResponseH 409 "{\"error\":\"Email already registered\"}" corsHeaders)
-        nothing →
-          generateId >>= λ uid →
-          hashPassword password >>= λ hash →
-          let esc = escapeJsonString
-              user = mkUser uid email hash
-              token = signJWT secret ("{\"sub\":\"" ++ esc uid ++ "\",\"email\":\"" ++ esc email ++ "\"}")
-              respBody = "{\"token\":\"" ++ esc token ++ "\",\"userId\":\"" ++ esc uid ++ "\"}"
-          in writeIORef store (user ∷ users) >>
-             pure (mkResponseH 201 respBody corsHeaders)
-  where
-    case_of_ : ∀ {a b} {A : Set a} {B : Set b} → A → (A → B) → B
-    case x of f = f x
+      if not (isValidEmail email)
+      then pure (mkResponseH 400 "{\"error\":\"Invalid email\"}" corsHeaders)
+      else if not (isValidPassword password)
+      then pure (mkResponseH 400 "{\"error\":\"Password must be at least 8 characters\"}" corsHeaders)
+      else
+        hashPassword password >>= λ hash →
+        walModify wal (λ state →
+          case findUserByEmail email state of λ where
+            (just _) → nothing
+            nothing  → just (AddUser (mkUserRecord (allocUserId state) email hash Student))
+        ) >>= λ where
+          nothing → pure (mkResponseH 409 "{\"error\":\"Email already registered\"}" corsHeaders)
+          (just state') →
+            case findUserByEmail email state' of λ where
+              nothing → pure (mkResponseH 500 "{\"error\":\"Internal error\"}" corsHeaders)
+              (just user) →
+                let token = mkToken secret (urId user) email (urRole user)
+                in pure (mkAuthResp 201 token (urId user))
+  where open import Data.Bool using (not; if_then_else_)
 
 private
-  loginUser : String → String → User → String → IO HttpResponse
-  loginUser secret email user password with verifyPassword password (userPassHash user)
+  loginUser : String → ℕ → String → UserRecord → String → IO HttpResponse
+  loginUser secret uid email user password with verifyPassword password (urPassHash user)
   ... | false = pure (mkResponseH 401 "{\"error\":\"Invalid credentials\"}" corsHeaders)
   ... | true  =
-    let esc = escapeJsonString
-        uid = userId user
-        token = signJWT secret ("{\"sub\":\"" ++ esc uid ++ "\",\"email\":\"" ++ esc email ++ "\"}")
-        respBody = "{\"token\":\"" ++ esc token ++ "\",\"userId\":\"" ++ esc uid ++ "\"}"
-    in pure (mkResponseH 200 respBody corsHeaders)
+    let token = mkToken secret uid email (urRole user)
+    in pure (mkAuthResp 200 token uid)
 
 -- | POST /api/login
 -- Body: {"email":"...","password":"..."}
--- Returns: {"token":"...", "userId":"..."}
-handleLogin : String → UserStore → HttpRequest → IO HttpResponse
-handleLogin secret store req =
+-- Returns: {"token":"...", "userId":N}
+handleLogin : String → WalHandle AppState AppOp → HttpRequest → IO HttpResponse
+handleLogin secret wal req =
   let body = reqBody req
   in case (jsonGetField "email" body , jsonGetField "password" body) of λ where
     (nothing , _) → pure (mkResponseH 400 "{\"error\":\"Missing email\"}" corsHeaders)
     (_ , nothing) → pure (mkResponseH 400 "{\"error\":\"Missing password\"}" corsHeaders)
     (just email , just password) →
-      readIORef store >>= λ users →
-      case findByEmail email users of λ where
+      walRead wal >>= λ state →
+      case findUserByEmail email state of λ where
         nothing → pure (mkResponseH 401 "{\"error\":\"Invalid credentials\"}" corsHeaders)
-        (just user) → loginUser secret email user password
-  where
-    case_of_ : ∀ {a b} {A : Set a} {B : Set b} → A → (A → B) → B
-    case x of f = f x
+        (just user) → loginUser secret (urId user) email user password

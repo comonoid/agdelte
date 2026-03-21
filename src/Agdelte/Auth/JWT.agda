@@ -9,11 +9,12 @@ module Agdelte.Auth.JWT where
 
 open import Agda.Builtin.String using (String)
 open import Data.String using (_++_; _≟_)
+open import Data.Bool using (if_then_else_)
 open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Product using (_×_; _,_)
 open import Relation.Nullary using (yes; no)
 
-open import Agdelte.FFI.Crypto using (hmacSHA256; base64Encode; base64Decode)
+open import Agdelte.FFI.Crypto using (hmacSHA256; base64Encode; base64Decode; constantTimeEq)
 
 ------------------------------------------------------------------------
 -- Split JWT into parts (header.payload.signature)
@@ -58,9 +59,11 @@ signJWT secret payload =
 ------------------------------------------------------------------------
 
 -- | Verify JWT signature. Returns decoded payload if valid, nothing if invalid.
+-- Uses constant-time comparison to prevent timing attacks.
 verifyJWT : String → String → Maybe String
 verifyJWT secret token with splitJWT token
 ... | nothing = nothing
-... | just (header , payload , sig) with hmacSHA256 secret (header ++ "." ++ payload) ≟ sig
-...   | yes _ = just (base64Decode payload)
-...   | no _  = nothing
+... | just (header , payload , sig) =
+  if constantTimeEq (hmacSHA256 secret (header ++ "." ++ payload)) sig
+  then just (base64Decode payload)
+  else nothing

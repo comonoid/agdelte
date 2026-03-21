@@ -15,7 +15,7 @@ open import Agda.Builtin.String using (String)
 open import Agda.Builtin.Bool using (Bool; true; false)
 open import Data.Bool using (if_then_else_)
 open import Data.String using (_++_)
-open import Data.Maybe using (Maybe; just; nothing)
+open import Data.Maybe using (Maybe; just; nothing; maybe)
 open import Data.List using (List; []; _∷_)
 
 open import Agdelte.FFI.Server using
@@ -133,6 +133,32 @@ walStep h op =
 walRead : ∀ {S Op} → WalHandle S Op → IO S
 walRead h =
   bracket (takeMVar (walState h)) (putMVar (walState h)) (λ s → pure s)
+
+------------------------------------------------------------------------
+-- Atomic read-modify-write
+------------------------------------------------------------------------
+
+-- | Read state under lock, apply guard function.
+-- If it returns Just op → append to log, apply, return Just newState.
+-- If Nothing → no change, return Nothing.
+-- Prevents TOCTOU races between walRead and walStep.
+walModify : ∀ {S Op} → WalHandle S Op → (S → Maybe Op) → IO (Maybe S)
+walModify h f =
+  takeMVar (walState h) >>= λ s →
+  maybe
+    (λ op →
+      let cfg  = walConfig h
+          line = walSerializeOp cfg op ++ "\n"
+      in onException
+        (appendFileText (walLogPath cfg) line >>
+         let s' = walApply cfg op s
+         in mask (putMVar (walState h) s' >>
+                  readIORef (walOpCount h) >>= λ n →
+                  writeIORef (walOpCount h) (suc n)) >>
+            pure (just s'))
+        (putMVar (walState h) s))
+    (putMVar (walState h) s >> pure nothing)
+    (f s)
 
 ------------------------------------------------------------------------
 -- Snapshot: write full state, truncate log

@@ -32,6 +32,25 @@
             http-types
             websockets
 
+            # Crypto & Auth
+            cryptonite
+            memory              # Data.ByteArray (cryptonite dep)
+            base64-bytestring
+
+            # HTTP client (for ЮKassa API)
+            http-client
+            http-client-tls
+
+            # JSON
+            aeson
+
+            # Time
+            time
+
+            # String interning
+            vector
+            unordered-containers  # HashMap
+
             # Misc
             case-insensitive
             unix

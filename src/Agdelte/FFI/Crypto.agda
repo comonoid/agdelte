@@ -63,3 +63,21 @@ postulate
   base64Decode : String → String
 
 {-# COMPILE GHC base64Decode = Crypto.base64Decode #-}
+
+------------------------------------------------------------------------
+-- Constant-time comparison
+------------------------------------------------------------------------
+
+-- | Constant-time string comparison (prevents timing attacks on HMAC).
+postulate
+  constantTimeEq : String → String → Bool
+
+{-# FOREIGN GHC
+  import qualified Data.Text as T
+  import qualified Data.Text.Encoding as TE
+  import qualified Data.ByteArray as BA
+
+  constantTimeEqHS :: T.Text -> T.Text -> Bool
+  constantTimeEqHS a b = BA.constEq (TE.encodeUtf8 a) (TE.encodeUtf8 b)
+  #-}
+{-# COMPILE GHC constantTimeEq = constantTimeEqHS #-}
