@@ -539,7 +539,8 @@ let NodeModule = null;
 async function loadNodeModule() {
   if (NodeModule) return NodeModule;
   try {
-    const mod = await import('../_build/jAgda.Agdelte.Reactive.Node.mjs');
+    // Load Core directly — Agda JS backend doesn't re-export from umbrella modules
+    const mod = await import('../_build/jAgda.Agdelte.Reactive.Node.Core.mjs');
     NodeModule = mod.default;
     return NodeModule;
   } catch (e) {
@@ -2124,6 +2125,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
     const eventSpec = subsFunc(model);
     const newFingerprint = serializeEvent(eventSpec);
+    console.log('[DEBUG subs] fingerprint:', newFingerprint, 'prev:', currentEventFingerprint);
 
     if (newFingerprint === currentEventFingerprint) return;
 
@@ -2139,6 +2141,7 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         background: dispatchBackground
       });
       currentEventFingerprint = newFingerprint;
+      console.log('[DEBUG subs] subscribed OK');
     } catch (e) {
       console.error('updateSubscriptions: interpretEvent failed:', e);
       currentSubscription = null;

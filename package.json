@@ -27,6 +27,7 @@
     "test:video": "node test/video.test.js",
     "test:auth": "node test/auth-http.test.js",
     "build:video": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/VideoDemo.agda",
+    "build:tetris": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/Tetris.agda",
     "test:all": "npm test && npm run test:smoke && npm run test:gl && npm run test:css && npm run test:agda && npm run test:array && npm run test:forms && npm run test:json && npm run test:datetime && npm run test:dom && npm run test:serialize && npm run test:video",
     "verify": "bash scripts/verify-build.sh",
     "build:counter": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/Counter.agda",

@@ -471,8 +471,17 @@ function makeLeafHandlers(dispatchImmediate, dispatchNormal, dispatchBackground)
       const mkGlobalListener = (eventName, mkEvent, dispatch) => (handler) => {
         const ac = new AbortController();
         document.addEventListener(eventName, (e) => {
-          const msg = fromMaybe(handler(mkEvent(e)));
-          if (msg !== null) dispatch(msg);
+          console.log('[DEBUG event]', eventName, e.code, e.key, 'repeat:', e.repeat);
+          try {
+            const agdaEvent = mkEvent(e);
+            const maybeMsg = handler(agdaEvent);
+            console.log('[DEBUG event] maybeMsg type:', typeof maybeMsg, maybeMsg);
+            const msg = fromMaybe(maybeMsg);
+            console.log('[DEBUG event] msg:', msg !== null ? 'dispatching' : 'filtered');
+            if (msg !== null) dispatch(msg);
+          } catch(err) {
+            console.error('[DEBUG event] handler error:', err);
+          }
         }, { signal: ac.signal });
         return { unsubscribe: () => ac.abort() };
       };
@@ -715,14 +724,15 @@ function dispatchWorkerProgress(data, dispatch, onProgress, onResult, onError) {
  * So the record must be: {"mkKeyboardEvent": cb => cb["mkKeyboardEvent"](fields...)}
  */
 function mkKeyboardEvent(e) {
+  // Agda Bool compiles to native JS true/false, not Scott-encoded
   return {"mkKeyboardEvent": (cb) => cb["mkKeyboardEvent"](
     e.key,
     e.code,
-    toBool(e.ctrlKey),
-    toBool(e.altKey),
-    toBool(e.shiftKey),
-    toBool(e.metaKey),
-    toBool(e.repeat),
+    !!e.ctrlKey,
+    !!e.altKey,
+    !!e.shiftKey,
+    !!e.metaKey,
+    !!e.repeat,
     BigInt(e.location ?? 0)
   )};
 }

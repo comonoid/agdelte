@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1a2e">
+  <link rel="icon" href="data:,">
+  <title>Tetris - Agdelte</title>
+  <link rel="stylesheet" href="generated/examples.css">
+</head>
+<body>
+  <header>
+    <a href="../index.html" class="back">&larr; Back to examples</a>
+    <h1>Tetris</h1>
+    <p class="subtitle">Chord-based controls: all 10 fingers, zero wasted moves</p>
+  </header>
+
+  <main>
+    <div class="instructions">
+      <strong>Position:</strong> <code>A S D F G H J K L ;</code> &rarr; columns 0&ndash;9 (home row, direct addressing).<br>
+      <strong>Rotation:</strong> toggle: <code>C</code> &plusmn;90&deg;, <code>M</code> &plusmn;180&deg; (each press flips one bit, all 4 states reachable).<br>
+      <strong>Alt:</strong> &larr;&rarr; move, &uarr; rotate. <strong>Esc</strong> pause. <strong>0&ndash;9</strong> start level. <strong>Enter</strong> start.
+    </div>
+
+    <div id="app" data-agdelte="Tetris">
+      <p class="loading">Loading compiled Agda...</p>
+      <noscript><p>This demo requires JavaScript.</p></noscript>
+    </div>
+
+    <div class="info">
+      <p>Source: <code>examples/Tetris.agda</code></p>
+      <p>Compiled: <code>_build/jAgda.Tetris.mjs</code></p>
+    </div>
+  </main>
+
+  <script type="module" src="../runtime/reactive-auto.js"></script>
+</body>
+</html>
