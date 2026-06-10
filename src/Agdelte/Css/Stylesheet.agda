@@ -95,12 +95,32 @@ mutual
     ++ ind ++ "}"
   renderRuleAt ind (rawRule s) = ind ++ s
 
+  -- NOTE: do NOT use `with renderRulesAt ind rs` here. The JS backend compiles a
+  -- `with`-scrutinee as a non-memoised thunk and re-evaluates it per clause; when
+  -- the scrutinee is the recursive call this is O(2ⁿ) (see
+  -- doc/agda-with-scrutinee-bug.md). Instead: render+drop-empties (dispatching on
+  -- the head render, not the recursion), then join (dispatching on the list spine).
+  -- Each recursive result is used exactly once → linear.
+
+  -- Render each rule and drop empty results. Dispatches on the head render string,
+  -- never on the recursive call, which appears once per branch.
+  collectNE : String → List Rule → List String
+  collectNE ind []       = []
+  collectNE ind (r ∷ rs) = consNE (renderRuleAt ind r) (collectNE ind rs)
+    where
+      consNE : String → List String → List String
+      consNE ""  rest = rest
+      consNE s   rest = s ∷ rest
+
+  -- Join with a separator. Dispatches on the list spine (cheap), and the
+  -- recursive call appears exactly once.
+  intercalateS : String → List String → String
+  intercalateS sep []        = ""
+  intercalateS sep (s ∷ [])  = s
+  intercalateS sep (s ∷ ss)  = s ++ sep ++ intercalateS sep ss
+
   renderRulesAt : String → List Rule → String
-  renderRulesAt ind []       = ""
-  renderRulesAt ind (r ∷ rs) with renderRuleAt ind r | renderRulesAt ind rs
-  ... | "" | rest = rest
-  ... | s  | ""   = s
-  ... | s  | rest = s ++ "\n\n" ++ rest
+  renderRulesAt ind rs = intercalateS "\n\n" (collectNE ind rs)
 
 ------------------------------------------------------------------------
 -- Public API
@@ -109,9 +129,12 @@ mutual
 renderRule : Rule → String
 renderRule = renderRuleAt ""
 
+-- Same fix as renderRulesAt: no `with` on the recursive call (that is O(2ⁿ) on the
+-- JS backend — see doc/agda-with-scrutinee-bug.md). Collect non-empty renders,
+-- then join. The recursive structure is consumed once by collectNE/intercalateS.
 renderStylesheet : Stylesheet → String
-renderStylesheet []       = ""
-renderStylesheet (r ∷ rs) with renderRule r | renderStylesheet rs
-... | "" | rest = rest
-... | s  | ""   = s ++ "\n"
-... | s  | rest = s ++ "\n\n" ++ rest
+renderStylesheet rs = finish (collectNE "" rs)
+  where
+    finish : List String → String
+    finish []        = ""
+    finish (p ∷ ps)  = intercalateS "\n\n" (p ∷ ps) ++ "\n"

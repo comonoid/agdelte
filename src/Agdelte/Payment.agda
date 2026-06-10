@@ -49,6 +49,7 @@ postulate
 {-# FOREIGN GHC
   import qualified Network.HTTP.Client as HC
   import qualified Network.HTTP.Client.TLS as TLS
+  import Network.HTTP.Types.Status (statusCode)
 
   type HttpManagerT = HC.Manager
 
@@ -94,22 +95,50 @@ data PaymentResult : Set where
   PaymentOk    : String → String → PaymentResult  -- paymentId, confirmationUrl
   PaymentError : ℕ → String → PaymentResult        -- HTTP status, error text
 
+-- FFI boundary tuple types. Agda's Σ/_×_ cannot appear in a COMPILE GHC type
+-- (MAlonzo can't translate Σ), so triples/pairs crossing the FFI are bound to
+-- Haskell tuples here and read back with the projections below.
+private
+  postulate
+    RawTriple : Set
+    rtNat     : RawTriple → ℕ
+    rtFst     : RawTriple → String
+    rtSnd     : RawTriple → String
+    RawPair   : Set
+    rpFst     : RawPair → String
+    rpSnd     : RawPair → String
+{-# FOREIGN GHC
+  import qualified Data.Text as T
+  type RawTripleH = (Integer, T.Text, T.Text)
+  type RawPairH   = (T.Text, T.Text)
+  #-}
+{-# COMPILE GHC RawTriple = type RawTripleH #-}
+{-# COMPILE GHC rtNat = (\ t -> case t of (n,_,_) -> n :: Integer) #-}
+{-# COMPILE GHC rtFst = (\ t -> case t of (_,a,_) -> a :: T.Text) #-}
+{-# COMPILE GHC rtSnd = (\ t -> case t of (_,_,b) -> b :: T.Text) #-}
+{-# COMPILE GHC RawPair = type RawPairH #-}
+{-# COMPILE GHC rpFst = (fst :: RawPairH -> T.Text) #-}
+{-# COMPILE GHC rpSnd = (snd :: RawPairH -> T.Text) #-}
+
 -- | Raw FFI: returns (httpStatus, field1, field2).
 -- Success: (0, paymentId, confirmationUrl)
 -- Error:   (statusCode, errorText, "")
 private
   postulate
     createPaymentRaw : HttpManager → String → String → String → String → String → String → String
-                     → IO (ℕ × String × String)
+                     → IO RawTriple
 
 -- | Create a payment in ЮKassa.
 createPayment : HttpManager → String → String → String → String → String → String → String
               → IO PaymentResult
 createPayment mgr shopId key amt desc ret idem meta =
-  createPaymentRaw mgr shopId key amt desc ret idem meta >>= λ where
-    (zero  , payId , url) → pure (PaymentOk payId url)
-    (suc n , err   , _)   → pure (PaymentError (suc n) err)
-  where open Data.Nat using (zero; suc)
+  createPaymentRaw mgr shopId key amt desc ret idem meta >>= λ r →
+  resolve (rtNat r) (rtFst r) (rtSnd r)
+  where
+    open Data.Nat using (zero; suc)
+    resolve : ℕ → String → String → IO PaymentResult
+    resolve zero    payId url = pure (PaymentOk payId url)
+    resolve (suc n) err   _   = pure (PaymentError (suc n) err)
 
 {-# FOREIGN GHC
   import qualified Data.Text as T
@@ -161,7 +190,7 @@ createPayment mgr shopId key amt desc ret idem meta =
     case result of
       Left ex -> pure (0, T.pack $ "Network error: " ++ show ex, T.empty)
       Right resp -> do
-        let status = fromIntegral (HC.statusCode (HC.responseStatus resp)) :: Integer
+        let status = fromIntegral (statusCode (HC.responseStatus resp)) :: Integer
             respBody = HC.responseBody resp
         if status >= 200 && status < 300
           then case decode respBody :: Maybe Value of
@@ -183,7 +212,70 @@ createPayment mgr shopId key amt desc ret idem meta =
 
 {-# COMPILE GHC createPaymentRaw = createPaymentRawHS #-}
 
+-- | Authoritatively fetch a payment's status from ЮKassa (GET /v3/payments/{id}).
+-- Returns (0, status, "") on success where `status` is ЮKassa's own
+-- "succeeded"/"canceled"/"pending"/… ; (httpStatus, errText, "") on error.
+-- This is the source of truth for the webhook — the webhook body is NOT trusted.
+private
+  postulate
+    getPaymentStatusRaw : HttpManager → String → String → String → IO RawTriple
+
+{-# FOREIGN GHC
+  getPaymentStatusRawHS :: HC.Manager -> T.Text -> T.Text -> T.Text
+                        -> IO (Integer, T.Text, T.Text)
+  getPaymentStatusRawHS mgr shopId secretKey paymentId = do
+    let authHeader = "Basic " <> B64.encode (TE.encodeUtf8 shopId <> ":" <> TE.encodeUtf8 secretKey)
+    result <- try (do
+      initReq <- HC.parseRequest (T.unpack ("GET https://api.yookassa.ru/v3/payments/" <> paymentId))
+      let req = initReq { HC.requestHeaders = [ ("Authorization", authHeader) ] }
+      HC.httpLbs req mgr) :: IO (Either SomeException (HC.Response LBS.ByteString))
+    case result of
+      Left ex -> pure (0, T.pack ("Network error: " ++ show ex), T.empty)
+      Right resp -> do
+        let status = fromIntegral (statusCode (HC.responseStatus resp)) :: Integer
+            respBody = HC.responseBody resp
+        if status >= 200 && status < 300
+          then case decode respBody :: Maybe Value of
+            Just (Object obj) -> case KM.lookup (K.fromText "status") obj of
+              Just (String s) -> pure (0, s, T.empty)
+              _               -> pure (status, T.pack "Missing status in payment", T.empty)
+            _ -> pure (status, T.pack "Invalid JSON response", T.empty)
+          else pure (status, TE.decodeUtf8 $ LBS.toStrict respBody, T.empty)
+  #-}
+
+{-# COMPILE GHC getPaymentStatusRaw = getPaymentStatusRawHS #-}
+
+-- | Parse a ЮKassa webhook body with a real JSON parser, returning
+-- (event, object.id). Uses nested lookup (object → id) so it cannot be fooled
+-- by an attacker injecting a top-level "id" the flat string scanner would grab.
+private
+  postulate
+    parseWebhookFields : String → Maybe RawPair
+
+{-# FOREIGN GHC
+  parseWebhookFieldsHS :: T.Text -> Maybe (T.Text, T.Text)
+  parseWebhookFieldsHS body =
+    case decode (LBS.fromStrict (TE.encodeUtf8 body)) :: Maybe Value of
+      Just (Object o) -> do
+        ev <- case KM.lookup (K.fromText "event") o of
+                Just (String s) -> Just s
+                _               -> Nothing
+        obj <- case KM.lookup (K.fromText "object") o of
+                Just (Object x) -> Just x
+                _               -> Nothing
+        pid <- case KM.lookup (K.fromText "id") obj of
+                Just (String s) -> Just s
+                _               -> Nothing
+        Just (ev, pid)
+      _ -> Nothing
+  #-}
+
+{-# COMPILE GHC parseWebhookFields = parseWebhookFieldsHS #-}
+
 -- | Verify ЮKassa webhook signature (HMAC-SHA256 of request body).
+-- NOTE: defense-in-depth only. ЮKassa does not authenticate webhooks with a
+-- body-HMAC header; the authoritative check is re-fetching the payment via
+-- getPaymentStatusRaw (see handleVerified). Do not rely on this alone.
 postulate
   verifyWebhookSig : String → String → String → Bool
   -- ^ secret, signature header, request body → valid?
@@ -237,37 +329,39 @@ private
 -- Returns: {"confirmationUrl": "..."}
 handlePurchase : YooKassaConfig → String → WalHandle AppState AppOp
               → HttpRequest → IO HttpResponse
-handlePurchase yk jwtSecret wal req with authenticate jwtSecret req
-... | nothing = pure (mkResponseH 401 "{\"error\":\"Unauthorized\"}" corsHeaders)
-... | just payload with extractSub payload
-...   | nothing = pure (mkResponseH 401 "{\"error\":\"Invalid token\"}" corsHeaders)
-...   | just uid =
-  let body = reqBody req
-  in case jsonGetNat "courseId" body of λ where
-    nothing → pure (resp400 "Missing courseId")
-    (just cid) →
-      walRead wal >>= λ state →
-      case findCourseById cid state of λ where
-        nothing → pure (mkResponseH 404 "{\"error\":\"Course not found\"}" corsHeaders)
-        (just course) →
-          -- Check if already purchased
-          if userHasCourse uid cid state
-          then pure (resp400 "Already purchased")
-          else
-            let pid   = allocPurchaseId state
-                amt   = crPrice course
-                desc  = coursePaymentDesc (ykLocale yk) (crTitle course)
-                idemKey = "purchase-" ++ show uid ++ "-" ++ show cid
-                meta  = "{\"type\":\"purchase\",\"userId\":" ++ show uid
-                     ++ ",\"courseId\":" ++ show cid ++ "}"
-            in getCurrentTime >>= λ now →
-               createPayment (ykManager yk) (ykShopId yk) (ykSecretKey yk)
-                 (show amt) desc (ykReturnUrl yk) idemKey meta >>= λ where
-                 (PaymentError st msg) → pure (paymentErrorResp st msg)
-                 (PaymentOk paymentId confirmUrl) →
-                   let purch = mkPurchaseRecord pid uid cid amt now paymentId PurchPending
-                   in walStep wal (AddPurchase purch) >>= λ _ →
-                      pure (resp200 ("{\"confirmationUrl\":\"" ++ escapeJsonString confirmUrl ++ "\"}"))
+handlePurchase yk jwtSecret wal req =
+  getCurrentTime >>= λ now → helper now (authenticate jwtSecret now req)
+  where
+    helper : ℕ → Maybe String → IO HttpResponse
+    helper _   nothing        = pure (mkResponseH 401 "{\"error\":\"Unauthorized\"}" corsHeaders)
+    helper now (just payload) with extractSub payload
+    ... | nothing = pure (mkResponseH 401 "{\"error\":\"Invalid token\"}" corsHeaders)
+    ... | just uid =
+      let body = reqBody req
+      in case jsonGetNat "courseId" body of λ where
+        nothing → pure (resp400 "Missing courseId")
+        (just cid) →
+          walRead wal >>= λ state →
+          case findCourseById cid state of λ where
+            nothing → pure (mkResponseH 404 "{\"error\":\"Course not found\"}" corsHeaders)
+            (just course) →
+              -- Check if already purchased
+              if userHasCourse uid cid state
+              then pure (resp400 "Already purchased")
+              else
+                let pid   = allocPurchaseId state
+                    amt   = crPrice course
+                    desc  = coursePaymentDesc (ykLocale yk) (crTitle course)
+                    idemKey = "purchase-" ++ show uid ++ "-" ++ show cid
+                    meta  = "{\"type\":\"purchase\",\"userId\":" ++ show uid
+                         ++ ",\"courseId\":" ++ show cid ++ "}"
+                in createPayment (ykManager yk) (ykShopId yk) (ykSecretKey yk)
+                     (show amt) desc (ykReturnUrl yk) idemKey meta >>= λ where
+                     (PaymentError st msg) → pure (paymentErrorResp st msg)
+                     (PaymentOk paymentId confirmUrl) →
+                       let purch = mkPurchaseRecord pid uid cid amt now paymentId PurchPending
+                       in walStep wal (AddPurchase purch) >>= λ _ →
+                          pure (resp200 ("{\"confirmationUrl\":\"" ++ escapeJsonString confirmUrl ++ "\"}"))
 
 ------------------------------------------------------------------------
 -- POST /api/subscribe — initiate subscription
@@ -278,42 +372,43 @@ handlePurchase yk jwtSecret wal req with authenticate jwtSecret req
 -- Returns: {"confirmationUrl": "..."}
 handleSubscribe : YooKassaConfig → String → WalHandle AppState AppOp
                → HttpRequest → IO HttpResponse
-handleSubscribe yk jwtSecret wal req with authenticate jwtSecret req
-... | nothing = pure (mkResponseH 401 "{\"error\":\"Unauthorized\"}" corsHeaders)
-... | just payload with extractSub payload
-...   | nothing = pure (mkResponseH 401 "{\"error\":\"Invalid token\"}" corsHeaders)
-...   | just uid =
-  let body = reqBody req
-  in case jsonGetNat "planId" body of λ where
-    nothing → pure (resp400 "Missing planId")
-    (just planId) →
-      walRead wal >>= λ state →
-      case findPlanById planId state of λ where
-        nothing → pure (mkResponseH 404 "{\"error\":\"Plan not found\"}" corsHeaders)
-        (just plan) →
-          getCurrentTime >>= λ now →
-          -- Check if already has active or pending subscription
-          if hasActiveSubscription uid now state
-          then pure (resp400 "Already subscribed")
-          else if hasPendingSubscription uid state
-          then pure (resp400 "Payment already in progress")
-          else
-            let sid     = allocSubId state
-                amt     = plPrice plan
-                desc    = subPaymentDesc (ykLocale yk) (plName plan)
-                idemKey = "sub-" ++ show uid ++ "-" ++ show planId
-                meta    = "{\"type\":\"subscription\",\"userId\":" ++ show uid
-                       ++ ",\"planId\":" ++ show planId ++ "}"
-            in createPayment (ykManager yk) (ykShopId yk) (ykSecretKey yk)
-                 (show amt) desc (ykReturnUrl yk) idemKey meta >>= λ where
-                 (PaymentError st msg) → pure (paymentErrorResp st msg)
-                 (PaymentOk paymentId confirmUrl) →
-                   let endDate = now + plDays plan * 86400
-                       sub = mkSubscriptionRecord sid uid planId SubPending now endDate true paymentId
-                   in walStep wal (AddSubscription sub) >>= λ _ →
-                      pure (resp200 ("{\"confirmationUrl\":\"" ++ escapeJsonString confirmUrl ++ "\"}"))
+handleSubscribe yk jwtSecret wal req =
+  getCurrentTime >>= λ now → helper now (authenticate jwtSecret now req)
   where
     open Data.Nat using (_+_; _*_)
+    helper : ℕ → Maybe String → IO HttpResponse
+    helper _   nothing        = pure (mkResponseH 401 "{\"error\":\"Unauthorized\"}" corsHeaders)
+    helper now (just payload) with extractSub payload
+    ... | nothing = pure (mkResponseH 401 "{\"error\":\"Invalid token\"}" corsHeaders)
+    ... | just uid =
+      let body = reqBody req
+      in case jsonGetNat "planId" body of λ where
+        nothing → pure (resp400 "Missing planId")
+        (just planId) →
+          walRead wal >>= λ state →
+          case findPlanById planId state of λ where
+            nothing → pure (mkResponseH 404 "{\"error\":\"Plan not found\"}" corsHeaders)
+            (just plan) →
+              -- Check if already has active or pending subscription
+              if hasActiveSubscription uid now state
+              then pure (resp400 "Already subscribed")
+              else if hasPendingSubscription uid state
+              then pure (resp400 "Payment already in progress")
+              else
+                let sid     = allocSubId state
+                    amt     = plPrice plan
+                    desc    = subPaymentDesc (ykLocale yk) (plName plan)
+                    idemKey = "sub-" ++ show uid ++ "-" ++ show planId
+                    meta    = "{\"type\":\"subscription\",\"userId\":" ++ show uid
+                           ++ ",\"planId\":" ++ show planId ++ "}"
+                in createPayment (ykManager yk) (ykShopId yk) (ykSecretKey yk)
+                     (show amt) desc (ykReturnUrl yk) idemKey meta >>= λ where
+                     (PaymentError st msg) → pure (paymentErrorResp st msg)
+                     (PaymentOk paymentId confirmUrl) →
+                       let endDate = now + plDays plan * 86400
+                           sub = mkSubscriptionRecord sid uid planId SubPending now endDate true paymentId
+                       in walStep wal (AddSubscription sub) >>= λ _ →
+                          pure (resp200 ("{\"confirmationUrl\":\"" ++ escapeJsonString confirmUrl ++ "\"}"))
 
 ------------------------------------------------------------------------
 -- POST /api/payment-webhook — ЮKassa callback
@@ -332,37 +427,46 @@ handlePaymentWebhook yk wal req =
   in if sigOk then handleVerified body
      else pure (mkResponseH 403 "{\"error\":\"Invalid webhook signature\"}" corsHeaders)
   where
-    -- Resolve event + paymentId into an atomic WAL operation.
+    open Data.Nat using (zero; suc)
+    -- Resolve the AUTHORITATIVE ЮKassa payment status (fetched server-side,
+    -- never taken from the webhook body) + paymentId into an atomic WAL op.
     -- Prevents TOCTOU race between walRead and walStep.
     purchOp : String → PurchaseRecord → Maybe AppOp
-    purchOp event p with event ≟ "payment.succeeded"
+    purchOp status p with status ≟ "succeeded"
     ... | yes _ = just (UpdatePurchStatus (prId p) PurchPaid)
-    ... | no _ with event ≟ "payment.canceled"
+    ... | no _ with status ≟ "canceled"
     ...   | yes _ = just (UpdatePurchStatus (prId p) PurchRefunded)
     ...   | no _  = nothing
 
-    -- payment.canceled = payment failed/not confirmed → SubExpired.
+    -- "canceled" = payment failed/not confirmed → SubExpired.
     -- SubCancelled is for user-initiated cancellation of an active sub.
     subOp : String → SubscriptionRecord → Maybe AppOp
-    subOp event sub with event ≟ "payment.succeeded"
+    subOp status sub with status ≟ "succeeded"
     ... | yes _ = just (UpdateSubStatus (sbId sub) SubActive)
-    ... | no _ with event ≟ "payment.canceled"
+    ... | no _ with status ≟ "canceled"
     ...   | yes _ = just (UpdateSubStatus (sbId sub) SubExpired)
     ...   | no _  = nothing
 
     resolveOp : String → String → AppState → Maybe AppOp
-    resolveOp event payId state with findPurchaseByPaymentId payId state
-    ... | just p  = purchOp event p
+    resolveOp status payId state with findPurchaseByPaymentId payId state
+    ... | just p  = purchOp status p
     ... | nothing with findSubByPaymentId payId state
-    ...   | just sub = subOp event sub
+    ...   | just sub = subOp status sub
     ...   | nothing  = nothing
 
+    -- Act on ЮKassa's authoritative status: 0 = fetched OK (apply the op);
+    -- non-zero = couldn't confirm → leave state unchanged (never grant access).
+    confirm : ℕ → String → String → IO HttpResponse
+    confirm zero    status payId =
+      walModify wal (resolveOp status payId) >>= λ _ → pure resp200ok
+    confirm (suc _) _      _     = pure resp200ok
+
+    -- Confirm the payment with ЮKassa and act on its authoritative status.
+    -- A forged/replayed body can at most cause us to re-confirm a payment's
+    -- TRUE status for an id we look up — it can never grant unpaid access.
     handleVerified : String → IO HttpResponse
-    handleVerified body = case jsonGetField "event" body of λ where
-      nothing → pure (resp400 "Missing event")
-      (just event) →
-        case jsonGetField "id" body of λ where
-          nothing → pure (resp400 "Missing payment id")
-          (just paymentId) →
-            walModify wal (resolveOp event paymentId) >>= λ _ →
-            pure resp200ok
+    handleVerified body = case parseWebhookFields body of λ where
+      nothing → pure (resp400 "Malformed webhook body")
+      (just rp) →
+        getPaymentStatusRaw (ykManager yk) (ykShopId yk) (ykSecretKey yk) (rpSnd rp) >>= λ r →
+        confirm (rtNat r) (rtFst r) (rpSnd rp)

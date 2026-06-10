@@ -29,8 +29,8 @@ postulate
 
 {-# COMPILE JS natToFloat = n => Number(n) #-}
 {-# COMPILE JS clamp01 = x => Math.min(1, Math.max(0, x)) #-}
-{-# COMPILE JS _<F_ = x => y => x < y ? (cases) => cases["true"]() : (cases) => cases["false"]() #-}
-{-# COMPILE JS _>F_ = x => y => x > y ? (cases) => cases["true"]() : (cases) => cases["false"]() #-}
+{-# COMPILE JS _<F_ = x => y => x < y #-}
+{-# COMPILE JS _>F_ = x => y => x > y #-}
 
 -- Helper: natural number less-than
 ltNat : ℕ → ℕ → Bool

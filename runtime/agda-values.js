@@ -309,26 +309,32 @@ export function detectSlots(extract, model, numSlots) {
   try { baseValue = extract(model); } catch { return null; }
 
   const deps = [];
+  // Probe each slot with several distinct sentinels. A single Symbol (always
+  // truthy) misses slots consumed by a truthiness test whose real value is
+  // already truthy — notably native-boolean fields valued `true`, where
+  // `cond ? a : b` picks the same branch for the Symbol. Including `true`/
+  // `false` flips such branches; any differing output (or throw) marks a dep.
+  // Over-marking is safe (just re-checks); the danger is missing a dep.
+  const sentinels = [Symbol(), true, false, 0];
   for (let i = 0; i < numSlots; i++) {
-    const sentinel = Symbol();
-    const replaced = (cases) => model(new Proxy({}, {
-      get(_, ctorName) {
-        return (...args) => {
-          const modified = args.slice();
-          modified[i] = sentinel;
-          return cases[ctorName](...modified);
-        };
-      }
-    }));
-
     let isDep = false;
-    try {
-      const modifiedValue = extract(replaced);
-      isDep = modifiedValue !== baseValue;
-    } catch {
-      isDep = true; // if it throws, assume dependency
+    for (const sentinel of sentinels) {
+      const replaced = (cases) => model(new Proxy({}, {
+        get(_, ctorName) {
+          return (...args) => {
+            const modified = args.slice();
+            modified[i] = sentinel;
+            return cases[ctorName](...modified);
+          };
+        }
+      }));
+      try {
+        if (extract(replaced) !== baseValue) { isDep = true; break; }
+      } catch {
+        isDep = true; // if it throws, assume dependency
+        break;
+      }
     }
-
     if (isDep) deps.push(i);
   }
 
@@ -512,11 +518,19 @@ export function natToNumber(n) {
 }
 
 /**
- * Convert JS number to Agda ℕ
+ * Convert JS number to Agda ℕ.
+ * Clamped to MAX_NAT_VALUE (matching the read side natToNumber) and floored,
+ * so a huge or fractional input can't hang/OOM building suc-closures.
  */
 export function numberToNat(num) {
+  let n = Math.floor(Number(num));
+  if (!isFinite(n) || n < 0) n = 0;
+  if (n > MAX_NAT_VALUE) {
+    console.warn(`numberToNat: input ${num} exceeds MAX_NAT_VALUE (${MAX_NAT_VALUE}), clamping`);
+    n = MAX_NAT_VALUE;
+  }
   let result = construct('zero');
-  for (let i = 0; i < num; i++) {
+  for (let i = 0; i < n; i++) {
     result = construct('suc', result);
   }
   return result;
@@ -603,10 +617,14 @@ export function fromBool(bool) {
 }
 
 /**
- * Convert JS boolean to Agda Bool
+ * Convert JS boolean to Agda Bool.
+ * Agda's JS backend represents Agda.Builtin.Bool as a NATIVE JS boolean
+ * (Bool.true === true), and Data.Bool.if_then_else_ dispatches via `c ? …`.
+ * So a Scott-encoded value here would be truthy and always take the true
+ * branch — return the native boolean instead.
  */
 export function toBool(value) {
-  return value ? construct('true') : construct('false');
+  return !!value;
 }
 
 // ─────────────────────────────────────────────────────────────────────

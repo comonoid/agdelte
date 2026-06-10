@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+// LEGACY / UNUSED: the build now emits ES6 directly via `agda --js --js-es6`,
+// so this CommonJS→ESM converter is not referenced by package.json or any
+// script. Kept for reference only. Its identity source maps are approximate
+// and its require→import regexes only match Agda's exact `var x = require(..)`
+// output shape; do not rely on it without revalidating against current Agda.
 // Convert CommonJS Agda output to ES6 modules
 const fs = require('fs');
 const path = require('path');

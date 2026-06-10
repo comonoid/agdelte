@@ -16,7 +16,7 @@
 module Agdelte.Reactive.BigLens where
 
 open import Agda.Builtin.IO using (IO)
-open import Agda.Builtin.Unit using (⊤)
+open import Agda.Builtin.Unit using (⊤; tt)
 open import Agda.Builtin.String using (String)
 open import Data.Maybe using (Maybe; just; nothing)
 
@@ -65,16 +65,23 @@ open import Agdelte.FFI.Server using
 processAgentOptic : String → IOOptic
 processAgentOptic socketPath = mkIOOptic peekIO overIO
   where
+    -- Cleanup that swallows its own errors. With plain closeProcess, a close
+    -- failure (broken pipe, already-closed) thrown by bracket's release would
+    -- propagate AFTER a successful body and tryCatch would report the whole
+    -- operation as `nothing` — misreporting a healthy peek/step as failure.
+    closeQuiet : IpcHandle → IO ⊤
+    closeQuiet h = tryCatch (closeProcess h) >> pure tt
+
     peekIO : IO (Maybe String)
     peekIO =
       tryCatch (bracket (connectProcess socketPath)
-                        closeProcess
+                        closeQuiet
                         queryProcess)
 
     overIO : String → IO (Maybe String)
     overIO input =
       tryCatch (bracket (connectProcess socketPath)
-                        closeProcess
+                        closeQuiet
                         (λ h → stepProcess h input))
 
 -- Persistent-connection variant: reuses an existing IPC handle.

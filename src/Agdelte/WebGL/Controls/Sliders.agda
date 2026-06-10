@@ -30,9 +30,9 @@ postulate
   roundF : Float → Float
 
 {-# COMPILE JS clamp01 = x => Math.max(0, Math.min(1, x)) #-}
-{-# COMPILE JS recip = x => 1 / x #-}
+{-# COMPILE JS recip = x => (x === 0 ? 0 : 1 / x) #-}
 {-# COMPILE JS natToFloat = n => Number(n) #-}
-{-# COMPILE JS floatToNat = f => Math.round(f) | 0 #-}
+{-# COMPILE JS floatToNat = f => { const r = Math.round(f); return BigInt(Number.isFinite(r) ? Math.max(0, r) : 0); } #-}
 {-# COMPILE JS roundF = x => Math.round(x) #-}
 
 ------------------------------------------------------------------------

@@ -11,7 +11,7 @@ open import Agda.Builtin.Bool using (Bool; true; false)
 open import Data.String using (_++_; _≟_)
 open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Product using (_×_; _,_)
-open import Data.Nat using (ℕ)
+open import Data.Nat using (ℕ; _+_)
 open import Data.Nat.Show using (show)
 open import Relation.Nullary using (yes; no)
 
@@ -21,6 +21,7 @@ open import Agdelte.FFI.Server using
   ; _>>=_; _>>_; pure
   )
 open import Agdelte.FFI.Crypto using (hashPassword; verifyPassword)
+open import Agdelte.FFI.Time using (getCurrentTime)
 open import Agdelte.Auth.JWT using (signJWT)
 open import Agdelte.Auth.Middleware using (corsHeaders)
 open import Agdelte.Auth.Role using (Role; Student; showRole)
@@ -56,12 +57,20 @@ private
 ------------------------------------------------------------------------
 
 private
-  mkToken : String → ℕ → String → Role → String
-  mkToken secret uid email role =
+  -- Token lifetime in seconds (24h). Issued tokens carry iat/exp so they
+  -- expire; verifyJWT rejects expired (or exp-less) tokens.
+  tokenTTL : ℕ
+  tokenTTL = 86400
+
+  mkToken : String → ℕ → String → Role → ℕ → String
+  mkToken secret uid email role now =
     let esc = escapeJsonString
+        exp = now + tokenTTL
     in signJWT secret ("{\"sub\":" ++ show uid
          ++ ",\"email\":\"" ++ esc email
-         ++ "\",\"role\":\"" ++ showRole role ++ "\"}")
+         ++ "\",\"role\":\"" ++ showRole role
+         ++ "\",\"iat\":" ++ show now
+         ++ ",\"exp\":" ++ show exp ++ "}")
 
   mkAuthResp : ℕ → String → ℕ → HttpResponse
   mkAuthResp status token uid =
@@ -90,6 +99,7 @@ handleRegister secret wal req =
       else if not (isValidPassword password)
       then pure (mkResponseH 400 "{\"error\":\"Password must be at least 8 characters\"}" corsHeaders)
       else
+        getCurrentTime >>= λ now →
         hashPassword password >>= λ hash →
         walModify wal (λ state →
           case findUserByEmail email state of λ where
@@ -101,16 +111,16 @@ handleRegister secret wal req =
             case findUserByEmail email state' of λ where
               nothing → pure (mkResponseH 500 "{\"error\":\"Internal error\"}" corsHeaders)
               (just user) →
-                let token = mkToken secret (urId user) email (urRole user)
+                let token = mkToken secret (urId user) email (urRole user) now
                 in pure (mkAuthResp 201 token (urId user))
   where open import Data.Bool using (not; if_then_else_)
 
 private
-  loginUser : String → ℕ → String → UserRecord → String → IO HttpResponse
-  loginUser secret uid email user password with verifyPassword password (urPassHash user)
+  loginUser : String → ℕ → ℕ → String → UserRecord → String → IO HttpResponse
+  loginUser secret now uid email user password with verifyPassword password (urPassHash user)
   ... | false = pure (mkResponseH 401 "{\"error\":\"Invalid credentials\"}" corsHeaders)
   ... | true  =
-    let token = mkToken secret uid email (urRole user)
+    let token = mkToken secret uid email (urRole user) now
     in pure (mkAuthResp 200 token uid)
 
 -- | POST /api/login
@@ -123,7 +133,8 @@ handleLogin secret wal req =
     (nothing , _) → pure (mkResponseH 400 "{\"error\":\"Missing email\"}" corsHeaders)
     (_ , nothing) → pure (mkResponseH 400 "{\"error\":\"Missing password\"}" corsHeaders)
     (just email , just password) →
+      getCurrentTime >>= λ now →
       walRead wal >>= λ state →
       case findUserByEmail email state of λ where
         nothing → pure (mkResponseH 401 "{\"error\":\"Invalid credentials\"}" corsHeaders)
-        (just user) → loginUser secret (urId user) email user password
+        (just user) → loginUser secret now (urId user) email user password

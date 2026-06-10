@@ -171,7 +171,7 @@ scatterPlot3D {M} {Msg} theme config getPoints clickHandler t =
     buildGrid =
       let gridMat = phong gridC 16.0
           gridR = 0.002
-          step = bx * (1.0 * (1.0 * (1.0 * (1.0 * 0.2))))  -- 1/5
+          step = bx * recipF (natToFloat divs)  -- span / number of divisions
       in group identityTransform (buildGridLines gridMat gridR step 0 divs)
       where
         buildGridLines : Material → Float → Float → ℕ → ℕ → List (SceneNode M Msg)
@@ -243,7 +243,8 @@ lineChart3D {M} {Msg} theme config getLines t =
           mx = (vec3X p1 + vec3X p2) * 0.5
           my = (vec3Y p1 + vec3Y p2) * 0.5
           mz = (vec3Z p1 + vec3Z p2) * 0.5
-          midT = mkTransform (vec3 mx my mz) identityQuat (vec3 1.0 1.0 1.0)
+          -- Orient the connecting cylinder (default +Y axis) from p1 toward p2.
+          midT = mkTransform (vec3 mx my mz) (lookAtQuat p1 p2) (vec3 1.0 1.0 1.0)
           -- Distance (simplified, uses cylinder)
           dx = vec3X p2 - vec3X p1
           dy = vec3Y p2 - vec3Y p1

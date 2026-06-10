@@ -50,7 +50,7 @@ postulate
   formatCurrencyImpl : String → ℕ → String
 
 {-# COMPILE JS formatCurrencyImpl = function(locale) { return function(kopecks) {
-  var rubles = kopecks / 100;
+  var rubles = Number(kopecks) / 100;
   if (locale === 'ru') return rubles.toFixed(2).replace('.', ',') + ' \u20BD';
   return rubles.toFixed(2).replace('.', ',') + ' RUB';
 }; } #-}
@@ -67,7 +67,7 @@ postulate
   formatDateImpl : String → ℕ → String
 
 {-# COMPILE JS formatDateImpl = function(locale) { return function(ts) {
-  var d = new Date(ts * 1000);
+  var d = new Date(Number(ts) * 1000);
   return d.toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US');
 }; } #-}
 
@@ -83,8 +83,9 @@ postulate
   pluralRu : ℕ → String → String → String → String
 
 {-# COMPILE JS pluralRu = function(n) { return function(one) { return function(few) { return function(many) {
-  var mod10 = n % 10, mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return n + ' ' + one;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return n + ' ' + few;
-  return n + ' ' + many;
+  var nn = Number(n);
+  var mod10 = nn % 10, mod100 = nn % 100;
+  if (mod10 === 1 && mod100 !== 11) return nn + ' ' + one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return nn + ' ' + few;
+  return nn + ' ' + many;
 }; }; }; } #-}

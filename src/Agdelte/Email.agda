@@ -63,6 +63,20 @@ postulate
 
 {-# COMPILE GHC sendEmailImpl = \_ _ -> putStrLn "sendEmailImpl: stub — email not sent" #-}
 
+-- | Strip CR/LF (and other control chars) from a value destined for an email
+-- HEADER (To, Subject). Prevents SMTP header injection (extra Bcc:/spoofed
+-- headers) once a real send backend replaces the stub. Body text may keep
+-- newlines, so it is NOT sanitized.
+postulate
+  sanitizeHeader : String → String
+
+{-# FOREIGN GHC
+  import qualified Data.Text as T
+  sanitizeHeaderHS :: T.Text -> T.Text
+  sanitizeHeaderHS = T.map (\c -> if c < ' ' then ' ' else c)
+  #-}
+{-# COMPILE GHC sanitizeHeader = sanitizeHeaderHS #-}
+
 ------------------------------------------------------------------------
 -- Email templates (locale-aware)
 ------------------------------------------------------------------------
@@ -71,31 +85,31 @@ open import Agdelte.I18n using (Locale; Ru; En)
 
 -- | Registration confirmation email.
 registrationEmail : Locale → String → String → Email
-registrationEmail Ru toAddr userName = mkEmail toAddr
+registrationEmail Ru toAddr userName = mkEmail (sanitizeHeader toAddr)
   "Добро пожаловать!"
   ("Здравствуйте, " ++ userName ++ "!\n\nВаш аккаунт успешно создан.\n")
-registrationEmail En toAddr userName = mkEmail toAddr
+registrationEmail En toAddr userName = mkEmail (sanitizeHeader toAddr)
   "Welcome!"
   ("Hello, " ++ userName ++ "!\n\nYour account has been created.\n")
 
 -- | Purchase confirmation email.
 purchaseEmail : Locale → String → String → String → Email
-purchaseEmail Ru toAddr userName courseTitle = mkEmail toAddr
-  ("Покупка курса: " ++ courseTitle)
+purchaseEmail Ru toAddr userName courseTitle = mkEmail (sanitizeHeader toAddr)
+  ("Покупка курса: " ++ sanitizeHeader courseTitle)
   ("Здравствуйте, " ++ userName ++ "!\n\n"
    ++ "Вы приобрели курс \"" ++ courseTitle ++ "\".\nПриятного обучения!\n")
-purchaseEmail En toAddr userName courseTitle = mkEmail toAddr
-  ("Course purchased: " ++ courseTitle)
+purchaseEmail En toAddr userName courseTitle = mkEmail (sanitizeHeader toAddr)
+  ("Course purchased: " ++ sanitizeHeader courseTitle)
   ("Hello, " ++ userName ++ "!\n\n"
    ++ "You have purchased the course \"" ++ courseTitle ++ "\".\nEnjoy learning!\n")
 
 -- | New lesson notification email.
 newLessonEmail : Locale → String → String → String → Email
-newLessonEmail Ru toAddr courseTitle lessonTitle = mkEmail toAddr
-  ("Новый урок в курсе: " ++ courseTitle)
+newLessonEmail Ru toAddr courseTitle lessonTitle = mkEmail (sanitizeHeader toAddr)
+  ("Новый урок в курсе: " ++ sanitizeHeader courseTitle)
   ("В курсе \"" ++ courseTitle ++ "\" появился новый урок:\n"
    ++ "\"" ++ lessonTitle ++ "\"\n")
-newLessonEmail En toAddr courseTitle lessonTitle = mkEmail toAddr
-  ("New lesson in: " ++ courseTitle)
+newLessonEmail En toAddr courseTitle lessonTitle = mkEmail (sanitizeHeader toAddr)
+  ("New lesson in: " ++ sanitizeHeader courseTitle)
   ("A new lesson has been added to \"" ++ courseTitle ++ "\":\n"
    ++ "\"" ++ lessonTitle ++ "\"\n")

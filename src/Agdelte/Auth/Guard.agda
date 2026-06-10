@@ -66,65 +66,75 @@ private
 -- | Require authentication + minimum role.
 -- Checks JWT validity, extracts role from payload, compares with required.
 withRole : String → Role → (AuthRequest → IO HttpResponse) → HttpRequest → IO HttpResponse
-withRole secret requiredRole handler req with authenticate secret req
-... | nothing      = pure resp401
-... | just payload with extractRole payload
-...   | nothing   = pure resp401
-...   | just role with roleAtLeast requiredRole role
-...     | false = pure resp403
-...     | true  = handler (mkAuthRequest payload req)
+withRole secret requiredRole handler req =
+  getCurrentTime >>= λ now → helper (authenticate secret now req)
+  where
+    helper : Maybe String → IO HttpResponse
+    helper nothing        = pure resp401
+    helper (just payload) with extractRole payload
+    ... | nothing   = pure resp401
+    ... | just role with roleAtLeast requiredRole role
+    ...   | false = pure resp403
+    ...   | true  = handler (mkAuthRequest payload req)
 
 -- | Require authentication + course access (subscription OR individual purchase).
 -- Extracts userId from JWT, checks active subscription or paid purchase.
 -- Gets current time internally via IO.
 withAccess : String → WalHandle AppState AppOp → CourseId
            → (AuthRequest → IO HttpResponse) → HttpRequest → IO HttpResponse
-withAccess secret wal courseId handler req with authenticate secret req
-... | nothing      = pure resp401
-... | just payload with extractSub payload
-...   | nothing  = pure resp401
-...   | just uid =
-        getCurrentTime >>= λ now →
-        walRead wal >>= λ state →
-        if userCanAccess uid courseId now state
-        then handler (mkAuthRequest payload req)
-        else pure (resp403Msg "Subscription or purchase required")
+withAccess secret wal courseId handler req =
+  getCurrentTime >>= λ now → helper now (authenticate secret now req)
+  where
+    helper : ℕ → Maybe String → IO HttpResponse
+    helper _   nothing        = pure resp401
+    helper now (just payload) with extractSub payload
+    ... | nothing  = pure resp401
+    ... | just uid =
+          walRead wal >>= λ state →
+          if userCanAccess uid courseId now state
+          then handler (mkAuthRequest payload req)
+          else pure (resp403Msg "Subscription or purchase required")
 
 -- | Backwards-compatible alias (without time check — no subscription support).
 -- Prefer withAccess for new code.
 withPurchase : String → WalHandle AppState AppOp → CourseId
              → (AuthRequest → IO HttpResponse) → HttpRequest → IO HttpResponse
-withPurchase secret wal courseId handler req with authenticate secret req
-... | nothing      = pure resp401
-... | just payload with extractSub payload
-...   | nothing  = pure resp401
-...   | just uid =
-        walRead wal >>= λ state →
-        if userHasCourse uid courseId state
-        then handler (mkAuthRequest payload req)
-        else pure (resp403Msg "Course not purchased")
+withPurchase secret wal courseId handler req =
+  getCurrentTime >>= λ now → helper (authenticate secret now req)
+  where
+    helper : Maybe String → IO HttpResponse
+    helper nothing        = pure resp401
+    helper (just payload) with extractSub payload
+    ... | nothing  = pure resp401
+    ... | just uid =
+          walRead wal >>= λ state →
+          if userHasCourse uid courseId state
+          then handler (mkAuthRequest payload req)
+          else pure (resp403Msg "Course not purchased")
 
 -- | Require authentication + course ownership (author).
 -- For instructor-only endpoints that modify their own courses.
 withOwner : String → WalHandle AppState AppOp → CourseId
           → (AuthRequest → IO HttpResponse) → HttpRequest → IO HttpResponse
-withOwner secret wal courseId handler req with authenticate secret req
-... | nothing      = pure resp401
-... | just payload with extractSub payload
-...   | nothing  = pure resp401
-...   | just uid =
-        walRead wal >>= λ state →
-        case findCourseById courseId state of λ where
-          nothing → pure (mkResponseH 404 "{\"error\":\"Course not found\"}" corsHeaders)
-          (just course) →
-            if crAuthorId course ≡ᵇ uid
-            then handler (mkAuthRequest payload req)
-            else -- Admin can also edit any course
-              case extractRole payload of λ where
-                (just role) → if roleAtLeast Admin role
-                  then handler (mkAuthRequest payload req)
-                  else pure (resp403Msg "Not course owner")
-                nothing → pure (resp403Msg "Not course owner")
-        where
-          open Data.Nat using (_≡ᵇ_)
-          open import Agdelte.Auth.Role using (Admin)
+withOwner secret wal courseId handler req =
+  getCurrentTime >>= λ now → helper (authenticate secret now req)
+  where
+    open Data.Nat using (_≡ᵇ_)
+    open import Agdelte.Auth.Role using (Admin)
+    helper : Maybe String → IO HttpResponse
+    helper nothing        = pure resp401
+    helper (just payload) with extractSub payload
+    ... | nothing  = pure resp401
+    ... | just uid =
+          walRead wal >>= λ state →
+          case findCourseById courseId state of λ where
+            nothing → pure (mkResponseH 404 "{\"error\":\"Course not found\"}" corsHeaders)
+            (just course) →
+              if crAuthorId course ≡ᵇ uid
+              then handler (mkAuthRequest payload req)
+              else -- Admin can also edit any course
+                case extractRole payload of λ where
+                  (just role) → if roleAtLeast Admin role
+                    then handler (mkAuthRequest payload req)
+                    else pure (resp403Msg "Not course owner")
+                  nothing → pure (resp403Msg "Not course owner")

@@ -166,12 +166,17 @@ handleClient :: Socket -> (T.Text -> IO T.Text) -> IO ()
 handleClient conn handler =
   go `finally` safeClose conn
   where
+    -- Idle read timeout: a client that connects and sends nothing (or only a
+    -- partial length header) must not pin a handler thread + fd forever.
+    idleTimeoutUs = 60 * 1000000  -- 60s
     go = do
-      result <- (Right <$> recvFramed conn) `catch` \(e :: IOException) -> return (Left e)
+      result <- (Right <$> timeout idleTimeoutUs (recvFramed conn))
+                  `catch` \(e :: IOException) -> return (Left e)
       case result of
         Left e -> hPutStrLn stderr $ "handleClient: recv error: " ++ show e
-        Right Nothing -> return ()  -- clean close by peer
-        Right (Just msg) -> do
+        Right Nothing -> return ()         -- idle timeout → drop the connection
+        Right (Just Nothing) -> return ()  -- clean close by peer
+        Right (Just (Just msg)) -> do
           let request = TE.decodeUtf8With lenientDecode msg
           mResponse <- timeout (30 * 1000000) $  -- 30 second timeout
             handler request `catch` \(e :: SomeException) ->

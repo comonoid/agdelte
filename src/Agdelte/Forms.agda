@@ -116,52 +116,52 @@ postulate
 -- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
 {-# COMPILE JS email = function(s) {
   const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const nil = (cases) => cases['[]']();
+  const nil = [];  /* Agda List is a native JS array */
   if (re.test(s)) return nil;
   const e = (cb) => cb["mkError"]("", "Invalid email format");
-  return (cases) => cases['_∷_'](e, nil);
+  return [e];
 } #-}
 
 -- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
 {-# COMPILE JS url = function(s) {
-  const nil = (cases) => cases['[]']();
+  const nil = [];  /* Agda List is a native JS array */
   try {
     new URL(s);
     return nil;
   } catch {
     const e = (cb) => cb["mkError"]("", "Invalid URL format");
-    return (cases) => cases['_∷_'](e, nil);
+    return [e];
   }
 } #-}
 
 -- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
 {-# COMPILE JS pattern′ = function(pat) { return function(errMsg) { return function(s) {
-  const nil = (cases) => cases['[]']();
+  const nil = [];  /* Agda List is a native JS array */
   try {
     const re = new RegExp(pat);
     if (re.test(s)) return nil;
     const e = (cb) => cb["mkError"]("", errMsg);
-    return (cases) => cases['_∷_'](e, nil);
+    return [e];
   } catch (ex) {
     const e = (cb) => cb["mkError"]("", "Invalid pattern: " + ex.message);
-    return (cases) => cases['_∷_'](e, nil);
+    return [e];
   }
 }; }; } #-}
 
 -- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
 {-# COMPILE JS numeric = function(s) {
-  const nil = (cases) => cases['[]']();
+  const nil = [];  /* Agda List is a native JS array */
   if (/^\d+$/.test(s)) return nil;
   const e = (cb) => cb["mkError"]("", "Must contain only digits");
-  return (cases) => cases['_∷_'](e, nil);
+  return [e];
 } #-}
 
 -- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
 {-# COMPILE JS alphanumeric = function(s) {
-  const nil = (cases) => cases['[]']();
+  const nil = [];  /* Agda List is a native JS array */
   if (/^[a-zA-Z0-9]+$/.test(s)) return nil;
   const e = (cb) => cb["mkError"]("", "Must be alphanumeric");
-  return (cases) => cases['_∷_'](e, nil);
+  return [e];
 } #-}
 
 ------------------------------------------------------------------------
@@ -225,18 +225,18 @@ postulate
 
 -- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
 {-# COMPILE JS equals = function(expected) { return function(s) {
-  const nil = (cases) => cases['[]']();
+  const nil = [];  /* Agda List is a native JS array */
   if (s === expected) return nil;
   const e = (cb) => cb["mkError"]("", "Must equal \"" + expected + "\"");
-  return (cases) => cases['_∷_'](e, nil);
+  return [e];
 }; } #-}
 
 -- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
 {-# COMPILE JS notEquals = function(forbidden) { return function(s) {
-  const nil = (cases) => cases['[]']();
+  const nil = [];  /* Agda List is a native JS array */
   if (s !== forbidden) return nil;
   const e = (cb) => cb["mkError"]("", "Must not equal \"" + forbidden + "\"");
-  return (cases) => cases['_∷_'](e, nil);
+  return [e];
 }; } #-}
 
 ------------------------------------------------------------------------
@@ -252,28 +252,28 @@ postulate
 
 -- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
 {-# COMPILE JS inRange = function(min) { return function(max) { return function(s) {
-  const nil = (cases) => cases['[]']();
+  const nil = [];  /* Agda List is a native JS array */
   const n = Number(s);
   if (!Number.isFinite(n) || !Number.isInteger(n)) {
     const e = (cb) => cb["mkError"]("", "Must be a whole number");
-    return (cases) => cases['_∷_'](e, nil);
+    return [e];
   }
   const minN = Number(min);
   const maxN = Number(max);
   if (n < minN || n > maxN) {
     const e = (cb) => cb["mkError"]("", "Must be between " + minN + " and " + maxN);
-    return (cases) => cases['_∷_'](e, nil);
+    return [e];
   }
   return nil;
 }; }; } #-}
 
 -- FFI-FRAGILE: mkError (ValidationError), _∷_ (List), [] (List)
 {-# COMPILE JS positive = function(s) {
-  const nil = (cases) => cases['[]']();
+  const nil = [];  /* Agda List is a native JS array */
   const n = Number(s);
   if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) {
     const e = (cb) => cb["mkError"]("", "Must be a positive number");
-    return (cases) => cases['_∷_'](e, nil);
+    return [e];
   }
   return nil;
 } #-}

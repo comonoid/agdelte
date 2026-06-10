@@ -5222,6 +5222,9 @@ function initGLCanvas(canvas) {
       window.removeEventListener('mouseup', handleWindowMouseUp);
       handleWindowMouseUp = null;
     }
+    // Disconnect the old ResizeObserver — initGLCanvas creates a fresh one,
+    // and a leaked observer would keep firing handleResize against stale GL.
+    resizeObs.disconnect();
     canvas.__glContext = null;
     disposed = false;
     initGLCanvas(canvas);
@@ -5316,6 +5319,25 @@ function initGLCanvas(canvas) {
       deleteGeometry(gl, geo);
     }
     geoCache.clear();
+
+    // Delete per-entry GPU resources attached lazily during rendering
+    // (text VAOs, instance buffers, merged batch geometry). These live on
+    // renderList entries, not in geoCache, so they leak unless freed here.
+    // Mirrors the cleanup block in the bindChildren update path.
+    for (const re of renderList) {
+      if (!re) continue;
+      if (re._mergedGeo) deleteGeometry(gl, re._mergedGeo);
+      if (re.textVAO) {
+        if (re.textVAO.vao) gl.deleteVertexArray(re.textVAO.vao);
+        if (re.textVAO.posBuf) gl.deleteBuffer(re.textVAO.posBuf);
+        if (re.textVAO.uvBuf) gl.deleteBuffer(re.textVAO.uvBuf);
+        if (re.textVAO.normBuf) gl.deleteBuffer(re.textVAO.normBuf);
+        if (re.textVAO.idxBuf) gl.deleteBuffer(re.textVAO.idxBuf);
+      }
+      if (re.instanceBuffer && re.instanceBuffer.buffer) {
+        gl.deleteBuffer(re.instanceBuffer.buffer);
+      }
+    }
 
     // Delete cached textures and font atlases
     if (texCache && texCache.dispose) texCache.dispose();

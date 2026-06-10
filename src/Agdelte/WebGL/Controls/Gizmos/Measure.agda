@@ -32,8 +32,8 @@ postulate
 {-# COMPILE JS atan2F = y => x => Math.atan2(y, x) #-}
 {-# COMPILE JS showFloat = x => x.toFixed(2) #-}
 {-# COMPILE JS piF = Math.PI #-}
-{-# COMPILE JS _<F_ = x => y => x < y ? (cases) => cases["true"]() : (cases) => cases["false"]() #-}
-{-# COMPILE JS _>F_ = x => y => x > y ? (cases) => cases["true"]() : (cases) => cases["false"]() #-}
+{-# COMPILE JS _<F_ = x => y => x < y #-}
+{-# COMPILE JS _>F_ = x => y => x > y #-}
 
 -- Helper for natural number comparison
 ltNat : ℕ → ℕ → Bool
@@ -89,7 +89,7 @@ measureDistance theme style p1 p2 formatDist =
       lc = MeasureStyle.lineColor style
       lineGeom = cylinder lw dist
       lineMat = phong lc 32.0
-      lineT = mkTransform (vec3 mx my mz) identityQuat (vec3 1.0 1.0 1.0)
+      lineT = mkTransform (vec3 mx my mz) (lookAtQuat p1 p2) (vec3 1.0 1.0 1.0)
       -- Endpoints
       epSize = MeasureStyle.endpointSize style
       ep1Geom = sphere epSize
@@ -162,8 +162,8 @@ measureAngle theme style p1 vertex p2 =
       m2x = (vec3X vertex + vec3X p2) * 0.5
       m2y = (vec3Y vertex + vec3Y p2) * 0.5
       m2z = (vec3Z vertex + vec3Z p2) * 0.5
-      line1T = mkTransform (vec3 m1x m1y m1z) identityQuat (vec3 1.0 1.0 1.0)
-      line2T = mkTransform (vec3 m2x m2y m2z) identityQuat (vec3 1.0 1.0 1.0)
+      line1T = mkTransform (vec3 m1x m1y m1z) (lookAtQuat vertex p1) (vec3 1.0 1.0 1.0)
+      line2T = mkTransform (vec3 m2x m2y m2z) (lookAtQuat vertex p2) (vec3 1.0 1.0 1.0)
       -- Vertex marker
       vertexGeom = sphere (MeasureStyle.endpointSize style)
       vertexMat = phong lc 48.0
@@ -239,7 +239,7 @@ annotationWithLeader theme style target labelPos text =
       mz = (vec3Z target + vec3Z labelPos) * 0.5
       lineGeom = cylinder lw len
       lineMat = phong lc 32.0
-      lineT = mkTransform (vec3 mx my mz) identityQuat (vec3 1.0 1.0 1.0)
+      lineT = mkTransform (vec3 mx my mz) (lookAtQuat target labelPos) (vec3 1.0 1.0 1.0)
       -- Target marker
       markerGeom = sphere (MeasureStyle.endpointSize style)
       markerMat = phong lc 48.0
@@ -282,7 +282,7 @@ ruler3D {M} {Msg} theme style p1 p2 majorInterval minorInterval =
       mz = (vec3Z p1 + vec3Z p2) * 0.5
       lineGeom = cylinder lw len
       lineMat = phong lc 32.0
-      lineT = mkTransform (vec3 mx my mz) identityQuat (vec3 1.0 1.0 1.0)
+      lineT = mkTransform (vec3 mx my mz) (lookAtQuat p1 p2) (vec3 1.0 1.0 1.0)
       -- Build tick marks
       ticks = buildTicks p1 nx ny nz len 0.0 majorInterval minorInterval
   in group identityTransform

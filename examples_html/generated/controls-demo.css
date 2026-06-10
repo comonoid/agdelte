@@ -21,19 +21,67 @@
   transition: transform 0.1s, background 0.2s;
 }
 
+.demo-btn {
+  padding: 10px;
+  margin: 4px;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+  border: none;
+  background-color: #3a3a5a;
+  color: #eee;
+  transition: transform 0.1s, background 0.2s;
+}
+
 .demo-btn.info {
   background-color: var(--agdelte-info);
   color: white;
 }
 
+.demo-btn {
+  padding: 10px;
+  margin: 4px;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+  border: none;
+  background-color: #3a3a5a;
+  color: #eee;
+  transition: transform 0.1s, background 0.2s;
+}
+
 .demo-btn.success {
   background-color: var(--agdelte-success);
-  color: white;
+  color: #1a1a2e;
+}
+
+.demo-btn {
+  padding: 10px;
+  margin: 4px;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+  border: none;
+  background-color: #3a3a5a;
+  color: #eee;
+  transition: transform 0.1s, background 0.2s;
 }
 
 .demo-btn.warning {
   background-color: var(--agdelte-warning);
   color: #1f2937;
+}
+
+.demo-btn {
+  padding: 10px;
+  margin: 4px;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+  border: none;
+  background-color: #3a3a5a;
+  color: #eee;
+  transition: transform 0.1s, background 0.2s;
 }
 
 .demo-btn.error {
@@ -67,4 +115,4 @@
   color: var(--agdelte-text);
 }
 
-/*# sourceAgda=jAgda.ControlsDemo:appCSS */
+/* sourceAgda=jAgda.ControlsDemo:appCSS */

@@ -107,9 +107,7 @@ postulate
 {-# COMPILE JS bool = {
   decode: (json) => {
     if (typeof json === 'boolean') {
-      const value = json
-        ? (cases) => cases["true"]()
-        : (cases) => cases["false"]();
+      const value = json;
       return { tag: 'ok', value };
     }
     return { tag: 'err', error: 'Expected boolean, got ' + typeof json };
@@ -227,13 +225,8 @@ postulate
         }
         results.push(r.value);
       }
-      let agdaList = (cases) => cases['[]']();
-      for (let i = results.length - 1; i >= 0; i--) {
-        const elem = results[i];
-        const tail = agdaList;
-        agdaList = (cases) => cases['_∷_'](elem, tail);
-      }
-      return { tag: 'ok', value: agdaList };
+      /* Agda List is a native JS array. */
+      return { tag: 'ok', value: results };
     }
   };
 } #-}
@@ -337,18 +330,12 @@ postulate
   return {
     decode: (json) => {
       const errors = [];
-      let current = decoders;
       let found = null;
-      let done = false;
-      while (!done) {
-        current({
-          '[]': () => { done = true; },
-          '_∷_': (head, tail) => {
-            const result = head.decode(json);
-            if (result.tag === 'ok') { found = result; done = true; }
-            else { errors.push(result.error); current = tail; }
-          }
-        });
+      /* Agda List compiles to a native JS array. */
+      for (const head of decoders) {
+        const result = head.decode(json);
+        if (result.tag === 'ok') { found = result; break; }
+        errors.push(result.error);
       }
       if (found) return found;
       return { tag: 'err', error: 'None of ' + errors.length + ' decoders matched: ' + errors.join('; ') };
@@ -394,7 +381,7 @@ postulate
   }
   var dispatch = {
     jNull: () => null,
-    jBool: (b) => b({"true": () => true, "false": () => false}),
+    jBool: (b) => b,
     jNumber: (n) => Number(n),
     jFloat: (f) => f,
     jString: (s) => s,
@@ -460,28 +447,17 @@ postulate
 {-# COMPILE JS encodeInt = { encode: (n) => n({"+_": pos => Number(pos), "-[1+_]": neg => -(Number(neg) + 1)}) } #-}
 {-# COMPILE JS encodeFloat = { encode: (f) => f } #-}
 -- FFI-FRAGILE: true (Bool), false (Bool)
-{-# COMPILE JS encodeBool = { encode: (b) => b({"true": () => true, "false": () => false}) } #-}
+{-# COMPILE JS encodeBool = { encode: (b) => b } #-}
 {-# COMPILE JS encodeNull = { encode: (_) => null } #-}
 
 {-# COMPILE JS encodeArray = function(encoder) {
   return { encode: (arr) => arr.map(x => encoder.encode(x)) };
 } #-}
 
--- FFI-FRAGILE: [] (List), _∷_ (List)
 {-# COMPILE JS encodeList = function(encoder) {
   return {
-    encode: (list) => {
-      const arr = [];
-      let current = list;
-      let done = false;
-      while (!done) {
-        current({
-          '[]': () => { done = true; },
-          '_∷_': (head, tail) => { arr.push(encoder.encode(head)); current = tail; }
-        });
-      }
-      return arr;
-    }
+    /* Agda List compiles to a native JS array. */
+    encode: (list) => list.map(head => encoder.encode(head))
   };
 } #-}
 
@@ -517,24 +493,13 @@ postulate
   -- Encode to JSON string
   encodeToString : ∀ {A : Set} → Encoder A → A → String
 
--- NOTE: arr contains Scott-encoded pairs (cb => cb["_,_"](k, v)).
+-- NOTE: the elements are Scott-encoded pairs (cb => cb["_,_"](k, v)).
 -- decodeValue.toJS relies on this — it calls p({"_,_": (k,v) => ...}).
--- Do NOT convert pairs to native JS objects here.
--- FFI-FRAGILE: [] (List), _∷_ (List), jObject (JsonValue)
+-- Do NOT convert the pair elements to native JS objects here.
+-- The List container itself compiles to a native JS array.
+-- FFI-FRAGILE: jObject (JsonValue)
 {-# COMPILE JS object = function(pairs) {
-  const arr = [];
-  let current = pairs;
-  let done = false;
-  while (!done) {
-    current({
-      '[]': () => { done = true; },
-      '_∷_': (head, tail) => {
-        arr.push(head);
-        current = tail;
-      }
-    });
-  }
-  return (cases) => cases["jObject"](arr);
+  return (cases) => cases["jObject"](pairs);
 } #-}
 
 {-# COMPILE JS encodeWith = function(encoder) { return function(value) {

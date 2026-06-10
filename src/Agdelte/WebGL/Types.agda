@@ -110,11 +110,14 @@ lookAtQuat source target =
       d    = dotVec3 yUp dir
       axis = crossVec3 yUp dir
       axisLen = lengthVec3 axis
+      -- Clamp dot to [-1,1]: float error can push it slightly outside, making
+      -- acosF return NaN and poisoning the quaternion.
+      dC   = if 1.0 ≤ᵇ d then 1.0 else (if d ≤ᵇ (0.0 - 1.0) then (0.0 - 1.0) else d)
   in if axisLen ≤ᵇ 0.000001
      then (if d ≤ᵇ 0.0
            then fromAxisAngle (vec3 1.0 0.0 0.0) 3.14159265358979  -- 180° flip
            else identityQuat)                                       -- already aligned
-     else fromAxisAngle (normalizeVec3 axis) (acosF d)
+     else fromAxisAngle (normalizeVec3 axis) (acosF dC)
 
 ------------------------------------------------------------------------
 -- Color (GPU: Float 0-1, NOT Css.Color which is ℕ 0-255)

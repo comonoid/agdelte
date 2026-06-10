@@ -52,18 +52,9 @@ postulate
 
 {-# COMPILE JS singleton = function(x) { return [x]; } #-}
 
--- FFI-FRAGILE: [] (List), _∷_ (List)
 {-# COMPILE JS fromList = function(list) {
-  const arr = [];
-  let current = list;
-  let done = false;
-  while (!done) {
-    current({
-      '[]': () => { done = true; },
-      '_∷_': (head, tail) => { arr.push(head); current = tail; }
-    });
-  }
-  return arr;
+  /* Agda List already compiles to a native JS array; copy it to an Array. */
+  return list.slice();
 } #-}
 
 -- FFI-FRAGILE: uses globalThis.Array to avoid shadowing by the Agda Array postulate
@@ -94,9 +85,7 @@ postulate
 
 -- FFI-FRAGILE: true (Bool), false (Bool)
 {-# COMPILE JS null = function(arr) {
-  return arr.length === 0
-    ? (cases) => cases["true"]()
-    : (cases) => cases["false"]();
+  return arr.length === 0;
 } #-}
 
 -- FFI-FRAGILE: just (Maybe), nothing (Maybe)
@@ -193,7 +182,7 @@ postulate
 }; } #-}
 
 {-# COMPILE JS filter = function(p) { return function(arr) {
-  return arr.filter(x => p(x)({"true": () => true, "false": () => false}));
+  return arr.filter(x => p(x));
 }; } #-}
 
 {-# COMPILE JS reverse = function(arr) {
@@ -239,17 +228,13 @@ postulate
 } #-}
 
 {-# COMPILE JS all = function(p) { return function(arr) {
-  const r = arr.every(x => p(x)({"true": () => true, "false": () => false}));
-  return r
-    ? (cases) => cases["true"]()
-    : (cases) => cases["false"]();
+  const r = arr.every(x => p(x));
+  return r;
 }; } #-}
 
 {-# COMPILE JS any = function(p) { return function(arr) {
-  const r = arr.some(x => p(x)({"true": () => true, "false": () => false}));
-  return r
-    ? (cases) => cases["true"]()
-    : (cases) => cases["false"]();
+  const r = arr.some(x => p(x));
+  return r;
 }; } #-}
 
 ------------------------------------------------------------------------
@@ -268,7 +253,7 @@ postulate
 
 -- FFI-FRAGILE: just (Maybe), nothing (Maybe), true (Bool), false (Bool)
 {-# COMPILE JS find = function(p) { return function(arr) {
-  const idx = arr.findIndex(x => p(x)({"true": () => true, "false": () => false}));
+  const idx = arr.findIndex(x => p(x));
   return idx >= 0
     ? (cases) => cases.just(arr[idx])
     : (cases) => cases.nothing();
@@ -276,7 +261,7 @@ postulate
 
 -- FFI-FRAGILE: just (Maybe), nothing (Maybe), true (Bool), false (Bool)
 {-# COMPILE JS findIndex = function(p) { return function(arr) {
-  const idx = arr.findIndex(x => p(x)({"true": () => true, "false": () => false}));
+  const idx = arr.findIndex(x => p(x));
   return idx >= 0
     ? (cases) => cases.just(BigInt(idx))
     : (cases) => cases.nothing();
@@ -284,10 +269,8 @@ postulate
 
 -- FFI-FRAGILE: true (Bool), false (Bool)
 {-# COMPILE JS elem = function(eq) { return function(x) { return function(arr) {
-  const r = arr.some(y => eq(x)(y)({"true": () => true, "false": () => false}));
-  return r
-    ? (cases) => cases["true"]()
-    : (cases) => cases["false"]();
+  const r = arr.some(y => eq(x)(y));
+  return r;
 }; }; } #-}
 
 ------------------------------------------------------------------------
@@ -298,15 +281,9 @@ postulate
   -- To list (O(n))
   toList : ∀ {A : Set} → Array A → List A
 
--- FFI-FRAGILE: [] (List), _∷_ (List)
 {-# COMPILE JS toList = function(arr) {
-  let result = (cases) => cases['[]']();
-  for (let i = arr.length - 1; i >= 0; i--) {
-    const elem = arr[i];
-    const tail = result;
-    result = (cases) => cases['_∷_'](elem, tail);
-  }
-  return result;
+  /* Agda List is a native JS array (same as Array here); copy it. */
+  return arr.slice();
 } #-}
 
 ------------------------------------------------------------------------

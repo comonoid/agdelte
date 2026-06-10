@@ -282,40 +282,30 @@ postulate
 
 -- FFI-FRAGILE: true (Bool), false (Bool)
 {-# COMPILE JS isBefore = function(d1) { return function(d2) {
-  return d1.getTime() < d2.getTime()
-    ? (cases) => cases["true"]()
-    : (cases) => cases["false"]();
+  return d1.getTime() < d2.getTime();
 }; } #-}
 
 -- FFI-FRAGILE: true (Bool), false (Bool)
 {-# COMPILE JS isAfter = function(d1) { return function(d2) {
-  return d1.getTime() > d2.getTime()
-    ? (cases) => cases["true"]()
-    : (cases) => cases["false"]();
+  return d1.getTime() > d2.getTime();
 }; } #-}
 
 -- FFI-FRAGILE: true (Bool), false (Bool)
 {-# COMPILE JS isSameDay = function(d1) { return function(d2) {
   return (d1.getFullYear() === d2.getFullYear() &&
           d1.getMonth() === d2.getMonth() &&
-          d1.getDate() === d2.getDate())
-    ? (cases) => cases["true"]()
-    : (cases) => cases["false"]();
+          d1.getDate() === d2.getDate());
 }; } #-}
 
 -- FFI-FRAGILE: true (Bool), false (Bool)
 {-# COMPILE JS isSameMonth = function(d1) { return function(d2) {
   return (d1.getFullYear() === d2.getFullYear() &&
-          d1.getMonth() === d2.getMonth())
-    ? (cases) => cases["true"]()
-    : (cases) => cases["false"]();
+          d1.getMonth() === d2.getMonth());
 }; } #-}
 
 -- FFI-FRAGILE: true (Bool), false (Bool)
 {-# COMPILE JS isSameYear = function(d1) { return function(d2) {
-  return d1.getFullYear() === d2.getFullYear()
-    ? (cases) => cases["true"]()
-    : (cases) => cases["false"]();
+  return d1.getFullYear() === d2.getFullYear();
 }; } #-}
 
 ------------------------------------------------------------------------

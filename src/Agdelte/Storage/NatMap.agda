@@ -8,8 +8,8 @@ module Agdelte.Storage.NatMap where
 open import Agda.Builtin.Nat using (Nat)
 open import Agda.Builtin.Bool using (Bool)
 open import Data.Maybe using (Maybe)
-open import Data.List using (List)
-open import Data.Product using (_×_)
+open import Data.List using (List; []; _∷_; foldr; reverse)
+open import Data.Product using (_×_; _,_; proj₁; proj₂)
 
 ------------------------------------------------------------------------
 -- Type
@@ -29,36 +29,38 @@ postulate
   lookup   : ∀ {V} → Nat → NatMap V → Maybe V
   member   : ∀ {V} → Nat → NatMap V → Bool
   size     : ∀ {V} → NatMap V → Nat
-  toList   : ∀ {V} → NatMap V → List (Nat × V)
-  fromList : ∀ {V} → List (Nat × V) → NatMap V
   values   : ∀ {V} → NatMap V → List V
   foldl    : ∀ {V} {A : Set} → (A → Nat → V → A) → A → NatMap V → A
+
+-- toList / fromList are DERIVED in pure Agda (not FFI): a (Nat × V) pair uses
+-- Agda's Σ, which MAlonzo cannot translate across a COMPILE GHC boundary.
+-- Building them from foldl/insert/empty keeps the FFI Σ-free.
+toList : ∀ {V} → NatMap V → List (Nat × V)
+toList m = reverse (foldl (λ acc k v → (k , v) ∷ acc) [] m)
+
+fromList : ∀ {V} → List (Nat × V) → NatMap V
+fromList xs = foldr (λ p acc → insert (proj₁ p) (proj₂ p) acc) empty xs
 
 ------------------------------------------------------------------------
 -- GHC compilation
 ------------------------------------------------------------------------
 
 {-# FOREIGN GHC
-  import qualified Data.IntMap.Strict as IM
-  import Data.Maybe (maybe)
+  import qualified Data.Map.Strict as M
 
-  type AgdaNatMap v = IM.IntMap v
-
-  -- Agda ℕ compiles to Integer, but IntMap uses Int keys.
-  -- All key-taking functions must convert via fromIntegral.
-  fi :: Integer -> Int
-  fi = fromIntegral
+  -- Agda ℕ compiles to Integer. We back the map with Data.Map keyed by
+  -- Integer (not Data.IntMap, whose Int keys truncate ids ≥ 2^63 and could
+  -- collide — e.g. attacker-controlled ids replayed from a WAL/snapshot).
+  type AgdaNatMap v = M.Map Integer v
   #-}
 
 {-# COMPILE GHC NatMap = type AgdaNatMap #-}
 
-{-# COMPILE GHC empty    = \ _ -> IM.empty #-}
-{-# COMPILE GHC insert   = \ _ k -> IM.insert (fi k) #-}
-{-# COMPILE GHC delete   = \ _ k -> IM.delete (fi k) #-}
-{-# COMPILE GHC lookup   = \ _ k -> IM.lookup (fi k) #-}
-{-# COMPILE GHC member   = \ _ k -> IM.member (fi k) #-}
-{-# COMPILE GHC size     = \ _ m -> fromIntegral (IM.size m) #-}
-{-# COMPILE GHC toList   = \ _ m -> map (\(k,v) -> (fromIntegral k, v)) (IM.toList m) #-}
-{-# COMPILE GHC fromList = \ _ xs -> IM.fromList (map (\(k,v) -> (fi k, v)) xs) #-}
-{-# COMPILE GHC values   = \ _ -> IM.elems #-}
-{-# COMPILE GHC foldl    = \ _ _ f z m -> IM.foldlWithKey' (\a k v -> f a (fromIntegral k) v) z m #-}
+{-# COMPILE GHC empty    = \ _ -> M.empty #-}
+{-# COMPILE GHC insert   = \ _ k -> M.insert k #-}
+{-# COMPILE GHC delete   = \ _ k -> M.delete k #-}
+{-# COMPILE GHC lookup   = \ _ k -> M.lookup k #-}
+{-# COMPILE GHC member   = \ _ k -> M.member k #-}
+{-# COMPILE GHC size     = \ _ m -> fromIntegral (M.size m) #-}
+{-# COMPILE GHC values   = \ _ -> M.elems #-}
+{-# COMPILE GHC foldl    = \ _ _ f z m -> M.foldlWithKey' (\a k v -> f a k v) z m #-}

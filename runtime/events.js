@@ -471,16 +471,13 @@ function makeLeafHandlers(dispatchImmediate, dispatchNormal, dispatchBackground)
       const mkGlobalListener = (eventName, mkEvent, dispatch) => (handler) => {
         const ac = new AbortController();
         document.addEventListener(eventName, (e) => {
-          console.log('[DEBUG event]', eventName, e.code, e.key, 'repeat:', e.repeat);
           try {
             const agdaEvent = mkEvent(e);
             const maybeMsg = handler(agdaEvent);
-            console.log('[DEBUG event] maybeMsg type:', typeof maybeMsg, maybeMsg);
             const msg = fromMaybe(maybeMsg);
-            console.log('[DEBUG event] msg:', msg !== null ? 'dispatching' : 'filtered');
             if (msg !== null) dispatch(msg);
           } catch(err) {
-            console.error('[DEBUG event] handler error:', err);
+            console.error('[agdelte] global event handler error:', err);
           }
         }, { signal: ac.signal });
         return { unsubscribe: () => ac.abort() };
@@ -540,6 +537,7 @@ function makeLeafHandlers(dispatchImmediate, dispatchNormal, dispatchBackground)
         return { unsubscribe: () => {} };
       }
       const connId = ++_wsConnectionCounter;
+      let terminated = false;
       ws.onopen = () => dispatchNormal(handler(mkWsMsg('WsConnected')));
       ws.onmessage = (e) => {
         if (typeof e.data === 'string') {
@@ -576,6 +574,7 @@ function makeLeafHandlers(dispatchImmediate, dispatchNormal, dispatchBackground)
       wsConnections.get(url).set(connId, ws);
       return {
         unsubscribe: () => {
+          terminated = true;
           const urlConns = wsConnections.get(url);
           if (urlConns) { urlConns.delete(connId); if (urlConns.size === 0) wsConnections.delete(url); }
           ws.onopen = null; ws.onmessage = null; ws.onclose = null; ws.onerror = null;

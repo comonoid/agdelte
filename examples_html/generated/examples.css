@@ -1845,9 +1845,33 @@ body:has(.keyboard-demo) #app {
   transition: transform 0.1s, background 0.2s;
 }
 
+.demo-btn {
+  padding: 10px;
+  margin: 4px;
+  border-radius: 6px;
+  font-size: 1rem;
+  cursor: pointer;
+  border: none;
+  background-color: #3a3a5a;
+  color: #eee;
+  transition: transform 0.1s, background 0.2s;
+}
+
 .demo-btn.info {
   background-color: var(--agdelte-primary);
   color: white;
+}
+
+.demo-btn {
+  padding: 10px;
+  margin: 4px;
+  border-radius: 6px;
+  font-size: 1rem;
+  cursor: pointer;
+  border: none;
+  background-color: #3a3a5a;
+  color: #eee;
+  transition: transform 0.1s, background 0.2s;
 }
 
 .demo-btn.success {
@@ -1855,9 +1879,33 @@ body:has(.keyboard-demo) #app {
   color: #1a1a2e;
 }
 
+.demo-btn {
+  padding: 10px;
+  margin: 4px;
+  border-radius: 6px;
+  font-size: 1rem;
+  cursor: pointer;
+  border: none;
+  background-color: #3a3a5a;
+  color: #eee;
+  transition: transform 0.1s, background 0.2s;
+}
+
 .demo-btn.warning {
   background-color: #fbbf24;
   color: #1a1a2e;
+}
+
+.demo-btn {
+  padding: 10px;
+  margin: 4px;
+  border-radius: 6px;
+  font-size: 1rem;
+  cursor: pointer;
+  border: none;
+  background-color: #3a3a5a;
+  color: #eee;
+  transition: transform 0.1s, background 0.2s;
 }
 
 .demo-btn.error {
@@ -1904,6 +1952,7 @@ body:has(.keyboard-demo) #app {
 .toolbar {
   display: flex;
   flex-direction: row;
+  display: flex;
   justify-content: center;
   align-items: center;
   gap: 12px;
@@ -1912,6 +1961,7 @@ body:has(.keyboard-demo) #app {
 .sidebar {
   display: flex;
   flex-direction: column;
+  display: flex;
   justify-content: space-between;
   align-items: center;
 }
@@ -2043,4 +2093,4 @@ body:has(.keyboard-demo) #app {
   color: var(--agdelte-text);
 }
 
-/*# sourceAgda=jAgda.Styles:examplesCSS */
+/* sourceAgda=jAgda.Styles:examplesCSS */

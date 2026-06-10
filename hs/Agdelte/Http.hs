@@ -59,7 +59,16 @@ mkApp httpHandler mWsHandler =
             in  if pathOnly == TE.encodeUtf8 wsPath
                 then wsApp pending
                 else WS.rejectRequest pending "Wrong path"
-      in WaiWS.websocketsOr WS.defaultConnectionOptions filteredWsApp httpApp
+      in WaiWS.websocketsOr wsConnectionOptions filteredWsApp httpApp
+
+-- | WebSocket options with a message-size cap (mirrors the HTTP body limit).
+-- defaultConnectionOptions imposes NO limit, so a single huge frame/message
+-- would buffer unbounded in memory (DoS).
+wsConnectionOptions :: WS.ConnectionOptions
+wsConnectionOptions = WS.defaultConnectionOptions
+  { WS.connectionMessageDataSizeLimit = WS.SizeLimit (fromIntegral maxBodySize)
+  , WS.connectionFramePayloadSizeLimit = WS.SizeLimit (fromIntegral maxBodySize)
+  }
 
 -- | Maximum request body size (16 MB). Requests with bodies larger than this
 -- are rejected with 413 before the full body is read into memory.

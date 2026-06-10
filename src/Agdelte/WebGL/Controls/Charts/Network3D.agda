@@ -28,7 +28,7 @@ postulate
   stringEq : String → String → Bool
 
 {-# COMPILE JS natToFloat = n => Number(n) #-}
-{-# COMPILE JS stringEq = a => b => a === b ? (cases) => cases["true"]() : (cases) => cases["false"]() #-}
+{-# COMPILE JS stringEq = a => b => a === b #-}
 
 ------------------------------------------------------------------------
 -- Module-level helpers
@@ -205,7 +205,7 @@ networkGraph3D {M} {Msg} theme config getNodes getEdges clickHandler t =
                       edgeGeom = cylinder edgeWidth dist
                       edgeMat = phong edgeC 32.0
                       -- Orientation (simplified - point toward toPos)
-                      edgeT = mkTransform (vec3 mx my mz) identityQuat (vec3 1.0 1.0 1.0)
+                      edgeT = mkTransform (vec3 mx my mz) (lookAtQuat fromPos toPos) (vec3 1.0 1.0 1.0)
                   in mesh edgeGeom edgeMat [] edgeT ∷ []
           in edgeNode ++L buildEdgeList nodes es
 
@@ -304,7 +304,7 @@ forceGraph3D {M} {Msg} theme netConfig forceConfig getNodeDefs getEdgeDefs getPo
                        dist = sqrtF (dx * dx + dy * dy + dz * dz)
                        edgeGeom = cylinder (NetworkConfig.defaultEdgeWidth netConfig) dist
                        edgeMat = phong (NetworkConfig.defaultEdgeColor netConfig) 32.0
-                       edgeT = mkTransform (vec3 mx my mz) identityQuat (vec3 1.0 1.0 1.0)
+                       edgeT = mkTransform (vec3 mx my mz) (lookAtQuat fromPos toPos) (vec3 1.0 1.0 1.0)
                    in mesh edgeGeom edgeMat [] edgeT ∷ buildEdgeList nodes es
           where
             findPos : String → List NodeData → Maybe Vec3

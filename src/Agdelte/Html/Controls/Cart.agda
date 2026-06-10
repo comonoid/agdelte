@@ -1,4 +1,4 @@
-{-# OPTIONS --without-K #-}
+{-# OPTIONS --without-K --guardedness #-}
 
 -- Shopping cart: client-side state with localStorage persistence.
 -- CSS classes: .agdelte-cart, .agdelte-cart__mini, .agdelte-cart__badge,
@@ -79,8 +79,9 @@ miniCart getCart openCartMsg =
 -- | Format price in kopecks as rubles string: 1500 → "15.00"
 postulate formatPriceImpl : ℕ → String
 {-# COMPILE JS formatPriceImpl = function(kopecks) {
-  var rubles = Math.floor(kopecks / 100);
-  var kop = kopecks % 100;
+  var k = Number(kopecks);
+  var rubles = Math.floor(k / 100);
+  var kop = k % 100;
   return rubles + '.' + (kop < 10 ? '0' + kop : '' + kop);
 } #-}
 

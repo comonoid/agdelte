@@ -1,7 +1,5 @@
 name: agdelte
 include:
   src
-  examples
-  server
 depend:
   standard-library

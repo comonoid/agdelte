@@ -74,6 +74,7 @@
 .toolbar {
   display: flex;
   flex-direction: row;
+  display: flex;
   justify-content: center;
   align-items: center;
   gap: 12px;
@@ -82,6 +83,7 @@
 .sidebar {
   display: flex;
   flex-direction: column;
+  display: flex;
   justify-content: space-between;
   align-items: center;
 }
@@ -131,15 +133,15 @@
 }
 
 .panel-enter {
-  animation: fadeIn 300ms ease;
+  animation: 300ms ease fadeIn;
 }
 
 .panel-leave {
-  animation: fadeOut 300ms ease;
+  animation: 300ms ease fadeOut;
 }
 
 .spinner {
-  animation: spin 1s ease infinite;
+  animation: 1s ease infinite spin;
 }
 
-/*# sourceAgda=jAgda.CssFullDemo:appCSS */
+/* sourceAgda=jAgda.CssFullDemo:appCSS */

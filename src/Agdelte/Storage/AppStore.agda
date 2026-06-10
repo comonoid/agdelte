@@ -331,6 +331,7 @@ private
     '\\' -> T.pack "\\\\"
     '|'  -> T.pack "\\p"
     '\n' -> T.pack "\\n"
+    '\r' -> T.pack "\\r"
     ','  -> T.pack "\\c"
     _    -> T.singleton c
 
@@ -341,6 +342,7 @@ private
       Just ('\\', r) -> T.cons '\\' (unescapeFieldHS r)
       Just ('p', r)  -> T.cons '|' (unescapeFieldHS r)
       Just ('n', r)  -> T.cons '\n' (unescapeFieldHS r)
+      Just ('r', r)  -> T.cons '\r' (unescapeFieldHS r)
       Just ('c', r)  -> T.cons ',' (unescapeFieldHS r)
       Just (c, r)    -> T.cons '\\' (T.cons c (unescapeFieldHS r))
       Nothing        -> T.singleton '\\'

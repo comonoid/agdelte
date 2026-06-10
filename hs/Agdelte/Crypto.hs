@@ -51,5 +51,6 @@ base64Encode = TE.decodeUtf8 . B64.encode . TE.encodeUtf8
 -- | Base64 decode text → text (returns empty on invalid input)
 base64Decode :: T.Text -> T.Text
 base64Decode t = case B64.decode (TE.encodeUtf8 t) of
-  Right bs -> TE.decodeUtf8 bs
+  -- decodeUtf8' (not the throwing decodeUtf8): decoded bytes need not be UTF-8.
+  Right bs -> either (const "") id (TE.decodeUtf8' bs)
   Left _   -> ""

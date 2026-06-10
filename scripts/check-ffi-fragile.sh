@@ -20,8 +20,10 @@ while IFS= read -r line; do
   for ctor in $ctors; do
     [ -z "$ctor" ] && continue
     # Use -F (fixed string) because constructor names like [], _∷_, -[1+_]
-    # contain regex special characters
-    if ! grep -rqF --include='*.agda' -- "$ctor" src/; then
+    # contain regex special characters. Add -w (word boundary) so a name that
+    # is merely a substring of a larger identifier (e.g. "Foo" inside "FooBar")
+    # does not count as a match — that was hiding removed constructors.
+    if ! grep -rqFw --include='*.agda' -- "$ctor" src/; then
       echo "BROKEN FFI: '$ctor' referenced at $file:$lineno not found in sources"
       status=1
     fi

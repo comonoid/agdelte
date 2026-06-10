@@ -24,7 +24,7 @@ open import Agdelte.FFI.Server using
   ; _>>=_; _>>_; pure; bracket; mask; onException
   )
 open import Agdelte.FFI.FileSystem using
-  ( readFileSafe; writeFileText; appendFileText; doesFileExist'; renameFile )
+  ( readFileSafe; writeFileText; appendFileText; doesFileExist'; renameFile; syncPathDir )
 
 ------------------------------------------------------------------------
 -- WAL configuration
@@ -174,6 +174,9 @@ walSnapshot h =
     (-- Atomic snapshot: write to temp file, then rename (POSIX atomic)
      writeFileText tmpPath (walSerializeState cfg s) >>
      renameFile tmpPath (walSnapshotPath cfg) >>
+     -- fsync the directory so the rename itself is crash-durable (the file's
+     -- contents are fsync'd by writeFileText, but the dir entry is not).
+     syncPathDir (walSnapshotPath cfg) >>
      -- Only truncate log AFTER snapshot is safely on disk
      writeFileText (walLogPath cfg) "" >>
      writeIORef (walOpCount h) zero >>

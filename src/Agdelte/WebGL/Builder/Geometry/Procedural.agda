@@ -163,7 +163,7 @@ postulate
 {-# COMPILE JS circleProfile = radius => segments => {
   const points = [];
   for (let i = 0; i <= segments; i++) {
-    const angle = (i / segments) * 2 * Math.PI;
+    const angle = (i / Number(segments)) * 2 * Math.PI;
     points.push({ x: radius * Math.cos(angle), y: radius * Math.sin(angle) });
   }
   return points;
@@ -203,7 +203,7 @@ postulate
 
   for (const corner of corners) {
     for (let i = 0; i <= cornerSegments; i++) {
-      const angle = corner.start + (i / cornerSegments) * (Math.PI / 2);
+      const angle = corner.start + (i / Number(cornerSegments)) * (Math.PI / 2);
       points.push({
         x: corner.cx + radius * Math.cos(angle),
         y: corner.cy + radius * Math.sin(angle)
@@ -227,7 +227,7 @@ postulate
 {-# COMPILE JS linePath = start => end => segments => {
   const points = [];
   for (let i = 0; i <= segments; i++) {
-    const t = i / segments;
+    const t = i / Number(segments);
     points.push({
       x: start.x + (end.x - start.x) * t,
       y: start.y + (end.y - start.y) * t,
@@ -244,7 +244,7 @@ postulate
 {-# COMPILE JS helixPath = radius => height => turns => segments => {
   const points = [];
   for (let i = 0; i <= segments; i++) {
-    const t = i / segments;
+    const t = i / Number(segments);
     const angle = t * turns * 2 * Math.PI;
     points.push({
       x: radius * Math.cos(angle),
@@ -262,7 +262,7 @@ postulate
 {-# COMPILE JS bezierPath = p0 => p1 => p2 => p3 => segments => {
   const points = [];
   for (let i = 0; i <= segments; i++) {
-    const t = i / segments;
+    const t = i / Number(segments);
     const mt = 1 - t;
     const mt2 = mt * mt, mt3 = mt2 * mt;
     const t2 = t * t, t3 = t2 * t;

@@ -392,8 +392,14 @@ connWsHandler broadcast registry counter sessionId routing pending = do
     Left (e :: SomeException) | Just (SomeAsyncException _) <- fromException e -> throwIO e
     Left e -> hPutStrLn stderr $ "AgentServer: WebSocket accept failed: " ++ show e
     Right conn -> do
-      cid <- IORef.atomicModifyIORef' counter (\n -> (n + 1, n))
-      let clientId' = sessionId <> "-" <> T.pack (show cid)
+      -- Fresh unguessable id PER CONNECTION. The previous scheme
+      -- (sessionId <> "-" <> sequential counter) shared one random prefix
+      -- across all clients and leaked it in the "connected:<id>" welcome
+      -- frame, so any client could enumerate <prefix>-0,-1,… and call
+      -- /client/{id}/peek|over on other clients (IDOR). Keep counter/sessionId
+      -- only for backward-compatible signature.
+      _ <- IORef.atomicModifyIORef' counter (\n -> (n + 1, n))
+      clientId' <- generateClientId
       connWsHandlerBody broadcast registry clientId' (WS.mkWsConn conn) routing
 
 connWsHandlerBody :: BroadcastChan -> ClientRegistry -> Text -> WS.WsConn
@@ -423,6 +429,17 @@ connWsHandlerBody broadcast registry clientId' conn routing = do
 generateSessionId :: IO Text
 generateSessionId = do
   bytes <- withBinaryFile "/dev/urandom" ReadMode (\h -> BS.hGet h 8)
+  return $ T.pack $ concatMap toHex (BS.unpack bytes)
+  where
+    toHex :: Word8 -> String
+    toHex b = let s = showHex b "" in if length s < 2 then '0':s else s
+
+-- | Generate a fresh, unguessable per-client ID (32 hex chars = 16 random
+-- bytes). Each WebSocket connection gets its own; nothing about it is derived
+-- from a shared/sequential value, so /client/{id}/* cannot be enumerated.
+generateClientId :: IO Text
+generateClientId = do
+  bytes <- withBinaryFile "/dev/urandom" ReadMode (\h -> BS.hGet h 16)
   return $ T.pack $ concatMap toHex (BS.unpack bytes)
   where
     toHex :: Word8 -> String

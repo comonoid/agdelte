@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Fix Agda 2.9.0 ES6 output: add missing `const exports = {};`
 // for modules that reference `exports` without defining it.
+// NOTE: targets Agda 2.9.0; the project currently builds with 2.7.0.1 and does
+// not reference this script from package.json. Kept for the eventual upgrade.
 const fs = require('fs');
 const path = require('path');
 

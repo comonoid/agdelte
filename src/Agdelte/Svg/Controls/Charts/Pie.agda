@@ -40,9 +40,15 @@ open PieSlice public
 ------------------------------------------------------------------------
 
 private
+  -- Clamp negative slice values to 0: a negative value would produce a
+  -- backwards sweep, a mis-set largeArc flag, and break the 360° closure of
+  -- subsequent slices. (Bar/Treemap already filter non-positive values.)
+  clampPos : Float → Float
+  clampPos v = if v ≤ᵇ 0.0 then 0.0 else v
+
   sumValues : ∀ {A} → List (PieSlice A) → Float
   sumValues [] = 0.0
-  sumValues (s ∷ ss) = sliceValue s + sumValues ss
+  sumValues (s ∷ ss) = clampPos (sliceValue s) + sumValues ss
 
   -- Compute arc path for a pie slice
   -- startAngle and endAngle in radians
@@ -101,7 +107,7 @@ pieChart {M} {A} cx cy radius slices =
                  → List (PieSlice A) → Float → List (Node M A)
     renderSlices _ _ _ _ [] _ = []
     renderSlices pcx pcy r tot (s ∷ ss) startA =
-      let fraction = if tot ≤ᵇ 0.0 then 0.0 else sliceValue s ÷ tot
+      let fraction = if tot ≤ᵇ 0.0 then 0.0 else clampPos (sliceValue s) ÷ tot
           sweep = fraction * 2.0 * π
           endA = startA + sweep
           -- When a single slice is (nearly) 100%, arc degenerates; use circle
@@ -158,7 +164,7 @@ donutChart {M} {A} cx cy outer inner slices =
                  → List (PieSlice A) → Float → List (Node M A)
     renderSlices _ _ _ _ _ [] _ = []
     renderSlices pcx pcy outr inr tot (s ∷ ss) startA =
-      let fraction = if tot ≤ᵇ 0.0 then 0.0 else sliceValue s ÷ tot
+      let fraction = if tot ≤ᵇ 0.0 then 0.0 else clampPos (sliceValue s) ÷ tot
           sweep = fraction * 2.0 * π
           endA = startA + sweep
           fullCircle = (2.0 * π - 0.00001) ≤ᵇ sweep

@@ -88,6 +88,21 @@ const BOOL_ATTRS = new Set([
   'inert', 'popover', 'ismap', 'nomodule', 'playsinline', 'itemscope',
 ]);
 
+// DOM *properties* (not attributes) that expect a boolean / number value.
+// Used by Cmd.setProp to coerce the incoming string by property name rather
+// than by sniffing the value (which corrupts numeric-looking strings and
+// makes el.muted = "false" — a truthy string — stay muted).
+const BOOLEAN_DOM_PROPS = new Set([
+  'muted', 'autoplay', 'loop', 'controls', 'defaultMuted', 'playsInline',
+  'disabled', 'checked', 'selected', 'hidden', 'readOnly', 'required',
+  'open', 'multiple', 'autofocus', 'draggable', 'spellcheck',
+]);
+const NUMERIC_DOM_PROPS = new Set([
+  'currentTime', 'volume', 'playbackRate', 'defaultPlaybackRate',
+  'scrollTop', 'scrollLeft', 'selectionStart', 'selectionEnd',
+  'tabIndex', 'width', 'height',
+]);
+
 // Namespaced attributes (xlink:href, xml:lang, etc.)
 const ATTR_NS = {
   'xlink:href': 'http://www.w3.org/1999/xlink',
@@ -396,9 +411,18 @@ function executeCmd(cmd, dispatch) {
       try {
         const el = sel === 'document' ? document : document.querySelector(sel);
         if (el) {
-          // Auto-convert to number if the property expects it
-          const numVal = Number(value);
-          el[prop] = isNaN(numVal) ? value : numVal;
+          // The value always arrives as a string from Agda. Coerce by property
+          // name, never by sniffing the value — otherwise string properties
+          // whose value looks numeric (e.g. textContent="007", an id) or
+          // boolean ("false") get silently corrupted.
+          if (BOOLEAN_DOM_PROPS.has(prop)) {
+            el[prop] = (value === 'true' || value === '1');
+          } else if (NUMERIC_DOM_PROPS.has(prop)) {
+            const numVal = Number(value);
+            el[prop] = isNaN(numVal) ? value : numVal;
+          } else {
+            el[prop] = value;
+          }
         } else console.warn(`Cmd.setProp: element not found: "${sel}"`);
       } catch (e) {
         console.warn(`Cmd.setProp: error on "${sel}".${prop}:`, e.message);
@@ -432,31 +456,55 @@ function executeCmd(cmd, dispatch) {
         }
         // Clean up previous MediaSource if any
         if (el._agdelteMS && el._agdelteMS.mediaSource) {
+          const prev = el._agdelteMS;
+          // Fail any still-queued/in-flight appends so their onError fires and
+          // the Agda state machine isn't left waiting on a SegmentAppended that
+          // can never come (the old SourceBuffer is about to be discarded).
           try {
-            if (el._agdelteMS.mediaSource.readyState === 'open') el._agdelteMS.mediaSource.endOfStream();
+            const pending = prev.appendQueue ? prev.appendQueue.splice(0) : [];
+            for (const t of pending) { try { t.onError('MediaSource re-initialized'); } catch (e) {} }
+            if (prev.onAppendDone) { prev.onAppendDone = null; }
+          } catch (e) { /* ignore */ }
+          try {
+            if (prev.mediaSource.readyState === 'open') prev.mediaSource.endOfStream();
           } catch (e) { /* ignore */ }
           if (el.src) URL.revokeObjectURL(el.src);
         }
         const ms = new MediaSource();
         el.src = URL.createObjectURL(ms);
-        // Store per-element state
+        // Store per-element state. appendQueue holds { bytes, onDone, onError }
+        // tasks; the onDone is carried per-task (not in a shared slot) so it
+        // can never be attributed to the wrong append.
         const state = { mediaSource: ms, sourceBuffer: null, appendQueue: [], onAppendDone: null };
+        // Drain the queue one append at a time. Robust to a synchronous
+        // appendBuffer throw: the failing task is reported and the pump moves
+        // on, so a bad segment can't stall the rest of the queue.
+        state.pump = () => {
+          const sb = state.sourceBuffer;
+          if (!sb || sb.updating) return;
+          const task = state.appendQueue.shift();
+          if (!task) return;
+          try {
+            state.onAppendDone = task.onDone;
+            sb.appendBuffer(task.bytes);
+          } catch (e) {
+            state.onAppendDone = null;
+            task.onError('appendBuffer failed: ' + e.message);
+            state.pump();
+          }
+        };
         el._agdelteMS = state;
         ms.addEventListener('sourceopen', () => {
           try {
             state.sourceBuffer = ms.addSourceBuffer(mimeType);
             state.sourceBuffer.addEventListener('updateend', () => {
-              // Dispatch the pending onDone callback
               const cb = state.onAppendDone;
               state.onAppendDone = null;
               if (cb) cb();
-              // Process next item in queue
-              if (state.appendQueue.length > 0) {
-                const next = state.appendQueue.shift();
-                next();
-              }
+              state.pump();
             });
             dispatch(onReady);
+            state.pump();
           } catch (e) {
             dispatch(onError('addSourceBuffer failed: ' + e.message));
           }
@@ -479,20 +527,14 @@ function executeCmd(cmd, dispatch) {
         const binary = atob(base64data);
         const bytes = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        const doAppend = () => {
-          try {
-            state.onAppendDone = () => dispatch(onDone);
-            state.sourceBuffer.appendBuffer(bytes);
-          } catch (e) {
-            state.onAppendDone = null;
-            dispatch(onError('appendBuffer failed: ' + e.message));
-          }
-        };
-        if (state.sourceBuffer.updating) {
-          state.appendQueue.push(doAppend);
-        } else {
-          doAppend();
-        }
+        // Always enqueue and let the single pump serialize appends; this keeps
+        // ordering correct even if updating briefly reads false mid-drain.
+        state.appendQueue.push({
+          bytes,
+          onDone: () => dispatch(onDone),
+          onError: (msg) => dispatch(onError(msg)),
+        });
+        state.pump();
       } catch (e) {
         dispatch(onError('mediaSourceAppend failed: ' + e.message));
       }
@@ -972,8 +1014,18 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
     let effectiveOldModel = oldModel;
     if (oldSlots && oldModel._slots === model._slots) {
-      effectiveOldModel = Object.create(oldModel);
+      // reconcile mutated the model in place, so oldModel now holds the new
+      // slots. Build a CALLABLE snapshot presenting the pre-batch slots —
+      // Object.create(fn) would yield a non-callable object, crashing Agda
+      // projections (zoomNode) and zeroing countSlots (disabling slot tracking).
+      const ctor = oldModel._ctor;
+      if (typeof oldModel === 'function') {
+        effectiveOldModel = (cases) => cases[ctor](...oldSlots);
+      } else {
+        effectiveOldModel = { [ctor]: (c) => c[ctor](...oldSlots) };
+      }
       effectiveOldModel._slots = oldSlots;
+      effectiveOldModel._ctor = ctor;
     }
 
     updateScope(rootScope, effectiveOldModel, model);
@@ -1438,6 +1490,13 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       } else if (name === 'value' && 'value' in el) {
         // For input/textarea/select, set the property (not attribute) to update displayed value
         el.value = value;
+      } else if (name === 'innerHTML') {
+        // Property, not attribute: setAttribute("innerHTML", …) creates an inert
+        // attribute and renders nothing. Used by Html.Markdown (whose output is
+        // HTML-escaped/sanitized in Agda) to inject pre-rendered markup.
+        el.innerHTML = value;
+      } else if (name === 'textContent') {
+        el.textContent = value;
       } else {
         el.setAttribute(name, value);
       }
@@ -2125,7 +2184,6 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
 
     const eventSpec = subsFunc(model);
     const newFingerprint = serializeEvent(eventSpec);
-    console.log('[DEBUG subs] fingerprint:', newFingerprint, 'prev:', currentEventFingerprint);
 
     if (newFingerprint === currentEventFingerprint) return;
 
@@ -2141,7 +2199,6 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
         background: dispatchBackground
       });
       currentEventFingerprint = newFingerprint;
-      console.log('[DEBUG subs] subscribed OK');
     } catch (e) {
       console.error('updateSubscriptions: interpretEvent failed:', e);
       currentSubscription = null;

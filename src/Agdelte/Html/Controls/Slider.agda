@@ -30,8 +30,10 @@ postulate guardStep : String → String
 postulate guardMinMax : String → String → _×_ String String
 {-# COMPILE JS guardMinMax = function(minV) { return function(maxV) {
   var a = parseFloat(minV) || 0, b = parseFloat(maxV) || 0;
-  if (a > b) return { "fst": maxV, "snd": minV };
-  return { "fst": minV, "snd": maxV };
+  /* Agda _×_ is Scott-encoded: a pair is {"_,_": c => c["_,_"](fst, snd)},
+     and proj1/proj2 access it via mm["_,_"]({...}). A plain {fst,snd} crashes. */
+  var lo = (a > b) ? maxV : minV, hi = (a > b) ? minV : maxV;
+  return { "_,_": function(c) { return c["_,_"](lo, hi); } };
 }; } #-}
 
 -- | Clamp min value to not exceed max: returns min(minVal, maxVal)

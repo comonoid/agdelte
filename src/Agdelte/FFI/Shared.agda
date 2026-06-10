@@ -51,9 +51,10 @@ instance
 postulate
   readℕ : String → Maybe ℕ
 {-# COMPILE JS readℕ = function(s) {
-  const n = parseInt(s, 10);
-  if (Number.isNaN(n) || n < 0) return (cb) => cb.nothing();
-  return (cb) => cb.just(BigInt(n));
+  /* Parse directly with BigInt — parseInt goes through a 53-bit Number and
+     silently corrupts naturals above 2^53. */
+  if (!/^[0-9]+$/.test(s)) return (cb) => cb.nothing();
+  return (cb) => cb.just(BigInt(s));
 } #-}
 
 instance
@@ -107,12 +108,11 @@ postulate
   encodeListLP : (A → String) → List A → String
   decodeListLP : (String → Maybe A) → String → Maybe (List A)
 {-# COMPILE JS encodeListLP = function(_) { return function(enc) { return function(xs) {
-  const arr = []; let cur = xs; let done = false;
-  while (!done) { cur({ '[]': () => { done = true; }, '_∷_': (h, t) => { arr.push(h); cur = t; } }); }
-  return arr.map(a => { const s = enc(a); return s.length + ':' + s; }).join('');
+  /* Agda List compiles to a native JS array. */
+  return xs.map(a => { const s = enc(a); return s.length + ':' + s; }).join('');
 }; }; } #-}
 {-# COMPILE JS decodeListLP = function(_) { return function(dec) { return function(s) {
-  if (s === '') return (cb) => cb.just((c) => c['[]']());
+  if (s === '') return (cb) => cb.just([]);
   const items = []; let pos = 0;
   while (pos < s.length) {
     const colon = s.indexOf(':', pos);
@@ -131,12 +131,8 @@ postulate
     if (!ok) return (cb) => cb.nothing();
     decoded.push(val);
   }
-  let result = (c) => c['[]']();
-  for (let i = decoded.length - 1; i >= 0; i--) {
-    const head = decoded[i]; const tail = result;
-    result = (c) => c['_∷_'](head, tail);
-  }
-  return (cb) => cb.just(result);
+  /* Agda List is a native JS array; return the decoded array directly. */
+  return (cb) => cb.just(decoded);
 }; }; } #-}
 
 instance

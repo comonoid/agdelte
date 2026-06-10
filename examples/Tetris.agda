@@ -333,7 +333,7 @@ finishClearAnim m =
       cleared   = proj₂ result
       newScore  = score m + scoreFor' cleared (level m)
       newLines  = linesTotal m + cleared
-      newLevel  = natDiv newLines 10
+      newLevel  = startLevel m + natDiv newLines 10
   in spawnNext (record m { board = newBoard ; score = newScore
                          ; linesTotal = newLines ; level = newLevel })
 

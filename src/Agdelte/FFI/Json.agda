@@ -20,6 +20,7 @@ postulate
 {-# FOREIGN GHC
   import qualified Data.Text as T
   import Text.Read (readMaybe)
+  import Text.Printf (printf)
 
   -- Minimal JSON field extractor (string values only, no nesting)
   jsonGetFieldImpl :: T.Text -> T.Text -> Maybe T.Text
@@ -71,6 +72,11 @@ postulate
       escChar '\n' = "\\n"
       escChar '\r' = "\\r"
       escChar '\t' = "\\t"
-      escChar c    = T.singleton c
+      -- Escape ALL remaining control characters (U+0000–U+001F) as \u00XX.
+      -- Leaving them raw produces invalid JSON and enables injection/smuggling
+      -- when the value is interpolated into a JWT payload or response body.
+      escChar c
+        | c < '\x20' = T.pack (printf "\\u%04x" (fromEnum c))
+        | otherwise  = T.singleton c
   #-}
 {-# COMPILE GHC escapeJsonString = escapeJsonStringImpl #-}

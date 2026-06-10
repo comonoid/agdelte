@@ -132,8 +132,9 @@ mkUpdateVideo cfg = go
   go ExitFullscreen m   = record m { fullscreen = false }
   go ToggleFullscreen m = record m { fullscreen = not (fullscreen m) }
   go (TimeUpdated t) m  = record m { currentTime = t }
-  go (DurationLoaded d) m = record m { duration = d
-                                      ; state = if pcAutoplay cfg then Playing else Paused }
+  go (DurationLoaded d) m = if eqState (state m) Error then record m { duration = d }
+                            else record m { duration = d
+                                          ; state = if pcAutoplay cfg then Playing else Paused }
   go (VolumeChanged v) m  = record m { volume = v }
   go MediaEnded m         = record m { state = if pcLoop cfg then Playing else Ended }
   go (MediaError e) m     = record m { state = Error ; error = just e }

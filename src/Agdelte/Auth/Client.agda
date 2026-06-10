@@ -71,8 +71,21 @@ authPost url token body onOk onErr = httpPostH url (authJsonHeaders token) body 
 
 postulate
   escapeJson : String → String
+-- Escape backslash/quote and ALL control characters (U+0000–U+001F) as \u00XX.
+-- Escaping only \n\r\t leaves other control chars raw → invalid JSON / smuggling.
 {-# COMPILE JS escapeJson = function(s) {
-  return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t');
+  return s.replace(/[\u0000-\u001f\\"]/g, function(ch) {
+    switch (ch) {
+      case '\\': return '\\\\';
+      case '"':  return '\\"';
+      case '\n': return '\\n';
+      case '\r': return '\\r';
+      case '\t': return '\\t';
+      case '\b': return '\\b';
+      case '\f': return '\\f';
+      default:   return '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0');
+    }
+  });
 } #-}
 
 ------------------------------------------------------------------------

@@ -41,7 +41,7 @@ countCompleted (l ∷ ls) = if lpCompleted l then suc (countCompleted ls) else c
 
 -- | Safe division for percentages (avoids NonZero constraint).
 postulate safeDiv : ℕ → ℕ → ℕ
-{-# COMPILE JS safeDiv = function(n) { return function(d) { return d === 0 ? 0 : Math.floor(n / d); }; } #-}
+{-# COMPILE JS safeDiv = function(n) { return function(d) { return d === 0n ? 0n : n / d; }; } #-}
 
 -- | Percentage string: completed / total * 100
 percentStr : ℕ → ℕ → String

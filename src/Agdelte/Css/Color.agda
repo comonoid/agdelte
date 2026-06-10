@@ -42,9 +42,7 @@ postulate
   isHexColor : String → Bool
 
 {-# COMPILE JS isHexColor = function(s) {
-  return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(s)
-    ? (cases) => cases["true"]()
-    : (cases) => cases["false"]();
+  return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(s);
 } #-}
 
 {-# FOREIGN GHC import qualified Data.Text as T #-}

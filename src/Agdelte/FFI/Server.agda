@@ -10,6 +10,7 @@ open import Agda.Builtin.Unit using (⊤)
 open import Agda.Builtin.String using (String)
 open import Agda.Builtin.Bool using (Bool)
 open import Agda.Builtin.List using (List; []; _∷_)
+open import Data.List.Base using (map)
 open import Data.Bool using (if_then_else_)
 
 ------------------------------------------------------------------------
@@ -56,11 +57,11 @@ postulate
 
 {-# FOREIGN GHC
   tryCatchImpl :: IO a -> IO (Maybe a)
-  tryCatchImpl act = do
-    r <- Ex.try act :: IO (Either Ex.SomeException a)
-    case r of
-      Right a -> return (Just a)
-      Left _  -> return Nothing
+  tryCatchImpl act = fmap eitherToMaybe (Ex.try act)
+    where
+      eitherToMaybe :: Either Ex.SomeException b -> Maybe b
+      eitherToMaybe (Right a) = Just a
+      eitherToMaybe (Left _)  = Nothing
   #-}
 
 {-# COMPILE GHC tryCatch = \_ -> tryCatchImpl #-}
@@ -118,32 +119,55 @@ postulate
 -- HTTP request (method, path, body, headers)
 open import Data.Product using (_×_; _,_; proj₁; proj₂)
 
+-- A string pair AT THE FFI BOUNDARY, bound to a Haskell 2-tuple. Agda's own
+-- pair (Σ / _×_) cannot appear in a COMPILE GHC type: MAlonzo can't translate
+-- Σ, and the Σ→tuple binding it suggests is only legal in Σ's own (builtin)
+-- module. StrPair lets the header FFI translate while the PUBLIC API keeps
+-- List (String × String) via the pure wrappers below.
+postulate
+  StrPair    : Set
+  mkStrPair  : String → String → StrPair
+  fstStrPair : StrPair → String
+  sndStrPair : StrPair → String
+{-# FOREIGN GHC type StrPairH = (T.Text, T.Text) #-}
+{-# COMPILE GHC StrPair    = type StrPairH #-}
+{-# COMPILE GHC mkStrPair  = (\ k v -> (k, v) :: StrPairH) #-}
+{-# COMPILE GHC fstStrPair = (fst :: StrPairH -> T.Text) #-}
+{-# COMPILE GHC sndStrPair = (snd :: StrPairH -> T.Text) #-}
+
 postulate
   HttpRequest : Set
   reqMethod  : HttpRequest → String
   reqPath    : HttpRequest → String
   reqBody    : HttpRequest → String
-  reqHeaders : HttpRequest → List (String × String)
+  reqHeadersRaw : HttpRequest → List StrPair
 
 {-# COMPILE GHC HttpRequest = type Http.Request #-}
 {-# COMPILE GHC reqMethod  = Http.reqMethod  #-}
 {-# COMPILE GHC reqPath    = Http.reqPath    #-}
 {-# COMPILE GHC reqBody    = Http.reqBody    #-}
-{-# COMPILE GHC reqHeaders = Http.reqHeaders #-}
+{-# COMPILE GHC reqHeadersRaw = Http.reqHeaders #-}
+
+-- Public API: headers as List (String × String) (Σ is fine in pure Agda).
+reqHeaders : HttpRequest → List (String × String)
+reqHeaders req = map (λ p → fstStrPair p , sndStrPair p) (reqHeadersRaw req)
 
 -- HTTP Response (status + body + optional headers)
 postulate
   HttpResponse : Set
   mkResponse   : Nat → String → HttpResponse
-  mkResponseH  : Nat → String → List (String × String) → HttpResponse
+  mkResponseHRaw : Nat → String → List StrPair → HttpResponse
 
 {-# FOREIGN GHC
   data AgdaResponse = AgdaResponse Integer T.Text [(T.Text, T.Text)]
   #-}
 
-{-# COMPILE GHC HttpResponse = type AgdaResponse #-}
-{-# COMPILE GHC mkResponse   = \s b -> AgdaResponse s b []      #-}
-{-# COMPILE GHC mkResponseH  = AgdaResponse #-}
+{-# COMPILE GHC HttpResponse   = type AgdaResponse #-}
+{-# COMPILE GHC mkResponse     = \s b -> AgdaResponse s b []      #-}
+{-# COMPILE GHC mkResponseHRaw = AgdaResponse #-}
+
+mkResponseH : Nat → String → List (String × String) → HttpResponse
+mkResponseH s b hdrs = mkResponseHRaw s b (map (λ p → mkStrPair (proj₁ p) (proj₂ p)) hdrs)
 
 -- | Lookup a header by name (case-insensitive)
 postulate

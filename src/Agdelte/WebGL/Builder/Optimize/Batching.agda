@@ -43,7 +43,7 @@ postulate
 
 {-# COMPILE JS combineStatic = meshes => ({
   type: 'combinedStatic',
-  meshes: meshes.map(m => m(geom => xform => ({ geometry: geom, transform: xform })))
+  meshes: meshes.map(m => m["staticMesh"]({ "staticMesh": (geom, xform) => ({ geometry: geom, transform: xform }) }))
 }) #-}
 
 ------------------------------------------------------------------------
