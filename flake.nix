@@ -14,6 +14,7 @@
         buildInputs = [
           pkgs.nodejs_20
           pkgs.agda
+          pkgs.postgresql      # local DB for Task 0 spike (psql/initdb/pg_ctl) + libpq
 
           (pkgs.haskellPackages.ghcWithPackages (p: with p; [
             # Server runtime

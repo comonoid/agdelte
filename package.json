@@ -89,6 +89,9 @@
     "run:inspector-demo": "./_build/InspectorDemo",
     "build:test-server": "ghc -ihs -o _build/Spec hs/test/Spec.hs -package hspec -package network -package text -package bytestring -package stm -package containers -package websockets -package warp -package wai -package wai-websockets -package http-types -package async -package case-insensitive -package unix -package directory",
     "test:server": "npm run build:test-server && ./_build/Spec",
+    "gen:pg-spike": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i server server/PgSpike.agda",
+    "build:pg-spike": "npm run gen:pg-spike && cabal build pg-spike",
+    "run:pg-spike": "cabal run pg-spike",
     "clean": "rm -rf _build MAlonzo jAgda"
   },
   "keywords": [

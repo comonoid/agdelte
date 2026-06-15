@@ -10,6 +10,7 @@ build/
 *.hi
 *.o
 hs/test-runner
+dist-newstyle/
 
 # Agda JS backend intermediate files (use --compile-dir=_build instead)
 jAgda.*.js
