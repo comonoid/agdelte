@@ -24,7 +24,8 @@
 - [ ] `src/Agdelte/Storage/IndexedMap.agda` — **абстрактный Agda-модуль над `NatMap`**
       (НЕ постулат-над-Haskell, концепт §3): record `{ primary : NatMap V ; indexes :
       … NatMap (List ℕ) ; extractors : … (V → List ℕ) }`; smart-конструкторы
-      `insert/update/delete/lookup/byIndex` держат индексы **в Agda**. Конструктор
+      `insert/update/delete/lookup/byIndex/entriesFrom` (последняя — упорядоченная
+      страница по `id` для пагинации §13, #K) держат индексы **в Agda**. Конструктор
       record'а **не экспортировать** (инкапсуляция). Нового `.hs` НЕ нужно.
 - [ ] Две тонкости (концепт §3): `insert`=upsert **снимает старые индекс-ключи** перед
       добавлением новых (#N3 — иначе stale-записи); экстрактор **пропускает soft-deleted**
@@ -41,9 +42,9 @@
 - [ ] Добавить записи: `Engagement`, `Activity` (FK `engagementId`), `Participation`
       (запись-факт M:N, синтетич. `id`). `PartyRecord` — уже есть.
 - [ ] **uuid-слой (#3):** адресуемые сущности несут `uuid : String` (внешний id, §13).
-- [ ] `Serialize` для каждой (**руками — в Agda нет deriving**), incl. вложенные значения.
-      **Round-trip property-тест `decode (encode x) ≡ just x` на КАЖДЫЙ тип** (#N6 — кривой
-      `decode` тихо испортит реплей).
+- [ ] **`Agdelte.Json`-кодек** для каждой (комбинаторами; самоописывающий → аддитивная
+      эволюция схемы обратно-совместима, #D). **Round-trip `decode (encode x) ≡ just x` на
+      КАЖДЫЙ тип** (#N6 — кривой `decode` тихо испортит реплей).
 - [ ] Типечек + grep-страж нейтральности (нет вертикалей в `services-core`).
 
 ## Фаза 2 — `Crm.Store` (сборка состояния)
@@ -83,6 +84,8 @@
 
 - [ ] `addParticipant` (store-инвариант FK — рантайм-проверка).
 - [ ] `scheduleActivity`/`bookSession` (проверка «слот свободен»).
+- [ ] **Удаление (#E):** soft-delete по умолчанию; hard-delete — транзакция **явно каскадит**
+      / проверяет отсутствие ссылок через обратные индексы (иначе dangling FK).
 - [ ] **Один value-инвариант correct-by-construction** через разрешимость
       (`charge`/`decBalance` с `amt ≤? bal` → proof). Измерить планку: сколько
       итераций, не сполз ли в `postulate`/`primTrustMe` (ревью обязано ловить).
