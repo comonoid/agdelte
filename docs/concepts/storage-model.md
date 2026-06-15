@@ -533,7 +533,7 @@ record Base    { parties : IndexedMap Party ; participations : IndexedMap Partic
 -- на parties: индекс byUuid (uuid → id) для headless-API
 
 -- ОПЕРАЦИИ
-data Op = SetEntity Tag ℕ Value | AddParticipant ℕ ℕ Role | …
+data Op = SetParty Party | SetEngagement Engagement | AddParticipant ℕ ℕ Role | …
 apply : Op → Base → Base                              -- через IndexedMap.insert/delete
 
 -- ТРАНЗАКЦИЯ
