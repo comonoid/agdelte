@@ -30,6 +30,8 @@
 - [ ] Две тонкости (концепт §3): `insert`=upsert **снимает старые индекс-ключи** перед
       добавлением новых (#N3 — иначе stale-записи); экстрактор **пропускает soft-deleted**
       (`deletedAt≠nothing → []`) → `byIndex` отдаёт только живые (#N7).
+- [ ] `IndexName` — **типизированный тег** (не `String`, #P3); `entriesFrom` по `primary`
+      включает soft-deleted → живая пагинация **пропускает удалённые** на ходу (#P4).
 - [ ] Генерик property-тест: `indexes m ≡ rebuild (entries m)` после произвольной
       последовательности операций.
 - [ ] Типечек.
@@ -73,10 +75,12 @@
 - [ ] В `Storage.WAL` — **`walTxn : WalHandle → (Base → Either Err (Base × List Op × A)) → IO (Either Err A)`**
       (обобщение `walModify`). **Порядок: durable ДО visible** — запись+`fsync`, и только при
       успехе `putMVar base'`; **отказ записи WAL** (диск/IO) → восстановить старый `MVar`
-      (`onException`) + вернуть ошибку (#N4). Заодно по ADR: `walRead → readMVar`, убрать
-      снапшотные следы (`walOpCount`, `loadSnapshot`).
+      (`onException`) + вернуть ошибку (#N4). **`onException` оборачивает ВСЮ секцию**
+      (прогон txn тоже) — иначе бросивший txn → пустой `MVar` → deadlock (#P2). Заодно по
+      ADR: `walRead → readMVar`, убрать снапшотные следы (`walOpCount`, `loadSnapshot`).
 - [ ] `Crm.Txn` — монада `Txn` (`return`/`_>>=_`/`getBase`/`abort`/**`emit`**, где
-      `emit op = apply op + лог`), доменные «сеттеры»/команды поверх `emit`.
+      `emit op = apply op + лог`), доменные «сеттеры»/команды поверх `emit`. Аккумулятор
+      ops — **difference-list** (не `++`), иначе bulk-каскад O(n²) (#P1).
 - [ ] Типечек; (по возможности) набросок property-теста `live ≡ replay`.
 - **Ревью человека:** транзакционная семантика, `Err`/authz (§15.4).
 
