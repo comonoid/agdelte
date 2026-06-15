@@ -54,10 +54,10 @@ record Participation { engagementId : ℕ ; partyId : ℕ ; role : Role }       
 
 ```
 record Base
-  { parties        : Table Party
-  ; engagements    : Table Engagement
-  ; activities     : Table Activity
-  ; participations : Table Participation
+  { parties        : IndexedMap Party
+  ; engagements    : IndexedMap Engagement
+  ; activities     : IndexedMap Activity
+  ; participations : IndexedMap Participation
   ; nextId         : ℕ }
 ```
 
@@ -82,10 +82,10 @@ record Category { id : ℕ ; tree : Tree Label }   -- дерево лежит Д
 
 ## 3. Таблицы — `IndexedMap` (абстрактный тип с авто-индексами)
 
-(`Table` в этом документе — **алиас** для `IndexedMap`; канонический тип —
-`Agdelte.Storage.IndexedMap`.)
+Каноническое имя типа в коде — **`IndexedMap`** (`Agdelte.Storage.IndexedMap`);
+«таблица» далее — лишь неформальное слово в прозе, отдельного типа `Table` нет.
 
-`Table` = `IndexedMap K V`: коллекция по первичному id + **объявленные** вторичные
+`IndexedMap V`: коллекция по первичному id + **объявленные** вторичные
 индексы, которые `insert`/`update`/`delete` поддерживают **сами**. Реализация —
 постулат над хаскельной структурой (как `NatMap`): `IntMap V` + по `IntMap`-у на
 каждый индекс. Представление **скрыто** — только smart-конструкторы.
@@ -440,7 +440,7 @@ HTTP `GET` → обработчик → `readMVar state` → **чистый** з
 -- ДАННЫЕ
 record Party         { id ; type ; name }
 record Participation { engagementId ; partyId ; role }
-record Base    { parties : Table Party ; participations : Table Participation ; nextId : ℕ }
+record Base    { parties : IndexedMap Party ; participations : IndexedMap Participation ; nextId : ℕ }
 -- индекс по partyId объявлен на таблице participations → byIndex даёт engagement'ы party
 
 -- ОПЕРАЦИИ

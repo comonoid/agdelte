@@ -15,7 +15,7 @@
 - [x] §14.2 — раскладка `services-core/packs/app` + grep-стражи + раннер миграций.
 - [x] §14.3 (0001) — SQL-схема идентичности (для Postgres-пути; на WAL-пути не нужна).
 - [x] `Crm.Identity` — **выбросной прототип** `party` (записи + `CrmState`/`CrmOp`/`applyOp`).
-      ⚠️ Его `CrmState`/`CrmOp`/`applyOp` **переедут в `Crm.Store`** (Base/Table/CrmOp), а
+      ⚠️ Его `CrmState`/`CrmOp`/`applyOp` **переедут в `Crm.Store`** (Base/CrmOp на `IndexedMap`), а
       `Crm.Identity` останется **только записями** — это **реструктуризация, не дополнение**.
 - [x] ADR 0001 + concepts/storage-model.md — решение, концепция, механика.
 
