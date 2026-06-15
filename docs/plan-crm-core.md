@@ -14,7 +14,9 @@
 - [x] Task 0 — Postgres-спайк (запасной путь, hpgsql); cabal+freeze сборка.
 - [x] §14.2 — раскладка `services-core/packs/app` + grep-стражи + раннер миграций.
 - [x] §14.3 (0001) — SQL-схема идентичности (для Postgres-пути; на WAL-пути не нужна).
-- [x] `Crm.Identity` — первый слайс `party` (записи + applyOp + queries) — **переедет на `Table`**.
+- [x] `Crm.Identity` — **выбросной прототип** `party` (записи + `CrmState`/`CrmOp`/`applyOp`).
+      ⚠️ Его `CrmState`/`CrmOp`/`applyOp` **переедут в `Crm.Store`** (Base/Table/CrmOp), а
+      `Crm.Identity` останется **только записями** — это **реструктуризация, не дополнение**.
 - [x] ADR 0001 + concepts/storage-model.md — решение, концепция, механика.
 
 ## Фаза 0 — `IndexedMap` (генерик-инфра, `agdelte`)
@@ -29,8 +31,10 @@
 
 ## Фаза 1 — Записи домена (`services-core/Crm/Identity.agda`)
 
-- [ ] Дополнить: `Engagement`, `Activity` (FK `engagementId`), `Participation`
-      (запись-факт M:N). `party` — уже есть.
+- [ ] **Реструктурировать `Crm.Identity` в records-only:** убрать `CrmState`/`CrmOp`/
+      `applyOp` (переедут в `Crm.Store`, Фаза 2), оставить только записи + их `Serialize`.
+- [ ] Добавить записи: `Engagement`, `Activity` (FK `engagementId`), `Participation`
+      (запись-факт M:N). `PartyRecord` — уже есть.
 - [ ] `Serialize` для каждой (рекурсивный/выводимый), incl. вложенные значения.
 - [ ] Типечек + grep-страж нейтральности (нет вертикалей в `services-core`).
 
@@ -46,6 +50,11 @@
 
 ## Фаза 3 — Транзакции (`Crm.Txn` + `walTxn` в `agdelte`)
 
+- [ ] **WAL-фрейминг (prerequisite, см. концепт §18):** текущий лог строковый
+      (`splitLines`/`\n`) — `\n` в payload (тела заметок/сообщений) расщепит запись,
+      рваный хвост может распарситься неверно. Перейти на **length-prefix**
+      (`<len>:<байты>`, идиома `FFI.Shared.encodeListLP`) **до** операций со свободным
+      текстом. (Для `party`/`engagement` без переводов строк можно отложить, но заложить.)
 - [ ] В `Storage.WAL` — **`walTxn : WalHandle → (Base → Either Err (Base × List Op × A)) → IO (Either Err A)`**
       (обобщение `walModify`; аппенд ops на коммит, no-op откат). Заодно по ADR:
       `walRead → readMVar`, убрать снапшотные следы (`walOpCount`, `loadSnapshot`).
