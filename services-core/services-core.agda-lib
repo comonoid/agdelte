@@ -1,0 +1,6 @@
+name: services-core
+include: .
+depend: standard-library
+-- On extraction to its own repo, add `agdelte` to depend: above and register
+-- the agdelte .agda-lib. Inside this monorepo the agdelte layer is on the
+-- include path via `-i src` (see package.json typecheck:services-core).
