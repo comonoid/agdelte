@@ -26,6 +26,9 @@
       … NatMap (List ℕ) ; extractors : … (V → List ℕ) }`; smart-конструкторы
       `insert/update/delete/lookup/byIndex` держат индексы **в Agda**. Конструктор
       record'а **не экспортировать** (инкапсуляция). Нового `.hs` НЕ нужно.
+- [ ] Две тонкости (концепт §3): `insert`=upsert **снимает старые индекс-ключи** перед
+      добавлением новых (#N3 — иначе stale-записи); экстрактор **пропускает soft-deleted**
+      (`deletedAt≠nothing → []`) → `byIndex` отдаёт только живые (#N7).
 - [ ] Генерик property-тест: `indexes m ≡ rebuild (entries m)` после произвольной
       последовательности операций.
 - [ ] Типечек.
@@ -38,7 +41,9 @@
 - [ ] Добавить записи: `Engagement`, `Activity` (FK `engagementId`), `Participation`
       (запись-факт M:N, синтетич. `id`). `PartyRecord` — уже есть.
 - [ ] **uuid-слой (#3):** адресуемые сущности несут `uuid : String` (внешний id, §13).
-- [ ] `Serialize` для каждой (рекурсивный/выводимый), incl. вложенные значения.
+- [ ] `Serialize` для каждой (**руками — в Agda нет deriving**), incl. вложенные значения.
+      **Round-trip property-тест `decode (encode x) ≡ just x` на КАЖДЫЙ тип** (#N6 — кривой
+      `decode` тихо испортит реплей).
 - [ ] Типечек + grep-страж нейтральности (нет вертикалей в `services-core`).
 
 ## Фаза 2 — `Crm.Store` (сборка состояния)
@@ -46,9 +51,13 @@
 - [ ] `Base` = **самоиндексирующиеся `IndexedMap`** по сущностям (`byUuid` на адресуемых;
       `byEngagement`/`byParty` на `participations`), `emptyBase`. **Отдельного
       `Indexes`/`reindex` НЕТ** (#2 — индексы внутри `IndexedMap`).
-- [ ] `data CrmOp` (`SetEntity`/`DeleteEntity` generic + доменные команды);
-      `apply : CrmOp → Base → Base` через `IndexedMap.insert/delete`. **uuid генерится в
-      транзакции и приходит в `Op`**, не в `apply` (#3 — детерминизм реплея).
+- [ ] `data CrmOp` — **типизированные конструкторы на сущность** (`SetParty Party | …`, не
+      generic `SetEntity tag value` — #N5, нет рассогласования тег↔значение) + доменные
+      команды; `apply : CrmOp → Base → Base` через `IndexedMap.insert/delete`. **`apply`
+      продвигает `nextId := max(nextId, id+1)`** на создающих ops (#N1 — иначе коллизии id
+      после рестарта).
+- [ ] **Недетерминизм (#N2):** `uuid`/время/random — НЕ в чистой транзакции; их генерит
+      IO-обработчик и **передаёт параметром** в построитель транзакции → оседают в `Op`.
 - [ ] `data Err` (NotFound|Conflict|Insufficient|InvalidTransition|Forbidden|Invariant).
 - [ ] `walSerializeOp`/`walDeserializeOp`; `WalConfig` через `mkWalConfigNoSnapshot`.
 - [ ] Типечек.
@@ -61,8 +70,10 @@
       транзакции — **одна length-prefixed запись + один `fsync`**; рваный хвост
       отбрасывается **целиком**. До операций со свободным текстом (тела заметок/сообщений).
 - [ ] В `Storage.WAL` — **`walTxn : WalHandle → (Base → Either Err (Base × List Op × A)) → IO (Either Err A)`**
-      (обобщение `walModify`; аппенд ops на коммит, no-op откат). Заодно по ADR:
-      `walRead → readMVar`, убрать снапшотные следы (`walOpCount`, `loadSnapshot`).
+      (обобщение `walModify`). **Порядок: durable ДО visible** — запись+`fsync`, и только при
+      успехе `putMVar base'`; **отказ записи WAL** (диск/IO) → восстановить старый `MVar`
+      (`onException`) + вернуть ошибку (#N4). Заодно по ADR: `walRead → readMVar`, убрать
+      снапшотные следы (`walOpCount`, `loadSnapshot`).
 - [ ] `Crm.Txn` — монада `Txn` (`return`/`_>>=_`/`getBase`/`abort`/**`emit`**, где
       `emit op = apply op + лог`), доменные «сеттеры»/команды поверх `emit`.
 - [ ] Типечек; (по возможности) набросок property-теста `live ≡ replay`.
