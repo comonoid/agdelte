@@ -21,40 +21,45 @@
 
 ## Фаза 0 — `IndexedMap` (генерик-инфра, `agdelte`)
 
-- [ ] `hs/Agdelte/IndexedMap.hs` — `IntMap V` + объявленные вторичные индексы
-      (`IntMap IntSet`), smart-конструкторы `insert/update/delete/lookup/byIndex`,
-      авто-поддержка индексов. Представление скрыто (абстрактный тип).
-- [ ] `src/Agdelte/Storage/IndexedMap.agda` — постулаты над ним (как `NatMap`):
-      `IndexedMap : Set → Set`, операции, экстрактор индекса `V → List ℕ`.
-- [ ] Типечек; (опц.) cabal-проба, что Haskell-структура компилируется.
-- **Ревью человека:** дизайн FFI-границы (§15.4).
+- [ ] `src/Agdelte/Storage/IndexedMap.agda` — **абстрактный Agda-модуль над `NatMap`**
+      (НЕ постулат-над-Haskell, концепт §3): record `{ primary : NatMap V ; indexes :
+      … NatMap (List ℕ) ; extractors : … (V → List ℕ) }`; smart-конструкторы
+      `insert/update/delete/lookup/byIndex` держат индексы **в Agda**. Конструктор
+      record'а **не экспортировать** (инкапсуляция). Нового `.hs` НЕ нужно.
+- [ ] Генерик property-тест: `indexes m ≡ rebuild (entries m)` после произвольной
+      последовательности операций.
+- [ ] Типечек.
+- **Ревью человека:** дизайн абстракции/инкапсуляции (§15.4).
 
 ## Фаза 1 — Записи домена (`services-core/Crm/Identity.agda`)
 
 - [ ] **Реструктурировать `Crm.Identity` в records-only:** убрать `CrmState`/`CrmOp`/
       `applyOp` (переедут в `Crm.Store`, Фаза 2), оставить только записи + их `Serialize`.
 - [ ] Добавить записи: `Engagement`, `Activity` (FK `engagementId`), `Participation`
-      (запись-факт M:N). `PartyRecord` — уже есть.
+      (запись-факт M:N, синтетич. `id`). `PartyRecord` — уже есть.
+- [ ] **uuid-слой (#3):** адресуемые сущности несут `uuid : String` (внешний id, §13).
 - [ ] `Serialize` для каждой (рекурсивный/выводимый), incl. вложенные значения.
 - [ ] Типечек + grep-страж нейтральности (нет вертикалей в `services-core`).
 
 ## Фаза 2 — `Crm.Store` (сборка состояния)
 
-- [ ] `Base` (таблицы на `IndexedMap`), `Indexes` (если что-то вне `IndexedMap`),
-      `CrmState = Base × Indexes`, `emptyBase`.
+- [ ] `Base` = **самоиндексирующиеся `IndexedMap`** по сущностям (`byUuid` на адресуемых;
+      `byEngagement`/`byParty` на `participations`), `emptyBase`. **Отдельного
+      `Indexes`/`reindex` НЕТ** (#2 — индексы внутри `IndexedMap`).
 - [ ] `data CrmOp` (`SetEntity`/`DeleteEntity` generic + доменные команды);
-      `apply : CrmOp → Base → Base` (через `IndexedMap`); `reindex : Base → Indexes`.
+      `apply : CrmOp → Base → Base` через `IndexedMap.insert/delete`. **uuid генерится в
+      транзакции и приходит в `Op`**, не в `apply` (#3 — детерминизм реплея).
 - [ ] `data Err` (NotFound|Conflict|Insufficient|InvalidTransition|Forbidden|Invariant).
 - [ ] `walSerializeOp`/`walDeserializeOp`; `WalConfig` через `mkWalConfigNoSnapshot`.
 - [ ] Типечек.
 
 ## Фаза 3 — Транзакции (`Crm.Txn` + `walTxn` в `agdelte`)
 
-- [ ] **WAL-фрейминг (prerequisite, см. концепт §18):** текущий лог строковый
-      (`splitLines`/`\n`) — `\n` в payload (тела заметок/сообщений) расщепит запись,
-      рваный хвост может распарситься неверно. Перейти на **length-prefix**
-      (`<len>:<байты>`, идиома `FFI.Shared.encodeListLP`) **до** операций со свободным
-      текстом. (Для `party`/`engagement` без переводов строк можно отложить, но заложить.)
+- [ ] **WAL: единица записи = ТРАНЗАКЦИЯ + фрейминг (prerequisite, концепт §18; #1).**
+      Сейчас лог строковый и пишет ops **по одной** → (1) краш между ops рвёт
+      **атомарность** транзакции; (2) `\n` в payload портит парс. Фикс: весь `List Op`
+      транзакции — **одна length-prefixed запись + один `fsync`**; рваный хвост
+      отбрасывается **целиком**. До операций со свободным текстом (тела заметок/сообщений).
 - [ ] В `Storage.WAL` — **`walTxn : WalHandle → (Base → Either Err (Base × List Op × A)) → IO (Either Err A)`**
       (обобщение `walModify`; аппенд ops на коммит, no-op откат). Заодно по ADR:
       `walRead → readMVar`, убрать снапшотные следы (`walOpCount`, `loadSnapshot`).
@@ -90,6 +95,13 @@
 Снапшоты · пейджинг · конкуренция/SSI · `Free Applicative` · тяжёлые доказательства ·
 кросс-коллекционные агрегаты · auto-index DSL · Postgres-путь · деньги/outbox/омни/UI
 (следующие срезы после ходячего ядра).
+
+## Открытые концы (спроектировать по ходу — концепт «Открытые концы»)
+
+- **authz/ACL** — где проверять (вероятно handler→`Txn`→ACL против `Base` → `Err Forbidden`); механизм ACL не спроектирован.
+- **эволюция схемы** — версионированный `Serialize` либо разовый WAL-конвертер при смене формата.
+- **рост WAL** — снапшотов нет → лог пухнет, старт-реплей линеен; на верхней границе ниши нужен чекпойнт/ротация.
+- **краш-тестирование recovery** — нет fault-injection-харнеса; durability не проверяется автоматически.
 
 ## Результат фазы 5
 
