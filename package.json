@@ -94,6 +94,9 @@
     "gen:pg-spike": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i server server/PgSpike.agda",
     "build:pg-spike": "npm run gen:pg-spike && cabal build pg-spike",
     "run:pg-spike": "cabal run pg-spike",
+    "gen:migrate-demo": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i server server/MigrateDemo.agda",
+    "build:migrate-demo": "npm run gen:migrate-demo && cabal build migrate-demo",
+    "run:migrate-demo": "cabal run migrate-demo",
     "clean": "rm -rf _build MAlonzo jAgda"
   },
   "keywords": [

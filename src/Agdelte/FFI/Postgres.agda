@@ -16,6 +16,7 @@ open import Agda.Builtin.IO using (IO)
 open import Agda.Builtin.Unit using (⊤)
 open import Agda.Builtin.String using (String)
 open import Agda.Builtin.Nat using (Nat)
+open import Agda.Builtin.List using (List)
 
 {-# FOREIGN GHC import qualified Agdelte.Postgres as PG #-}
 {-# FOREIGN GHC import qualified Data.Text as T #-}
@@ -49,6 +50,12 @@ postulate
 postulate
   queryJson : Pool → String → IO String
 {-# COMPILE GHC queryJson = PG.queryJson #-}
+
+-- Run a SELECT whose rows are a single text column; collect the values in
+-- order (e.g. applied migration versions). No JSON round-trip.
+postulate
+  queryCol : Pool → String → IO (List String)
+{-# COMPILE GHC queryCol = PG.queryCol #-}
 
 -- Run a non-row statement (INSERT/UPDATE/DELETE/DDL); returns affected rows.
 postulate

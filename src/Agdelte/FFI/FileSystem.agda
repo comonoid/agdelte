@@ -8,17 +8,18 @@ open import Agda.Builtin.IO using (IO)
 open import Agda.Builtin.Unit using (⊤)
 open import Agda.Builtin.String using (String)
 open import Agda.Builtin.Bool using (Bool)
+open import Agda.Builtin.List using (List)
 open import Data.Maybe using (Maybe)
 
 {-# FOREIGN GHC
   import qualified Data.Text    as T
   import qualified Data.Text.IO as TIO
   import System.IO (withFile, hFlush, IOMode(WriteMode, AppendMode))
-  import System.Directory (doesFileExist, createDirectoryIfMissing, renameFile, canonicalizePath)
+  import System.Directory (doesFileExist, createDirectoryIfMissing, renameFile, canonicalizePath, listDirectory)
   import qualified System.FilePath as FP
   import System.Posix.IO (handleToFd, closeFd, openFd, OpenMode(ReadOnly), defaultFileFlags)
   import System.Posix.Unistd (fileSynchronise)
-  import Data.List (isPrefixOf)
+  import Data.List (isPrefixOf, sort)
   import Control.Exception (try, SomeException)
 
   -- fsync the directory CONTAINING the given path, so a rename/create within
@@ -86,6 +87,22 @@ postulate
   mkdirp : String → IO ⊤
 
 {-# COMPILE GHC mkdirp = createDirectoryIfMissing True . T.unpack #-}
+
+------------------------------------------------------------------------
+-- Directory listing (entries only, names not paths), sorted ascending so
+-- ordered conventions like NNNN_*.sql apply deterministically.
+------------------------------------------------------------------------
+
+postulate
+  listDirectory : String → IO (List String)
+
+{-# FOREIGN GHC
+  listDirSortedHS :: T.Text -> IO [T.Text]
+  listDirSortedHS path = do
+    entries <- listDirectory (T.unpack path)
+    pure (sort (map T.pack entries))
+  #-}
+{-# COMPILE GHC listDirectory = listDirSortedHS #-}
 
 ------------------------------------------------------------------------
 -- Atomic rename

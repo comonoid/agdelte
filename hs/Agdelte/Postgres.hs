@@ -19,6 +19,7 @@ module Agdelte.Postgres
   ( Pool
   , newPool
   , queryJson
+  , queryCol
   , execSql
   , closePool
   ) where
@@ -101,6 +102,14 @@ queryJson pool sql = withConn pool $ \conn -> do
   case rows of
     (Only j : _) -> pure j
     []           -> pure "[]"
+
+-- | Run a SELECT whose rows are a single text column; collect the values in
+-- order. Generic untyped read for one column (e.g. applied migration versions),
+-- avoiding a JSON round-trip.
+queryCol :: Pool -> Text -> IO [Text]
+queryCol pool sql = withConn pool $ \conn -> do
+  rows <- query conn (mkQuery (TE.encodeUtf8 sql) ()) :: IO [Only Text]
+  pure (map fromOnly rows)
 
 -- | Run a non-row statement (INSERT/UPDATE/DELETE/DDL). Returns the number of
 -- affected rows (0 for DDL).
