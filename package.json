@@ -122,8 +122,7 @@
     "gen:json-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i server server/JsonTest.agda",
     "test:json-ffi": "npm run gen:json-test && cabal build json-test && cabal run json-test",
     "gen:psych-schedule-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i /home/n/.agda/agdelte-pack-psych -i server server/PsychScheduleTest.agda",
-    "test:psych-schedule": "npm run gen:psych-schedule-test && cabal build psych-schedule-test && cabal run psych-schedule-test",
-    "build:psych-web": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i /home/n/.agda/agdelte-pack-psych /home/n/.agda/agdelte-pack-psych/Psych/Web.agda"
+    "test:psych-schedule": "npm run gen:psych-schedule-test && cabal build psych-schedule-test && cabal run psych-schedule-test"
   },
   "keywords": [
     "agda",
