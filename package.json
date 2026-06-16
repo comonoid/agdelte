@@ -115,7 +115,12 @@
     "gen:store-txn-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i /home/n/.agda/agdelte-store -i server server/StoreTxnTest.agda",
     "test:store-txn": "npm run gen:store-txn-test && cabal build store-txn-test && cabal run store-txn-test",
     "gen:courses-smoke-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i /home/n/.agda/agdelte-courses -i server server/CoursesSmokeTest.agda",
-    "test:courses-smoke": "npm run gen:courses-smoke-test && cabal build courses-smoke-test && cabal run courses-smoke-test"
+    "test:courses-smoke": "npm run gen:courses-smoke-test && cabal build courses-smoke-test && cabal run courses-smoke-test",
+    "test:ghc": "bash scripts/run-ghc-tests.sh",
+    "test:api": "npm run build:crm-server && bash scripts/api-test.sh",
+    "test:crm-all": "npm run test:ghc && npm run test:api",
+    "gen:json-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i server server/JsonTest.agda",
+    "test:json-ffi": "npm run gen:json-test && cabal build json-test && cabal run json-test"
   },
   "keywords": [
     "agda",
