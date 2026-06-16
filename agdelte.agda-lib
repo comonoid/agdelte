@@ -4,3 +4,4 @@ include:
 depend:
   standard-library
   agdelte-store
+  agdelte-payments
