@@ -14,6 +14,9 @@ open import Data.Maybe using (Maybe)
 {-# FOREIGN GHC
   import qualified Data.Text    as T
   import qualified Data.Text.IO as TIO
+  import qualified Data.ByteString as BS
+  import Data.Text.Encoding (decodeUtf8With)
+  import Data.Text.Encoding.Error (lenientDecode)
   import System.IO (withFile, hFlush, IOMode(WriteMode, AppendMode))
   import System.Directory (doesFileExist, createDirectoryIfMissing, renameFile, canonicalizePath, listDirectory)
   import qualified System.FilePath as FP
@@ -51,6 +54,17 @@ open import Data.Maybe using (Maybe)
       fd <- handleToFd h
       fileSynchronise fd
       closeFd fd
+
+  -- Lenient WAL read: read raw bytes (no decode can fail), then decode UTF-8
+  -- replacing any malformed bytes with U+FFFD. A crash mid-append leaves a torn
+  -- UTF-8 tail; a STRICT decode would throw → the whole log would be discarded
+  -- as "" (total loss). Leniently the torn tail becomes replacement chars, which
+  -- the length-prefix record framing then drops as a torn record. Missing /
+  -- unreadable file → "".
+  readWalLogHS :: T.Text -> IO T.Text
+  readWalLogHS path = do
+    r <- try (BS.readFile (T.unpack path)) :: IO (Either SomeException BS.ByteString)
+    either (const (return T.empty)) (return . decodeUtf8With lenientDecode) r
   #-}
 
 ------------------------------------------------------------------------
@@ -123,6 +137,10 @@ postulate
 
 postulate
   readFileSafe : String → IO String
+  -- Durable, decode-safe WAL read (raw bytes → lenient UTF-8). Use for the WAL
+  -- log so a torn-tail (partial last write) never throws on decode and discards
+  -- the whole history; the record framing drops just the torn record.
+  readWalLog : String → IO String
 
 {-# FOREIGN GHC
   readFileSafeImpl :: T.Text -> IO T.Text
@@ -133,6 +151,7 @@ postulate
       Left _        -> return T.empty
   #-}
 {-# COMPILE GHC readFileSafe = readFileSafeImpl #-}
+{-# COMPILE GHC readWalLog   = readWalLogHS     #-}
 
 ------------------------------------------------------------------------
 -- Confined read / write — for paths derived from untrusted input.

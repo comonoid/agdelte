@@ -19,7 +19,7 @@ open import Relation.Nullary using (yes; no)
 
 open import Agdelte.Auth.Role using (Role; Student)
 open import Agdelte.Storage.NatMap as NM using (NatMap)
-open import Agdelte.Storage.WAL using (WalConfig; mkWalConfig; WalHandle; walOpen; walStep; walRead; splitLines)
+open import Agdelte.Storage.WAL using (WalConfig; mkWalConfig; WalHandle; walOpen; walStep; walRead)
 
 ------------------------------------------------------------------------
 -- ID types (all ℕ)
@@ -599,43 +599,14 @@ deserializeOp line = dispatch (splitPipe line)
       else nothing
     dispatch _ = nothing
 
-serializeState : AppState → String
-serializeState s = unlines allOps
-  where
-    unlines : List String → String
-    unlines []       = ""
-    unlines (x ∷ []) = x
-    unlines (x ∷ xs) = x ++ "\n" ++ unlines xs
-
-    allOps : List String
-    allOps =
-      map (λ u → serializeOp (AddUser u)) (NM.values (asUsers s))
-      ++L map (λ c → serializeOp (AddCourse c)) (NM.values (asCourses s))
-      ++L map (λ p → serializeOp (AddPlan p)) (NM.values (asPlans s))
-      ++L map (λ sub → serializeOp (AddSubscription sub)) (NM.values (asSubscriptions s))
-      ++L map (λ p → serializeOp (AddPurchase p)) (NM.values (asPurchases s))
-      ++L map (λ p → serializeOp (SetProgress p)) (asProgress s)
-      ++L map (λ r → serializeOp (AddReview r)) (NM.values (asReviews s))
-      ++L map (λ c → serializeOp (AddComment c)) (NM.values (asComments s))
-
-deserializeState : String → AppState
-deserializeState str = replay emptyAppState (splitLines str)
-  where
-    replay : AppState → List String → AppState
-    replay s []       = s
-    replay s (l ∷ ls) with deserializeOp l
-    ... | nothing = replay s ls
-    ... | just op = replay (applyOp op s) ls
-
 ------------------------------------------------------------------------
--- WAL config for the app
+-- WAL config for the app (WAL-only: no snapshot fields, see ADR 0001)
 ------------------------------------------------------------------------
 
-appWalConfig : String → String → WalConfig AppState AppOp
-appWalConfig logPath snapPath = mkWalConfig
-  logPath snapPath
+appWalConfig : String → WalConfig AppState AppOp
+appWalConfig logPath = mkWalConfig
+  logPath
   applyOp serializeOp deserializeOp
-  serializeState deserializeState
   emptyAppState
 
 ------------------------------------------------------------------------

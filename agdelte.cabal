@@ -81,3 +81,17 @@ executable crmstore-test
   ghc-options:      -main-is MAlonzo.Code.CrmStoreTest -w -rtsopts
   default-language: GHC2021
   build-depends:    base, text, containers
+
+-- walrec-test: Phase 3 fault-injection test for Agdelte.Storage.WAL recovery
+-- (lenient decode, torn-tail drop, transaction atomicity, mid-corruption refusal).
+-- Pulls the full server FFI closure (FFI.Server → Agdelte.Http/AgentServer/...).
+executable walrec-test
+  main-is:          MAlonzo/Code/WalRecoveryTest.hs
+  hs-source-dirs:   _build, hs
+  ghc-options:      -main-is MAlonzo.Code.WalRecoveryTest -w -threaded -rtsopts
+  default-language: GHC2021
+  build-depends:
+      base, bytestring, containers, text, time
+    , warp, wai, wai-websockets, websockets, http-types, case-insensitive
+    , network, stm, async, unix, directory, filepath
+    , hpgsql, Only

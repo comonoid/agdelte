@@ -49,6 +49,13 @@ postulate
 {-# COMPILE GHC bracket = \_ _ -> Ex.bracket #-}
 {-# COMPILE GHC onException = \_ _ -> Ex.onException #-}
 
+-- | Abort the process loudly with a message. Used when WAL recovery hits
+-- mid-log corruption: refusing to start beats silently dropping committed data.
+postulate
+  die : ∀ {A : Set} → String → IO A
+
+{-# COMPILE GHC die = \_ msg -> ioError (userError (T.unpack msg)) #-}
+
 -- Try an IO action, catching all exceptions as Left String
 open import Data.Maybe using (Maybe; just; nothing)
 
@@ -106,11 +113,36 @@ postulate
   newMVar   : ∀ {A : Set} → A → IO (MVar A)
   takeMVar  : ∀ {A : Set} → MVar A → IO A
   putMVar   : ∀ {A : Set} → MVar A → A → IO ⊤
+  -- Non-destructive snapshot read: returns the current value without emptying
+  -- the MVar, so concurrent readers don't exclude one another (state is
+  -- immutable, so a pointer read is a consistent snapshot).
+  readMVar  : ∀ {A : Set} → MVar A → IO A
 
 {-# COMPILE GHC MVar     = type MVar.MVar #-}
 {-# COMPILE GHC newMVar  = \_ -> MVar.newMVar  #-}
 {-# COMPILE GHC takeMVar = \_ -> MVar.takeMVar #-}
 {-# COMPILE GHC putMVar  = \_ -> MVar.putMVar  #-}
+{-# COMPILE GHC readMVar = \_ -> MVar.readMVar #-}
+
+-- A native Haskell 2-tuple at the FFI boundary (Agda's Σ/_×_ compiles to a
+-- record MAlonzo can't pass to a (,)-typed callback). modifyMVarMasked's
+-- callback must return IO (newState, result); this is that pair.
+postulate
+  Pair2   : Set → Set → Set
+  mkPair2 : ∀ {A B : Set} → A → B → Pair2 A B
+{-# COMPILE GHC Pair2   = type (,)        #-}
+{-# COMPILE GHC mkPair2 = \_ _ -> (,)     #-}
+
+-- | Exception-safe read-modify-write under a mask.
+-- Takes the MVar, runs the callback with ASYNC EXCEPTIONS MASKED; on success
+-- puts the returned new state and yields the result; on ANY exception (incl.
+-- one thrown while FORCING the pure callback) restores the original value and
+-- re-raises. This is the whole critical section done right — durable-before-
+-- visible holds because the callback performs its durable write before
+-- returning the new state that modifyMVarMasked then makes visible.
+postulate
+  modifyMVarMasked : ∀ {A B : Set} → MVar A → (A → IO (Pair2 A B)) → IO B
+{-# COMPILE GHC modifyMVarMasked = \_ _ -> MVar.modifyMVarMasked #-}
 
 ------------------------------------------------------------------------
 -- HTTP Server
