@@ -23,15 +23,25 @@ Postgres-путь (hpgsql, раннер миграций, схема §5/§14.3)
 рецепт GHC-сборки и грабли (zlib `LIBRARY_PATH`, `-threaded`, устаревший `.agdai`-кэш) —
 в **`docs/POSTGRES-SPIKE.md`**.
 
-**Раскладка слоёв и извлекаемость.** CRM должен оставаться извлекаемым в отдельный репозиторий:
-- инфраструктура фреймворка (Postgres-FFI, пул, jobs, раннер миграций) — в `agdelte` (`src/Agdelte/**`,
-  `hs/Agdelte/**`), домен-агностично;
-- CRM-специфика — в отдельных top-level каталогах `services-core/`, `packs/`, `app/`, каждый со своим
-  `.agda-lib` (`depend: agdelte, standard-library`), чтобы поднять их одним `git mv` в новый репозиторий.
+**Раскладка слоёв — ДЕКОМПОЗИЦИЯ ЗАВЕРШЕНА (2026-06-16).** Монолит разрезан на отдельные
+**зарегистрированные Agda-библиотеки** в `~/.agda/` (каждая — свой каталог + git-репо;
+реестр `~/.agda/libraries`; `.agda-lib` с `name/include/depend`). Имена модулей сохранены
+(`Agdelte.*`; CRM — `Crm.*`), поэтому строки import у потребителей не менялись. Граф (вниз):
+- **`agdelte-store`** (`~/.agda/agdelte-store`, depend: stdlib) — генерик-стор: `Agdelte.Storage.`
+  `{NatMap,IndexedMap,Wire,WAL,Txn,FFI}` (встроенный event-sourced стор + самодостаточный FFI);
+- **`agdelte-payments`** (depend: stdlib) — `Agdelte.Payment.YooKassa` (ЮKassa-клиент, свой http-client);
+- **`agdelte`** (этот репо, `src/`+`hs/`) — **чистый фреймворк**: reactive UI, `FFI.*`, generic
+  `Auth.{JWT,Middleware,Role,SignedUrl,Client}`, `I18n`, `Email`, HTTP-сервер. Импортирует домена ноль;
+- **`agdelte-crm`** (`~/.agda/agdelte-crm`, depend: stdlib+store+agdelte) — `Crm.*` + `ServicesCore`;
+- **`agdelte-courses`** (depend: stdlib+store+agdelte+payments) — легаси видео-платформа
+  (`Storage.AppStore`, `Payment` хендлеры, `Auth.{Guard,Handler}`, `Html/Controls/{Cart,…}`).
+- **app-слой остался в этом репо:** `server/` (CrmServer + тесты), `agdelte.cabal`, `package.json`
+  gen-скрипты (резолвят либы через `-i ~/.agda/agdelte-{store,crm,courses}`), `docs/`. `app/`/`packs/` —
+  скелеты (README/SQL). Postgres-FFI/пул/раннер миграций — генерик-инфра, остаются в `agdelte`.
 
-**Два grep-стража нейтральности (раздел 4):**
-- в `agdelte/` (т.е. `src/`, `hs/`) нет слов `party|engagement|услуг…`;
-- в `services-core/` нет слов `psych|vet|transfer|медцентр…`.
+**Два grep-стража нейтральности** (`scripts/check-neutrality.sh`):
+- в `agdelte/` (`src/`, `hs/`) нет слов `party|engagement|услуг…`;
+- в CRM-ядре (`~/.agda/agdelte-crm/Crm`, через `$AGDELTE_CRM_DIR`) нет `psych|vet|transfer|медцентр…`.
 
 ## Environment
 
