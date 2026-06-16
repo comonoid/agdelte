@@ -42,15 +42,17 @@
 
 ## Фаза 1 — Записи домена (`services-core/Crm/Identity.agda`)
 
-- [ ] **Реструктурировать `Crm.Identity` в records-only:** убрать `CrmState`/`CrmOp`/
-      `applyOp` (переедут в `Crm.Store`, Фаза 2), оставить только записи + их `Serialize`.
-- [ ] Добавить записи: `Engagement`, `Activity` (FK `engagementId`), `Participation`
-      (запись-факт M:N, синтетич. `id`). `PartyRecord` — уже есть.
-- [ ] **uuid-слой (#3):** адресуемые сущности несут `uuid : String` (внешний id, §13).
-- [ ] **`Agdelte.Json`-кодек** для каждой (комбинаторами; самоописывающий → аддитивная
-      эволюция схемы обратно-совместима, #D). **Round-trip `decode (encode x) ≡ just x` на
-      КАЖДЫЙ тип** (#N6 — кривой `decode` тихо испортит реплей).
-- [ ] Типечек + grep-страж нейтральности (нет вертикалей в `services-core`).
+- [x] **`Crm.Identity` → records-only:** убраны `CrmState`/`CrmOp`/`applyOp` (переедут в
+      `Crm.Store`, Фаза 2). ✓
+- [x] Записи: `Party`, `Engagement`, `Activity` (FK `aEngagementId`), `Participation`
+      (M:N-факт, синтетич. `prId`) + `PartyType`/`ActStatus`/`Role`. ✓ типечек.
+- [x] **uuid-слой (#3):** `Party`/`Engagement`/`Activity` несут `pUuid`/`eUuid`/`aUuid`. ✓
+- [ ] **Чистый Agda-кодек** `encode/decode` на каждый тип. ⚠️ Аудит кодом: `Agdelte.Json` И
+      `FFI.Shared` (`readℕ`/`encodeListLP`) — **JS-only**, на GHC не компилятся → **НЕ они**.
+      Кодек = `showℕ` (encode, чистый) + **чистый `readℕ`** + length-prefix `<len>:<s>`,
+      GHC+JS. **Позиционный**, не самоописывающий (#6 → версия/конвертер). **Round-trip
+      `decode (encode x) ≡ just x` на каждый тип** (#N6) — рантайм-тест (как у IndexedMap).
+- [x] grep-страж нейтральности (нет вертикалей). ✓
 
 ## Фаза 2 — `Crm.Store` (сборка состояния)
 

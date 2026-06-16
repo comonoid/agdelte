@@ -1,106 +1,100 @@
 {-# OPTIONS --without-K #-}
 
--- CRM identity domain (SPEC §5.2) on the WAL + in-memory engine.
--- Reference entity slice: `party`. Mirrors the AppStore pattern — records +
--- NatMap "tables" + an Op sum type + a pure applyOp — but neutral (services-core).
+-- CRM domain records (SPEC §5.2) — records ONLY (no state/ops/queries; those live
+-- in Crm.Store, Phase 2). Neutral service-core domain on the WAL + in-memory engine.
 --
--- Tenancy is intentionally omitted for the single-operator MVP (one operator ⇒
--- multitenancy is near-pointless); it returns when this becomes SaaS. Persistence
--- (WalConfig serialization) is wired in a later Store module once entities settle.
+-- Addressable entities carry `uuid` (external id, §13) alongside the internal `id`.
+-- M:N is a fact-record (Participation). Tenancy omitted for the single-operator MVP.
+-- (Concept: docs/concepts/storage-model.md §1.)
 module Crm.Identity where
 
-open import Data.Nat using (ℕ; suc; _⊔_)
+open import Data.Nat using (ℕ)
 open import Data.String using (String)
-open import Data.Maybe using (Maybe; just; nothing)
-open import Data.Bool using (Bool; true; false; if_then_else_)
-open import Data.List using (List; []; _∷_)
-
-open import Agdelte.Storage.NatMap as NM using (NatMap)
+open import Data.Maybe using (Maybe)
 
 ------------------------------------------------------------------------
--- Party (person | org) — SPEC §5.1/§5.2
+-- Shared
 ------------------------------------------------------------------------
 
-PartyId : Set
+PartyId Uuid : Set
 PartyId = ℕ
+Uuid     = String
+
+Role : Set       -- participation role — config-driven (e.g. "client","provider","payer")
+Role = String
 
 data PartyType : Set where
   Person : PartyType
   Org    : PartyType
 
-record PartyRecord : Set where
+data ActStatus : Set where
+  Scheduled : ActStatus
+  Completed : ActStatus
+  Canceled  : ActStatus
+  NoShow    : ActStatus
+
+------------------------------------------------------------------------
+-- Party (person | org) — §5.1/§5.2
+------------------------------------------------------------------------
+
+record Party : Set where
   constructor mkParty
   field
-    pId          : PartyId
+    pId          : ℕ
+    pUuid        : Uuid             -- external id (§13)
     pType        : PartyType
     pDisplayName : String
-    pTz          : String          -- IANA tz; reminder rendering (§5.4)
-    pCreatedAt   : ℕ               -- unix seconds
-    pDeletedAt   : Maybe ℕ         -- soft-delete (§5.7); nothing = live
+    pTz          : String           -- IANA tz; reminder rendering (§5.4)
+    pCreatedAt   : ℕ                -- unix seconds (supplied from IO, §1)
+    pDeletedAt   : Maybe ℕ          -- soft-delete (§5.7); nothing = live
 
-open PartyRecord public
+open Party public
 
 ------------------------------------------------------------------------
--- In-memory state
+-- Engagement (the "кейс") — §5.2
 ------------------------------------------------------------------------
 
-record CrmState : Set where
-  constructor mkCrmState
+record Engagement : Set where
+  constructor mkEngagement
   field
-    csParties    : NatMap PartyRecord
-    csNextPartyId : ℕ
+    eId        : ℕ
+    eUuid      : Uuid
+    eCaseType  : ℕ                  -- case_type id
+    eStage     : ℕ                  -- current stage id
+    eTitle     : Maybe String
+    eCreatedAt : ℕ
+    eDeletedAt : Maybe ℕ
 
-open CrmState public
-
-emptyCrmState : CrmState
-emptyCrmState = mkCrmState NM.empty 0
-
-------------------------------------------------------------------------
--- Operations (WAL log entries)
-------------------------------------------------------------------------
-
-data CrmOp : Set where
-  CreateParty     : PartyRecord → CrmOp
-  RenameParty     : PartyId → String → CrmOp
-  SoftDeleteParty : PartyId → ℕ → CrmOp        -- id, deletion timestamp
+open Engagement public
 
 ------------------------------------------------------------------------
--- Apply (pure state transition)
+-- Activity (session/meeting; 1:N under engagement) — §5.3
 ------------------------------------------------------------------------
 
-private
-  renameIn : PartyId → String → NatMap PartyRecord → NatMap PartyRecord
-  renameIn pid name ps with NM.lookup pid ps
-  ... | nothing = ps
-  ... | just p  = NM.insert pid (record p { pDisplayName = name }) ps
+record Activity : Set where
+  constructor mkActivity
+  field
+    aId           : ℕ
+    aUuid         : Uuid
+    aEngagementId : ℕ               -- FK → engagement (1:N)
+    aStartsAt     : ℕ               -- unix seconds
+    aStatus       : ActStatus
+    aCreatedAt    : ℕ
+    aDeletedAt    : Maybe ℕ
 
-  softDeleteIn : PartyId → ℕ → NatMap PartyRecord → NatMap PartyRecord
-  softDeleteIn pid at ps with NM.lookup pid ps
-  ... | nothing = ps
-  ... | just p  = NM.insert pid (record p { pDeletedAt = just at }) ps
-
-applyOp : CrmOp → CrmState → CrmState
-applyOp (CreateParty p) s =
-  record s { csParties    = NM.insert (pId p) p (csParties s)
-           ; csNextPartyId = suc (pId p) ⊔ csNextPartyId s
-           }
-applyOp (RenameParty pid name) s =
-  record s { csParties = renameIn pid name (csParties s) }
-applyOp (SoftDeleteParty pid at) s =
-  record s { csParties = softDeleteIn pid at (csParties s) }
+open Activity public
 
 ------------------------------------------------------------------------
--- Queries (read-side, over in-memory state)
+-- Participation (M:N party↔engagement, with role) — fact-record, §5.1
 ------------------------------------------------------------------------
 
-lookupParty : PartyId → CrmState → Maybe PartyRecord
-lookupParty pid s = NM.lookup pid (csParties s)
+record Participation : Set where
+  constructor mkParticipation
+  field
+    prId           : ℕ              -- synthetic row id (primary key)
+    prEngagementId : ℕ
+    prPartyId      : ℕ
+    prRole         : Role
+    prCreatedAt    : ℕ
 
--- Live (non-soft-deleted) parties.
-liveParties : CrmState → List PartyRecord
-liveParties s = NM.foldl keep [] (csParties s)
-  where
-    keep : List PartyRecord → ℕ → PartyRecord → List PartyRecord
-    keep acc _ p with pDeletedAt p
-    ... | nothing = p ∷ acc
-    ... | just _  = acc
+open Participation public
