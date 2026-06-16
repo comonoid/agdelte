@@ -28,8 +28,9 @@ open import Data.Maybe using (Maybe; just; nothing)
 open import Data.List using (List; []; _∷_)
 open import Data.String using () renaming (_++_ to _<>_)
 
-open import Agdelte.FFI.Server using (_>>=_; _>>_; pure; putStrLn; tryCatch)
-open import Agdelte.FFI.FileSystem using (writeFileText; appendWalRecord)
+open import Agdelte.Storage.FFI using (_>>=_; _>>_; pure; tryCatch; writeFileText; appendWalRecord)
+
+postulate putStrLn : String → IO ⊤
 open import Agdelte.Storage.Wire using (lp)
 open import Agdelte.Storage.WAL using
   ( WalConfig; mkWalConfig; WalHandle; walOpen; walRead; walTxn
@@ -58,7 +59,9 @@ postulate
   flipMidByte : String → IO ⊤
 {-# FOREIGN GHC
   import qualified Data.Text as T
+  import qualified Data.Text.IO as TIO
   import qualified Data.ByteString as BS
+  import Data.Bits (xor)
   corruptCyrillicTailHS :: T.Text -> IO ()
   corruptCyrillicTailHS path =
     BS.appendFile (T.unpack path) (BS.pack [0x33,0x30,0x3a,0x31,0x32,0x33,0x3a,0xd0,0x9f,0xd0])
@@ -69,11 +72,10 @@ postulate
         b = BS.index bs i
         bs' = BS.concat [BS.take i bs, BS.singleton (b `xor` 0x20), BS.drop (i+1) bs]
     BS.writeFile (T.unpack path) bs'
-    where xor = Data.Bits.xor
   #-}
-{-# FOREIGN GHC import qualified Data.Bits #-}
+{-# COMPILE GHC putStrLn            = TIO.putStrLn #-}
 {-# COMPILE GHC corruptCyrillicTail = corruptCyrillicTailHS #-}
-{-# COMPILE GHC flipMidByte = flipMidByteHS #-}
+{-# COMPILE GHC flipMidByte         = flipMidByteHS #-}
 
 ------------------------------------------------------------------------
 -- Config + sample data
