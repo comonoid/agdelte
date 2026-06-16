@@ -48,16 +48,32 @@ open import Crm.Txn using (Txn; emit; abort; _>>T_; runTxn)
 -- D0 is invalid UTF-8 (a strict reader would throw on it).
 ------------------------------------------------------------------------
 
+-- Append a TORN record (valid CRC-format prefix, payload incomplete + cut
+-- mid-cyrillic): "30:123:" then D0 9F D0. Declared payload = 30 bytes, present = 3
+-- → torn → dropped. The lone D0 is invalid UTF-8 (a strict reader would throw).
 postulate
   corruptCyrillicTail : String → IO ⊤
+  -- Flip one byte in the middle of an existing record's payload → CRC mismatch →
+  -- recovery must refuse to start (die), not silently accept (M5).
+  flipMidByte : String → IO ⊤
 {-# FOREIGN GHC
   import qualified Data.Text as T
   import qualified Data.ByteString as BS
   corruptCyrillicTailHS :: T.Text -> IO ()
   corruptCyrillicTailHS path =
-    BS.appendFile (T.unpack path) (BS.pack [0x33,0x30,0x3a,0xd0,0x9f,0xd0])
+    BS.appendFile (T.unpack path) (BS.pack [0x33,0x30,0x3a,0x31,0x32,0x33,0x3a,0xd0,0x9f,0xd0])
+  flipMidByteHS :: T.Text -> IO ()
+  flipMidByteHS path = do
+    bs <- BS.readFile (T.unpack path)
+    let i = BS.length bs `div` 2
+        b = BS.index bs i
+        bs' = BS.concat [BS.take i bs, BS.singleton (b `xor` 0x20), BS.drop (i+1) bs]
+    BS.writeFile (T.unpack path) bs'
+    where xor = Data.Bits.xor
   #-}
+{-# FOREIGN GHC import qualified Data.Bits #-}
 {-# COMPILE GHC corruptCyrillicTail = corruptCyrillicTailHS #-}
+{-# COMPILE GHC flipMidByte = flipMidByteHS #-}
 
 ------------------------------------------------------------------------
 -- Config + sample data
@@ -164,5 +180,24 @@ scenario4 =
   check "txn-iofailed"      (ioFailed? o) >>
   check "iofail-state-intact" (nextId st == 1)
 
+------------------------------------------------------------------------
+-- S5 — CRC mismatch on a committed record → refuse to start (M5)
+------------------------------------------------------------------------
+
+path5 = "/tmp/agdelte-wal-rec-5.log"
+
+scenario5 : IO ⊤
+scenario5 =
+  writeFileText path5 "" >>
+  walOpen (cfg path5) >>= λ h →
+  walTxn h (runTxn tx2) >>= λ _ →        -- a real committed record
+  flipMidByte path5 >>                    -- bit-rot one payload byte → CRC breaks
+  tryCatch (walOpen (cfg path5)) >>= λ r →
+  check "crc-mismatch-refused" (refused r)
+  where
+    refused : ∀ {A : Set} → Maybe A → Bool
+    refused (just _) = false
+    refused nothing  = true
+
 main : IO ⊤
-main = scenario1 >> scenario2 >> scenario3 >> scenario4
+main = scenario1 >> scenario2 >> scenario3 >> scenario4 >> scenario5

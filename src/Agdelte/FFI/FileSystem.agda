@@ -24,7 +24,8 @@ open import Data.Maybe using (Maybe)
   import System.Posix.IO (handleToFd, closeFd, openFd, OpenMode(ReadOnly), defaultFileFlags)
   import System.Posix.Unistd (fileSynchronise)
   import Data.List (isPrefixOf, sort, foldl')
-  import Data.Word (Word8)
+  import Data.Word (Word8, Word32)
+  import Data.Bits (xor, shiftR, (.&.))
   import Control.Monad (when)
   import Control.Exception (try, SomeException)
 
@@ -63,14 +64,27 @@ open import Data.Maybe using (Maybe)
   -- preserving (a torn multi-byte char → one+ U+FFFD), so a char-length prefix
   -- can mis-frame a torn tail. Byte-length framing is exact: a torn tail always
   -- has fewer bytes than its declared length → dropped.
+  --
+  -- Record = `<payloadByteLen>:<crc32>:<payload-utf8>` (lengths/crc in ASCII
+  -- decimal). The CRC32 over the payload distinguishes a CORRUPT committed record
+  -- (full bytes present, crc mismatch → refuse to start) from a TORN TAIL (payload
+  -- shorter than declared → drop). Without it, a bit-rotted length digit on a
+  -- mid-stream record impersonated a torn tail and silently truncated the log (M5).
 
-  -- Durably append one record `<byteLen>:<payload-utf8>` + fsync. On first create
-  -- also fsync the parent directory, so the new file's directory entry survives
-  -- power loss (the file fsync persists data+inode, but not the dir entry).
+  -- pure CRC32 (poly 0xEDB88320), bit-by-bit (no table/dep); fine at recovery time.
+  walCrcStep :: Word32 -> Word8 -> Word32
+  walCrcStep crc byte = go (8 :: Int) (crc `xor` fromIntegral byte)
+    where go 0 c = c
+          go k c = go (k - 1) (if c .&. 1 /= 0 then (c `shiftR` 1) `xor` 0xEDB88320 else c `shiftR` 1)
+  walCrc32 :: BS.ByteString -> Word32
+  walCrc32 bs = 0xFFFFFFFF `xor` BS.foldl' walCrcStep 0xFFFFFFFF bs
+
+  -- Durably append one CRC-framed record + fsync. On first create also fsync the
+  -- parent directory, so the new file's directory entry survives power loss.
   appendWalRecordHS :: T.Text -> T.Text -> IO ()
   appendWalRecordHS path payload = do
     let pbytes = encodeUtf8 payload
-        rec    = BC.pack (show (BS.length pbytes) ++ ":") <> pbytes
+        rec    = BC.pack (show (BS.length pbytes) ++ ":" ++ show (walCrc32 pbytes) ++ ":") <> pbytes
     existed <- doesFileExist (T.unpack path)
     withBinaryFile (T.unpack path) AppendMode $ \h -> do
       BS.hPut h rec
@@ -83,14 +97,15 @@ open import Data.Maybe using (Maybe)
   walIsDigit :: Word8 -> Bool
   walIsDigit w = w >= 48 && w <= 57
 
+  -- decimal digit run → Integer (no Int overflow, L8)
+  walDigitsToInteger :: BS.ByteString -> Integer
+  walDigitsToInteger = BS.foldl' (\a w -> a * 10 + toInteger (w - 48)) 0
+
   -- Read the WAL as bytes and split into complete records at byte granularity.
-  --   Just records — every COMPLETE record's payload (decoded), torn tail dropped;
-  --   Nothing       — mid-stream corruption (a record boundary that isn't
-  --                   `<asciiDigits>:` — the single-writer never emits that, so it
-  --                   means real corruption → caller refuses to start).
-  -- A complete record's bytes are exactly the intact UTF-8 the writer wrote, so
-  -- decoding them is unambiguous (lenient is a no-op on valid UTF-8). Missing /
-  -- unreadable file → Just [] (empty log).
+  --   Just records — every COMPLETE, CRC-valid record's payload (decoded), torn tail dropped;
+  --   Nothing       — corruption: bad header, an over-long digit run (>18, L8), or a
+  --                   CRC mismatch on a fully-present record (M5) → caller refuses to start.
+  -- Missing / unreadable file → Just [] (empty log).
   readWalRecordsHS :: T.Text -> IO (Maybe [T.Text])
   readWalRecordsHS path = do
     r <- try (BS.readFile (T.unpack path)) :: IO (Either SomeException BS.ByteString)
@@ -99,22 +114,30 @@ open import Data.Maybe using (Maybe)
       Right bs -> walGo bs []
     where
       walGo bs acc
-        | BS.null bs = Just (reverse acc)                       -- clean end
+        | BS.null bs = Just (reverse acc)                          -- clean end
         | otherwise =
-            case BS.elemIndex 0x3a bs of                        -- ':' = 0x3a
-              Nothing -> if BS.all walIsDigit bs
-                         then Just (reverse acc)                 -- torn digit-only header → drop
-                         else Nothing                           -- non-digit junk → corruption
+            case BS.elemIndex 0x3a bs of                           -- 1st ':'
+              Nothing -> if BS.all walIsDigit bs then Just (reverse acc) else Nothing
               Just i  ->
-                let digits = BS.take i bs
-                    rest   = BS.drop (i + 1) bs
-                in if BS.null digits || not (BS.all walIsDigit digits)
-                   then Nothing                                 -- bad header → corruption
-                   else let n = foldl' (\a w -> a * 10 + fromIntegral (w - 48)) 0 (BS.unpack digits)
-                        in if BS.length rest < n
-                           then Just (reverse acc)              -- incomplete body → torn tail → drop
-                           else walGo (BS.drop n rest)
-                                      (decodeUtf8With lenientDecode (BS.take n rest) : acc)
+                let lenD    = BS.take i bs
+                    afterL  = BS.drop (i + 1) bs
+                in if BS.null lenD || not (BS.all walIsDigit lenD) || BS.length lenD > 18
+                   then Nothing                                    -- bad / absurd length header
+                   else case BS.elemIndex 0x3a afterL of           -- 2nd ':'
+                          Nothing -> if BS.all walIsDigit afterL then Just (reverse acc) else Nothing
+                          Just j  ->
+                            let crcD = BS.take j afterL
+                                rest = BS.drop (j + 1) afterL
+                                n    = fromInteger (walDigitsToInteger lenD) :: Int
+                            in if BS.null crcD || not (BS.all walIsDigit crcD) || BS.length crcD > 10
+                               then Nothing                        -- bad crc header
+                               else if BS.length rest < n
+                                    then Just (reverse acc)        -- payload incomplete → torn tail
+                                    else let payload = BS.take n rest
+                                             more    = BS.drop n rest
+                                         in if toInteger (walCrc32 payload) == walDigitsToInteger crcD
+                                            then walGo more (decodeUtf8With lenientDecode payload : acc)
+                                            else Nothing            -- CRC mismatch → corruption → die
   #-}
 
 ------------------------------------------------------------------------

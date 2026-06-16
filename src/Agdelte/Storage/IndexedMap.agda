@@ -47,9 +47,14 @@ private
   addKey : ℕ → ℕ → IdxMap → IdxMap
   addKey key id im = NM.insert key (id ∷ fromMaybe [] (NM.lookup key im)) im
 
+  -- Remove `id` from `key`'s bucket; DELETE the key when the bucket becomes empty
+  -- so empty buckets don't accumulate monotonically with index-key history (L7).
+  -- byIndex already maps a missing key to [] (fromMaybe []), so this is behaviourally
+  -- invariant.
   removeKey : ℕ → ℕ → IdxMap → IdxMap
-  removeKey key id im =
-    NM.insert key (filterᵇ (λ x → not (x == id)) (fromMaybe [] (NM.lookup key im))) im
+  removeKey key id im with filterᵇ (λ x → not (x == id)) (fromMaybe [] (NM.lookup key im))
+  ... | []       = NM.delete key im
+  ... | (y ∷ ys) = NM.insert key (y ∷ ys) im
 
   addKeys : List ℕ → ℕ → IdxMap → IdxMap
   addKeys keys id im = foldr (λ k acc → addKey k id acc) im keys

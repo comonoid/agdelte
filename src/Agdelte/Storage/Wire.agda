@@ -10,11 +10,11 @@ module Agdelte.Storage.Wire where
 
 open import Agda.Builtin.Char using (primCharToNat; primCharEquality)
 open import Data.Char using (Char; isDigit)
-open import Data.Nat using (ℕ; zero; suc; _+_; _*_; _∸_)
+open import Data.Nat using (ℕ; zero; suc; _+_; _*_; _∸_; _≡ᵇ_)
 open import Data.Nat.Show using () renaming (show to showℕ)
 open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.Maybe using (Maybe; just; nothing)
-open import Data.List using (List; []; _∷_; splitAt)
+open import Data.List using (List; []; _∷_; splitAt; length)
 open import Data.Product using (_×_; _,_; proj₁; proj₂)
 open import Data.String using (String; toList; fromList) renaming (length to strLen; _++_ to _<>_)
 
@@ -52,13 +52,19 @@ private
   ... | true  = let r = takeDigits cs in (c ∷ proj₁ r , proj₂ r)
   ... | false = ([] , c ∷ cs)
 
--- read one `<len>:<payload>` from the front → (payload, rest)
+-- read one `<len>:<payload>` from the front → (payload, rest).
+-- splitAt silently clamps when n > length rest, so we REQUIRE the payload to be
+-- exactly n chars (length ≡ᵇ n) — an over-declared length is fail-closed (nothing)
+-- here instead of being silently delegated to the value codec (L9).
 readField : List Char → Maybe (String × List Char)
 readField cs with takeDigits cs
 ... | ([] , _)                  = nothing               -- no length digits
 ... | (d ∷ ds , [])             = nothing               -- no separator
 ... | (d ∷ ds , sep ∷ rest)     with primCharEquality sep ':' | readDigits 0 (d ∷ ds)
-...   | true | just n           = let sp = splitAt n rest in just (fromList (proj₁ sp) , proj₂ sp)
+...   | true | just n           = let sp = splitAt n rest in
+                                    if length (proj₁ sp) ≡ᵇ n
+                                    then just (fromList (proj₁ sp) , proj₂ sp)
+                                    else nothing          -- declared length not fully present
 ...   | _    | _                = nothing
 
 ------------------------------------------------------------------------
