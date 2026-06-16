@@ -25,7 +25,7 @@
     "test:dom": "node test/dom.test.js",
     "test:serialize": "node test/serialize.test.js",
     "test:video": "node test/video.test.js",
-    "test:auth": "node test/auth-http.test.js",
+    "test:auth": "npm run build:auth-client && node test/auth-http.test.js",
     "build:video": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/VideoDemo.agda",
     "build:tetris": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i examples examples/Tetris.agda",
     "test:all": "npm test && npm run test:smoke && npm run test:gl && npm run test:css && npm run test:agda && npm run test:array && npm run test:forms && npm run test:json && npm run test:datetime && npm run test:dom && npm run test:serialize && npm run test:video && npm run test:auth",
@@ -114,7 +114,7 @@
     "crm:live": "npm run build:crm-server && bash scripts/crm-live-run.sh",
     "gen:store-txn-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i /home/n/.agda/agdelte-store -i server server/StoreTxnTest.agda",
     "test:store-txn": "npm run gen:store-txn-test && cabal build store-txn-test && cabal run store-txn-test",
-    "gen:courses-smoke-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i /home/n/.agda/agdelte-courses -i server server/CoursesSmokeTest.agda",
+    "gen:courses-smoke-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i /home/n/.agda/agdelte-courses -i /home/n/.agda/agdelte-auth -i server server/CoursesSmokeTest.agda",
     "test:courses-smoke": "npm run gen:courses-smoke-test && cabal build courses-smoke-test && cabal run courses-smoke-test",
     "test:ghc": "bash scripts/run-ghc-tests.sh",
     "test:api": "npm run build:crm-server && bash scripts/api-test.sh",
@@ -122,7 +122,8 @@
     "gen:json-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i server server/JsonTest.agda",
     "test:json-ffi": "npm run gen:json-test && cabal build json-test && cabal run json-test",
     "gen:psych-schedule-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i /home/n/.agda/agdelte-pack-psych -i server server/PsychScheduleTest.agda",
-    "test:psych-schedule": "npm run gen:psych-schedule-test && cabal build psych-schedule-test && cabal run psych-schedule-test"
+    "test:psych-schedule": "npm run gen:psych-schedule-test && cabal build psych-schedule-test && cabal run psych-schedule-test",
+    "build:auth-client": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i /home/n/.agda/agdelte-auth /home/n/.agda/agdelte-auth/Agdelte/Auth/Client.agda"
   },
   "keywords": [
     "agda",

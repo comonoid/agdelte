@@ -30,11 +30,14 @@ Postgres-путь (hpgsql, раннер миграций, схема §5/§14.3)
 - **`agdelte-store`** (`~/.agda/agdelte-store`, depend: stdlib) — генерик-стор: `Agdelte.Storage.`
   `{NatMap,IndexedMap,Wire,WAL,Txn,FFI}` (встроенный event-sourced стор + самодостаточный FFI);
 - **`agdelte-payments`** (depend: stdlib) — `Agdelte.Payment.YooKassa` (ЮKassa-клиент, свой http-client);
-- **`agdelte`** (этот репо, `src/`+`hs/`) — **чистый фреймворк**: reactive UI, `FFI.*`, generic
-  `Auth.{JWT,Middleware,Role,SignedUrl,Client}`, `I18n`, `Email`, HTTP-сервер. Импортирует домена ноль;
+- **`agdelte`** (этот репо, `src/`+`hs/`) — **чистый фреймворк**: reactive UI, `FFI.*` (вкл.
+  `FFI.Crypto`), `I18n`, `Email`, HTTP-сервер. Импортирует домена ноль; Auth НЕ содержит;
+- **`agdelte-auth`** (`~/.agda/agdelte-auth`, depend: stdlib+agdelte) — генерик-безопасность:
+  `Agdelte.Auth.{JWT,Middleware,Role,SignedUrl,Client}` (на `FFI.Crypto/Server/Time` + `Core.Cmd`);
 - **`agdelte-crm`** (`~/.agda/agdelte-crm`, depend: stdlib+store+agdelte) — `Crm.*` + `ServicesCore`;
-- **`agdelte-courses`** (depend: stdlib+store+agdelte+payments) — легаси видео-платформа
+- **`agdelte-courses`** (depend: stdlib+store+agdelte+**auth**+payments) — легаси видео-платформа
   (`Storage.AppStore`, `Payment` хендлеры, `Auth.{Guard,Handler}`, `Html/Controls/{Cart,…}`).
+- **`agdelte-pack-psych`** (depend: stdlib+store+agdelte+crm) — вертикаль брони/коучинга.
 - **app-слой остался в этом репо:** `server/` (CrmServer + тесты), `agdelte.cabal`, `package.json`
   gen-скрипты (резолвят либы через `-i ~/.agda/agdelte-{store,crm,courses}`), `docs/`. `app/`/`packs/` —
   скелеты (README/SQL). Postgres-FFI/пул/раннер миграций — генерик-инфра, остаются в `agdelte`.
