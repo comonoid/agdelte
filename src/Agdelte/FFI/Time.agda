@@ -11,10 +11,8 @@ open import Data.Nat using (ℕ)
 postulate
   getCurrentTime : IO ℕ
 
-{-# FOREIGN GHC
-  import Data.Time.Clock.POSIX (getPOSIXTime)
-
-  getCurrentTimeHS :: IO Integer
-  getCurrentTimeHS = round <$> getPOSIXTime
-  #-}
-{-# COMPILE GHC getCurrentTime = getCurrentTimeHS #-}
+-- NB: the body is inlined into the COMPILE pragma (not a FOREIGN def) so the
+-- FOREIGN block is import-only — a trailing def in a FOREIGN block strands
+-- MAlonzo's auto `import Data.Text` after it → GHC parse error.
+{-# FOREIGN GHC import qualified Data.Time.Clock.POSIX as POSIX #-}
+{-# COMPILE GHC getCurrentTime = (fmap round POSIX.getPOSIXTime :: IO Integer) #-}

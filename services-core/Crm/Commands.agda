@@ -14,6 +14,7 @@
 module Crm.Commands where
 
 open import Agda.Builtin.Unit using (⊤; tt)
+open import Agda.Builtin.String using (String)
 open import Agda.Builtin.Nat using (_==_)
 open import Data.Nat using (ℕ; _+_; _∸_; _≤_; _≤?_)
 open import Data.Bool using (Bool; true; false; _∧_; _∨_; not)
@@ -24,7 +25,8 @@ open import Relation.Nullary using (yes; no)
 open import Crm.Identity
 open import Crm.Store
   using ( Base; CrmOp; Err
-        ; SetActivity; SetParticipation; SetAccount; DelActivity; DelParticipation; DelEngagement
+        ; SetParty; SetEngagement; SetActivity; SetParticipation; SetAccount
+        ; DelActivity; DelParticipation; DelEngagement
         ; NotFound; Conflict; InvalidTransition; Insufficient
         ; engagements; parties; activities; participations; accounts; nextId
         ; actByEngagement; partByEngagement )
@@ -50,6 +52,28 @@ canCancel _         = false
 anyℕ : (ℕ → Bool) → List ℕ → Bool
 anyℕ p []       = false
 anyℕ p (x ∷ xs) = p x ∨ anyℕ p xs
+
+------------------------------------------------------------------------
+-- create commands — allocate id from nextId; uuid + timestamp come from IO (#N2)
+------------------------------------------------------------------------
+
+createParty : Uuid → PartyType → (name tz : String) → (now : ℕ) → Txn ℕ
+createParty uuid ty name tz now =
+  getBase >>=T λ b →
+  (let pid = nextId b in
+   emit (SetParty (mkParty pid uuid ty name tz now nothing)) >>T returnT pid)
+
+createEngagement : Uuid → (caseType stage : ℕ) → (now : ℕ) → Txn ℕ
+createEngagement uuid caseType stage now =
+  getBase >>=T λ b →
+  (let eid = nextId b in
+   emit (SetEngagement (mkEngagement eid uuid caseType stage nothing now nothing)) >>T returnT eid)
+
+createAccount : Uuid → (balance now : ℕ) → Txn ℕ
+createAccount uuid balance now =
+  getBase >>=T λ b →
+  (let aid = nextId b in
+   emit (SetAccount (mkAccount aid uuid balance now)) >>T returnT aid)
 
 ------------------------------------------------------------------------
 -- addParticipant — FK check on both ends (exist + live), then link

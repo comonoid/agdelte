@@ -135,16 +135,28 @@
       разрешимости эргономичен. ✓ тест: debit 1000→700, overdraft→`Insufficient` (баланс цел),
       credit 1000→1050.
 
-## Фаза 5 — Headless-вход (`Crm.Api`) + живой прогон
+## Фаза 5 — Headless-вход (`Crm.Api`) + живой прогон ✓
 
-- [ ] Минимальные HTTP-обработчики (как pg-spike): `GET` → `readMVar`+запрос; `POST`
-      → `walTxn`. Конверт `{data}`/`{error}` (§13).
-- [ ] Entry-модуль + cabal-таргет; сборка (`-threaded`, `LIBRARY_PATH` zlib на NixOS).
-- [ ] **Живой прогон:** старт → записать (несколько транзакций) → рестарт → реплей →
-      состояние совпало; запрос по вторичному индексу работает.
-- [ ] Инвариант индексов — генерик property-тест `indexes m ≡ rebuild (entries m)` уже в
-      Фазе 0; здесь убедиться, что доменные транзакции его не ломают (запрос по `byIndex`
-      после серии операций даёт верный результат).
+`services-core/Crm/Api.agda` (обработчики+роутер+конверт) + `server/CrmServer.agda` (entry:
+`walOpen`+`listen`). Cabal-таргет `crm-server`; live-скрипт `scripts/crm-live-run.sh`
+(`npm run crm:live`).
+
+- [x] HTTP-обработчики: `GET` → `walRead`+запрос; `POST` → парс JSON-тела → построить `Txn`
+      → `walTxn`. Конверт `{data}`/`{error}` (§13); `Err`→HTTP-статус (404/409/402/…).
+      uuid (внешний id, §13) генерится на IO-границе (`/proc/sys/kernel/random/uuid`, #N2).
+- [x] Entry-модуль + cabal-таргет `crm-server` (`-threaded`, `LIBRARY_PATH` zlib на NixOS).
+      ⚠️ попутно починен `FFI.Time` (трейлинг-def в FOREIGN стрэндил авто-`import Data.Text` →
+      тело инлайнено в COMPILE-прагму; та же грабля, что NatMap/FileSystem).
+- [x] **Живой прогон (`scripts/crm-live-run.sh`):** старт → `POST /accounts`+`/charge`+`/parties`
+      (incl. overdraft → 402, кириллица «Полунин») → `GET` показывает balance 700 → **рестарт**
+      → `GET` снова balance 700 и «Полунин» (uuid сохранён) — **реплей из 224-байтного `crm.wal`
+      совпал**. correct-by-construction инвариант денег держится **через HTTP**.
+- [x] Инвариант индексов под доменными транзакциями — `byIndex` после серии операций даёт
+      верный результат: покрыто `CrmCommandsTest` (slot/cascade через обратные индексы).
+- [~] **`byUuid` (lookup по внешнему uuid) — ОТЛОЖЕНО.** Чтения сейчас по внутреннему `id` /
+      списком; uuid возвращается и хранится, но строкового хеш-индекса нет. Когда понадобится
+      `GET /parties/{uuid}` — добавить `hashString : String → ℕ` + индекс `byUuidHash` на
+      адресуемых сущностях + фильтр по точному uuid (коллизии хеша). Ядро ходит и без этого.
 
 ## Гейты ревью (§15.4 — не мерджить автономно)
 

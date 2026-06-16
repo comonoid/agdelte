@@ -103,3 +103,15 @@ executable crmcommands-test
   ghc-options:      -main-is MAlonzo.Code.CrmCommandsTest -w -rtsopts
   default-language: GHC2021
   build-depends:    base, text, containers
+
+-- crm-server: Phase 5 headless CRM entry (walOpen + listen + Crm.Api router).
+executable crm-server
+  main-is:          MAlonzo/Code/CrmServer.hs
+  hs-source-dirs:   _build, hs
+  ghc-options:      -main-is MAlonzo.Code.CrmServer -w -threaded -rtsopts "-with-rtsopts=-N"
+  default-language: GHC2021
+  build-depends:
+      base, bytestring, containers, text, time
+    , warp, wai, wai-websockets, websockets, http-types, case-insensitive
+    , network, stm, async, unix, directory, filepath
+    , hpgsql, Only
