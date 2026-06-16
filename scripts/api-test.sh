@@ -156,6 +156,18 @@ req POST /psych/cancel "{\"act\":$A2}"; eq "cx-recancel-409" "$code" 409        
 req POST /psych/complete '{"act":999}'; eq "cx-complete-404" "$code" 404
 stop
 
+echo "===== boot 9 (deployment config from env: prices + working hours) ====="
+rm -f "$WORK/crm.wal"
+start PSYCH_PRICE_SINGLE=999000 PSYCH_DAY_END=780 PSYCH_HORIZON_DAYS=7
+req GET /psych/offerings; has "cfg-price-overridden" "$body" '"price":999000'
+req POST /psych/availability '{"type":"session"}'
+NSLOTS=$(printf '%s' "$body" | grep -oE '"start":' | wc -l)
+{ [ "$NSLOTS" -gt 0 ] && [ "$NSLOTS" -le 20 ]; } && ok "cfg-hours-shrink" || bad "cfg-hours-shrink" "expected few slots (short day + 7d horizon), got $NSLOTS"
+stop
+start   # defaults restored when env unset
+req GET /psych/offerings; has "cfg-price-default" "$body" '"price":1500000'
+stop
+
 echo "------------------------------------------------------------"
 echo "API TOTAL: $P PASS, $F FAIL"
 [ "$F" -eq 0 ] && { echo "✓ API integration green"; exit 0; } || { echo "✗ API integration FAILED"; exit 1; }
