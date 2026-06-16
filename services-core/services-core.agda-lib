@@ -1,7 +1,0 @@
-name: services-core
-include: .
-depend: standard-library agdelte-store
--- The embedded store is the registered `agdelte-store` library. The agdelte
--- framework layer (FFI.Server/Json for the HTTP API) is on the include path via
--- `-i src` inside this monorepo. On extraction to its own repo, also add `agdelte`
--- to depend: above and register its .agda-lib.
