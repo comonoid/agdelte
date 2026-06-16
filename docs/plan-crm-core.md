@@ -21,20 +21,23 @@
 
 ## Фаза 0 — `IndexedMap` (генерик-инфра, `agdelte`)
 
-- [ ] `src/Agdelte/Storage/IndexedMap.agda` — **абстрактный Agda-модуль над `NatMap`**
-      (НЕ постулат-над-Haskell, концепт §3): record `{ primary : NatMap V ; indexes :
-      … NatMap (List ℕ) ; extractors : … (V → List ℕ) }`; smart-конструкторы
-      `insert/update/delete/lookup/byIndex/entriesFrom` (последняя — упорядоченная
-      страница по `id` для пагинации §13, #K) держат индексы **в Agda**. Конструктор
-      record'а **не экспортировать** (инкапсуляция). Нового `.hs` НЕ нужно.
-- [ ] Две тонкости (концепт §3): `insert`=upsert **снимает старые индекс-ключи** перед
-      добавлением новых (#N3 — иначе stale-записи); экстрактор **пропускает soft-deleted**
-      (`deletedAt≠nothing → []`) → `byIndex` отдаёт только живые (#N7).
-- [ ] `IndexName` — **типизированный тег** (не `String`, #P3); `entriesFrom` по `primary`
-      включает soft-deleted → живая пагинация **пропускает удалённые** на ходу (#P4).
-- [ ] Генерик property-тест: `indexes m ≡ rebuild (entries m)` после произвольной
-      последовательности операций.
-- [ ] Типечек.
+- [x] `src/Agdelte/Storage/IndexedMap.agda` — **абстрактный Agda-модуль над `NatMap`**
+      (приватные record'ы `Slot`/`IM` → конструктор не виден импортёрам); `empty (со
+      списком экстракторов) / insert / delete / lookup / byIndex / entriesFrom / toList`,
+      индексы поддерживаются **в Agda**. Нового `.hs` нет. ✓ типечек.
+- [x] `insert`=upsert **снимает старые индекс-ключи** перед новыми (#N3) — **проверено
+      рантайм-тестом** (update меняет индексируемое поле → нет stale). N7 (экстрактор
+      пропускает soft-deleted) — это работа **экстрактора сущности** (слой домена), IndexedMap
+      его поддерживает.
+- [~] `entriesFrom` по `primary` (упорядочено по `id`) — есть. `IndexName` типизированный
+      (#P3) — это **тонкая обёртка на слое сущности** (в IndexedMap индекс по позиции ℕ);
+      живая пагинация пропускает soft-deleted на месте (#P4) — на слое запроса.
+- [x] Property-тест — `server/IndexedMapTest.agda` (рантайм, т.к. NatMap — постулат): 5
+      ассертов insert/update-retract/delete/byIndex, **все PASS** (`npm run test:im`).
+- [x] Типечек.
+- ⚠️ Попутно починен латентный баг `NatMap.agda`: `type`-декл в FOREIGN-блоке ломал GHC
+      (MAlonzo дописывает импорт после) → тип задан инлайн в COMPILE-прагме. NatMap раньше
+      был JS-only.
 - **Ревью человека:** дизайн абстракции/инкапсуляции (§15.4).
 
 ## Фаза 1 — Записи домена (`services-core/Crm/Identity.agda`)

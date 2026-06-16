@@ -45,16 +45,16 @@ fromList xs = foldr (λ p acc → insert (proj₁ p) (proj₂ p) acc) empty xs
 -- GHC compilation
 ------------------------------------------------------------------------
 
-{-# FOREIGN GHC
-  import qualified Data.Map.Strict as M
+-- Agda ℕ compiles to Integer. We back the map with Data.Map keyed by Integer
+-- (not Data.IntMap, whose Int keys truncate ids ≥ 2^63 and could collide —
+-- e.g. attacker-controlled ids replayed from a WAL/snapshot).
+-- NB: the Haskell type is given INLINE in the COMPILE pragma rather than as a
+-- `type` decl inside a FOREIGN block — MAlonzo appends its own imports (e.g.
+-- Data.Text) after FOREIGN blocks, and an import after a `type` decl is a parse
+-- error. (NatMap was JS-only before; this surfaced on its first GHC compile.)
+{-# FOREIGN GHC import qualified Data.Map.Strict as M #-}
 
-  -- Agda ℕ compiles to Integer. We back the map with Data.Map keyed by
-  -- Integer (not Data.IntMap, whose Int keys truncate ids ≥ 2^63 and could
-  -- collide — e.g. attacker-controlled ids replayed from a WAL/snapshot).
-  type AgdaNatMap v = M.Map Integer v
-  #-}
-
-{-# COMPILE GHC NatMap = type AgdaNatMap #-}
+{-# COMPILE GHC NatMap = type M.Map Integer #-}
 
 {-# COMPILE GHC empty    = \ _ -> M.empty #-}
 {-# COMPILE GHC insert   = \ _ k -> M.insert k #-}

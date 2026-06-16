@@ -97,6 +97,9 @@
     "gen:migrate-demo": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i server server/MigrateDemo.agda",
     "build:migrate-demo": "npm run gen:migrate-demo && cabal build migrate-demo",
     "run:migrate-demo": "cabal run migrate-demo",
+    "gen:im-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i server server/IndexedMapTest.agda",
+    "build:im-test": "npm run gen:im-test && cabal build indexedmap-test",
+    "test:im": "npm run build:im-test && cabal run indexedmap-test",
     "clean": "rm -rf _build MAlonzo jAgda"
   },
   "keywords": [

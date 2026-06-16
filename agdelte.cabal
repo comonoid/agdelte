@@ -57,3 +57,11 @@ executable migrate-demo
     , warp, wai, wai-websockets, websockets, http-types, case-insensitive
     , network, stm, async, unix, directory, filepath
     , hpgsql, Only
+
+-- indexedmap-test: runtime unit test for Agdelte.Storage.IndexedMap (Phase 0).
+executable indexedmap-test
+  main-is:          MAlonzo/Code/IndexedMapTest.hs
+  hs-source-dirs:   _build, hs
+  ghc-options:      -main-is MAlonzo.Code.IndexedMapTest -w -rtsopts
+  default-language: GHC2021
+  build-depends:    base, text, containers
