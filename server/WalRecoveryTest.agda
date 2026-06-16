@@ -1,60 +1,63 @@
 {-# OPTIONS --without-K --guardedness #-}
 
--- Phase 3 fault-injection test (#8): prove WAL durability/recovery on GHC.
+-- Phase 3 fault-injection test (#8), hardened after review.
 --
--- Scenario 1 (torn tail + invalid UTF-8 — findings A, B, atomicity #1):
---   write a 2-op transaction (one record) + a 1-op transaction (another), then
---   append a TORN record ending in a lone 0xFF byte (invalid UTF-8). Reopen:
---   the two complete records must survive (a STRICT decode would have thrown on
---   0xFF → whole log discarded → parties NOT found; lenient decode + length-
---   framing drop only the torn tail). The 2-op record proves transaction
---   framing replays atomically.
+-- S1 (byte-framing + multi-byte tear — the review's CONFIRMED bug):
+--   write a transaction whose payload is RUSSIAN text containing ':' and '|'
+--   (multi-byte + would-be delimiters), then append a TORN record whose body is
+--   cut mid-cyrillic-char (raw bytes "30:" + D0 9F D0). With CHAR-length framing
+--   a torn multi-byte tail can be mis-counted as complete → die on a recoverable
+--   log; with BYTE-length framing the torn tail (3 body bytes < 30) is dropped and
+--   the earlier record survives with its text intact. Also proves ':'/'|'/multi-
+--   byte survive framing, and a strict decode would have thrown on the D0 tail.
 --
--- Scenario 2 (mid-log corruption — finding D):
---   a fully-present record whose inner op is undecodable must make recovery
---   REFUSE to start (die), not silently skip. We catch the abort with tryCatch
---   and assert it fired.
+-- S2 (mid-log corruption — finding D): a complete record whose inner op is
+--   undecodable must make recovery REFUSE to start (die), caught via tryCatch.
+--
+-- S3 (rejected path): a txn that aborts writes nothing and leaves state unchanged.
+-- S4 (ioFailed path): a durable-write failure surfaces as ioFailed, state intact.
 module WalRecoveryTest where
 
 open import Agda.Builtin.IO using (IO)
 open import Agda.Builtin.Unit using (⊤; tt)
-open import Agda.Builtin.String using (String)
+open import Agda.Builtin.String using (String; primStringEquality)
 open import Agda.Builtin.Nat using (_==_)
 open import Data.Nat using (ℕ)
-open import Data.Bool using (Bool; true; false; if_then_else_; _∧_)
+open import Data.Bool using (Bool; true; false; if_then_else_; not)
 open import Data.Maybe using (Maybe; just; nothing)
+open import Data.List using (List; []; _∷_)
 open import Data.String using () renaming (_++_ to _<>_)
 
 open import Agdelte.FFI.Server using (_>>=_; _>>_; pure; putStrLn; tryCatch)
-open import Agdelte.FFI.FileSystem using (writeFileText)
+open import Agdelte.FFI.FileSystem using (writeFileText; appendWalRecord)
 open import Agdelte.Storage.Wire using (lp)
 open import Agdelte.Storage.WAL using
-  ( WalConfig; mkWalConfig; WalHandle; walOpen; walRead; walStep; walTxn
-  ; WalOutcome; committed; rejected; ioFailed; frameTxn )
+  ( WalConfig; mkWalConfig; WalHandle; walOpen; walRead; walTxn
+  ; WalOutcome; committed; rejected; ioFailed; serializeTxn )
 import Agdelte.Storage.IndexedMap as IM
 
 open import Crm.Identity
 open import Crm.Store using
-  ( Base; CrmOp; SetParty; SetEngagement; Err; emptyBase; apply
-  ; encodeOp; decodeOp; parties; engagements; nextId )
-open import Crm.Txn using (Txn; emit; _>>T_; runTxn)
+  ( Base; CrmOp; SetParty; Err; NotFound; emptyBase; apply
+  ; encodeOp; decodeOp; parties; nextId )
+open import Crm.Txn using (Txn; emit; abort; _>>T_; runTxn)
 
 ------------------------------------------------------------------------
--- Append a torn record ending in a lone 0xFF (invalid UTF-8). "20:abc" claims
--- 20 chars but only 4 survive (incl. the U+FFFD replacement) → torn → dropped;
--- the 0xFF would make a STRICT reader throw.
+-- Append a TORN record cut mid-cyrillic: "30:" then D0 9F D0 (П + a dangling
+-- lead byte). Declared body = 30 bytes, present = 3 → torn → dropped. The lone
+-- D0 is invalid UTF-8 (a strict reader would throw on it).
 ------------------------------------------------------------------------
 
 postulate
-  corruptTail : String → IO ⊤
+  corruptCyrillicTail : String → IO ⊤
 {-# FOREIGN GHC
   import qualified Data.Text as T
   import qualified Data.ByteString as BS
-  corruptTailHS :: T.Text -> IO ()
-  corruptTailHS path =
-    BS.appendFile (T.unpack path) (BS.pack [0x32,0x30,0x3a,0x61,0x62,0x63,0xff])
+  corruptCyrillicTailHS :: T.Text -> IO ()
+  corruptCyrillicTailHS path =
+    BS.appendFile (T.unpack path) (BS.pack [0x33,0x30,0x3a,0xd0,0x9f,0xd0])
   #-}
-{-# COMPILE GHC corruptTail = corruptTailHS #-}
+{-# COMPILE GHC corruptCyrillicTail = corruptCyrillicTailHS #-}
 
 ------------------------------------------------------------------------
 -- Config + sample data
@@ -63,11 +66,12 @@ postulate
 cfg : String → WalConfig Base CrmOp
 cfg path = mkWalConfig path apply encodeOp decodeOp emptyBase
 
-p7  = mkParty 7 "u7" Person "P7" "UTC" 100 nothing
-p8  = mkParty 8 "u8" Person "P8" "UTC" 100 nothing
-e3  = mkEngagement 3 "u3" 1 1 nothing 100 nothing
+ruName : String
+ruName = "Полунин: имя | с спецсимволами"      -- multi-byte + ':' + '|'
 
--- one transaction emitting TWO ops (single atomic record)
+p7  = mkParty 7 "u7" Person ruName "Europe/Moscow" 100 nothing
+p8  = mkParty 8 "u8" Org "Орг8" "UTC" 100 nothing
+
 tx2 : Txn ⊤
 tx2 = emit (SetParty p7) >>T emit (SetParty p8)
 
@@ -75,58 +79,90 @@ isJust : ∀ {A : Set} → Maybe A → Bool
 isJust (just _) = true
 isJust nothing  = false
 
-committed? : ∀ {E A} → WalOutcome E A → Bool
+committed? rejected? ioFailed? : ∀ {E A} → WalOutcome E A → Bool
 committed? (committed _) = true
 committed? _             = false
+rejected?  (rejected _)  = true
+rejected?  _             = false
+ioFailed?  ioFailed      = true
+ioFailed?  _             = false
+
+nameOf : Maybe Party → String
+nameOf (just p) = pDisplayName p
+nameOf nothing  = "<none>"
 
 check : String → Bool → IO ⊤
 check name ok = putStrLn (if ok then ("PASS " <> name) else ("FAIL " <> name))
 
 ------------------------------------------------------------------------
--- Scenario 1
+-- S1 — byte-framing survives a mid-cyrillic torn tail
 ------------------------------------------------------------------------
 
-path1 : String
 path1 = "/tmp/agdelte-wal-rec-1.log"
 
 scenario1 : IO ⊤
 scenario1 =
-  writeFileText path1 "" >>                       -- clean start (truncate)
+  writeFileText path1 "" >>
   walOpen (cfg path1) >>= λ h →
-  walTxn h (runTxn tx2) >>= λ o →                 -- 2-op atomic record
-  walStep h (SetEngagement e3) >>= λ _ →          -- 1-op record
-  corruptTail path1 >>                            -- torn tail + bad UTF-8 byte
-  walOpen (cfg path1) >>= λ h2 →                  -- recover
+  walTxn h (runTxn tx2) >>= λ o →            -- 2-op atomic record, cyrillic payload
+  corruptCyrillicTail path1 >>               -- torn mid-cyrillic tail
+  walOpen (cfg path1) >>= λ h2 →             -- recover
   walRead h2 >>= λ st →
-  check "txn-committed"   (committed? o) >>
-  check "party7-survived" (isJust (IM.lookup 7 (parties st))) >>
-  check "party8-survived" (isJust (IM.lookup 8 (parties st))) >>
-  check "eng3-survived"   (isJust (IM.lookup 3 (engagements st))) >>
-  check "nextId-rebuilt"  (nextId st == 9)        -- max id 8 (+1) ⊓ 4 = 9
+  check "txn-committed"     (committed? o) >>
+  check "party7-survived"   (isJust (IM.lookup 7 (parties st))) >>
+  check "party8-survived"   (isJust (IM.lookup 8 (parties st))) >>
+  check "name-roundtrip"    (primStringEquality (nameOf (IM.lookup 7 (parties st))) ruName) >>
+  check "nextId-rebuilt"    (nextId st == 9)
 
 ------------------------------------------------------------------------
--- Scenario 2 — mid-log corruption must refuse (die), caught here
+-- S2 — mid-log corruption refused (die), caught
 ------------------------------------------------------------------------
 
-path2 : String
 path2 = "/tmp/agdelte-wal-rec-2.log"
-
--- a complete record (real op) followed by a complete record whose inner
--- payload is NOT a decodable op ("garbage" — no valid tag char).
-corruptMiddle : String
-corruptMiddle = frameTxn (cfg path2) (SetParty p7 ∷ [])
-              <> lp (lp "garbage")
-  where open import Data.List using (List; []; _∷_)
 
 scenario2 : IO ⊤
 scenario2 =
-  writeFileText path2 corruptMiddle >>
+  writeFileText path2 "" >>
+  appendWalRecord path2 (serializeTxn (cfg path2) (SetParty p7 ∷ [])) >>  -- a good record
+  appendWalRecord path2 (lp "garbage") >>                                 -- complete record, undecodable op
   tryCatch (walOpen (cfg path2)) >>= λ r →
   check "corruption-refused" (refused r)
   where
     refused : ∀ {A : Set} → Maybe A → Bool
-    refused (just _) = false      -- opened despite corruption → wrong
-    refused nothing  = true       -- die fired, caught → correct
+    refused (just _) = false
+    refused nothing  = true
+
+------------------------------------------------------------------------
+-- S3 — abort writes nothing, state unchanged
+------------------------------------------------------------------------
+
+path3 = "/tmp/agdelte-wal-rec-3.log"
+
+txReject : Txn ⊤
+txReject = emit (SetParty p7) >>T abort NotFound
+
+scenario3 : IO ⊤
+scenario3 =
+  writeFileText path3 "" >>
+  walOpen (cfg path3) >>= λ h →
+  walTxn h (runTxn txReject) >>= λ o →
+  walRead h >>= λ st →
+  check "txn-rejected"      (rejected? o) >>
+  check "reject-no-write"   (not (isJust (IM.lookup 7 (parties st)))) >>
+  check "reject-nextId-1"   (nextId st == 1)
+
+------------------------------------------------------------------------
+-- S4 — durable-write failure → ioFailed, state intact
+-- ("/tmp" is a directory: appendWalRecord throws; readWalRecords → Just [] → empty)
+------------------------------------------------------------------------
+
+scenario4 : IO ⊤
+scenario4 =
+  walOpen (cfg "/tmp") >>= λ h →
+  walTxn h (runTxn (emit (SetParty p7))) >>= λ o →
+  walRead h >>= λ st →
+  check "txn-iofailed"      (ioFailed? o) >>
+  check "iofail-state-intact" (nextId st == 1)
 
 main : IO ⊤
-main = scenario1 >> scenario2
+main = scenario1 >> scenario2 >> scenario3 >> scenario4

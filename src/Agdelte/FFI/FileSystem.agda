@@ -15,14 +15,17 @@ open import Data.Maybe using (Maybe)
   import qualified Data.Text    as T
   import qualified Data.Text.IO as TIO
   import qualified Data.ByteString as BS
-  import Data.Text.Encoding (decodeUtf8With)
+  import qualified Data.ByteString.Char8 as BC
+  import Data.Text.Encoding (decodeUtf8With, encodeUtf8)
   import Data.Text.Encoding.Error (lenientDecode)
-  import System.IO (withFile, hFlush, IOMode(WriteMode, AppendMode))
+  import System.IO (withFile, withBinaryFile, hFlush, IOMode(WriteMode, AppendMode))
   import System.Directory (doesFileExist, createDirectoryIfMissing, renameFile, canonicalizePath, listDirectory)
   import qualified System.FilePath as FP
   import System.Posix.IO (handleToFd, closeFd, openFd, OpenMode(ReadOnly), defaultFileFlags)
   import System.Posix.Unistd (fileSynchronise)
-  import Data.List (isPrefixOf, sort)
+  import Data.List (isPrefixOf, sort, foldl')
+  import Data.Word (Word8)
+  import Control.Monad (when)
   import Control.Exception (try, SomeException)
 
   -- fsync the directory CONTAINING the given path, so a rename/create within
@@ -55,16 +58,63 @@ open import Data.Maybe using (Maybe)
       fileSynchronise fd
       closeFd fd
 
-  -- Lenient WAL read: read raw bytes (no decode can fail), then decode UTF-8
-  -- replacing any malformed bytes with U+FFFD. A crash mid-append leaves a torn
-  -- UTF-8 tail; a STRICT decode would throw → the whole log would be discarded
-  -- as "" (total loss). Leniently the torn tail becomes replacement chars, which
-  -- the length-prefix record framing then drops as a torn record. Missing /
-  -- unreadable file → "".
-  readWalLogHS :: T.Text -> IO T.Text
-  readWalLogHS path = do
+  -- WAL records are framed at the BYTE level, not the character level: durability
+  -- tearing happens on byte boundaries, and lenient UTF-8 decode is NOT length-
+  -- preserving (a torn multi-byte char → one+ U+FFFD), so a char-length prefix
+  -- can mis-frame a torn tail. Byte-length framing is exact: a torn tail always
+  -- has fewer bytes than its declared length → dropped.
+
+  -- Durably append one record `<byteLen>:<payload-utf8>` + fsync. On first create
+  -- also fsync the parent directory, so the new file's directory entry survives
+  -- power loss (the file fsync persists data+inode, but not the dir entry).
+  appendWalRecordHS :: T.Text -> T.Text -> IO ()
+  appendWalRecordHS path payload = do
+    let pbytes = encodeUtf8 payload
+        rec    = BC.pack (show (BS.length pbytes) ++ ":") <> pbytes
+    existed <- doesFileExist (T.unpack path)
+    withBinaryFile (T.unpack path) AppendMode $ \h -> do
+      BS.hPut h rec
+      hFlush h
+      fd <- handleToFd h
+      fileSynchronise fd
+      closeFd fd
+    when (not existed) (syncPathDirHS path)
+
+  walIsDigit :: Word8 -> Bool
+  walIsDigit w = w >= 48 && w <= 57
+
+  -- Read the WAL as bytes and split into complete records at byte granularity.
+  --   Just records — every COMPLETE record's payload (decoded), torn tail dropped;
+  --   Nothing       — mid-stream corruption (a record boundary that isn't
+  --                   `<asciiDigits>:` — the single-writer never emits that, so it
+  --                   means real corruption → caller refuses to start).
+  -- A complete record's bytes are exactly the intact UTF-8 the writer wrote, so
+  -- decoding them is unambiguous (lenient is a no-op on valid UTF-8). Missing /
+  -- unreadable file → Just [] (empty log).
+  readWalRecordsHS :: T.Text -> IO (Maybe [T.Text])
+  readWalRecordsHS path = do
     r <- try (BS.readFile (T.unpack path)) :: IO (Either SomeException BS.ByteString)
-    either (const (return T.empty)) (return . decodeUtf8With lenientDecode) r
+    pure $ case r of
+      Left _   -> Just []
+      Right bs -> walGo bs []
+    where
+      walGo bs acc
+        | BS.null bs = Just (reverse acc)                       -- clean end
+        | otherwise =
+            case BS.elemIndex 0x3a bs of                        -- ':' = 0x3a
+              Nothing -> if BS.all walIsDigit bs
+                         then Just (reverse acc)                 -- torn digit-only header → drop
+                         else Nothing                           -- non-digit junk → corruption
+              Just i  ->
+                let digits = BS.take i bs
+                    rest   = BS.drop (i + 1) bs
+                in if BS.null digits || not (BS.all walIsDigit digits)
+                   then Nothing                                 -- bad header → corruption
+                   else let n = foldl' (\a w -> a * 10 + fromIntegral (w - 48)) 0 (BS.unpack digits)
+                        in if BS.length rest < n
+                           then Just (reverse acc)              -- incomplete body → torn tail → drop
+                           else walGo (BS.drop n rest)
+                                      (decodeUtf8With lenientDecode (BS.take n rest) : acc)
   #-}
 
 ------------------------------------------------------------------------
@@ -137,10 +187,13 @@ postulate
 
 postulate
   readFileSafe : String → IO String
-  -- Durable, decode-safe WAL read (raw bytes → lenient UTF-8). Use for the WAL
-  -- log so a torn-tail (partial last write) never throws on decode and discards
-  -- the whole history; the record framing drops just the torn record.
-  readWalLog : String → IO String
+  -- Durably append one BYTE-length-framed WAL record (+ fsync, + dir fsync on
+  -- create). Payload may contain any text (newlines, ':', multi-byte) — framing
+  -- is by byte length, so it is unambiguous.
+  appendWalRecord : String → String → IO ⊤
+  -- Read the WAL as byte-framed records: just (complete record payloads, torn
+  -- tail dropped) | nothing (mid-stream corruption → caller must refuse to start).
+  readWalRecords : String → IO (Maybe (List String))
 
 {-# FOREIGN GHC
   readFileSafeImpl :: T.Text -> IO T.Text
@@ -150,8 +203,9 @@ postulate
       Right content -> return content
       Left _        -> return T.empty
   #-}
-{-# COMPILE GHC readFileSafe = readFileSafeImpl #-}
-{-# COMPILE GHC readWalLog   = readWalLogHS     #-}
+{-# COMPILE GHC readFileSafe    = readFileSafeImpl   #-}
+{-# COMPILE GHC appendWalRecord = appendWalRecordHS  #-}
+{-# COMPILE GHC readWalRecords  = readWalRecordsHS   #-}
 
 ------------------------------------------------------------------------
 -- Confined read / write — for paths derived from untrusted input.
