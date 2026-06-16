@@ -96,6 +96,30 @@ req GET /outbox; has "nf-marked-sent" "$body" '"status":"sent"'
 req POST /outbox/drain; has "nf-drain-idempotent" "$body" '"sent":0'
 stop
 
+echo "===== boot 6 (psych pack: availability = grid − booked, durable booking) ====="
+rm -f "$WORK/crm.wal"
+start
+req POST /psych/availability '{"type":"session"}'; has "ps-avail-slots" "$body" '"start":'
+ST=$(printf '%s' "$body" | grep -oE '"start":[0-9]+' | head -1 | grep -oE '[0-9]+')
+N1=$(printf "%s" "$body" | grep -oE '"start":' | wc -l)
+req POST /psych/book "{\"type\":\"session\",\"start\":$ST,\"name\":\"Полунин\",\"email\":\"p@mail.ru\"}"
+has "ps-book-id" "$body" '"id":'; eq "ps-book-200" "$code" 200
+req POST /psych/availability '{"type":"session"}'
+N2=$(printf "%s" "$body" | grep -oE '"start":' | wc -l)
+case "$body" in *"\"start\":$ST,"*) bad "ps-slot-removed" "booked slot $ST still offered";; *) ok "ps-slot-removed";; esac
+[ "$N2" -lt "$N1" ] && ok "ps-avail-decreased" || bad "ps-avail-decreased" "N1=$N1 N2=$N2"
+req POST /psych/book "{\"type\":\"session\",\"start\":$ST,\"name\":\"X\",\"email\":\"x\"}"; eq "ps-double-409" "$code" 409
+req POST /psych/book "{\"type\":\"session\",\"start\":$((ST+60)),\"name\":\"X\",\"email\":\"x\"}"; eq "ps-offgrid-400" "$code" 400
+req POST /psych/book '{"type":"session","name":"X"}'; eq "ps-missing-start-400" "$code" 400
+req GET /outbox; has "ps-confirm-enqueued" "$body" 'Подтверждение записи'
+req GET /parties;  has "ps-client-created" "$body" 'Полунин'
+stop
+start   # durability: the booked slot stays occupied after a restart
+req POST /psych/availability '{"type":"session"}'
+case "$body" in *"\"start\":$ST,"*) bad "ps-durable-occupied" "slot reappeared after restart";; *) ok "ps-durable-occupied";; esac
+req GET /activities; has "ps-session-survived" "$body" "\"startsAt\":$ST"
+stop
+
 echo "------------------------------------------------------------"
 echo "API TOTAL: $P PASS, $F FAIL"
 [ "$F" -eq 0 ] && { echo "✓ API integration green"; exit 0; } || { echo "✗ API integration FAILED"; exit 1; }

@@ -5,7 +5,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-TESTS=(test:im test:crmwire test:crmstore test:crmcommands test:walrec test:json-ffi test:store-txn test:courses-smoke)
+TESTS=(test:im test:crmwire test:crmstore test:crmcommands test:walrec test:json-ffi test:store-txn test:courses-smoke test:psych-schedule)
 
 total_pass=0 total_fail=0
 declare -a failed=()

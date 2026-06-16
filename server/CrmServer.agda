@@ -11,7 +11,9 @@ open import Agda.Builtin.String using (String)
 
 open import Agdelte.FFI.Server using (listenHost; getEnvOr; putStrLn; _>>=_; _>>_)
 open import Agdelte.Storage.WAL using (walOpen)
-open import Crm.Api using (crmConfig; route)
+open import Crm.Api using (crmConfig; routeExt)
+open import Psych.Api using (tryRoute)
+open import Psych.Schedule using (defaultSettings)
 
 -- Config from env (secure defaults): CRM_HOST=127.0.0.1 (loopback-only, H1),
 -- CRM_TOKEN="" (open on loopback; set it to require `Authorization: Bearer <token>`).
@@ -21,5 +23,5 @@ main =
   getEnvOr "CRM_HOST" "127.0.0.1" >>= λ host →
   getEnvOr "CRM_TOKEN" "" >>= λ token →
   walOpen (crmConfig "crm.wal") >>= λ h →
-  putStrLn "CRM headless on :8137 (WAL: ./crm.wal)" >>
-  listenHost host 8137 (λ req → route token h req)
+  putStrLn "CRM headless on :8137 (WAL: ./crm.wal) + /psych booking" >>
+  listenHost host 8137 (λ req → routeExt (tryRoute defaultSettings h) token h req)

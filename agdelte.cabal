@@ -137,3 +137,10 @@ executable courses-smoke-test
   ghc-options:      -main-is MAlonzo.Code.CoursesSmokeTest -w -rtsopts
   default-language: GHC2021
   build-depends:    base, text, containers, bytestring, unix, directory, filepath
+
+executable psych-schedule-test
+  main-is:          MAlonzo/Code/PsychScheduleTest.hs
+  hs-source-dirs:   _build, hs
+  ghc-options:      -main-is MAlonzo.Code.PsychScheduleTest -w -rtsopts
+  default-language: GHC2021
+  build-depends:    base, text, containers
