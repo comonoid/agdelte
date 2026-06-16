@@ -230,6 +230,30 @@ postulate
 
 {-# COMPILE GHC listen = listenImpl #-}
 
+-- Listen bound to a specific host (e.g. "127.0.0.1"). Loopback-only by default
+-- keeps the money/PII server off the network until authz exists.
+postulate
+  listenHost : String → Nat → (HttpRequest → IO HttpResponse) → IO ⊤
+
+{-# FOREIGN GHC
+  listenHostImpl :: T.Text -> Integer -> (Http.Request -> IO AgdaResponse) -> IO ()
+  listenHostImpl host port handler = Http.serveHost host (fromIntegral port) $ \req -> do
+    AgdaResponse status body hdrs <- handler req
+    return (Http.Response (fromIntegral status) body hdrs)
+  #-}
+{-# COMPILE GHC listenHost = listenHostImpl #-}
+
+-- Read an environment variable, or a default if unset.
+{-# FOREIGN GHC import System.Environment (lookupEnv) #-}
+postulate
+  getEnvOr : String → String → IO String
+
+{-# FOREIGN GHC
+  getEnvOrImpl :: T.Text -> T.Text -> IO T.Text
+  getEnvOrImpl key def = fmap (maybe def T.pack) (lookupEnv (T.unpack key))
+  #-}
+{-# COMPILE GHC getEnvOr = getEnvOrImpl #-}
+
 ------------------------------------------------------------------------
 -- Unix Socket IPC (ProcessOptic)
 ------------------------------------------------------------------------

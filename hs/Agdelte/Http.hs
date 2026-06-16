@@ -1,10 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Agdelte.Http
-  ( serve, serveWithWs, mkApp, toWaiApp, Request(..), Response(..)
+  ( serve, serveHost, serveWithWs, mkApp, toWaiApp, Request(..), Response(..)
   ) where
 
 import Control.Exception (SomeAsyncException(..), SomeException, fromException, throwIO, try)
+import Data.String (fromString)
+import qualified Data.Text as T
 import Data.Text (Text)
 import qualified Data.Text.Encoding as TE
 import Data.Text.Encoding.Error (lenientDecode)
@@ -44,6 +46,16 @@ serveWithWs port httpHandler mWsHandler = do
                $ Warp.setHost "*"
                $ Warp.defaultSettings
   Warp.runSettings settings (mkApp httpHandler mWsHandler)
+
+-- Bind to a specific host (e.g. "127.0.0.1" for loopback-only). Use this for
+-- services that must NOT be reachable off-box by default (e.g. the money/PII CRM).
+serveHost :: Text -> Int -> (Request -> IO Response) -> IO ()
+serveHost host port httpHandler = do
+  putStrLn $ "Agdelte server listening on " ++ T.unpack host ++ ":" ++ show port
+  let settings = Warp.setPort port
+               $ Warp.setHost (fromString (T.unpack host))
+               $ Warp.defaultSettings
+  Warp.runSettings settings (mkApp httpHandler Nothing)
 
 -- | Build WAI Application with optional WebSocket routing (without starting warp).
 -- Needed for tests (Warp.testWithApplication).
