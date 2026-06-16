@@ -115,3 +115,11 @@ executable crm-server
     , warp, wai, wai-websockets, websockets, http-types, case-insensitive
     , network, stm, async, unix, directory, filepath
     , hpgsql, Only
+
+-- json-test: audit M2 — escape-aware JSON parser in Agdelte.FFI.Json.
+executable json-test
+  main-is:          MAlonzo/Code/JsonTest.hs
+  hs-source-dirs:   _build, hs
+  ghc-options:      -main-is MAlonzo.Code.JsonTest -w -rtsopts
+  default-language: GHC2021
+  build-depends:    base, text
