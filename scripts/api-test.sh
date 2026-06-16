@@ -120,6 +120,42 @@ case "$body" in *"\"start\":$ST,"*) bad "ps-durable-occupied" "slot reappeared a
 req GET /activities; has "ps-session-survived" "$body" "\"startsAt\":$ST"
 stop
 
+first_start(){ printf '%s' "$1" | grep -oE '"start":[0-9]+' | head -1 | grep -oE '[0-9]+'; }
+first_id(){ printf '%s' "$1" | grep -oE '"id":[0-9]+' | grep -oE '[0-9]+'; }
+
+echo "===== boot 7 (psych pack: catalogue + prepaid packages, credit draw-down) ====="
+rm -f "$WORK/crm.wal"
+start
+req GET /psych/offerings; has "pk-offerings" "$body" 'Путь в точку — 10 встреч'; has "pk-price" "$body" '"price":6750000'
+req POST /psych/purchase '{"offering":1,"name":"Иван","email":"i@m.ru"}'; has "pk-purchase-id" "$body" '"id":'
+E1=$(first_id "$body")
+req POST /psych/package "{\"eng\":$E1}"; has "pk-total-1" "$body" '"sessionsTotal":1'; has "pk-left-1" "$body" '"sessionsLeft":1'
+req POST /psych/availability '{"type":"session"}'; S1=$(first_start "$body")
+req POST /psych/session "{\"eng\":$E1,\"start\":$S1}"; has "pk-session-id" "$body" '"id":'; eq "pk-session-200" "$code" 200
+req POST /psych/package "{\"eng\":$E1}"; has "pk-used-1" "$body" '"sessionsUsed":1'; has "pk-left-0" "$body" '"sessionsLeft":0'
+req POST /psych/availability '{"type":"session"}'; S1b=$(first_start "$body")
+req POST /psych/session "{\"eng\":$E1,\"start\":$S1b}"; eq "pk-exhausted-402" "$code" 402; has "pk-exhausted-code" "$body" 'insufficient'
+req POST /psych/package '{"eng":999}'; eq "pk-no-eng-404" "$code" 404
+req POST /psych/purchase '{"offering":99}'; eq "pk-bad-offering-400" "$code" 400
+stop
+
+echo "===== boot 8 (psych pack: cancel/no-show — free returns credit, forfeit burns it) ====="
+rm -f "$WORK/crm.wal"
+start
+req POST /psych/purchase '{"offering":2,"name":"Анна","email":"a@m.ru"}'; E2=$(first_id "$body")
+req POST /psych/availability '{"type":"session"}'; NEAR=$(first_start "$body")
+FARFROM=$(( $(date +%s) + 400000 ))
+req POST /psych/availability "{\"type\":\"session\",\"from\":$FARFROM}"; FAR=$(first_start "$body")
+req POST /psych/session "{\"eng\":$E2,\"start\":$NEAR}"; A1=$(first_id "$body")
+req POST /psych/session "{\"eng\":$E2,\"start\":$FAR}";  A2=$(first_id "$body")
+req POST /psych/package "{\"eng\":$E2}"; has "cx-used-2" "$body" '"sessionsUsed":2'
+req POST /psych/cancel "{\"act\":$A2}"; has "cx-far-free" "$body" '"result":"canceled"'      # far ≥24h → free
+req POST /psych/no-show "{\"act\":$A1}"; eq "cx-noshow-200" "$code" 200                       # forfeit (deterministic)
+req POST /psych/package "{\"eng\":$E2}"; has "cx-left-4" "$body" '"sessionsLeft":4'; has "cx-used-1" "$body" '"sessionsUsed":1'
+req POST /psych/cancel "{\"act\":$A2}"; eq "cx-recancel-409" "$code" 409                      # already canceled
+req POST /psych/complete '{"act":999}'; eq "cx-complete-404" "$code" 404
+stop
+
 echo "------------------------------------------------------------"
 echo "API TOTAL: $P PASS, $F FAIL"
 [ "$F" -eq 0 ] && { echo "✓ API integration green"; exit 0; } || { echo "✗ API integration FAILED"; exit 1; }

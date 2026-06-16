@@ -10,7 +10,7 @@ open import Agda.Builtin.IO using (IO)
 open import Agda.Builtin.Unit using (⊤; tt)
 open import Agda.Builtin.String using (String)
 open import Agda.Builtin.Nat using (_==_)
-open import Data.Nat using (ℕ; _+_)
+open import Data.Nat using (ℕ; _+_; _*_)
 open import Data.Bool using (Bool; true; false; not)
 open import Data.List using (List; []; _∷_; length)
 open import Data.Maybe using (is-just; is-nothing)
@@ -72,6 +72,10 @@ checks =
   chk "validate-ok"        (is-nothing (validateSlot cfg Session 0 s10)) ∷
   chk "validate-too-soon"  (is-just    (validateSlot cfg Session s10 s10)) ∷
   chk "validate-horizon"   (is-just    (validateSlot cfg Session 0 (atMinute cfg 200 600))) ∷
+  -- cancel policy (slice 3): ≥24h before start = free; <24h = late
+  chk "cancel-free-100h"   (freeCancelWindow cfg 0 (100 * 3600)) ∷
+  chk "cancel-late-10h"    (not (freeCancelWindow cfg 0 (10 * 3600))) ∷
+  chk "cancel-boundary-24h" (freeCancelWindow cfg 0 (24 * 3600)) ∷
   []
 
 report : String → Bool → IO ⊤
