@@ -95,3 +95,11 @@ executable walrec-test
     , warp, wai, wai-websockets, websockets, http-types, case-insensitive
     , network, stm, async, unix, directory, filepath
     , hpgsql, Only
+
+-- crmcommands-test: Phase 4 domain transactions (FK / slot / transition / cascade / charge).
+executable crmcommands-test
+  main-is:          MAlonzo/Code/CrmCommandsTest.hs
+  hs-source-dirs:   _build, hs
+  ghc-options:      -main-is MAlonzo.Code.CrmCommandsTest -w -rtsopts
+  default-language: GHC2021
+  build-depends:    base, text, containers

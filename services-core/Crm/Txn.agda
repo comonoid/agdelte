@@ -18,9 +18,11 @@
 module Crm.Txn where
 
 open import Agda.Builtin.Unit using (⊤; tt)
+open import Data.Bool using (Bool; true; false)
+open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Product using (_×_; _,_)
 open import Data.Sum using (_⊎_; inj₁; inj₂)
-open import Data.List using (List; [])
+open import Data.List using (List; []; _∷_)
 
 open import Crm.Store using (Base; CrmOp; Err; apply)
 
@@ -83,6 +85,25 @@ emit op b d = inj₂ (apply op b , dsnoc d op , tt)
 require : ∀ {A : Set} → (A ⊎ Err) → Txn A
 require (inj₁ a) b d = inj₂ (b , d , a)
 require (inj₂ e) b d = inj₁ e
+
+------------------------------------------------------------------------
+-- Derived combinators (so domain commands read like ordinary FP)
+------------------------------------------------------------------------
+
+-- unwrap a lookup or abort with the given error (FK / existence checks)
+requireJust : ∀ {A} → Err → Maybe A → Txn A
+requireJust e nothing  = abort e
+requireJust e (just a) = returnT a
+
+-- continue iff the guard holds, else abort (invariants / slot-free / transitions)
+guardT : Bool → Err → Txn ⊤
+guardT true  _ = returnT tt
+guardT false e = abort e
+
+-- emit once per element, in order (cascades over reverse-index id lists)
+forEachT : ∀ {A : Set} → List A → (A → Txn ⊤) → Txn ⊤
+forEachT []       f = returnT tt
+forEachT (x ∷ xs) f = f x >>T forEachT xs f
 
 ------------------------------------------------------------------------
 -- Run — to the shape walTxn consumes

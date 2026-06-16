@@ -18,7 +18,8 @@ open import Agda.Builtin.Char using (primCharEquality)
 open import Crm.Identity
 open import Crm.Wire
   using ( encParty; decParty; encEngagement; decEngagement
-        ; encActivity; decActivity; encParticipation; decParticipation )
+        ; encActivity; decActivity; encParticipation; decParticipation
+        ; encAccount; decAccount )
 open import Agdelte.Storage.Wire using (encℕ; decℕ)
 open import Agdelte.Storage.IndexedMap as IM using (IndexedMap)
 
@@ -54,6 +55,7 @@ record Base : Set where
     engagements    : IndexedMap Engagement
     activities     : IndexedMap Activity         -- index 0: byEngagement
     participations : IndexedMap Participation     -- index 0: byEngagement, 1: byParty
+    accounts       : IndexedMap Account
     nextId         : ℕ
 open Base public
 
@@ -63,6 +65,7 @@ emptyBase = mkBase
   (IM.empty [])
   (IM.empty (extActEng ∷ []))
   (IM.empty (extPartEng ∷ extPartParty ∷ []))
+  (IM.empty [])
   1
 
 ------------------------------------------------------------------------
@@ -74,10 +77,12 @@ data CrmOp : Set where
   SetEngagement    : Engagement → CrmOp
   SetActivity      : Activity → CrmOp
   SetParticipation : Participation → CrmOp
+  SetAccount       : Account → CrmOp
   DelParty         : ℕ → CrmOp
   DelEngagement    : ℕ → CrmOp
   DelActivity      : ℕ → CrmOp
   DelParticipation : ℕ → CrmOp
+  DelAccount       : ℕ → CrmOp
 
 data Err : Set where
   NotFound          : Err
@@ -104,10 +109,13 @@ apply (SetActivity a) b =
   record b { activities = IM.insert (aId a) a (activities b) ; nextId = bump (aId a) (nextId b) }
 apply (SetParticipation p) b =
   record b { participations = IM.insert (prId p) p (participations b) ; nextId = bump (prId p) (nextId b) }
+apply (SetAccount a) b =
+  record b { accounts = IM.insert (acId a) a (accounts b) ; nextId = bump (acId a) (nextId b) }
 apply (DelParty id) b         = record b { parties        = IM.delete id (parties b) }
 apply (DelEngagement id) b    = record b { engagements    = IM.delete id (engagements b) }
 apply (DelActivity id) b      = record b { activities     = IM.delete id (activities b) }
 apply (DelParticipation id) b = record b { participations = IM.delete id (participations b) }
+apply (DelAccount id) b       = record b { accounts       = IM.delete id (accounts b) }
 
 ------------------------------------------------------------------------
 -- Op codec (tagged; record bodies via Crm.Wire). For the WAL (#D).
@@ -118,10 +126,12 @@ encodeOp (SetParty p)          = "P" <> encParty p
 encodeOp (SetEngagement e)     = "E" <> encEngagement e
 encodeOp (SetActivity a)       = "A" <> encActivity a
 encodeOp (SetParticipation p)  = "T" <> encParticipation p
+encodeOp (SetAccount a)        = "C" <> encAccount a
 encodeOp (DelParty id)         = "p" <> encℕ id
 encodeOp (DelEngagement id)    = "e" <> encℕ id
 encodeOp (DelActivity id)      = "a" <> encℕ id
 encodeOp (DelParticipation id) = "t" <> encℕ id
+encodeOp (DelAccount id)       = "c" <> encℕ id
 
 private
   mP : Maybe Party → Maybe CrmOp
@@ -136,6 +146,9 @@ private
   mT : Maybe Participation → Maybe CrmOp
   mT (just x) = just (SetParticipation x)
   mT nothing  = nothing
+  mC : Maybe Account → Maybe CrmOp
+  mC (just x) = just (SetAccount x)
+  mC nothing  = nothing
   mDel : (ℕ → CrmOp) → Maybe ℕ → Maybe CrmOp
   mDel f (just n) = just (f n)
   mDel f nothing  = nothing
@@ -149,8 +162,10 @@ decodeOp s with toList s
   else if primCharEquality c 'E' then mE (decEngagement body)
   else if primCharEquality c 'A' then mA (decActivity body)
   else if primCharEquality c 'T' then mT (decParticipation body)
+  else if primCharEquality c 'C' then mC (decAccount body)
   else if primCharEquality c 'p' then mDel DelParty (decℕ body)
   else if primCharEquality c 'e' then mDel DelEngagement (decℕ body)
   else if primCharEquality c 'a' then mDel DelActivity (decℕ body)
   else if primCharEquality c 't' then mDel DelParticipation (decℕ body)
+  else if primCharEquality c 'c' then mDel DelAccount (decℕ body)
   else nothing

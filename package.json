@@ -106,7 +106,9 @@
     "test:crmstore": "npm run gen:crmstore-test && cabal build crmstore-test && cabal run crmstore-test",
     "gen:walrec-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i services-core -i server server/WalRecoveryTest.agda",
     "test:walrec": "npm run gen:walrec-test && cabal build walrec-test && cabal run walrec-test",
-    "clean": "rm -rf _build MAlonzo jAgda"
+    "clean": "rm -rf _build MAlonzo jAgda",
+    "gen:crmcommands-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i services-core -i server server/CrmCommandsTest.agda",
+    "test:crmcommands": "npm run gen:crmcommands-test && cabal build crmcommands-test && cabal run crmcommands-test"
   },
   "keywords": [
     "agda",

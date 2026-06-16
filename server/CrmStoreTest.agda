@@ -76,4 +76,5 @@ main =
   checkL "act-by-eng3"    (IM.byIndex actByEngagement 3 (activities st))      (9 ∷ [])       seq
   checkN "nextId"         (nextId st) 13                                                     seq
   pass   "lookup-act9"    (isJustA (IM.lookup 9 (activities st)))                            seq
-  pass   "op-roundtrip"   (rtOp (SetParty p7) ∧ rtOp (DelParticipation 11))
+  pass   "op-roundtrip"   (rtOp (SetParty p7) ∧ rtOp (DelParticipation 11)
+                           ∧ rtOp (SetAccount (mkAccount 5 "ua5" 1000 100)) ∧ rtOp (DelAccount 5))

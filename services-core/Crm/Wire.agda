@@ -117,3 +117,20 @@ decParticipation = runR (
   fieldR decStr              >>=R λ role →
   fieldR decℕ                >>=R λ ca →
   returnR (mkParticipation i eng pty role ca))
+
+------------------------------------------------------------------------
+-- Account (balance)
+------------------------------------------------------------------------
+
+encAccount : Account → String
+encAccount a =
+  lp (encℕ (acId a)) <> lp (encStr (acUuid a)) <> lp (encℕ (acBalance a)) <>
+  lp (encℕ (acCreatedAt a))
+
+decAccount : String → Maybe Account
+decAccount = runR (
+  fieldR decℕ                >>=R λ i →
+  fieldR decStr              >>=R λ u →
+  fieldR decℕ                >>=R λ bal →
+  fieldR decℕ                >>=R λ ca →
+  returnR (mkAccount i u bal ca))

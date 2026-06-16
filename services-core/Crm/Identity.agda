@@ -98,3 +98,17 @@ record Participation : Set where
     prCreatedAt    : ℕ
 
 open Participation public
+
+------------------------------------------------------------------------
+-- Account (a balance in minor units; invariant: never negative) — §5.x money
+------------------------------------------------------------------------
+
+record Account : Set where
+  constructor mkAccount
+  field
+    acId        : ℕ
+    acUuid      : Uuid
+    acBalance   : ℕ                 -- minor units (kopecks); guarded ≥ 0 by construction
+    acCreatedAt : ℕ
+
+open Account public

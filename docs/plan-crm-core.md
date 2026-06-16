@@ -112,15 +112,28 @@
       не только диск), нет CRC (бит-рот с заниженной длиной — редкий; см. ниже), Payment
       cross-resource (см. ниже).
 
-## Фаза 4 — Реальные транзакции (мерило «естественно ли»)
+## Фаза 4 — Реальные транзакции (мерило «естественно ли») ✓
 
-- [ ] `addParticipant` (store-инвариант FK — рантайм-проверка).
-- [ ] `scheduleActivity`/`bookSession` (проверка «слот свободен»).
-- [ ] **Удаление (#E):** soft-delete по умолчанию; hard-delete — транзакция **явно каскадит**
-      / проверяет отсутствие ссылок через обратные индексы (иначе dangling FK).
-- [ ] **Один value-инвариант correct-by-construction** через разрешимость
-      (`charge`/`decBalance` с `amt ≤? bal` → proof). Измерить планку: сколько
-      итераций, не сполз ли в `postulate`/`primTrustMe` (ревью обязано ловить).
+Всё в `services-core/Crm/Commands.agda` (+ `Crm.Txn` комбинаторы `requireJust`/`guardT`/
+`forEachT`). Тест `server/CrmCommandsTest.agda` — **10/10 PASS на GHC** (`npm run test:crmcommands`).
+
+- [x] `addParticipant` — FK-проверка **обоих** концов (engagement и party существуют и live),
+      id из `nextId b`. ✓ (reject `NotFound` на несуществующих).
+- [x] `bookSession` — проверка «слот свободен» через **обратный индекс** `byEngagement`
+      (нет live не-canceled активности в то же время). ✓ (conflict / другой слот / re-book
+      после cancel).
+- [x] `cancelActivity` — **гард перехода статуса** (`Scheduled → Canceled`; повтор →
+      `InvalidTransition`). ✓
+- [x] **Удаление (#E):** `hardDeleteEngagement` — транзакция **явно каскадит** через обратные
+      индексы (`DelActivity`/`DelParticipation` по всем, потом `DelEngagement`) → нет dangling FK.
+      ✓ тест `cascade-clean`. (Soft-delete = обычный `Set*` с `*DeletedAt`, уже есть.)
+- [x] **value-инвариант correct-by-construction:** `charge` поверх `Account` (новая сущность —
+      добавлена через весь стек Identity→Wire→Store **механически**). `debit : (bal amt : ℕ) →
+      amt ≤ bal → ℕ` нельзя **вызвать** без доказательства; пруф даёт только ветка `yes` от
+      `_≤?_`, ветка `no` обязана `abort Insufficient`. **Планка:** прошло с первого раза, БЕЗ
+      `postulate`/`primTrustMe`/`{-# TERMINATING #-}`, без боёв с тайпчекером — паттерн
+      разрешимости эргономичен. ✓ тест: debit 1000→700, overdraft→`Insufficient` (баланс цел),
+      credit 1000→1050.
 
 ## Фаза 5 — Headless-вход (`Crm.Api`) + живой прогон
 
