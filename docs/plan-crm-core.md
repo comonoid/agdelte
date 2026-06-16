@@ -47,11 +47,11 @@
 - [x] Записи: `Party`, `Engagement`, `Activity` (FK `aEngagementId`), `Participation`
       (M:N-факт, синтетич. `prId`) + `PartyType`/`ActStatus`/`Role`. ✓ типечек.
 - [x] **uuid-слой (#3):** `Party`/`Engagement`/`Activity` несут `pUuid`/`eUuid`/`aUuid`. ✓
-- [ ] **Чистый Agda-кодек** `encode/decode` на каждый тип. ⚠️ Аудит кодом: `Agdelte.Json` И
-      `FFI.Shared` (`readℕ`/`encodeListLP`) — **JS-only**, на GHC не компилятся → **НЕ они**.
-      Кодек = `showℕ` (encode, чистый) + **чистый `readℕ`** + length-prefix `<len>:<s>`,
-      GHC+JS. **Позиционный**, не самоописывающий (#6 → версия/конвертер). **Round-trip
-      `decode (encode x) ≡ just x` на каждый тип** (#N6) — рантайм-тест (как у IndexedMap).
+- [x] **Чистый Agda-кодек** `encode/decode` — `Agdelte.Storage.Wire` (генерик: `readℕ`,
+      length-prefix `<len>:<s>`, ридер-монада, прим. кодеки) + `Crm.Wire` (enum'ы + 4 записи).
+      GHC+JS, позиционный (Json/FFI.Shared — JS-only, аудит кодом). **Round-trip
+      `server/CrmWireTest.agda` — 7/7 PASS на GHC** (`npm run test:crmwire`), incl. `:`/`|` в
+      полях, `nothing`/`just`, все enum'ы (#N6). ✓
 - [x] grep-страж нейтральности (нет вертикалей). ✓
 
 ## Фаза 2 — `Crm.Store` (сборка состояния)

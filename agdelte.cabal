@@ -65,3 +65,11 @@ executable indexedmap-test
   ghc-options:      -main-is MAlonzo.Code.IndexedMapTest -w -rtsopts
   default-language: GHC2021
   build-depends:    base, text, containers
+
+-- crmwire-test: round-trip test for Crm.Wire codecs (Phase 1, #N6).
+executable crmwire-test
+  main-is:          MAlonzo/Code/CrmWireTest.hs
+  hs-source-dirs:   _build, hs
+  ghc-options:      -main-is MAlonzo.Code.CrmWireTest -w -rtsopts
+  default-language: GHC2021
+  build-depends:    base, text
