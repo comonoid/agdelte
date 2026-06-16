@@ -73,3 +73,11 @@ executable crmwire-test
   ghc-options:      -main-is MAlonzo.Code.CrmWireTest -w -rtsopts
   default-language: GHC2021
   build-depends:    base, text
+
+-- crmstore-test: Phase 2 test for Crm.Store (apply / indexes / nextId / op codec).
+executable crmstore-test
+  main-is:          MAlonzo/Code/CrmStoreTest.hs
+  hs-source-dirs:   _build, hs
+  ghc-options:      -main-is MAlonzo.Code.CrmStoreTest -w -rtsopts
+  default-language: GHC2021
+  build-depends:    base, text, containers

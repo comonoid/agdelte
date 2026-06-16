@@ -102,6 +102,8 @@
     "test:im": "npm run build:im-test && cabal run indexedmap-test",
     "gen:crmwire-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i services-core -i server server/CrmWireTest.agda",
     "test:crmwire": "npm run gen:crmwire-test && cabal build crmwire-test && cabal run crmwire-test",
+    "gen:crmstore-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i services-core -i server server/CrmStoreTest.agda",
+    "test:crmstore": "npm run gen:crmstore-test && cabal build crmstore-test && cabal run crmstore-test",
     "clean": "rm -rf _build MAlonzo jAgda"
   },
   "keywords": [

@@ -34,7 +34,7 @@ private
   record Slot (V : Set) : Set where
     constructor mkSlot
     field
-      extract : V → List ℕ      -- index-keys of a value (e.g. [uuidHash] or [partyId])
+      extract : V → List ℕ      -- index-keys of a value (e.g. [uuidHash] or [foreignKey])
       imap    : IdxMap
 
   record IM (V : Set) : Set where

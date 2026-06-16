@@ -56,19 +56,21 @@
 
 ## Фаза 2 — `Crm.Store` (сборка состояния)
 
-- [ ] `Base` = **самоиндексирующиеся `IndexedMap`** по сущностям (`byUuid` на адресуемых;
-      `byEngagement`/`byParty` на `participations`), `emptyBase`. **Отдельного
-      `Indexes`/`reindex` НЕТ** (#2 — индексы внутри `IndexedMap`).
-- [ ] `data CrmOp` — **типизированные конструкторы на сущность** (`SetParty Party | …`, не
-      generic `SetEntity tag value` — #N5, нет рассогласования тег↔значение) + доменные
-      команды; `apply : CrmOp → Base → Base` через `IndexedMap.insert/delete`. **`apply`
-      продвигает `nextId := max(nextId, id+1)`** на создающих ops (#N1 — иначе коллизии id
-      после рестарта).
-- [ ] **Недетерминизм (#N2):** `uuid`/время/random — НЕ в чистой транзакции; их генерит
-      IO-обработчик и **передаёт параметром** в построитель транзакции → оседают в `Op`.
-- [ ] `data Err` (NotFound|Conflict|Insufficient|InvalidTransition|Forbidden|Invariant).
-- [ ] `walSerializeOp`/`walDeserializeOp`; `WalConfig` через `mkWalConfigNoSnapshot`.
-- [ ] Типечек.
+- [x] `Base` = **самоиндексирующиеся `IndexedMap`** по сущностям (`activities` byEngagement;
+      `participations` byEngagement/byParty — FK-индексы), `emptyBase`. **Отдельного
+      `Indexes`/`reindex` НЕТ** (#2 — индексы внутри `IndexedMap`). `byUuid`-хеш отложен на
+      слой API (Фаза 5). ✓
+- [x] `data CrmOp` — **типизированные конструкторы на сущность** (`SetParty Party | …`, не
+      generic `SetEntity tag value` — #N5) + `Del*`; `apply : CrmOp → Base → Base` через
+      `IndexedMap.insert/delete`. **`apply` продвигает `nextId := max(nextId, id+1)`** на
+      создающих ops (#N1) — **проверено рантайм-тестом** (`nextId=13` после реплея). ✓
+- [~] **Недетерминизм (#N2):** механика — на слое `Txn`/handler (Фаза 3/5); здесь `uuid`/время
+      уже **поля записей** (оседают в `Op` через `Set*`), генерации в `Store` нет. ✓ по части Store.
+- [x] `data Err` (NotFound|Conflict|Insufficient|InvalidTransition|Forbidden|Invariant). ✓
+- [x] `encodeOp`/`decodeOp` (теговый кодек операций для WAL #D) — **round-trip проверен**
+      (`op-roundtrip` PASS, incl. `Del*`). `WalConfig`/`mkWalConfigNoSnapshot` — Фаза 3 (движок WAL).
+- [x] Типечек + **рантайм-тест `server/CrmStoreTest.agda` 7/7 PASS** (`npm run test:crmstore`):
+      M:N-индексы в обе стороны, 1:N, `nextId`, lookup, op-roundtrip.
 
 ## Фаза 3 — Транзакции (`Crm.Txn` + `walTxn` в `agdelte`)
 
