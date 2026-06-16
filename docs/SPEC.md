@@ -562,6 +562,10 @@ AML/115-ФЗ, миграционные данные, KYC) → **ветклини
   `POST /api/v1/engagements`, `GET/PATCH/DELETE /api/v1/engagements/{uuid}`.
   Действия-команды: `POST /api/v1/engagements/{uuid}/stage` и т.п.
 - **Наружу — только `uuid`.** `bigint id` никогда не покидает сервер.
+  > ⚠️ **WAL-MVP (2026-06-16): uuid ОТЛОЖЕН.** Внешний id = внутренний `id`; маршруты пока
+  > плоские (`/parties`, `/accounts`, `/charge`). uuid + object-level authz вернутся одним
+  > срезом при появлении внешнего/недоверенного клиента (анализ — memory `crm-uuid-dropped`).
+  > Эта строка §13 — целевой контракт, не текущее состояние.
 - **Конверт:** успех `{"data": …}` (объект или массив), ошибка
   `{"error": {"code": "...", "message": "..."}}`. Коды: `not_found`, `validation`, `forbidden`,
   `unauthorized`, `conflict`, `internal`.

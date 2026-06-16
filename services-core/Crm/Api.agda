@@ -43,23 +43,6 @@ crmConfig : String → WalConfig Base CrmOp
 crmConfig path = mkWalConfig path apply encodeOp decodeOp emptyBase
 
 ------------------------------------------------------------------------
--- uuid (external id, §13) — generated at the IO boundary (#N2). Linux only.
-------------------------------------------------------------------------
-
-postulate
-  genUuid : IO String
-{-# FOREIGN GHC
-  import qualified Data.Text as T
-  import qualified Data.Text.IO as TIO
-  import System.IO (withFile, IOMode(ReadMode), hSetEncoding, utf8)
-  genUuidHS :: IO T.Text
-  genUuidHS = withFile "/proc/sys/kernel/random/uuid" ReadMode $ \h -> do
-    hSetEncoding h utf8
-    T.strip <$> TIO.hGetLine h
-  #-}
-{-# COMPILE GHC genUuid = genUuidHS #-}
-
-------------------------------------------------------------------------
 -- Envelope + Err mapping
 ------------------------------------------------------------------------
 
@@ -102,13 +85,11 @@ private
 
 partyJson : Party → String
 partyJson p =
-  "{\"id\":" <> show (pId p) <> ",\"uuid\":" <> str (pUuid p) <>
-  ",\"name\":" <> str (pDisplayName p) <> "}"
+  "{\"id\":" <> show (pId p) <> ",\"name\":" <> str (pDisplayName p) <> "}"
 
 accountJson : Account → String
 accountJson a =
-  "{\"id\":" <> show (acId a) <> ",\"uuid\":" <> str (acUuid a) <>
-  ",\"balance\":" <> show (acBalance a) <> "}"
+  "{\"id\":" <> show (acId a) <> ",\"balance\":" <> show (acBalance a) <> "}"
 
 ------------------------------------------------------------------------
 -- Handlers
@@ -130,11 +111,10 @@ postParty h req =
   case jsonGetField "name" body of λ where
     nothing      → pure (errJson 400 "missing name")
     (just name)  →
-      genUuid >>= λ uuid →
       getCurrentTime >>= λ now →
       let ty = parseType (jsonGetField "type" body)
           tz = maybeStr (jsonGetField "tz" body)
-      in commit h (createParty uuid ty name tz now)
+      in commit h (createParty ty name tz now)
   where
     maybeStr : Maybe String → String
     maybeStr (just s) = s
@@ -147,9 +127,8 @@ postAccount h req =
   case jsonGetNat "balance" body of λ where
     nothing      → pure (errJson 400 "missing balance")
     (just bal)   →
-      genUuid >>= λ uuid →
       getCurrentTime >>= λ now →
-      commit h (createAccount uuid bal now)
+      commit h (createAccount bal now)
 
 -- POST /charge  {"acc":id, "amt":N}
 postCharge : WalHandle Base CrmOp → HttpRequest → IO HttpResponse

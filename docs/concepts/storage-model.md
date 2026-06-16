@@ -44,9 +44,9 @@ ORM-маппингов, нет языка запросов. Персистент
 
 ```
 data PartyType = person | org
-record Party         { id : ℕ ; uuid : String ; type : PartyType ; name : String ; tz : String }
-record Engagement    { id : ℕ ; uuid : String ; caseType : ℕ ; stage : ℕ ; title : Maybe String }
-record Activity      { id : ℕ ; uuid : String ; engagementId : ℕ ; startsAt : ℕ ; status : ActStatus }  -- 1:N: FK
+record Party         { id : ℕ ; type : PartyType ; name : String ; tz : String }
+record Engagement    { id : ℕ ; caseType : ℕ ; stage : ℕ ; title : Maybe String }
+record Activity      { id : ℕ ; engagementId : ℕ ; startsAt : ℕ ; status : ActStatus }  -- 1:N: FK
 record Participation { id : ℕ ; engagementId : ℕ ; partyId : ℕ ; role : Role }           -- M:N факт; синтетич. row-id
 ```
 
@@ -61,9 +61,10 @@ record Base
   ; nextId         : ℕ }
 ```
 
-> **Слой uuid + источники недетерминизма (внешний id, SPEC §13).** Наружу API отдаёт
-> **только `uuid`**, внутри — `id : ℕ`; у адресуемых сущностей `uuid : String` + индекс
-> `byUuid` (`uuid → id`).
+> **Внешний id + источники недетерминизма.** uuid-слой §13 **УБРАН** (2026-06-16): внешний
+> id = внутренний `id : ℕ`. uuid вернётся вместе с authz при появлении внешнего/недоверенного
+> клиента (memory `crm-uuid-dropped`). Недетерминизм остаётся (время `createdAt`, при возврате —
+> uuid/random):
 > **Транзакция ЧИСТА** (`Base → Either Err …`) → сама **не может** генерить uuid / читать
 > часы / брать random. Все недетерминированные входы (`uuid`, текущее время для
 > `createdAt`, любой random) **генерит IO-обработчик и передаёт в транзакцию параметром**

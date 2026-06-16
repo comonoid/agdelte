@@ -16,9 +16,8 @@ open import Data.Maybe using (Maybe)
 -- Shared
 ------------------------------------------------------------------------
 
-PartyId Uuid : Set
+PartyId : Set
 PartyId = ℕ
-Uuid     = String
 
 Role : Set       -- participation role — config-driven (e.g. "client","provider","payer")
 Role = String
@@ -40,8 +39,7 @@ data ActStatus : Set where
 record Party : Set where
   constructor mkParty
   field
-    pId          : ℕ
-    pUuid        : Uuid             -- external id (§13)
+    pId          : ℕ                -- internal primary key (= external id for the single-operator MVP)
     pType        : PartyType
     pDisplayName : String
     pTz          : String           -- IANA tz; reminder rendering (§5.4)
@@ -58,7 +56,6 @@ record Engagement : Set where
   constructor mkEngagement
   field
     eId        : ℕ
-    eUuid      : Uuid
     eCaseType  : ℕ                  -- case_type id
     eStage     : ℕ                  -- current stage id
     eTitle     : Maybe String
@@ -75,7 +72,6 @@ record Activity : Set where
   constructor mkActivity
   field
     aId           : ℕ
-    aUuid         : Uuid
     aEngagementId : ℕ               -- FK → engagement (1:N)
     aStartsAt     : ℕ               -- unix seconds
     aStatus       : ActStatus
@@ -107,7 +103,6 @@ record Account : Set where
   constructor mkAccount
   field
     acId        : ℕ
-    acUuid      : Uuid
     acBalance   : ℕ                 -- minor units (kopecks); guarded ≥ 0 by construction
     acCreatedAt : ℕ
 

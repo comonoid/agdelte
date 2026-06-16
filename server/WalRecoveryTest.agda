@@ -85,8 +85,8 @@ cfg path = mkWalConfig path apply encodeOp decodeOp emptyBase
 ruName : String
 ruName = "Полунин: имя | с спецсимволами"      -- multi-byte + ':' + '|'
 
-p7  = mkParty 7 "u7" Person ruName "Europe/Moscow" 100 nothing
-p8  = mkParty 8 "u8" Org "Орг8" "UTC" 100 nothing
+p7  = mkParty 7 Person ruName "Europe/Moscow" 100 nothing
+p8  = mkParty 8 Org "Орг8" "UTC" 100 nothing
 
 tx2 : Txn ⊤
 tx2 = emit (SetParty p7) >>T emit (SetParty p8)

@@ -56,14 +56,14 @@ rtAcc a with decAccount (encAccount a)
 ... | just a' = primStringEquality (encAccount a') (encAccount a)
 ... | nothing = false
 
-p1 = mkParty 7 "ab-12" Person "Полунин: с двоеточием" "Europe/Moscow" 1700000000 nothing
-p2 = mkParty 8 "cd-34" Org "Орг|пайп" "UTC" 1700000001 (just 1700009999)
-e1 = mkEngagement 3 "e-1" 2 5 (just "Заголовок: и | спецсимволы") 1700000000 nothing
-e2 = mkEngagement 4 "e-2" 2 6 nothing 1700000000 (just 1700001)
-a1 = mkActivity 9 "a-1" 3 1700005000 Scheduled 1700000000 nothing
-a2 = mkActivity 10 "a-2" 3 1700006000 NoShow 1700000000 (just 1700002)
+p1 = mkParty 7 Person "Полунин: с двоеточием" "Europe/Moscow" 1700000000 nothing
+p2 = mkParty 8 Org "Орг|пайп" "UTC" 1700000001 (just 1700009999)
+e1 = mkEngagement 3 2 5 (just "Заголовок: и | спецсимволы") 1700000000 nothing
+e2 = mkEngagement 4 2 6 nothing 1700000000 (just 1700001)
+a1 = mkActivity 9 3 1700005000 Scheduled 1700000000 nothing
+a2 = mkActivity 10 3 1700006000 NoShow 1700000000 (just 1700002)
 pp = mkParticipation 11 3 7 "provider" 1700000000
-ac = mkAccount 5 "ac-5" 1000 1700000000
+ac = mkAccount 5 1000 1700000000
 
 main : IO ⊤
 main =

@@ -43,20 +43,19 @@ decActStatus _   = nothing
 
 encParty : Party → String
 encParty p =
-  lp (encℕ (pId p)) <> lp (encStr (pUuid p)) <> lp (encPartyType (pType p)) <>
+  lp (encℕ (pId p)) <> lp (encPartyType (pType p)) <>
   lp (encStr (pDisplayName p)) <> lp (encStr (pTz p)) <> lp (encℕ (pCreatedAt p)) <>
   lp (encMaybeℕ (pDeletedAt p))
 
 decParty : String → Maybe Party
 decParty = runR (
   fieldR decℕ                >>=R λ i →
-  fieldR decStr              >>=R λ u →
   fieldR decPartyType        >>=R λ t →
   fieldR decStr              >>=R λ dn →
   fieldR decStr              >>=R λ tz →
   fieldR decℕ                >>=R λ ca →
   fieldR decMaybeℕ     >>=R λ dd →
-  returnR (mkParty i u t dn tz ca dd))
+  returnR (mkParty i t dn tz ca dd))
 
 ------------------------------------------------------------------------
 -- Engagement
@@ -64,20 +63,19 @@ decParty = runR (
 
 encEngagement : Engagement → String
 encEngagement e =
-  lp (encℕ (eId e)) <> lp (encStr (eUuid e)) <> lp (encℕ (eCaseType e)) <>
+  lp (encℕ (eId e)) <> lp (encℕ (eCaseType e)) <>
   lp (encℕ (eStage e)) <> lp (encMaybeStr (eTitle e)) <>
   lp (encℕ (eCreatedAt e)) <> lp (encMaybeℕ (eDeletedAt e))
 
 decEngagement : String → Maybe Engagement
 decEngagement = runR (
   fieldR decℕ                >>=R λ i →
-  fieldR decStr              >>=R λ u →
   fieldR decℕ                >>=R λ ct →
   fieldR decℕ                >>=R λ st →
   fieldR decMaybeStr   >>=R λ ti →
   fieldR decℕ                >>=R λ ca →
   fieldR decMaybeℕ     >>=R λ dd →
-  returnR (mkEngagement i u ct st ti ca dd))
+  returnR (mkEngagement i ct st ti ca dd))
 
 ------------------------------------------------------------------------
 -- Activity
@@ -85,20 +83,19 @@ decEngagement = runR (
 
 encActivity : Activity → String
 encActivity a =
-  lp (encℕ (aId a)) <> lp (encStr (aUuid a)) <> lp (encℕ (aEngagementId a)) <>
+  lp (encℕ (aId a)) <> lp (encℕ (aEngagementId a)) <>
   lp (encℕ (aStartsAt a)) <> lp (encActStatus (aStatus a)) <>
   lp (encℕ (aCreatedAt a)) <> lp (encMaybeℕ (aDeletedAt a))
 
 decActivity : String → Maybe Activity
 decActivity = runR (
   fieldR decℕ                >>=R λ i →
-  fieldR decStr              >>=R λ u →
   fieldR decℕ                >>=R λ eng →
   fieldR decℕ                >>=R λ sa →
   fieldR decActStatus        >>=R λ st →
   fieldR decℕ                >>=R λ ca →
   fieldR decMaybeℕ     >>=R λ dd →
-  returnR (mkActivity i u eng sa st ca dd))
+  returnR (mkActivity i eng sa st ca dd))
 
 ------------------------------------------------------------------------
 -- Participation (M:N fact)
@@ -124,13 +121,11 @@ decParticipation = runR (
 
 encAccount : Account → String
 encAccount a =
-  lp (encℕ (acId a)) <> lp (encStr (acUuid a)) <> lp (encℕ (acBalance a)) <>
-  lp (encℕ (acCreatedAt a))
+  lp (encℕ (acId a)) <> lp (encℕ (acBalance a)) <> lp (encℕ (acCreatedAt a))
 
 decAccount : String → Maybe Account
 decAccount = runR (
   fieldR decℕ                >>=R λ i →
-  fieldR decStr              >>=R λ u →
   fieldR decℕ                >>=R λ bal →
   fieldR decℕ                >>=R λ ca →
-  returnR (mkAccount i u bal ca))
+  returnR (mkAccount i bal ca))

@@ -46,7 +46,10 @@
       `Crm.Store`, Фаза 2). ✓
 - [x] Записи: `Party`, `Engagement`, `Activity` (FK `aEngagementId`), `Participation`
       (M:N-факт, синтетич. `prId`) + `PartyType`/`ActStatus`/`Role`. ✓ типечек.
-- [x] **uuid-слой (#3):** `Party`/`Engagement`/`Activity` несут `pUuid`/`eUuid`/`aUuid`. ✓
+- [~] **uuid-слой (#3) — УБРАН (2026-06-16).** Внешний id = внутренний `id` (`nextId`).
+      Анализ показал: все плюсы uuid здесь будущие/не-доставляемые, а единственный «с зубами»
+      (непрозрачность) — часть authz и должен ехать вместе с ним при появлении внешнего/
+      недоверенного клиента. Поля `*Uuid`/`genUuid`/uuid-кодеки сняты. См. memory `crm-uuid-dropped`.
 - [x] **Чистый Agda-кодек** `encode/decode` — `Agdelte.Storage.Wire` (генерик: `readℕ`,
       length-prefix `<len>:<s>`, ридер-монада, прим. кодеки) + `Crm.Wire` (enum'ы + 4 записи).
       GHC+JS, позиционный (Json/FFI.Shared — JS-only, аудит кодом). **Round-trip
@@ -143,20 +146,19 @@
 
 - [x] HTTP-обработчики: `GET` → `walRead`+запрос; `POST` → парс JSON-тела → построить `Txn`
       → `walTxn`. Конверт `{data}`/`{error}` (§13); `Err`→HTTP-статус (404/409/402/…).
-      uuid (внешний id, §13) генерится на IO-границе (`/proc/sys/kernel/random/uuid`, #N2).
+      Внешний id = внутренний `id` (uuid убран, см. выше).
 - [x] Entry-модуль + cabal-таргет `crm-server` (`-threaded`, `LIBRARY_PATH` zlib на NixOS).
       ⚠️ попутно починен `FFI.Time` (трейлинг-def в FOREIGN стрэндил авто-`import Data.Text` →
       тело инлайнено в COMPILE-прагму; та же грабля, что NatMap/FileSystem).
 - [x] **Живой прогон (`scripts/crm-live-run.sh`):** старт → `POST /accounts`+`/charge`+`/parties`
       (incl. overdraft → 402, кириллица «Полунин») → `GET` показывает balance 700 → **рестарт**
-      → `GET` снова balance 700 и «Полунин» (uuid сохранён) — **реплей из 224-байтного `crm.wal`
+      → `GET` снова balance 700 и «Полунин» — **реплей из `crm.wal`
       совпал**. correct-by-construction инвариант денег держится **через HTTP**.
 - [x] Инвариант индексов под доменными транзакциями — `byIndex` после серии операций даёт
       верный результат: покрыто `CrmCommandsTest` (slot/cascade через обратные индексы).
-- [~] **`byUuid` (lookup по внешнему uuid) — ОТЛОЖЕНО.** Чтения сейчас по внутреннему `id` /
-      списком; uuid возвращается и хранится, но строкового хеш-индекса нет. Когда понадобится
-      `GET /parties/{uuid}` — добавить `hashString : String → ℕ` + индекс `byUuidHash` на
-      адресуемых сущностях + фильтр по точному uuid (коллизии хеша). Ядро ходит и без этого.
+- [—] **`byUuid` — СНЯТО с повестки** (uuid убран). Адресация по внутреннему `id`. Вернётся
+      вместе с uuid+authz при появлении внешнего клиента (тогда же осознанно выбрать вариант,
+      возможно ULID); рецепт хеш-индекса — в memory `crm-uuid-dropped` / истории git.
 
 ## Гейты ревью (§15.4 — не мерджить автономно)
 

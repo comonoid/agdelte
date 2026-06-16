@@ -57,23 +57,23 @@ anyℕ p (x ∷ xs) = p x ∨ anyℕ p xs
 -- create commands — allocate id from nextId; uuid + timestamp come from IO (#N2)
 ------------------------------------------------------------------------
 
-createParty : Uuid → PartyType → (name tz : String) → (now : ℕ) → Txn ℕ
-createParty uuid ty name tz now =
+createParty : PartyType → (name tz : String) → (now : ℕ) → Txn ℕ
+createParty ty name tz now =
   getBase >>=T λ b →
   (let pid = nextId b in
-   emit (SetParty (mkParty pid uuid ty name tz now nothing)) >>T returnT pid)
+   emit (SetParty (mkParty pid ty name tz now nothing)) >>T returnT pid)
 
-createEngagement : Uuid → (caseType stage : ℕ) → (now : ℕ) → Txn ℕ
-createEngagement uuid caseType stage now =
+createEngagement : (caseType stage : ℕ) → (now : ℕ) → Txn ℕ
+createEngagement caseType stage now =
   getBase >>=T λ b →
   (let eid = nextId b in
-   emit (SetEngagement (mkEngagement eid uuid caseType stage nothing now nothing)) >>T returnT eid)
+   emit (SetEngagement (mkEngagement eid caseType stage nothing now nothing)) >>T returnT eid)
 
-createAccount : Uuid → (balance now : ℕ) → Txn ℕ
-createAccount uuid balance now =
+createAccount : (balance now : ℕ) → Txn ℕ
+createAccount balance now =
   getBase >>=T λ b →
   (let aid = nextId b in
-   emit (SetAccount (mkAccount aid uuid balance now)) >>T returnT aid)
+   emit (SetAccount (mkAccount aid balance now)) >>T returnT aid)
 
 ------------------------------------------------------------------------
 -- addParticipant — FK check on both ends (exist + live), then link
@@ -104,14 +104,14 @@ slotFree b engId t =
     ... | nothing = false
     ... | just a  = (aStartsAt a == t) ∧ not (freesSlot (aStatus a)) ∧ live (aDeletedAt a)
 
-bookSession : (engId : ℕ) → Uuid → (startsAt now : ℕ) → Txn ℕ
-bookSession engId uuid startsAt now =
+bookSession : (engId : ℕ) → (startsAt now : ℕ) → Txn ℕ
+bookSession engId startsAt now =
   getBase >>=T λ b →
   requireJust NotFound (IM.lookup engId (engagements b)) >>=T λ e →
   guardT (live (eDeletedAt e)) NotFound >>T
   guardT (slotFree b engId startsAt) Conflict >>T
   (let aid = nextId b in
-   emit (SetActivity (mkActivity aid uuid engId startsAt Scheduled now nothing)) >>T
+   emit (SetActivity (mkActivity aid engId startsAt Scheduled now nothing)) >>T
    returnT aid)
 
 ------------------------------------------------------------------------

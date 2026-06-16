@@ -93,10 +93,10 @@ isCanceled _               = false
 
 seed : Base
 seed = foldl (λ b op → apply op b) emptyBase
-  ( SetParty (mkParty 7 "u7" Person "P7" "UTC" 100 nothing)
-  ∷ SetParty (mkParty 8 "u8" Person "P8" "UTC" 100 nothing)
-  ∷ SetEngagement (mkEngagement 3 "u3" 1 1 nothing 100 nothing)
-  ∷ SetAccount (mkAccount 5 "ua5" 1000 100)
+  ( SetParty (mkParty 7 Person "P7" "UTC" 100 nothing)
+  ∷ SetParty (mkParty 8 Person "P8" "UTC" 100 nothing)
+  ∷ SetEngagement (mkEngagement 3 1 1 nothing 100 nothing)
+  ∷ SetAccount (mkAccount 5 1000 100)
   ∷ [] )
 
 ------------------------------------------------------------------------
@@ -109,27 +109,27 @@ addPartNoParty = code (addParticipant 3 99 "provider" 200) seed == 1
 
 -- bookSession: book, then same slot conflicts, different slot ok
 bookConflict : Bool
-bookConflict with runB (bookSession 3 "ua" 500 200) seed
+bookConflict with runB (bookSession 3 500 200) seed
 ... | nothing = false
-... | just b1 = (code (bookSession 3 "ub" 500 201) b1 == 2)            -- Conflict
-                ∧ (code (bookSession 3 "uc" 600 201) b1 == 0)          -- other slot ok
+... | just b1 = (code (bookSession 3 500 201) b1 == 2)            -- Conflict
+                ∧ (code (bookSession 3 600 201) b1 == 0)          -- other slot ok
 
 -- cancelActivity: Scheduled→Canceled ok; second cancel → InvalidTransition;
 -- a canceled slot frees up for rebooking
 cancelFlow : Bool
-cancelFlow with runB (bookSession 3 "ua" 500 200) seed
+cancelFlow with runB (bookSession 3 500 200) seed
 ... | nothing = false
 ... | just b1 with runB (cancelActivity (nextId seed)) b1              -- the booked id = 9
 ...   | nothing = false
 ...   | just b2 = isCanceled (statusOf (nextId seed) b2)
                   ∧ (code (cancelActivity (nextId seed)) b2 == 4)      -- InvalidTransition
-                  ∧ (code (bookSession 3 "ud" 500 202) b2 == 0)       -- slot freed → ok
+                  ∧ (code (bookSession 3 500 202) b2 == 0)       -- slot freed → ok
 
 -- cascade hard-delete leaves no dangling activities/participations
 cascadeClean : Bool
 cascadeClean with runB (addParticipant 3 7 "provider" 200) seed
 ... | nothing = false
-... | just b1 with runB (bookSession 3 "ua" 500 201) b1
+... | just b1 with runB (bookSession 3 500 201) b1
 ...   | nothing = false
 ...   | just b2 with runB (hardDeleteEngagement 3) b2
 ...     | nothing = false

@@ -54,10 +54,10 @@ rtOp op with decodeOp (encodeOp op)
 ... | just op' = primStringEquality (encodeOp op') (encodeOp op)
 ... | nothing  = false
 
-p7  = mkParty 7 "u7" Person "P7" "UTC" 100 nothing
-p8  = mkParty 8 "u8" Person "P8" "UTC" 100 nothing
-e3  = mkEngagement 3 "u3" 1 1 nothing 100 nothing
-a9  = mkActivity 9 "u9" 3 200 Scheduled 100 nothing
+p7  = mkParty 7 Person "P7" "UTC" 100 nothing
+p8  = mkParty 8 Person "P8" "UTC" 100 nothing
+e3  = mkEngagement 3 1 1 nothing 100 nothing
+a9  = mkActivity 9 3 200 Scheduled 100 nothing
 pp11 = mkParticipation 11 3 7 "provider" 100
 pp12 = mkParticipation 12 3 8 "client" 100
 
@@ -77,4 +77,4 @@ main =
   checkN "nextId"         (nextId st) 13                                                     seq
   pass   "lookup-act9"    (isJustA (IM.lookup 9 (activities st)))                            seq
   pass   "op-roundtrip"   (rtOp (SetParty p7) ∧ rtOp (DelParticipation 11)
-                           ∧ rtOp (SetAccount (mkAccount 5 "ua5" 1000 100)) ∧ rtOp (DelAccount 5))
+                           ∧ rtOp (SetAccount (mkAccount 5 1000 100)) ∧ rtOp (DelAccount 5))
