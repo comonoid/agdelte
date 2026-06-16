@@ -152,6 +152,13 @@ creditOk with runB (credit 5 50) seed
 ... | nothing = false
 ... | just b  = balOf 5 b == 1050
 
+-- soft-delete a party → the (previously unreachable) live FK-guard now fires:
+-- addParticipant referencing the tombstoned party is rejected NotFound
+softDelBlocksFK : Bool
+softDelBlocksFK with runB (softDeleteParty 7 999) seed
+... | nothing = false
+... | just b  = code (addParticipant 3 7 "provider" 200) b == 1
+
 ------------------------------------------------------------------------
 
 check : String → Bool → IO ⊤
@@ -168,7 +175,8 @@ main =
   check "charge-ok"          chargeOk                                       seq
   check "charge-insufficient" chargeInsufficient                           seq
   check "charge-unchanged"   chargeUnchanged                                seq
-  check "credit-ok"          creditOk
+  check "credit-ok"          creditOk                                       seq
+  check "softdel-blocks-fk"  softDelBlocksFK
   where
     -- success: a participation got indexed under engagement 3
     addPartIndexed : Maybe Base → Bool

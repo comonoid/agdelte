@@ -137,6 +137,25 @@ hardDeleteEngagement engId =
   emit (DelEngagement engId)
 
 ------------------------------------------------------------------------
+-- soft-delete (SPEC §5.7: tombstone, not physical removal). Sets *DeletedAt;
+-- the `live` FK-guards then reject it, and read endpoints filter it out (L3).
+-- NB: reverse indexes still contain the tombstone — call sites filter `live`
+-- (slotFree, list reads); a future live-aware extractor could drop them eagerly.
+------------------------------------------------------------------------
+
+softDeleteParty : (partyId now : ℕ) → Txn ⊤
+softDeleteParty pid now =
+  getBase >>=T λ b →
+  requireJust NotFound (IM.lookup pid (parties b)) >>=T λ p →
+  emit (SetParty (record p { pDeletedAt = just now }))
+
+softDeleteEngagement : (engId now : ℕ) → Txn ⊤
+softDeleteEngagement eid now =
+  getBase >>=T λ b →
+  requireJust NotFound (IM.lookup eid (engagements b)) >>=T λ e →
+  emit (SetEngagement (record e { eDeletedAt = just now }))
+
+------------------------------------------------------------------------
 -- charge — value-invariant CORRECT-BY-CONSTRUCTION (balance never negative).
 --
 -- `debit` cannot even be CALLED without a proof `amt ≤ bal`; the only way to

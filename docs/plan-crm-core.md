@@ -129,7 +129,10 @@
       `InvalidTransition`). ✓
 - [x] **Удаление (#E):** `hardDeleteEngagement` — транзакция **явно каскадит** через обратные
       индексы (`DelActivity`/`DelParticipation` по всем, потом `DelEngagement`) → нет dangling FK.
-      ✓ тест `cascade-clean`. (Soft-delete = обычный `Set*` с `*DeletedAt`, уже есть.)
+      ✓ тест `cascade-clean`. Soft-delete: команды `softDeleteParty`/`softDeleteEngagement`
+      (`Set*` с `*DeletedAt := just now`) — добавлены по аудиту L5 (раньше поля были, а сеттера
+      нет). NB: экстракторы возвращают FK безусловно → tombstone остаётся в обратных индексах;
+      `live`-фильтр на call-site (`slotFree`, list-чтения L3). ✓ тест `softdel-blocks-fk`.
 - [x] **value-инвариант correct-by-construction:** `charge` поверх `Account` (новая сущность —
       добавлена через весь стек Identity→Wire→Store **механически**). `debit : (bal amt : ℕ) →
       amt ≤ bal → ℕ` нельзя **вызвать** без доказательства; пруф даёт только ветка `yes` от
@@ -159,6 +162,28 @@
 - [—] **`byUuid` — СНЯТО с повестки** (uuid убран). Адресация по внутреннему `id`. Вернётся
       вместе с uuid+authz при появлении внешнего клиента (тогда же осознанно выбрать вариант,
       возможно ULID); рецепт хеш-индекса — в memory `crm-uuid-dropped` / истории git.
+
+## Фаза 6 — post-audit hardening (аудит `docs/audit-2026-06-16.md`) ✓
+
+Мульти-агентный адверсариальный аудит (15 подтверждённых из 20). Разобрано:
+- **M5/L8** durability: per-record **CRC32** в WAL (`<len>:<crc>:<payload>`) — порча
+  committed-записи → `die`, рваный хвост → drop; длина — `Integer` + cap 18. **L9**:
+  `Wire.readField` требует точную длину. **L7**: `removeKey` чистит пустой bucket.
+  ✓ `walrec` 12/12 (incl. `crc-mismatch-refused`).
+- **M2** JSON: подстроночный сканер → настоящий escape-aware парсер (`FFI.Json`).
+  ✓ `json-test` 7/7.
+- **M3/L1** uuid: **убран** (анализ — все плюсы будущие; вернётся с authz). External id = `id`.
+- **H1**: bind по умолчанию **`127.0.0.1`** (loopback, `listenHost`) + опц. bearer-токен
+  (`CRM_TOKEN`); проверено `LISTEN 127.0.0.1`. **M4**: структурный конверт ошибок
+  `{error:{code,message}}`. **L3**: read-эндпоинты фильтруют soft-deleted (`liveJson`).
+- **L5**: `softDeleteParty`/`softDeleteEngagement` — сеттер soft-delete (раньше поля без
+  сеттера). ✓ `crmcommands` 11/11 (`softdel-blocks-fk`). **L6**: SQL-миграции помечены
+  «deferred Postgres path».
+- **Опровергнуто/не-баг (5):** field-smuggling PoC, silent-ops-loss (кодеки fail-closed),
+  пара заострённых durability-сценариев.
+- **Отложено (с заметками):** пагинация/`/api/v1` (single-operator MVP), authz/ACL (с uuid),
+  Payment cross-resource S3 (легаси), S1 shallow-evaluate (детерминир. реплей), извлечение
+  старой курсовой базы из `src/Agdelte/` (memory `crm-layering-storage-engine`).
 
 ## Гейты ревью (§15.4 — не мерджить автономно)
 

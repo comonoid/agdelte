@@ -1,5 +1,13 @@
 -- 0001_identity — identity & multitenancy foundation (SPEC §5.2, §5.4, §5.7, §5.8)
 --
+-- ⚠️ DEFERRED Postgres scale-out path — NOT the live engine. The running CRM uses
+-- the WAL + in-memory store (ADR docs/adr/0001-storage-wal-in-memory.md;
+-- services-core/Crm/Store.agda). This DDL (bigserial PKs, tenant_id + RLS,
+-- gen_random_uuid) is the documented future for multi-tenant SaaS / SQL reporting /
+-- when RAM won't hold the data; it is NOT executed by the WAL engine. Tenancy + uuid
+-- here intentionally diverge from the single-operator WAL MVP, which omits both
+-- (see services-core/Crm/Identity.agda; memory crm-uuid-dropped).
+--
 -- Tables: tenant, app_user, party, account, profile, channel_handle, segment,
 -- party_segment, consent. Operational tables carry tenant_id + RLS (§5.7).
 --
