@@ -63,6 +63,23 @@ req GET /parties '' wrong; eq "wrong-token-401" "$code" 401
 req GET /parties '' s3cret; eq "right-token-200" "$code" 200; has "right-token-data" "$body" '"data"'
 stop
 
+echo "===== boot 4 (full domain flow: client → case → session) ====="
+rm -f "$WORK/crm.wal"
+start
+req POST /parties '{"name":"Иванов"}';                          has "df-party-id1" "$body" '"id":1'
+req POST /engagements '{"caseType":1,"stage":1}';               has "df-eng-id2" "$body" '"id":2'; eq "df-eng-200" "$code" 200
+req POST /participations '{"eng":2,"party":1,"role":"client"}'; has "df-part-id3" "$body" '"id":3'
+req POST /participations '{"eng":99,"party":1}';                eq "df-part-fk-404" "$code" 404; has "df-part-fk-code" "$body" '"code":"not_found"'
+req POST /activities '{"eng":2,"startsAt":1700000000}';         has "df-act-id4" "$body" '"id":4'
+req POST /activities '{"eng":2,"startsAt":1700000000}';         eq "df-slot-conflict-409" "$code" 409; has "df-slot-code" "$body" '"code":"conflict"'
+req POST /activities/by-engagement '{"eng":2}';                 has "df-byeng-id4" "$body" '"id":4'; has "df-byeng-status" "$body" 'scheduled'
+req GET /engagements;                                           has "df-get-eng" "$body" '"caseType":1'
+req POST /activities/cancel '{"id":4}';                         has "df-cancel-ok" "$body" '"ok":true'
+req POST /activities/cancel '{"id":4}';                         eq "df-recancel-409" "$code" 409; has "df-recancel-code" "$body" '"code":"invalid_transition"'
+req POST /engagements/delete '{"id":2}';                        has "df-cascade-ok" "$body" '"ok":true'
+req POST /participations/by-engagement '{"eng":2}';             eq "df-cascade-empty" "$body" '{"data":[]}'
+stop
+
 echo "------------------------------------------------------------"
 echo "API TOTAL: $P PASS, $F FAIL"
 [ "$F" -eq 0 ] && { echo "✓ API integration green"; exit 0; } || { echo "✗ API integration FAILED"; exit 1; }
