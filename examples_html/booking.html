@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Запись — В точку</title>
+  <style>
+    :root { --accent:#2b6cb0; --ink:#1a202c; --muted:#718096; --line:#e2e8f0; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+           color: var(--ink); background:#f7fafc; margin:0; padding:2rem 1rem; }
+    .booking { max-width: 560px; margin: 0 auto; background:#fff; border:1px solid var(--line);
+               border-radius: 14px; padding: 1.75rem 1.75rem 2rem; }
+    .booking h1 { font-size: 1.5rem; margin:.2rem 0 .25rem; }
+    .booking p  { color: var(--muted); margin:.2rem 0 1rem; }
+    .offerings, .slots { display:flex; flex-wrap:wrap; gap:.5rem; margin:.5rem 0 1rem; }
+    .offering, .slot, .submit {
+      cursor:pointer; border:1px solid var(--line); border-radius:9px;
+      padding:.6rem .9rem; font-size:.95rem; background:#fff; color:var(--ink);
+      transition: all .12s ease; }
+    .offering:hover, .slot:hover { border-color:var(--accent); color:var(--accent); }
+    .slots { border-top:1px dashed var(--line); padding-top:1rem; }
+    .slot { font-variant-numeric: tabular-nums; }
+    .form { display:flex; flex-direction:column; gap:.6rem; margin:1rem 0 .5rem;
+            border-top:1px dashed var(--line); padding-top:1rem; }
+    .form input { padding:.65rem .8rem; border:1px solid var(--line); border-radius:9px;
+                  font-size:1rem; }
+    .form input:focus { outline:none; border-color:var(--accent); }
+    .submit { background:var(--accent); color:#fff; border-color:var(--accent);
+              font-weight:600; padding:.7rem; }
+    .submit:hover { filter:brightness(1.07); }
+    .status { margin-top:1rem; min-height:1.4em; font-weight:600; color:var(--accent); }
+  </style>
+</head>
+<body>
+  <!-- Mounts Psych.Web.app from _build/jAgda.Psych.Web.mjs -->
+  <div data-agdelte="Psych.Web">
+    <p style="text-align:center;color:#718096">Загрузка…</p>
+  </div>
+  <script type="module" src="../runtime/reactive-auto.js"></script>
+</body>
+</html>
