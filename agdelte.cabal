@@ -120,3 +120,20 @@ executable json-test
   ghc-options:      -main-is MAlonzo.Code.JsonTest -w -rtsopts
   default-language: GHC2021
   build-depends:    base, text
+
+-- store-txn-test: the GENERIC Agdelte.Storage.Txn monad on a toy domain (no CRM).
+executable store-txn-test
+  main-is:          MAlonzo/Code/StoreTxnTest.hs
+  hs-source-dirs:   _build, hs
+  ghc-options:      -main-is MAlonzo.Code.StoreTxnTest -w -rtsopts
+  default-language: GHC2021
+  build-depends:    base, text
+
+-- courses-smoke-test: the extracted video-course AppStore actually runs on the store.
+-- AppStore imports Storage.WAL → Storage.FFI, so it links the WAL file-op FFI (POSIX).
+executable courses-smoke-test
+  main-is:          MAlonzo/Code/CoursesSmokeTest.hs
+  hs-source-dirs:   _build, hs
+  ghc-options:      -main-is MAlonzo.Code.CoursesSmokeTest -w -rtsopts
+  default-language: GHC2021
+  build-depends:    base, text, containers, bytestring, unix, directory, filepath
