@@ -80,6 +80,22 @@ req POST /engagements/delete '{"id":2}';                        has "df-cascade-
 req POST /participations/by-engagement '{"eng":2}';             eq "df-cascade-empty" "$body" '{"data":[]}'
 stop
 
+echo "===== boot 5 (notifications: outbox §6, durable intent → worker drain) ====="
+rm -f "$WORK/crm.wal"
+start
+req POST /notifications '{"to":"polunin@mail.ru","subject":"Сессия завтра","body":"…"}'; has "nf-enqueue-id1" "$body" '"id":1'
+req POST /notifications '{"to":"client@mail.ru","subject":"Оплата"}';                    has "nf-enqueue-id2" "$body" '"id":2'
+req GET /outbox; has "nf-pending"  "$body" '"status":"pending"'; has "nf-cyrillic" "$body" 'Сессия завтра'
+req POST /notifications '{"subject":"no recipient"}'; eq "nf-missing-to-400" "$code" 400
+stop
+# restart: the queued intents must survive (durable in the WAL)
+start
+req GET /outbox; has "nf-durable-pending" "$body" '"status":"pending"'
+req POST /outbox/drain; has "nf-drain-sent2" "$body" '"sent":2'
+req GET /outbox; has "nf-marked-sent" "$body" '"status":"sent"'
+req POST /outbox/drain; has "nf-drain-idempotent" "$body" '"sent":0'
+stop
+
 echo "------------------------------------------------------------"
 echo "API TOTAL: $P PASS, $F FAIL"
 [ "$F" -eq 0 ] && { echo "✓ API integration green"; exit 0; } || { echo "✗ API integration FAILED"; exit 1; }
