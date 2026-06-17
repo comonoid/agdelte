@@ -147,7 +147,7 @@ postulate
   -- Index into array
   index : ∀ {A : Set} → ℕ → Decoder A → Decoder A
 
-{-# COMPILE JS field′ = function(name) { return function(decoder) {
+{-# COMPILE JS field′ = _ => function(name) { return function(decoder) {
   return {
     decode: (json) => {
       if (typeof json !== 'object' || json === null) {
@@ -161,7 +161,7 @@ postulate
   };
 }; } #-}
 
-{-# COMPILE JS optionalField = function(name) { return function(decoder) {
+{-# COMPILE JS optionalField = _ => function(name) { return function(decoder) {
   return {
     decode: (json) => {
       if (typeof json !== 'object' || json === null) {
@@ -179,7 +179,7 @@ postulate
   };
 }; } #-}
 
-{-# COMPILE JS fieldWithDefault = function(name) { return function(def) { return function(decoder) {
+{-# COMPILE JS fieldWithDefault = _ => function(name) { return function(def) { return function(decoder) {
   return {
     decode: (json) => {
       if (typeof json !== 'object' || json === null || !(name in json)) {
@@ -192,7 +192,7 @@ postulate
   };
 }; }; } #-}
 
-{-# COMPILE JS array = function(decoder) {
+{-# COMPILE JS array = _ => function(decoder) {
   return {
     decode: (json) => {
       if (!Array.isArray(json)) {
@@ -211,7 +211,7 @@ postulate
   };
 } #-}
 
-{-# COMPILE JS list = function(decoder) {
+{-# COMPILE JS list = _ => function(decoder) {
   return {
     decode: (json) => {
       if (!Array.isArray(json)) {
@@ -231,7 +231,7 @@ postulate
   };
 } #-}
 
-{-# COMPILE JS nullable = function(decoder) {
+{-# COMPILE JS nullable = _ => function(decoder) {
   return {
     decode: (json) => {
       if (json === null || json === undefined) {
@@ -246,7 +246,7 @@ postulate
   };
 } #-}
 
-{-# COMPILE JS index = function(i) { return function(decoder) {
+{-# COMPILE JS index = _ => function(i) { return function(decoder) {
   return {
     decode: (json) => {
       if (!Array.isArray(json)) {
@@ -284,7 +284,7 @@ postulate
   -- Alternative: try first, if fails try second
   oneOf : ∀ {A : Set} → List (Decoder A) → Decoder A
 
-{-# COMPILE JS mapDecoder = function(f) { return function(decoder) {
+{-# COMPILE JS mapDecoder = _ => _ => function(f) { return function(decoder) {
   return {
     decode: (json) => {
       const result = decoder.decode(json);
@@ -296,15 +296,15 @@ postulate
   };
 }; } #-}
 
-{-# COMPILE JS succeed = function(value) {
+{-# COMPILE JS succeed = _ => function(value) {
   return { decode: (_) => ({ tag: 'ok', value }) };
 } #-}
 
-{-# COMPILE JS fail = function(msg) {
+{-# COMPILE JS fail = _ => function(msg) {
   return { decode: (_) => ({ tag: 'err', error: msg }) };
 } #-}
 
-{-# COMPILE JS apply = function(df) { return function(da) {
+{-# COMPILE JS apply = _ => _ => function(df) { return function(da) {
   return {
     decode: (json) => {
       const rf = df.decode(json);
@@ -316,7 +316,7 @@ postulate
   };
 }; } #-}
 
-{-# COMPILE JS andThen = function(f) { return function(decoder) {
+{-# COMPILE JS andThen = _ => _ => function(f) { return function(decoder) {
   return {
     decode: (json) => {
       const result = decoder.decode(json);
@@ -326,7 +326,7 @@ postulate
   };
 }; } #-}
 
-{-# COMPILE JS oneOf = function(decoders) {
+{-# COMPILE JS oneOf = _ => function(decoders) {
   return {
     decode: (json) => {
       const errors = [];
@@ -354,7 +354,7 @@ postulate
   -- Decode a JsonValue directly
   decodeValue : ∀ {A : Set} → Decoder A → JsonValue → Result String A
 
-{-# COMPILE JS decodeString = function(decoder) { return function(jsonStr) {
+{-# COMPILE JS decodeString = _ => function(decoder) { return function(jsonStr) {
   try {
     const json = JSON.parse(jsonStr);
     const result = decoder.decode(json);
@@ -369,7 +369,7 @@ postulate
 
 -- FFI-FRAGILE: jNull, jBool, jNumber, jFloat, jString, jArray, jObject (JsonValue),
 --   true/false (Bool), _,_ (Pair), [] / _∷_ (List)
-{-# COMPILE JS decodeValue = function(decoder) { return function(json) {
+{-# COMPILE JS decodeValue = _ => function(decoder) { return function(json) {
   var expectedKeys = ['jNull','jBool','jNumber','jFloat','jString','jArray','jObject'];
   function toList(x) {
     if (Array.isArray(x)) return x;
@@ -450,11 +450,11 @@ postulate
 {-# COMPILE JS encodeBool = { encode: (b) => b } #-}
 {-# COMPILE JS encodeNull = { encode: (_) => null } #-}
 
-{-# COMPILE JS encodeArray = function(encoder) {
+{-# COMPILE JS encodeArray = _ => function(encoder) {
   return { encode: (arr) => arr.map(x => encoder.encode(x)) };
 } #-}
 
-{-# COMPILE JS encodeList = function(encoder) {
+{-# COMPILE JS encodeList = _ => function(encoder) {
   return {
     /* Agda List compiles to a native JS array. */
     encode: (list) => list.map(head => encoder.encode(head))
@@ -462,7 +462,7 @@ postulate
 } #-}
 
 -- FFI-FRAGILE: just (Maybe), nothing (Maybe)
-{-# COMPILE JS encodeMaybe = function(encoder) {
+{-# COMPILE JS encodeMaybe = _ => function(encoder) {
   return {
     encode: (maybe) => {
       return maybe({
@@ -502,11 +502,11 @@ postulate
   return (cases) => cases["jObject"](pairs);
 } #-}
 
-{-# COMPILE JS encodeWith = function(encoder) { return function(value) {
+{-# COMPILE JS encodeWith = _ => function(encoder) { return function(value) {
   return encoder.encode(value);
 }; } #-}
 
-{-# COMPILE JS encodeToString = function(encoder) { return function(value) {
+{-# COMPILE JS encodeToString = _ => function(encoder) { return function(value) {
   return JSON.stringify(encoder.encode(value));
 }; } #-}
 
@@ -532,21 +532,21 @@ postulate
 
 {-# COMPILE JS ObjectEncoder = function(x) { return x; } #-}
 
-{-# COMPILE JS objectEncoder = { fields: [] } #-}
+{-# COMPILE JS objectEncoder = _ => ({ fields: [] }) #-}
 
-{-# COMPILE JS withField = function(name) { return function(getter) { return function(encoder) { return function(obj) {
+{-# COMPILE JS withField = _ => _ => function(name) { return function(getter) { return function(encoder) { return function(obj) {
   return {
     fields: [...obj.fields, { name, getter, encoder, optional: false }]
   };
 }; }; }; } #-}
 
-{-# COMPILE JS withOptionalField = function(name) { return function(getter) { return function(encoder) { return function(obj) {
+{-# COMPILE JS withOptionalField = _ => _ => function(name) { return function(getter) { return function(encoder) { return function(obj) {
   return {
     fields: [...obj.fields, { name, getter, encoder, optional: true }]
   };
 }; }; }; } #-}
 
-{-# COMPILE JS buildEncoder = function(obj) {
+{-# COMPILE JS buildEncoder = _ => function(obj) {
   return {
     encode: (value) => {
       const result = {};
@@ -579,7 +579,7 @@ postulate
   map7 : ∀ {A B C D E F G R : Set} → (A → B → C → D → E → F → G → R) → Decoder A → Decoder B → Decoder C → Decoder D → Decoder E → Decoder F → Decoder G → Decoder R
   map8 : ∀ {A B C D E F G H R : Set} → (A → B → C → D → E → F → G → H → R) → Decoder A → Decoder B → Decoder C → Decoder D → Decoder E → Decoder F → Decoder G → Decoder H → Decoder R
 
-{-# COMPILE JS map2 = function(f) { return function(da) { return function(db) {
+{-# COMPILE JS map2 = _ => _ => _ => function(f) { return function(da) { return function(db) {
   return {
     decode: (json) => {
       const ra = da.decode(json);
@@ -591,7 +591,7 @@ postulate
   };
 }; }; } #-}
 
-{-# COMPILE JS map3 = function(f) { return function(da) { return function(db) { return function(dc) {
+{-# COMPILE JS map3 = _ => _ => _ => _ => function(f) { return function(da) { return function(db) { return function(dc) {
   return {
     decode: (json) => {
       const ra = da.decode(json);
@@ -605,7 +605,7 @@ postulate
   };
 }; }; }; } #-}
 
-{-# COMPILE JS map4 = function(f) { return function(da) { return function(db) { return function(dc) { return function(dd) {
+{-# COMPILE JS map4 = _ => _ => _ => _ => _ => function(f) { return function(da) { return function(db) { return function(dc) { return function(dd) {
   return {
     decode: (json) => {
       const ra = da.decode(json);
@@ -621,7 +621,7 @@ postulate
   };
 }; }; }; }; } #-}
 
-{-# COMPILE JS map5 = function(f) { return function(da) { return function(db) { return function(dc) { return function(dd) { return function(de) {
+{-# COMPILE JS map5 = _ => _ => _ => _ => _ => _ => function(f) { return function(da) { return function(db) { return function(dc) { return function(dd) { return function(de) {
   return {
     decode: (json) => {
       const ra = da.decode(json);
@@ -639,7 +639,7 @@ postulate
   };
 }; }; }; }; }; } #-}
 
-{-# COMPILE JS map6 = function(f) { return function(da) { return function(db) { return function(dc) { return function(dd) { return function(de) { return function(df) {
+{-# COMPILE JS map6 = _ => _ => _ => _ => _ => _ => _ => function(f) { return function(da) { return function(db) { return function(dc) { return function(dd) { return function(de) { return function(df) {
   return {
     decode: (json) => {
       const ra = da.decode(json);
@@ -659,7 +659,7 @@ postulate
   };
 }; }; }; }; }; }; } #-}
 
-{-# COMPILE JS map7 = function(f) { return function(da) { return function(db) { return function(dc) { return function(dd) { return function(de) { return function(df) { return function(dg) {
+{-# COMPILE JS map7 = _ => _ => _ => _ => _ => _ => _ => _ => function(f) { return function(da) { return function(db) { return function(dc) { return function(dd) { return function(de) { return function(df) { return function(dg) {
   return {
     decode: (json) => {
       const ra = da.decode(json);
@@ -681,7 +681,7 @@ postulate
   };
 }; }; }; }; }; }; }; } #-}
 
-{-# COMPILE JS map8 = function(f) { return function(da) { return function(db) { return function(dc) { return function(dd) { return function(de) { return function(df) { return function(dg) { return function(dh) {
+{-# COMPILE JS map8 = _ => _ => _ => _ => _ => _ => _ => _ => _ => function(f) { return function(da) { return function(db) { return function(dc) { return function(dd) { return function(de) { return function(df) { return function(dg) { return function(dh) {
   return {
     decode: (json) => {
       const ra = da.decode(json);
