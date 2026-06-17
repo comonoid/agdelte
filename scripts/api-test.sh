@@ -187,6 +187,20 @@ start   # assignments survive restart (durable in the WAL)
 req POST /assignments/by-subject '{"subject":"ivan"}'; has "ra-durable" "$body" '"role":"viewer"'
 stop
 
+echo "===== boot 11 (reminders §6 — due sessions → outbox, idempotent) ====="
+rm -f "$WORK/crm.wal"
+start
+req POST /psych/availability '{"type":"session"}'; S=$(first_start "$body")
+req POST /psych/book "{\"type\":\"session\",\"start\":$S,\"name\":\"Клиент\",\"email\":\"client@x.ru\"}"
+has "rm-book" "$body" '"id":'
+req POST /psych/reminders/run '{"leadHours":720}'; has "rm-run-1" "$body" '"reminded":1'
+req GET /outbox; has "rm-outbox-subj" "$body" 'Напоминание о встрече'; has "rm-outbox-to" "$body" 'client@x.ru'
+req POST /psych/reminders/run '{"leadHours":720}'; has "rm-idempotent" "$body" '"reminded":0'
+stop
+start   # the reminded flag is durable — no re-reminding after restart
+req POST /psych/reminders/run '{"leadHours":720}'; has "rm-durable-idem" "$body" '"reminded":0'
+stop
+
 echo "------------------------------------------------------------"
 echo "API TOTAL: $P PASS, $F FAIL"
 [ "$F" -eq 0 ] && { echo "✓ API integration green"; exit 0; } || { echo "✗ API integration FAILED"; exit 1; }

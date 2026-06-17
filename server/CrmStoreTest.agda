@@ -54,10 +54,10 @@ rtOp op with decodeOp (encodeOp op)
 ... | just op' = primStringEquality (encodeOp op') (encodeOp op)
 ... | nothing  = false
 
-p7  = mkParty 7 Person "P7" "UTC" 100 nothing
-p8  = mkParty 8 Person "P8" "UTC" 100 nothing
+p7  = mkParty 7 Person "P7" "UTC" 100 nothing ""
+p8  = mkParty 8 Person "P8" "UTC" 100 nothing ""
 e3  = mkEngagement 3 1 1 nothing 100 nothing
-a9  = mkActivity 9 3 200 Scheduled 100 nothing
+a9  = mkActivity 9 3 200 Scheduled 100 nothing nothing
 pp11 = mkParticipation 11 3 7 "provider" 100
 pp12 = mkParticipation 12 3 8 "client" 100
 

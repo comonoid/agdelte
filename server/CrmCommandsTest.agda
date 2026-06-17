@@ -93,8 +93,8 @@ isCanceled _               = false
 
 seed : Base
 seed = foldl (λ b op → apply op b) emptyBase
-  ( SetParty (mkParty 7 Person "P7" "UTC" 100 nothing)
-  ∷ SetParty (mkParty 8 Person "P8" "UTC" 100 nothing)
+  ( SetParty (mkParty 7 Person "P7" "UTC" 100 nothing "")
+  ∷ SetParty (mkParty 8 Person "P8" "UTC" 100 nothing "")
   ∷ SetEngagement (mkEngagement 3 1 1 nothing 100 nothing)
   ∷ SetAccount (mkAccount 5 1000 100)
   ∷ [] )
