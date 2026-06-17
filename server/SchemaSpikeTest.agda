@@ -19,7 +19,9 @@ open import Data.Maybe using (Maybe; just; nothing; map)
 open import Data.Product using (_×_; _,_)
 open import Data.String using (toList; fromList) renaming (_++_ to _<>_)
 
-open import Agdelte.Storage.Schema using (ColTy; CNat; Column; mkCol; Schema; Row; encodeRow; decodeRow; ddlOf)
+open import Agdelte.Storage.Schema using
+  ( ColTy; CNat; CFK; CEnumS; Column; mkCol; idxCol; Schema; Row
+  ; encodeRow; decodeRow; encAtom; decAtom; ddlOf; imIndexes; indexDDLs )
 open import Crm.Identity using (Account; mkAccount; acId; acBalance; acCreatedAt)
 open import Crm.Wire using (encAccount; decAccount)
 
@@ -92,6 +94,46 @@ contains hay needle = go (toList hay)
 chk : String → Bool → String × Bool
 chk n b = n , b
 
+------------------------------------------------------------------------
+-- Index derivation + CEnumS (the step-3 interpreter), over a 2-index schema
+------------------------------------------------------------------------
+
+stCodes : List String
+stCodes = "P" ∷ "S" ∷ []
+
+idxSchema : Schema
+idxSchema = mkCol "id" CNat ∷ idxCol "eng" (CFK "engagement")
+          ∷ idxCol "st" (CEnumS stCodes) ∷ []
+
+sampleRow : Row idxSchema           -- id=5, eng=7, st=1 ("S")
+sampleRow = 5 , 7 , 1 , tt
+
+lℕ= : List ℕ → List ℕ → Bool
+lℕ= []       []       = true
+lℕ= (x ∷ xs) (y ∷ ys) = (x == y) ∧ lℕ= xs ys
+lℕ= _        _        = false
+
+-- the two derived extractors (positions 0=eng, 1=st) project the right keys
+idxKeys : Bool
+idxKeys with imIndexes idxSchema (λ r → r)
+... | e0 ∷ e1 ∷ [] = lℕ= (e0 sampleRow) (7 ∷ []) ∧ lℕ= (e1 sampleRow) (1 ∷ [])
+... | _            = false
+
+enumDec : Bool                       -- code → ordinal
+enumDec with decAtom (CEnumS stCodes) "S"
+... | just n  = n == 1
+... | nothing = false
+
+enumDecBad : Bool                    -- unknown code ⇒ strict failure (nothing)
+enumDecBad with decAtom (CEnumS stCodes) "Q"
+... | just _  = false
+... | nothing = true
+
+ixddl2 : Bool                        -- one CREATE INDEX per idxCol (2 here)
+ixddl2 with indexDDLs "activity" idxSchema
+... | _ ∷ _ ∷ [] = true
+... | _          = false
+
 checks : List (String × Bool)
 checks =
   chk "format-matches-handwritten-a1" (encAccount′ a1 ==ˢ encAccount a1) ∷
@@ -103,6 +145,12 @@ checks =
   chk "ddl-table"   (contains ddl "CREATE TABLE account") ∷
   chk "ddl-pk"      (contains ddl "id BIGINT PRIMARY KEY") ∷
   chk "ddl-notnull" (contains ddl "balance BIGINT NOT NULL") ∷
+  chk "index-keys-derived"  idxKeys ∷
+  chk "cenums-enc-ordinal0" (encAtom (CEnumS stCodes) 0 ==ˢ "P") ∷
+  chk "cenums-enc-ordinal1" (encAtom (CEnumS stCodes) 1 ==ˢ "S") ∷
+  chk "cenums-dec-ordinal"  enumDec ∷
+  chk "cenums-dec-strict"   enumDecBad ∷
+  chk "index-ddl-per-idxcol" ixddl2 ∷
   []
 
 report : String → Bool → IO ⊤
