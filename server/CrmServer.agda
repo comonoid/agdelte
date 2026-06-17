@@ -25,7 +25,8 @@ postulate setLineBuffering : IO ⊤
 open import Data.Nat.Show using (show; readMaybe)
 open import Data.Maybe using (Maybe; just; nothing)
 
-open import Agdelte.FFI.Server using (listenHost; getEnvOr; putStrLn; _>>=_; _>>_; pure)
+open import Agdelte.FFI.Server using
+  ( listenHost; getEnvOr; putStrLn; eqStrCI; HttpRequest; HttpResponse; _>>=_; _>>_; pure )
 open import Agdelte.FFI.Time using (getCurrentTime)
 open import Agdelte.FFI.Crypto using (hashPassword)
 open import Agdelte.Storage.WAL using (walOpen; walTxn; WalHandle)
@@ -34,6 +35,7 @@ open import Crm.Txn using (runTxn)
 open import Crm.Commands using (ensureAdmin)
 open import Crm.Api using (crmConfig; routeExt)
 open import Psych.Api using (tryRoute)
+open import Psych.Enforce using (authz)
 open import Psych.Schedule using (Settings; mkSettings)
 open import Psych.Catalog using (Prices; mkPrices)
 
@@ -57,6 +59,11 @@ seedAdmin h login pass =
          putStrLn ("admin ensured: " <> login) )
   else putStrLn "(no admin seed — PSYCH_ADMIN_LOGIN unset)"
 
+-- the authz hook to install: the RBAC gate when CRM_AUTHZ=on, else open (allow all).
+-- Default OFF for dev/loopback (the functional API is open); production sets it on.
+gate : String → WalHandle Base CrmOp → Maybe String → HttpRequest → IO (Maybe HttpResponse)
+gate mode h = if eqStrCI mode "on" then authz h else (λ _ _ → pure nothing)
+
 {-# NON_TERMINATING #-}
 main : IO ⊤
 main =
@@ -66,6 +73,7 @@ main =
   getEnvOr "CRM_JWT_SECRET" "dev-secret-change-me" >>= λ secret →
   getEnvOr "PSYCH_ADMIN_LOGIN" "" >>= λ adminLogin →
   getEnvOr "PSYCH_ADMIN_PASSWORD" "" >>= λ adminPass →
+  getEnvOr "CRM_AUTHZ" "off" >>= λ authzMode →
   envNat "PSYCH_DAY_START"    600 >>= λ ds →
   envNat "PSYCH_DAY_END"     1140 >>= λ de →
   envNat "PSYCH_BUFFER"         0 >>= λ bf →
@@ -81,4 +89,4 @@ main =
   putStrLn "CRM headless on :8137 (WAL: ./crm.wal) + /psych + /auth" >>
   listenHost host 8137
     (λ req → routeExt (tryRoute (mkSettings ds de bf no ca ho tz) (mkPrices p1 p5 p10) h)
-                      token secret h req)
+                      (gate authzMode h) token secret h req)

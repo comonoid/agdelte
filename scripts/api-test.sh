@@ -220,6 +220,23 @@ N=$(printf '%s' "$body" | grep -oE '"role":"admin"' | wc -l)
 { [ "$N" -eq 1 ]; } && ok "au-seed-idempotent" || bad "au-seed-idempotent" "admin assignments after restart: $N"
 stop
 
+echo "===== boot 13 (authz enforcement — RBAC gate on management routes) ====="
+rm -f "$WORK/crm.wal"
+start PSYCH_ADMIN_LOGIN=admin PSYCH_ADMIN_PASSWORD=adminpw CRM_JWT_SECRET=s CRM_AUTHZ=on
+req POST /psych/availability '{"type":"session"}'; eq "ez-public-open" "$code" 200          # public: no token needed
+req POST /psych/cancel '{"act":1}'; eq "ez-anon-401" "$code" 401                            # management: anon blocked
+req POST /auth/login '{"login":"admin","password":"adminpw"}'
+ADM=$(printf '%s' "$body" | grep -oE '"token":"[^"]+"' | sed 's/"token":"//; s/"$//')
+req POST /psych/cancel '{"act":999}' "$ADM"; eq "ez-admin-passes-404" "$code" 404           # admin passes authz → handler 404s
+req POST /auth/users '{"login":"vera","password":"verapw"}' "$ADM"; has "ez-create-user" "$body" '"id":'
+req POST /assignments '{"subject":"vera","role":"viewer","scope":"*"}' "$ADM"; has "ez-assign-viewer" "$body" '"id":'
+req POST /auth/login '{"login":"vera","password":"verapw"}'
+VER=$(printf '%s' "$body" | grep -oE '"token":"[^"]+"' | sed 's/"token":"//; s/"$//')
+req POST /psych/cancel '{"act":1}' "$VER"; eq "ez-viewer-cancel-403" "$code" 403            # authenticated but lacks perm
+req POST /auth/users '{"login":"x","password":"y"}' "$VER"; eq "ez-viewer-create-403" "$code" 403  # admin-only
+req POST /psych/availability '{"type":"session"}' "$VER"; eq "ez-viewer-public" "$code" 200  # public still open
+stop
+
 echo "------------------------------------------------------------"
 echo "API TOTAL: $P PASS, $F FAIL"
 [ "$F" -eq 0 ] && { echo "✓ API integration green"; exit 0; } || { echo "✗ API integration FAILED"; exit 1; }
