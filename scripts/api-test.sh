@@ -272,6 +272,15 @@ start   # events durable, all still processed after restart
 req POST /events/dispatch; has "ev-durable-0" "$body" '"dispatched":0'
 stop
 
+echo "===== boot 16 (payment webhook signature gate — reject when secret set) ====="
+rm -f "$WORK/crm.wal"
+start YOOKASSA_WEBHOOK_SECRET=whsec
+req POST /payments/webhook '{"event":"payment.succeeded","object":{"id":"x"}}'; eq "wh-unsigned-401" "$code" 401
+bsout=$(curl -s -w $'\n%{http_code}' -H "x-yookassa-signature: bogus" -X POST "$BASE/payments/webhook" -d '{"event":"payment.succeeded","object":{"id":"x"}}')
+bscode=$(printf '%s' "$bsout" | tail -n1)
+{ [ "$bscode" = "401" ]; } && ok "wh-badsig-401" || bad "wh-badsig-401" "expected 401, got $bscode"
+stop
+
 echo "------------------------------------------------------------"
 echo "API TOTAL: $P PASS, $F FAIL"
 [ "$F" -eq 0 ] && { echo "✓ API integration green"; exit 0; } || { echo "✗ API integration FAILED"; exit 1; }

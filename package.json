@@ -127,7 +127,9 @@
     "gen:rbac-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i /home/n/.agda/agdelte-auth -i server server/RbacTest.agda",
     "test:rbac": "npm run gen:rbac-test && cabal build rbac-test && cabal run rbac-test",
     "gen:authz-store-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i /home/n/.agda/agdelte-crm -i /home/n/.agda/agdelte-auth -i /home/n/.agda/agdelte-pack-psych -i server server/AuthzStoreTest.agda",
-    "test:authz-store": "npm run gen:authz-store-test && cabal build authz-store-test && cabal run authz-store-test"
+    "test:authz-store": "npm run gen:authz-store-test && cabal build authz-store-test && cabal run authz-store-test",
+    "gen:yookassa-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i /home/n/.agda/agdelte-payments -i server server/YooKassaTest.agda",
+    "test:yookassa": "npm run gen:yookassa-test && cabal build yookassa-test && cabal run yookassa-test"
   },
   "keywords": [
     "agda",

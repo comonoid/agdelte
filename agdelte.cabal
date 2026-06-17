@@ -160,3 +160,12 @@ executable authz-store-test
   ghc-options:      -main-is MAlonzo.Code.AuthzStoreTest -w -rtsopts
   default-language: GHC2021
   build-depends:    base, text, containers
+
+executable yookassa-test
+  main-is:          MAlonzo/Code/YooKassaTest.hs
+  hs-source-dirs:   _build, hs
+  ghc-options:      -main-is MAlonzo.Code.YooKassaTest -w -rtsopts
+  default-language: GHC2021
+  build-depends:    base, text, containers, crypton, memory, base64-bytestring
+                  , http-client, http-client-tls, aeson
+                  , bytestring, http-types
