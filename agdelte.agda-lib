@@ -5,6 +5,6 @@ depend:
   standard-library
   -- agdelte-store is consumed by the server/ APP layer (CrmServer + tests), built
   -- with explicit `-i src -i server`; src/ itself imports no Agdelte.Storage.*.
-  -- (agdelte-payments removed: nothing here imports it — only agdelte-courses does,
-  -- and that lib declares the dep itself.)
+  -- (agdelte-payments is not depended on here: the framework imports none of it —
+  -- the consuming domains, e.g. agdelte-pack-psych, declare that dep themselves.)
   agdelte-store

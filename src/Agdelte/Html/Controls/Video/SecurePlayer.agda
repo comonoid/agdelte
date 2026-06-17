@@ -6,7 +6,7 @@
 --
 -- Domain-neutral: the token endpoint is supplied by the caller as an opaque URL
 -- (`initSecureModel inner tokenUrl`). A consuming domain builds its own contract —
--- e.g. the courses platform passes "/api/video-token?courseId=C&lessonId=L".
+-- e.g. "/api/media-token?assetId=A" — and signs segment URLs with the returned token.
 
 module Agdelte.Html.Controls.Video.SecurePlayer where
 
@@ -51,6 +51,6 @@ mkSecureConfig cfg signFn = record cfg
 
 -- | Initial secure model wrapping an inner model. `tokenUrl` is the (opaque)
 -- endpoint the player fetches its signed-manifest token from — the caller's domain
--- builds it (e.g. "/api/video-token?courseId=…&lessonId=…").
+-- builds it (e.g. "/api/media-token?assetId=…").
 initSecureModel : ∀ {M} → M → String → SecureModel M
 initSecureModel inner tokenUrl = mkSecureModel inner nothing tokenUrl false
