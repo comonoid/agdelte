@@ -20,8 +20,8 @@ open import Data.Product using (_×_; _,_)
 open import Data.String using (toList; fromList) renaming (_++_ to _<>_)
 
 open import Agdelte.Storage.Schema using
-  ( CNat; CFK; CEnumS; mkCol; idxCol; Schema; Row
-  ; encodeRow; decodeRow; encAtom; decAtom; ddlOf; imIndexes; indexDDLs )
+  ( CNat; CStr; CFK; CEnumS; CMaybe; mkCol; idxCol; Schema; Row
+  ; encodeRow; decodeRow; decodeRowTolerant; encAtom; decAtom; ddlOf; imIndexes; indexDDLs )
 open import Crm.Identity using (Account; mkAccount; acId; acBalance; acCreatedAt)
 open import Crm.Wire using (encAccount; decAccount)
 
@@ -134,6 +134,42 @@ ixddl2 with indexDDLs "activity" idxSchema
 ... | _ ∷ _ ∷ [] = true
 ... | _          = false
 
+------------------------------------------------------------------------
+-- Tier-1 schema evolution (docs/concepts/schema-evolution.md)
+------------------------------------------------------------------------
+
+oldS : Schema                        -- a record before evolution
+oldS = mkCol "id" CNat ∷ mkCol "balance" CNat ∷ []
+newS : Schema                        -- + a nullable column appended at the END
+newS = mkCol "id" CNat ∷ mkCol "balance" CNat ∷ mkCol "note" (CMaybe CStr) ∷ []
+
+oldBytes : String                    -- written by the OLD codec (2 fields)
+oldBytes = encodeRow oldS (5 , 100 , tt)
+
+isNothingS : Maybe String → Bool
+isNothingS nothing  = true
+isNothingS (just _) = false
+
+-- an OLD record decodes under the NEW schema; the appended column = nothing
+evolveAdd : Bool
+evolveAdd with decodeRowTolerant newS oldBytes
+... | just (i , bal , note , tt) = (i == 5) ∧ (bal == 100) ∧ isNothingS note
+... | nothing                    = false
+
+-- a FULL new-schema record: tolerant decode agrees with strict (default never fires)
+fullEquiv : Bool
+fullEquiv with decodeRow newS (encodeRow newS (7 , 200 , just "hi" , tt))
+             | decodeRowTolerant newS (encodeRow newS (7 , 200 , just "hi" , tt))
+... | just (i1 , b1 , just n1 , tt) | just (i2 , b2 , just n2 , tt) =
+        (i1 == i2) ∧ (b1 == b2) ∧ (n1 ==ˢ n2)
+... | _ | _ = false
+
+-- strict decode of an OLD record under the NEW schema FAILS (proves tolerance is needed)
+strictRejectsOld : Bool
+strictRejectsOld with decodeRow newS oldBytes
+... | just _  = false
+... | nothing = true
+
 checks : List (String × Bool)
 checks =
   chk "format-matches-handwritten-a1" (encAccount′ a1 ==ˢ encAccount a1) ∷
@@ -151,6 +187,9 @@ checks =
   chk "cenums-dec-ordinal"  enumDec ∷
   chk "cenums-dec-strict"   enumDecBad ∷
   chk "index-ddl-per-idxcol" ixddl2 ∷
+  chk "evolve-add-trailing-maybe" evolveAdd ∷
+  chk "evolve-full-tolerant≡strict" fullEquiv ∷
+  chk "evolve-strict-rejects-old" strictRejectsOld ∷
   []
 
 report : String → Bool → IO ⊤
