@@ -254,6 +254,24 @@ start   # payment + grant durable; still idempotent after restart
 req POST /payments/webhook "$WB"; has "py-durable-idem" "$body" '"idempotent":true'
 stop
 
+echo "===== boot 15 (domain events §6 — transactional emit + dispatch) ====="
+rm -f "$WORK/crm.wal"
+start
+req POST /psych/availability '{"type":"session"}'; S=$(first_start "$body")
+req POST /psych/book "{\"type\":\"session\",\"start\":$S,\"name\":\"X\",\"email\":\"x@x\"}"; has "ev-book" "$body" '"id":'
+req GET /events; has "ev-scheduled" "$body" '"topic":"activity.scheduled"'; has "ev-unprocessed" "$body" '"processed":false'
+req POST /payments/record '{"extId":"e1","offering":1,"name":"Y","email":"y@y","amount":1500000}'
+req POST /payments/webhook '{"event":"payment.succeeded","object":{"id":"e1"}}'; has "ev-pay-granted" "$body" '"granted":true'
+req GET /events; has "ev-payment-topic" "$body" '"topic":"payment.succeeded"'
+req POST /events/dispatch; has "ev-dispatched" "$body" '"dispatched":2'
+req GET /events; has "ev-processed" "$body" '"processed":true'
+case "$body" in *'"processed":false'*) bad "ev-none-unprocessed" "an event is still unprocessed";; *) ok "ev-none-unprocessed";; esac
+req POST /events/dispatch; has "ev-redispatch-0" "$body" '"dispatched":0'
+stop
+start   # events durable, all still processed after restart
+req POST /events/dispatch; has "ev-durable-0" "$body" '"dispatched":0'
+stop
+
 echo "------------------------------------------------------------"
 echo "API TOTAL: $P PASS, $F FAIL"
 [ "$F" -eq 0 ] && { echo "✓ API integration green"; exit 0; } || { echo "✗ API integration FAILED"; exit 1; }
