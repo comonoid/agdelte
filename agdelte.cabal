@@ -144,3 +144,10 @@ executable psych-schedule-test
   ghc-options:      -main-is MAlonzo.Code.PsychScheduleTest -w -rtsopts
   default-language: GHC2021
   build-depends:    base, text, containers
+
+executable rbac-test
+  main-is:          MAlonzo/Code/RbacTest.hs
+  hs-source-dirs:   _build, hs
+  ghc-options:      -main-is MAlonzo.Code.RbacTest -w -rtsopts
+  default-language: GHC2021
+  build-depends:    base, text, containers
