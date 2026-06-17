@@ -14,6 +14,9 @@ open import Data.Product using (_×_; _,_)
 open import Data.String using () renaming (_++_ to _<>_)
 
 open import Agdelte.Auth.RBAC
+open import Agdelte.Auth.RBAC.Presets as Pre using (policyOf; canStr; superAdmin)
+open import Agdelte.Auth.RBAC.Scoped  as Sc  using (scopeCovers; canOn; canAssign)
+import Agdelte.Auth.RBAC.Typed as Ty
 
 postulate
   putStrLn : String → IO ⊤
@@ -46,6 +49,30 @@ pol =
 
 sod : SoD
 sod = ("operator" , "auditor") ∷ []
+
+-- Presets facade: policy from plain string config
+prePol : Policy
+prePol = policyOf (("op" , ("activity:cancel" ∷ [])) ∷ ("admin" , ("*:*" ∷ [])) ∷ [])
+
+-- Scoped/ARBAC sample policy
+scPol : Policy
+scPol = role "operator" (perm "activity" "cancel" ∷ []) []
+      ∷ role "owner"    (perm "role" "assign" ∷ []) []
+      ∷ []
+
+-- Typed mechanism: a domain plugs its own Resource/Action enums
+data TR : Set where TActivity TEngagement : TR
+data TA : Set where TRead TCancel : TA
+showTR : TR → String
+showTR TActivity   = "activity"
+showTR TEngagement = "engagement"
+showTA : TA → String
+showTA TRead   = "read"
+showTA TCancel = "cancel"
+open Ty.Builder showTR showTA
+
+tyPol : Policy
+tyPol = role "op" (tperm TActivity TCancel ∷ []) [] ∷ []
 
 chk : String → Bool → String × Bool
 chk n b = n , b
@@ -81,6 +108,22 @@ checks =
   chk "parse-res"          (resource (parsePerm "activity:cancel") ==ˢ "activity") ∷
   chk "parse-act"          (action   (parsePerm "activity:cancel") ==ˢ "cancel") ∷
   chk "parse-nocolon"      (action   (parsePerm "lonely") ==ˢ "*") ∷
+  -- Presets facade (string config, no Perm records)
+  chk "preset-allow"       (canStr prePol ("op" ∷ []) "activity:cancel") ∷
+  chk "preset-deny"        (not (canStr prePol ("op" ∷ []) "activity:read")) ∷
+  chk "preset-superadmin"  (canStr prePol ("admin" ∷ []) "whatever:goes") ∷
+  -- Scoped / ARBAC delegation
+  chk "scope-self"         (scopeCovers "ws/42" "ws/42") ∷
+  chk "scope-subtree"      (scopeCovers "ws/42" "ws/42/x") ∷
+  chk "scope-sibling-no"   (not (scopeCovers "ws/42" "ws/420")) ∷
+  chk "scope-outside-no"   (not (scopeCovers "ws/42" "ws")) ∷
+  chk "canOn-in-scope"     (canOn scPol (("operator" , "ws/42") ∷ []) (perm "activity" "cancel") "ws/42/sub") ∷
+  chk "canOn-out-scope"    (not (canOn scPol (("operator" , "ws/42") ∷ []) (perm "activity" "cancel") "ws/99")) ∷
+  chk "canAssign-owner"    (canAssign scPol (("owner" , "ws/42") ∷ []) "ws/42/x") ∷
+  chk "canAssign-out"      (not (canAssign scPol (("owner" , "ws/42") ∷ []) "ws/99")) ∷
+  -- Typed mechanism (domain-supplied enums, typo-proof)
+  chk "typed-allow"        (tcan tyPol ("op" ∷ []) TActivity TCancel) ∷
+  chk "typed-deny"         (not (tcan tyPol ("op" ∷ []) TActivity TRead)) ∷
   []
 
 report : String → Bool → IO ⊤
