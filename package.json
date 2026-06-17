@@ -129,7 +129,9 @@
     "gen:authz-store-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i /home/n/.agda/agdelte-crm -i /home/n/.agda/agdelte-auth -i /home/n/.agda/agdelte-pack-psych -i server server/AuthzStoreTest.agda",
     "test:authz-store": "npm run gen:authz-store-test && cabal build authz-store-test && cabal run authz-store-test",
     "gen:yookassa-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i /home/n/.agda/agdelte-payments -i server server/YooKassaTest.agda",
-    "test:yookassa": "npm run gen:yookassa-test && cabal build yookassa-test && cabal run yookassa-test"
+    "test:yookassa": "npm run gen:yookassa-test && cabal build yookassa-test && cabal run yookassa-test",
+    "gen:schema-spike-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i /home/n/.agda/agdelte-crm -i server server/SchemaSpikeTest.agda",
+    "test:schema-spike": "npm run gen:schema-spike-test && cabal build schema-spike-test && cabal run schema-spike-test"
   },
   "keywords": [
     "agda",

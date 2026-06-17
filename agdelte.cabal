@@ -169,3 +169,10 @@ executable yookassa-test
   build-depends:    base, text, containers, crypton, memory, base64-bytestring
                   , http-client, http-client-tls, aeson
                   , bytestring, http-types
+
+executable schema-spike-test
+  main-is:          MAlonzo/Code/SchemaSpikeTest.hs
+  hs-source-dirs:   _build, hs
+  ghc-options:      -main-is MAlonzo.Code.SchemaSpikeTest -w -rtsopts
+  default-language: GHC2021
+  build-depends:    base, text, containers
