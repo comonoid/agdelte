@@ -131,14 +131,7 @@ executable store-txn-test
   default-language: GHC2021
   build-depends:    base, text
 
--- courses-smoke-test: the extracted video-course AppStore actually runs on the store.
--- AppStore imports Storage.WAL → Storage.FFI, so it links the WAL file-op FFI (POSIX).
-executable courses-smoke-test
-  main-is:          MAlonzo/Code/CoursesSmokeTest.hs
-  hs-source-dirs:   _build, hs
-  ghc-options:      -main-is MAlonzo.Code.CoursesSmokeTest -w -rtsopts
-  default-language: GHC2021
-  build-depends:    base, text, containers, bytestring, unix, directory, filepath
+-- (courses-smoke-test removed 2026-06-17: agdelte-courses frozen as legacy reference.)
 
 executable psych-schedule-test
   main-is:          MAlonzo/Code/PsychScheduleTest.hs
