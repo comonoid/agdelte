@@ -51,3 +51,8 @@ open import Agdelte.Html.Controls.Stepper public
 
 -- Media
 open import Agdelte.Html.Controls.Video.Player public
+
+-- Content / commerce (domain-neutral UI tools)
+open import Agdelte.Html.Controls.Comments public
+open import Agdelte.Html.Controls.Cart public
+open import Agdelte.Html.Controls.FilterChips public
