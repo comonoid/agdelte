@@ -9,7 +9,7 @@
 module Agdelte.Html.Controls.Table where
 
 open import Data.String using (String)
-open import Data.List using (List; []; _∷_; map; null; length)
+open import Data.List using (List; []; _∷_; null; length)
 open import Data.Nat using (ℕ; zero; suc)
 open import Data.Nat.Show using (show)
 open import Data.Bool using (Bool; true; false; not)

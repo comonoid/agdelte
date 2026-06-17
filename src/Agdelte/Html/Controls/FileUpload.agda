@@ -7,9 +7,8 @@
 module Agdelte.Html.Controls.FileUpload where
 
 open import Data.String using (String; _++_)
-open import Data.List using (List; []; _∷_)
+open import Data.List using ([]; _∷_)
 open import Data.Nat using (ℕ)
-open import Data.Bool using (Bool; true; false; if_then_else_)
 
 open import Agdelte.Reactive.Node
 

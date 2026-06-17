@@ -8,10 +8,9 @@
 module Agdelte.Html.Controls.Breadcrumb where
 
 open import Data.String using (String)
-open import Data.List using (List; []; _∷_; map; length)
-open import Data.Nat using (ℕ; zero; suc; _≡ᵇ_; _∸_)
-open import Data.Bool using (Bool; true; false; if_then_else_)
-open import Function using (_∘_)
+open import Data.List using (List; []; _∷_; length)
+open import Data.Nat using (ℕ; suc; _≡ᵇ_)
+open import Data.Bool using (Bool; if_then_else_)
 
 open import Agdelte.Reactive.Node
 

@@ -7,11 +7,10 @@
 module Agdelte.Html.Controls.Rating where
 
 open import Data.String using (String; _++_)
-open import Data.List using (List; []; _∷_)
-open import Data.Nat using (ℕ; zero; suc; _≤ᵇ_)
-open import Data.Bool using (Bool; true; false; if_then_else_)
+open import Data.List using ([]; _∷_)
+open import Data.Nat using (ℕ; _≤ᵇ_)
+open import Data.Bool using (if_then_else_)
 
-open import Agda.Builtin.String using (primShowNat)
 open import Agdelte.Reactive.Node
 open import Agdelte.I18n using (pluralRu)
 

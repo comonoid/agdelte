@@ -8,11 +8,10 @@
 
 module Agdelte.Html.Controls.Skeleton where
 
-open import Data.String using (String; _++_)
+open import Data.String using (String)
 open import Data.List using (List; []; _∷_)
 open import Data.Nat using (ℕ; zero; suc)
-open import Data.Bool using (Bool; true; false; not)
-open import Data.Maybe using (Maybe; just; nothing)
+open import Data.Bool using (Bool; not)
 open import Function using (_∘_)
 
 open import Agdelte.Reactive.Node

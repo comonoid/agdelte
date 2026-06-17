@@ -10,9 +10,8 @@ module Agdelte.Html.Controls.Toast where
 
 open import Data.String using (String)
 open import Data.List using (List; []; _∷_; drop; length)
-open import Data.Nat using (ℕ; _∸_; _⊔_)
+open import Data.Nat using (ℕ; _∸_)
 open import Data.Bool using (Bool)
-open import Function using (_∘_)
 
 open import Agdelte.Core.Cmd as Cmd using (Cmd; delay)
 open import Agdelte.Reactive.Node

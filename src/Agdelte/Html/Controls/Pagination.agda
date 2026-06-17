@@ -8,9 +8,9 @@
 module Agdelte.Html.Controls.Pagination where
 
 open import Data.String using (String)
-open import Data.List using (List; []; _∷_; _++_; map; length)
-open import Data.Nat using (ℕ; zero; suc; _+_; _≤ᵇ_; _<ᵇ_; _≡ᵇ_)
-open import Data.Bool using (Bool; true; false; if_then_else_; not)
+open import Data.List using (List; []; _∷_; _++_)
+open import Data.Nat using (ℕ; _+_; _≤ᵇ_; _<ᵇ_; _≡ᵇ_)
+open import Data.Bool using (if_then_else_; not)
 open import Function using (_∘_)
 
 open import Data.Nat.Show renaming (show to showℕ)

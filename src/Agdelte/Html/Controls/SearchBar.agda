@@ -6,8 +6,7 @@
 module Agdelte.Html.Controls.SearchBar where
 
 open import Data.String using (String)
-open import Data.List using (List; []; _∷_)
-open import Data.Bool using (Bool; true; false; if_then_else_)
+open import Data.List using ([]; _∷_)
 
 open import Agdelte.Reactive.Node
 

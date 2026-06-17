@@ -13,7 +13,6 @@ open import Data.Nat using (ℕ; zero; suc; _+_; _∸_; _<ᵇ_; _≡ᵇ_)
 open import Data.Nat.Show using (show)
 open import Data.Bool using (Bool; true; false; if_then_else_; _∧_)
 open import Data.Maybe using (Maybe; just; nothing)
-open import Function using (_∘_)
 open import Data.Product using (_×_; _,_)
 
 open import Agdelte.Reactive.Node

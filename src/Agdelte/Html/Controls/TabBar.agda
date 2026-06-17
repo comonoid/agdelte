@@ -7,11 +7,10 @@
 module Agdelte.Html.Controls.TabBar where
 
 open import Data.String using (String; _++_)
-open import Data.List using (List; []; _∷_; map; length)
-open import Data.Nat using (ℕ; zero; suc; _≡ᵇ_)
+open import Data.List using (List; []; _∷_)
+open import Data.Nat using (ℕ; suc; _≡ᵇ_)
 open import Data.Nat.Show using (show)
-open import Data.Bool using (Bool; true; false; if_then_else_)
-open import Function using (_∘_)
+open import Data.Bool using (if_then_else_)
 
 open import Agdelte.Reactive.Node
 open import Agdelte.Html.Controls.Util using (eqStr)

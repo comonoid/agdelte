@@ -7,11 +7,11 @@
 module Agdelte.Html.Controls.Checkbox where
 
 open import Data.String using (String)
-open import Data.List using (List; []; _∷_; map; any)
+open import Data.List using (List; []; _∷_; map)
 open import Data.Nat using (ℕ)
 open import Data.Bool using (Bool; true; false; if_then_else_)
 open import Data.Maybe using (Maybe; just; nothing)
-open import Function using (_∘_; case_of_)
+open import Function using (case_of_)
 
 open import Agdelte.Reactive.Node
 open import Agdelte.Html.Controls.Util using (eqStr)
@@ -85,7 +85,7 @@ checkboxIndeterminate lbl getState toggleMsg =
 ------------------------------------------------------------------------
 
 -- Re-use SelectOption from Dropdown
-open import Agdelte.Html.Controls.Dropdown using (SelectOption; mkOption; optValue; optLabel)
+open import Agdelte.Html.Controls.Dropdown using (SelectOption; optValue; optLabel)
 
 private
   -- Check if value is in list

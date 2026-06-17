@@ -8,13 +8,12 @@ module Agdelte.Html.Controls.Progress where
 
 open import Data.String using (String)
 open import Data.List using (List; []; _∷_)
-open import Data.Nat using (ℕ; _≤ᵇ_)
-open import Data.Bool using (Bool; true; false; if_then_else_)
+open import Data.Nat using (ℕ)
+open import Data.Bool using (Bool)
 open import Function using (_∘_)
 
 open import Agdelte.Reactive.Node
 
-open import Agda.Builtin.String using (primShowNat)
 
 ------------------------------------------------------------------------
 -- Clamping helper (JS postulate)

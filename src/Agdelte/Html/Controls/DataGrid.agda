@@ -10,14 +10,14 @@ module Agdelte.Html.Controls.DataGrid where
 open import Data.String using (String)
 open import Data.List using (List; []; _∷_; map; null)
 open import Data.Nat using (ℕ; zero; suc; _≡ᵇ_)
-open import Data.Bool using (Bool; true; false; not; if_then_else_)
+open import Data.Bool using (Bool; not; if_then_else_)
 open import Data.Maybe using (Maybe; just; nothing)
-open import Data.Product using (_×_; _,_; proj₁; proj₂)
+open import Data.Product using (_×_; _,_)
 open import Function using (_∘_)
 
 open import Agdelte.Reactive.Node
 open import Agdelte.Html.Controls.Util using (case_of_; noDataText)
-open import Agdelte.Data.Array as Arr using (Array; CmpResult; cmpLT; cmpEQ; cmpGT; fromList; toList; sortBy)
+open import Agdelte.Data.Array as Arr using (CmpResult; cmpLT; cmpEQ; cmpGT; fromList; toList; sortBy)
 
 ------------------------------------------------------------------------
 -- Column definition

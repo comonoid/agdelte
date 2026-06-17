@@ -12,7 +12,7 @@ module Agdelte.Html.Controls.FilterChips where
 open import Data.String using (String)
 open import Data.List using (List; []; _∷_)
 open import Data.Maybe using (Maybe; just; nothing)
-open import Data.Bool using (Bool; true; false; if_then_else_)
+open import Data.Bool using (Bool; false; if_then_else_)
 open import Agda.Builtin.String using (primStringEquality)
 
 open import Agdelte.Reactive.Node

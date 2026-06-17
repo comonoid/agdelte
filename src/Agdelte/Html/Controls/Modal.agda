@@ -8,9 +8,7 @@ module Agdelte.Html.Controls.Modal where
 
 open import Data.String using (String; _++_)
 open import Data.List using (List; []; _∷_)
-open import Data.Nat using (ℕ)
 open import Data.Bool using (Bool)
-open import Function using (_∘_)
 
 open import Agdelte.Reactive.Node
 
