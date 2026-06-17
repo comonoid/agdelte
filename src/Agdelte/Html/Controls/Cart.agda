@@ -10,8 +10,8 @@ module Agdelte.Html.Controls.Cart where
 open import Data.String using (String; _++_)
 open import Data.List using (List; []; _∷_; length)
 open import Data.List.Base using (filterᵇ)
-open import Data.Nat using (ℕ; zero; suc; _≡ᵇ_; _+_)
-open import Data.Bool using (Bool; true; false; not)
+open import Data.Nat using (ℕ; zero; _≡ᵇ_; _+_)
+open import Data.Bool using (not)
 
 open import Agda.Builtin.String using (primShowNat)
 open import Agdelte.Reactive.Node

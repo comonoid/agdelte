@@ -20,7 +20,7 @@ open import Data.Product using (_×_; _,_)
 open import Data.String using (toList; fromList) renaming (_++_ to _<>_)
 
 open import Agdelte.Storage.Schema using
-  ( ColTy; CNat; CFK; CEnumS; Column; mkCol; idxCol; Schema; Row
+  ( CNat; CFK; CEnumS; mkCol; idxCol; Schema; Row
   ; encodeRow; decodeRow; encAtom; decAtom; ddlOf; imIndexes; indexDDLs )
 open import Crm.Identity using (Account; mkAccount; acId; acBalance; acCreatedAt)
 open import Crm.Wire using (encAccount; decAccount)
