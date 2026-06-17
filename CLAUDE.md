@@ -17,6 +17,9 @@
 - **`docs/adr/0001-storage-wal-in-memory.md`** — решение и обоснование (закрывает §12 SPEC);
 - **`docs/concepts/storage-model.md`** — полный дизайн + механика рантайма (типы+индексы,
   `IndexedMap`, `Op`, монада `Txn`, транзакции, разрешимость, Часть V — как крутится);
+- **`docs/concepts/declarative-storage.md`** — дизайн-вектор: хранилище как реактивный UI
+  (схема-`template` → кодек/индексы/SQL/пейджинг выводятся интерпретаторами); partial-RAM ≡ SQL ≡
+  смена backend. Фундамент будущей эволюции (SQL/масштаб), реализуется инкрементально;
 - **`docs/plan-crm-core.md`** — исполняемый чеклист; **следующий шаг — Фаза 0: `IndexedMap`**.
 
 Postgres-путь (hpgsql, раннер миграций, схема §5/§14.3) — scale-out за headless-API;
