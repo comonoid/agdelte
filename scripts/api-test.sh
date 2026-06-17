@@ -237,6 +237,23 @@ req POST /auth/users '{"login":"x","password":"y"}' "$VER"; eq "ez-viewer-create
 req POST /psych/availability '{"type":"session"}' "$VER"; eq "ez-viewer-public" "$code" 200  # public still open
 stop
 
+echo "===== boot 14 (payments §7 — record → webhook → grant, idempotent) ====="
+rm -f "$WORK/crm.wal"
+start
+req POST /payments/record '{"extId":"yk-1","offering":2,"name":"Анна","email":"a@x.ru","amount":6750000}'
+has "py-record-id" "$body" '"id":'; eq "py-record-200" "$code" 200
+WB='{"event":"payment.succeeded","object":{"id":"yk-1","status":"succeeded"}}'
+req POST /payments/webhook "$WB"; has "py-granted" "$body" '"granted":true'
+ENG=$(printf '%s' "$body" | grep -oE '"engagement":[0-9]+' | grep -oE '[0-9]+')
+req POST /psych/package "{\"eng\":$ENG}"; has "py-pkg-total5" "$body" '"sessionsTotal":5'; has "py-pkg-left5" "$body" '"sessionsLeft":5'
+req POST /payments/webhook "$WB"; has "py-idempotent" "$body" '"idempotent":true'             # re-fire → no double-grant
+req POST /payments/webhook '{"event":"payment.succeeded","object":{"id":"nope"}}'; has "py-unknown" "$body" '"granted":false'
+req POST /payments/webhook '{"event":"payment.canceled","object":{"id":"yk-1"}}'; has "py-ignored" "$body" '"ignored":true'
+stop
+start   # payment + grant durable; still idempotent after restart
+req POST /payments/webhook "$WB"; has "py-durable-idem" "$body" '"idempotent":true'
+stop
+
 echo "------------------------------------------------------------"
 echo "API TOTAL: $P PASS, $F FAIL"
 [ "$F" -eq 0 ] && { echo "✓ API integration green"; exit 0; } || { echo "✗ API integration FAILED"; exit 1; }

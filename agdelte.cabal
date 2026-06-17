@@ -110,6 +110,7 @@ executable crm-server
   build-depends:
       base, bytestring, containers, text, time
     , crypton, memory, base64-bytestring
+    , http-client, http-client-tls, aeson
     , warp, wai, wai-websockets, websockets, http-types, case-insensitive
     , network, stm, async, unix, directory, filepath
     , hpgsql, Only

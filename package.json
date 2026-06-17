@@ -109,7 +109,7 @@
     "clean": "rm -rf _build MAlonzo jAgda",
     "gen:crmcommands-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i /home/n/.agda/agdelte-crm -i server server/CrmCommandsTest.agda",
     "test:crmcommands": "npm run gen:crmcommands-test && cabal build crmcommands-test && cabal run crmcommands-test",
-    "gen:crm-server": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i /home/n/.agda/agdelte-crm -i /home/n/.agda/agdelte-auth -i /home/n/.agda/agdelte-pack-psych -i server server/CrmServer.agda",
+    "gen:crm-server": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i /home/n/.agda/agdelte-crm -i /home/n/.agda/agdelte-auth -i /home/n/.agda/agdelte-payments -i /home/n/.agda/agdelte-pack-psych -i server server/CrmServer.agda",
     "build:crm-server": "npm run gen:crm-server && cabal build crm-server",
     "crm:live": "npm run build:crm-server && bash scripts/crm-live-run.sh",
     "gen:store-txn-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i /home/n/.agda/agdelte-store -i server server/StoreTxnTest.agda",

@@ -36,8 +36,10 @@ open import Crm.Commands using (ensureAdmin)
 open import Crm.Api using (crmConfig; routeExt)
 open import Psych.Api using (tryRoute)
 open import Psych.Enforce using (authz)
+open import Psych.Payments using (PayConfig; mkPayConfig)
 open import Psych.Schedule using (Settings; mkSettings)
 open import Psych.Catalog using (Prices; mkPrices)
+open import Agdelte.Payment.YooKassa using (newHttpManager)
 
 -- read a ℕ from env (base-10); fall back to `def` when unset or unparseable
 envNat : String → ℕ → IO ℕ
@@ -84,9 +86,15 @@ main =
   envNat "PSYCH_PRICE_SINGLE"  1500000 >>= λ p1 →
   envNat "PSYCH_PRICE_PATH5"   6750000 >>= λ p5 →
   envNat "PSYCH_PRICE_PATH10" 12000000 >>= λ p10 →
+  getEnvOr "YOOKASSA_SHOP_ID" "" >>= λ ykShop →
+  getEnvOr "YOOKASSA_SECRET_KEY" "" >>= λ ykKey →
+  getEnvOr "YOOKASSA_WEBHOOK_SECRET" "" >>= λ ykWh →
+  getEnvOr "YOOKASSA_RETURN_URL" "https://vtochku.fun/thanks" >>= λ ykRet →
+  newHttpManager >>= λ mgr →
   walOpen (crmConfig "crm.wal") >>= λ h →
   seedAdmin h adminLogin adminPass >>
-  putStrLn "CRM headless on :8137 (WAL: ./crm.wal) + /psych + /auth" >>
+  putStrLn "CRM headless on :8137 (WAL: ./crm.wal) + /psych + /auth + /payments" >>
   listenHost host 8137
-    (λ req → routeExt (tryRoute (mkSettings ds de bf no ca ho tz) (mkPrices p1 p5 p10) h)
+    (λ req → routeExt (tryRoute (mkSettings ds de bf no ca ho tz) (mkPrices p1 p5 p10)
+                                (mkPayConfig mgr ykShop ykKey ykWh ykRet (mkPrices p1 p5 p10)) h)
                       (gate authzMode h) token secret h req)
