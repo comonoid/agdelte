@@ -151,3 +151,10 @@ executable rbac-test
   ghc-options:      -main-is MAlonzo.Code.RbacTest -w -rtsopts
   default-language: GHC2021
   build-depends:    base, text, containers
+
+executable authz-store-test
+  main-is:          MAlonzo/Code/AuthzStoreTest.hs
+  hs-source-dirs:   _build, hs
+  ghc-options:      -main-is MAlonzo.Code.AuthzStoreTest -w -rtsopts
+  default-language: GHC2021
+  build-depends:    base, text, containers

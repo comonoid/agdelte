@@ -117,6 +117,8 @@ checks =
   chk "scope-subtree"      (scopeCovers "ws/42" "ws/42/x") ∷
   chk "scope-sibling-no"   (not (scopeCovers "ws/42" "ws/420")) ∷
   chk "scope-outside-no"   (not (scopeCovers "ws/42" "ws")) ∷
+  chk "scope-global-star"  (scopeCovers "*" "ws/42") ∷
+  chk "scope-global-empty" (scopeCovers "" "anything/here") ∷
   chk "canOn-in-scope"     (canOn scPol (("operator" , "ws/42") ∷ []) (perm "activity" "cancel") "ws/42/sub") ∷
   chk "canOn-out-scope"    (not (canOn scPol (("operator" , "ws/42") ∷ []) (perm "activity" "cancel") "ws/99")) ∷
   chk "canAssign-owner"    (canAssign scPol (("owner" , "ws/42") ∷ []) "ws/42/x") ∷

@@ -125,7 +125,9 @@
     "test:psych-schedule": "npm run gen:psych-schedule-test && cabal build psych-schedule-test && cabal run psych-schedule-test",
     "build:auth-client": "agda --js --js-es6 --js-optimize --compile-dir=_build -i src -i /home/n/.agda/agdelte-auth /home/n/.agda/agdelte-auth/Agdelte/Auth/Client.agda",
     "gen:rbac-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i /home/n/.agda/agdelte-auth -i server server/RbacTest.agda",
-    "test:rbac": "npm run gen:rbac-test && cabal build rbac-test && cabal run rbac-test"
+    "test:rbac": "npm run gen:rbac-test && cabal build rbac-test && cabal run rbac-test",
+    "gen:authz-store-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i /home/n/.agda/agdelte-crm -i /home/n/.agda/agdelte-auth -i /home/n/.agda/agdelte-pack-psych -i server server/AuthzStoreTest.agda",
+    "test:authz-store": "npm run gen:authz-store-test && cabal build authz-store-test && cabal run authz-store-test"
   },
   "keywords": [
     "agda",

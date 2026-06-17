@@ -168,6 +168,25 @@ start   # defaults restored when env unset
 req GET /psych/offerings; has "cfg-price-default" "$body" '"price":1500000'
 stop
 
+echo "===== boot 10 (RBAC role assignments — store CRUD + durability) ====="
+rm -f "$WORK/crm.wal"
+start
+req POST /assignments '{"subject":"ivan","role":"operator","scope":"ws/42"}'
+has "ra-assign-id" "$body" '"id":'; eq "ra-assign-200" "$code" 200
+RA=$(first_id "$body")
+req POST /assignments '{"subject":"ivan","role":"viewer","scope":"ws/9"}'; has "ra-assign2" "$body" '"id":'
+req POST /assignments/by-subject '{"subject":"ivan"}'
+has "ra-list-role" "$body" '"role":"operator"'; has "ra-list-scope" "$body" 'ws/42'
+req POST /assignments '{"subject":"ivan"}'; eq "ra-missing-400" "$code" 400
+req POST /assignments/revoke "{\"id\":$RA}"; has "ra-revoke-ok" "$body" '"ok":true'
+req POST /assignments/by-subject '{"subject":"ivan"}'
+case "$body" in *'"role":"operator"'*) bad "ra-revoked-gone" "operator still present after revoke";; *) ok "ra-revoked-gone";; esac
+has "ra-other-remains" "$body" '"role":"viewer"'
+stop
+start   # assignments survive restart (durable in the WAL)
+req POST /assignments/by-subject '{"subject":"ivan"}'; has "ra-durable" "$body" '"role":"viewer"'
+stop
+
 echo "------------------------------------------------------------"
 echo "API TOTAL: $P PASS, $F FAIL"
 [ "$F" -eq 0 ] && { echo "✓ API integration green"; exit 0; } || { echo "✗ API integration FAILED"; exit 1; }
