@@ -23,7 +23,7 @@ hmacSHA256 :: T.Text -> T.Text -> T.Text
 hmacSHA256 secret msg =
   let key = TE.encodeUtf8 secret
       dat = TE.encodeUtf8 msg
-      digest = HMAC.hmac key dat :: HMAC.HMAC Hash.SHA256
+      digest = HMAC.hmacGetDigest (HMAC.hmac key dat :: HMAC.HMAC Hash.SHA256)
   in T.pack (show digest)
 
 -- | Hash password with bcrypt (cost 12). Returns base64-encoded hash.

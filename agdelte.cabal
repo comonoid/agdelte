@@ -109,6 +109,7 @@ executable crm-server
   default-language: GHC2021
   build-depends:
       base, bytestring, containers, text, time
+    , crypton, memory, base64-bytestring
     , warp, wai, wai-websockets, websockets, http-types, case-insensitive
     , network, stm, async, unix, directory, filepath
     , hpgsql, Only

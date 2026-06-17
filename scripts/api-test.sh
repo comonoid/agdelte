@@ -201,6 +201,25 @@ start   # the reminded flag is durable — no re-reminding after restart
 req POST /psych/reminders/run '{"leadHours":720}'; has "rm-durable-idem" "$body" '"reminded":0'
 stop
 
+echo "===== boot 12 (authn — login → JWT → /auth/me, bcrypt admin seed) ====="
+rm -f "$WORK/crm.wal"
+start PSYCH_ADMIN_LOGIN=sergey PSYCH_ADMIN_PASSWORD=hunter2 CRM_JWT_SECRET=top-secret
+req POST /auth/login '{"login":"sergey","password":"hunter2"}'; has "au-token" "$body" '"token":'; eq "au-200" "$code" 200
+TOK=$(printf '%s' "$body" | grep -oE '"token":"[^"]+"' | sed 's/"token":"//; s/"$//')
+req POST /auth/login '{"login":"sergey","password":"wrong"}'; eq "au-bad-pw-401" "$code" 401
+req POST /auth/login '{"login":"ghost","password":"x"}'; eq "au-no-user-401" "$code" 401
+req GET /auth/me '' "$TOK"; has "au-me-login" "$body" '"login":"sergey"'; eq "au-me-200" "$code" 200
+req GET /auth/me; eq "au-me-notoken-401" "$code" 401
+req GET /auth/me '' "garbage.token.x"; eq "au-me-garbage-401" "$code" 401
+req POST /assignments/by-subject '{"subject":"sergey"}'; has "au-admin-seeded" "$body" '"role":"admin"'
+stop
+start PSYCH_ADMIN_LOGIN=sergey PSYCH_ADMIN_PASSWORD=hunter2 CRM_JWT_SECRET=top-secret   # restart: user durable + idempotent seed
+req POST /auth/login '{"login":"sergey","password":"hunter2"}'; has "au-durable-login" "$body" '"token":'
+req POST /assignments/by-subject '{"subject":"sergey"}'
+N=$(printf '%s' "$body" | grep -oE '"role":"admin"' | wc -l)
+{ [ "$N" -eq 1 ]; } && ok "au-seed-idempotent" || bad "au-seed-idempotent" "admin assignments after restart: $N"
+stop
+
 echo "------------------------------------------------------------"
 echo "API TOTAL: $P PASS, $F FAIL"
 [ "$F" -eq 0 ] && { echo "✓ API integration green"; exit 0; } || { echo "✗ API integration FAILED"; exit 1; }
