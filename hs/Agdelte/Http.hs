@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Agdelte.Http
-  ( serve, serveHost, serveWithWs, mkApp, toWaiApp, Request(..), Response(..)
+  ( serve, serveHost, serveUnix, serveWithWs, mkApp, toWaiApp, Request(..), Response(..)
   ) where
 
 import Control.Exception (SomeAsyncException(..), SomeException, fromException, throwIO, try)
@@ -16,6 +16,7 @@ import qualified Data.CaseInsensitive as CI
 import System.IO (hPutStrLn, stderr)
 import qualified Network.Wai as Wai
 import qualified Network.Wai.Handler.Warp as Warp
+import qualified Network.Socket as NS
 import qualified Network.HTTP.Types as H
 import qualified Network.WebSockets as WS
 import qualified Network.Wai.Handler.WebSockets as WaiWS
@@ -56,6 +57,18 @@ serveHost host port httpHandler = do
                $ Warp.setHost (fromString (T.unpack host))
                $ Warp.defaultSettings
   Warp.runSettings settings (mkApp httpHandler Nothing)
+
+-- Serve over a unix-domain socket (nginx ↔ service, no TCP port). Production deploy:
+-- the socket lives in a per-site systemd RuntimeDirectory which is recreated fresh on
+-- each start, so no stale-socket cleanup is needed here.
+serveUnix :: Text -> (Request -> IO Response) -> IO ()
+serveUnix path httpHandler = do
+  let p = T.unpack path
+  sock <- NS.socket NS.AF_UNIX NS.Stream NS.defaultProtocol
+  NS.bind sock (NS.SockAddrUnix p)
+  NS.listen sock 1024
+  putStrLn $ "Agdelte server listening on unix:" ++ p
+  Warp.runSettingsSocket Warp.defaultSettings sock (mkApp httpHandler Nothing)
 
 -- | Build WAI Application with optional WebSocket routing (without starting warp).
 -- Needed for tests (Warp.testWithApplication).

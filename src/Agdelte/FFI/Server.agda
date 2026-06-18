@@ -243,6 +243,18 @@ postulate
   #-}
 {-# COMPILE GHC listenHost = listenHostImpl #-}
 
+-- Listen on a unix-domain socket (nginx ↔ service, no TCP port) — production deploy.
+postulate
+  listenUnix : String → (HttpRequest → IO HttpResponse) → IO ⊤
+
+{-# FOREIGN GHC
+  listenUnixImpl :: T.Text -> (Http.Request -> IO AgdaResponse) -> IO ()
+  listenUnixImpl path handler = Http.serveUnix path $ \req -> do
+    AgdaResponse status body hdrs <- handler req
+    return (Http.Response (fromIntegral status) body hdrs)
+  #-}
+{-# COMPILE GHC listenUnix = listenUnixImpl #-}
+
 -- Read an environment variable, or a default if unset.
 {-# FOREIGN GHC import System.Environment (lookupEnv) #-}
 postulate

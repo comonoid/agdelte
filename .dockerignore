@@ -1,0 +1,26 @@
+# Build context for Dockerfile.crm — keep only what cabal needs: the .cabal/project files,
+# the hand-written FFI (hs/) and the generated MAlonzo Haskell (_build/MAlonzo). Everything
+# else (Agda sources, the JS build, the NixOS dist-newstyle, docs) is excluded to keep the
+# context small and the build hermetic.
+.git
+dist-newstyle
+node_modules
+package.json
+package-lock.json
+src
+examples
+examples_html
+doc
+docs
+test
+runtime
+benchmark
+scripts
+debug-*.md
+*.md
+_crmbin
+Dockerfile.crm
+# within _build: drop the JS backend output and the Agda interface cache, keep MAlonzo/
+_build/jAgda.*
+_build/2.9.0
+**/*.agdai

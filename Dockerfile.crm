@@ -1,0 +1,32 @@
+# Reproducible Debian 13 (trixie) build of the CRM server — same OS/toolchain as the host.
+# Builds from the Agda-generated MAlonzo Haskell (already in _build/MAlonzo, generated on the
+# dev box) + the hand-written FFI in hs/ — NO Agda in the container, just GHC/cabal. Versions
+# pinned by cabal.project.freeze (same as the sergey-site services).
+#
+#   docker build -f Dockerfile.crm --output type=local,dest=./_crmbin .
+#   # → _crmbin/crm-server   (drop into the site bundle's bin/)
+#
+# On Debian zlib/gmp/ffi are in standard linker paths ⇒ no LIBRARY_PATH hack (unlike NixOS dev).
+FROM debian:trixie AS build
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential curl ca-certificates git \
+      libgmp-dev libffi-dev zlib1g-dev libnuma-dev pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Same toolchain as dev (apt GHC is too old) — via ghcup, pinned 9.10.3.
+ENV PATH=/root/.ghcup/bin:$PATH
+RUN curl -fsSL https://downloads.haskell.org/ghcup/x86_64-linux-ghcup -o /usr/local/bin/ghcup \
+    && chmod +x /usr/local/bin/ghcup \
+    && ghcup install ghc 9.10.3 --set \
+    && ghcup install cabal 3.16.0.0 --set
+
+WORKDIR /src
+COPY . .
+RUN cabal update && cabal build exe:crm-server
+RUN mkdir -p /out \
+    && cp "$(cabal list-bin exe:crm-server)" /out/crm-server \
+    && strip /out/crm-server
+
+FROM scratch AS bin
+COPY --from=build /out/ /

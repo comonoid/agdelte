@@ -26,7 +26,7 @@ open import Data.Nat.Show using (show; readMaybe)
 open import Data.Maybe using (Maybe; just; nothing)
 
 open import Agdelte.FFI.Server using
-  ( listenHost; getEnvOr; putStrLn; eqStrCI; HttpRequest; HttpResponse; _>>=_; _>>_; pure )
+  ( listenHost; listenUnix; getEnvOr; putStrLn; eqStrCI; HttpRequest; HttpResponse; _>>=_; _>>_; pure )
 open import Agdelte.FFI.Time using (getCurrentTime)
 open import Agdelte.FFI.Crypto using (hashPassword)
 open import Agdelte.Storage.WAL using (walOpen; walTxn; WalHandle)
@@ -66,10 +66,19 @@ seedAdmin h login pass =
 gate : String → WalHandle Base CrmOp → Maybe String → HttpRequest → IO (Maybe HttpResponse)
 gate mode h = if eqStrCI mode "on" then authz h else (λ _ _ → pure nothing)
 
+-- Bind on the unix socket when CRM_SOCKET is set (prod: nginx ↔ /run/sites/<slug>/…),
+-- else loopback TCP :8137 (dev). Mirrors booking-service's BOOKING_SOCKET.
+serveOn : String → String → (HttpRequest → IO HttpResponse) → IO ⊤
+serveOn sock host handler =
+  if null (toList sock)
+  then listenHost host 8137 handler
+  else listenUnix sock handler
+
 {-# NON_TERMINATING #-}
 main : IO ⊤
 main =
   setLineBuffering >>
+  getEnvOr "CRM_SOCKET" "" >>= λ sock →
   getEnvOr "CRM_HOST" "127.0.0.1" >>= λ host →
   getEnvOr "CRM_TOKEN" "" >>= λ token →
   getEnvOr "CRM_JWT_SECRET" "dev-secret-change-me" >>= λ secret →
@@ -93,8 +102,8 @@ main =
   newHttpManager >>= λ mgr →
   walOpen (crmConfig "crm.wal") >>= λ h →
   seedAdmin h adminLogin adminPass >>
-  putStrLn "CRM headless on :8137 (WAL: ./crm.wal) + /psych + /auth + /payments" >>
-  listenHost host 8137
+  putStrLn "CRM headless (WAL: ./crm.wal) + /psych + /auth + /payments" >>
+  serveOn sock host
     (λ req → routeExt (tryRoute (mkSettings ds de bf no ca ho tz) (mkPrices p1 p5 p10)
                                 (mkPayConfig mgr ykShop ykKey ykWh ykRet (mkPrices p1 p5 p10)) h)
                       (gate authzMode h) token secret h req)
