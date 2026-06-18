@@ -11,6 +11,8 @@ build/
 *.o
 hs/test-runner
 dist-newstyle/
+# Debian-13 crm-server binary from Dockerfile.crm (--output type=local,dest=./_crmbin)
+_crmbin/
 
 # Agda JS backend intermediate files (use --compile-dir=_build instead)
 jAgda.*.js
