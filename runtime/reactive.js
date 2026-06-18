@@ -119,8 +119,12 @@ const ATTR_NS = {
 function agdaHeadersToObj(agdaList) {
   const result = {};
   const items = listToArray(agdaList).items;
+  const handler = { '_,_': (k, v) => { result[k] = v; } };
   for (const pair of items) {
-    pair({ '_,_': (k, v) => { result[k] = v; } });
+    // A Σ/pair value is a bare Scott function under plain --js, but `{ '_,_': fn }`
+    // under --js-optimize (which all the build scripts use). Handle both.
+    if (typeof pair === 'function') pair(handler);
+    else if (pair && typeof pair['_,_'] === 'function') pair['_,_'](handler);
   }
   return result;
 }
