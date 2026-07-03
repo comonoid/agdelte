@@ -1,7 +1,7 @@
 {-# OPTIONS --without-K --guardedness #-}
 
 -- Test the GENERIC transaction monad Agdelte.Storage.Txn (from agdelte-store)
--- on a TOY domain (a single ℕ counter) — i.e. with NO CRM involvement. Proves the
+-- on a TOY domain (a single ℕ counter) — i.e. with NO domain involvement. Proves the
 -- extraction produced a reusable, domain-parameterized monad: emit / getBase /
 -- abort / guardT / runTxn, plus live ≡ replay (the emitted ops, replayed via the
 -- same `apply`, reach the same state runTxn computed).

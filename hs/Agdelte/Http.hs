@@ -51,7 +51,7 @@ serveWithWs port httpHandler mWsHandler = do
   Warp.runSettings settings (mkApp httpHandler mWsHandler)
 
 -- Bind to a specific host (e.g. "127.0.0.1" for loopback-only). Use this for
--- services that must NOT be reachable off-box by default (e.g. the money/PII CRM).
+-- services that must NOT be reachable off-box by default (e.g. a money/PII service).
 serveHost :: Text -> Int -> (Request -> IO Response) -> IO ()
 serveHost host port httpHandler = do
   putStrLn $ "Agdelte server listening on " ++ T.unpack host ++ ":" ++ show port

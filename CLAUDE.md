@@ -1,53 +1,38 @@
 # Project Notes
 
-## CRM («Ядро услуг») — спецификация и протокол
+## Agdelte — фреймворк и экосистема
 
-Мы строим домен-нейтральное «ядро услуг» (CRM-платформу) поверх фреймворка agdelte.
-Полная спека — **`docs/SPEC.md`**. Перед работой над CRM прочитать:
-- **раздел 4** — слои (`app → packs → services-core → agdelte`, зависимость только вниз) и два grep-стража;
-- **раздел 5.6** — маппинг типов SQL↔Agda и три границы FFI;
-- **раздел 13** — контракт headless-API;
-- **раздел 14** — порядок задач Ф0 (текущая задача — одна за сессию);
-- **раздел 15** — протокол сессий (идиомы копировать из исходников, не изобретать).
+Этот репозиторий — **чистый фреймворк** `agdelte`: reactive UI (без Virtual DOM), `FFI.*`
+(Server/Json/Time/Crypto/HttpClient/FileSystem), `I18n`, `Email`, HTTP-сервер. Импортирует домена
+ноль. Домены/приложения — в отдельных репозиториях (раскладка ниже). *(CRM удалён — вся его
+функциональность перенесена в CXM; несколько аудитов подтвердили.)*
 
-**⚠️ ВАЖНО — текущее решение по хранилищу (ЗАМЕНЯЕТ SQL-части SPEC §14).**
-По итогам аудита выбран движок **WAL + in-memory, типизированные записи (НЕ Postgres)**.
-Поэтому SQL-ориентированные §5.6/§14.3/§14.4 SPEC — это **запасной Postgres-путь**, а не
-текущая ветка. Перед работой над хранилищем/доменом читать **в этом порядке**:
-- **`docs/adr/0001-storage-wal-in-memory.md`** — решение и обоснование (закрывает §12 SPEC);
-- **`docs/concepts/storage-model.md`** — полный дизайн + механика рантайма (типы+индексы,
-  `IndexedMap`, `Op`, монада `Txn`, транзакции, разрешимость, Часть V — как крутится);
-- **`docs/concepts/declarative-storage.md`** — дизайн-вектор: хранилище как реактивный UI
-  (схема-`template` → кодек/индексы/SQL/пейджинг выводятся интерпретаторами); partial-RAM ≡ SQL ≡
-  смена backend. Фундамент будущей эволюции (SQL/масштаб), реализуется инкрементально;
-- **`docs/plan-crm-core.md`** — исполняемый чеклист; **следующий шаг — Фаза 0: `IndexedMap`**.
+**Хранилище (для генерик-стора `agdelte-store`):** движок **WAL + in-memory, типизированные
+записи** (Postgres — отложенный scale-out, не основной путь). Перед работой над хранилищем читать:
+- **`docs/adr/0001-storage-wal-in-memory.md`** — решение и обоснование;
+- **`docs/concepts/storage-model.md`** — дизайн + механика рантайма (типы+индексы, `IndexedMap`,
+  `Op`, монада `Txn`, транзакции);
+- **`docs/concepts/declarative-storage.md`** — вектор: схема-`template` → кодек/индексы/SQL
+  выводятся интерпретаторами (partial-RAM ≡ SQL ≡ смена backend);
+- **`docs/POSTGRES-SPIKE.md`** — Postgres-путь (hpgsql; GHC-грабли: zlib `LIBRARY_PATH`, `-threaded`,
+  устаревший `.agdai`-кэш). **Postgres-ДРАЙВЕР переехал в `agdelte-store`** (`Agdelte.Storage.Postgres`,
+  2026-07-03); раннер миграций (`Server.Migrate`) + pg-спайки остаются здесь (нужен Warp/FS-FFI).
 
-Postgres-путь (hpgsql, раннер миграций, схема §5/§14.3) — scale-out за headless-API;
-рецепт GHC-сборки и грабли (zlib `LIBRARY_PATH`, `-threaded`, устаревший `.agdai`-кэш) —
-в **`docs/POSTGRES-SPIKE.md`**.
+**Раскладка репозиториев (2026-07-03).** Либа = каталог + `.agda-lib` (`name/include/depend`);
+реестр `~/.agda/libraries` резолвит по имени. Граф (вниз):
+- **`agdelte`** (ЭТОТ репо: `src/`+`hs/`+`server/`+build harness `agdelte.cabal`/`package.json`) —
+  фреймворк. depend: stdlib + `agdelte-store`. Сюда же входит сборка `cxm-server`/`pg-spike`.
+- **`agdelte-store`** (`~/agdelte-addons/agdelte-store`, depend: stdlib) — event-sourced стор
+  `Agdelte.Storage.{NatMap,IndexedMap,Wire,WAL,Txn,Schema,FFI,Postgres}`.
+- **`agdelte-auth`** (`~/agdelte-addons/agdelte-auth`, depend: stdlib+agdelte) — `Agdelte.Auth.*`.
+- **`agdelte-payments`** (`~/agdelte-addons/agdelte-payments`, depend: stdlib) — `Agdelte.Payment.YooKassa`.
+- **`cxm` + `cxm-pack-psych`** (`~/cxm-core`, depend: stdlib+agdelte+store+auth+payments[+cxm]) —
+  движок CXM + психо-пак (`Cxm.*`/`PsychCxm.*`); `server/CxmServer.agda` там же (харнесс — в этом репо).
+- **Архив** `~/.agda/_archive/`: `agdelte-courses` (легаси видео) + до-переносные git-оригиналы
+  store/auth/payments. `agdelte-crm` и легаси pack-psych — УДАЛЕНЫ.
 
-**Раскладка слоёв — ДЕКОМПОЗИЦИЯ ЗАВЕРШЕНА (2026-06-16).** Монолит разрезан на отдельные
-**зарегистрированные Agda-библиотеки** в `~/.agda/` (каждая — свой каталог + git-репо;
-реестр `~/.agda/libraries`; `.agda-lib` с `name/include/depend`). Имена модулей сохранены
-(`Agdelte.*`; CRM — `Crm.*`), поэтому строки import у потребителей не менялись. Граф (вниз):
-- **`agdelte-store`** (`~/.agda/agdelte-store`, depend: stdlib) — генерик-стор: `Agdelte.Storage.`
-  `{NatMap,IndexedMap,Wire,WAL,Txn,FFI}` (встроенный event-sourced стор + самодостаточный FFI);
-- **`agdelte-payments`** (depend: stdlib) — `Agdelte.Payment.YooKassa` (ЮKassa-клиент, свой http-client);
-- **`agdelte`** (этот репо, `src/`+`hs/`) — **чистый фреймворк**: reactive UI, `FFI.*` (вкл.
-  `FFI.Crypto`), `I18n`, `Email`, HTTP-сервер. Импортирует домена ноль; Auth НЕ содержит;
-- **`agdelte-auth`** (`~/.agda/agdelte-auth`, depend: stdlib+agdelte) — генерик-безопасность:
-  `Agdelte.Auth.{JWT,Middleware,Role,SignedUrl,Client}` (на `FFI.Crypto/Server/Time` + `Core.Cmd`);
-- **`agdelte-crm`** (`~/.agda/agdelte-crm`, depend: stdlib+store+agdelte) — `Crm.*` + `ServicesCore`;
-- **`agdelte-courses`** (depend: stdlib+store+agdelte+**auth**+payments) — легаси видео-платформа
-  (`Storage.AppStore`, `Payment` хендлеры, `Auth.{Guard,Handler}`, `Html/Controls/{Cart,…}`).
-- **`agdelte-pack-psych`** (depend: stdlib+store+agdelte+crm) — вертикаль брони/коучинга.
-- **app-слой остался в этом репо:** `server/` (CrmServer + тесты), `agdelte.cabal`, `package.json`
-  gen-скрипты (резолвят либы через `-i ~/.agda/agdelte-{store,crm,courses}`), `docs/`. `app/`/`packs/` —
-  скелеты (README/SQL). Postgres-FFI/пул/раннер миграций — генерик-инфра, остаются в `agdelte`.
-
-**Два grep-стража нейтральности** (`scripts/check-neutrality.sh`):
-- в `agdelte/` (`src/`, `hs/`) нет слов `party|engagement|услуг…`;
-- в CRM-ядре (`~/.agda/agdelte-crm/Crm`, через `$AGDELTE_CRM_DIR`) нет `psych|vet|transfer|медцентр…`.
+**Страж нейтральности** (`scripts/check-neutrality.sh`): в `agdelte/` (`src/`, `hs/`) нет доменных
+слов (`party|engagement|услуг…`) — фреймворк домена не называет.
 
 ## Environment
 
