@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Two neutrality guards (SPEC §4) — keep the layer boundaries honest.
 #  1. the agdelte framework (src/, hs/) must be domain-agnostic;
-#  2. the neutral CRM core (the agdelte-crm library) must not name any vertical.
+#  2. the neutral domain core (the agdelte-cxm library) must not name any vertical.
+#     (agdelte-crm retired 2026-07-02 → the core is now agdelte-cxm/Cxm.)
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -14,16 +15,20 @@ if grep -rIEn --include='*.agda' --include='*.hs' \
   fail=1
 fi
 
-# Guard 2: no vertical names in the neutral CRM core (now the agdelte-crm library).
-CRM_DIR="${AGDELTE_CRM_DIR:-$HOME/.agda/agdelte-crm}"
-if [ -d "$CRM_DIR/Crm" ]; then
+# Guard 2: no vertical names in the neutral domain core (the agdelte-cxm library).
+CXM_DIR="${AGDELTE_CXM_DIR:-$HOME/.agda/agdelte-cxm}"
+if [ -d "$CXM_DIR/Cxm" ]; then
+  # NB: the CRM-era word `transfer` was DROPPED from this list (2026-07-02): promise-transfer
+  # is core economics vocabulary (Concept Ч.2 §3 futures), not a vertical name. The canonical
+  # vertical-word list is agdelte-cxm/scripts/check-neutrality.sh — mirrored here.
   if grep -rIEn --include='*.agda' --include='*.hs' \
-       -e '\b(psych|vet|transfer)\b' -e 'медцентр' "$CRM_DIR/Crm" 2>/dev/null; then
-    echo "✗ neutrality: vertical names leaked into the CRM core ($CRM_DIR/Crm)"
+       -e '\b(psych|veterinar|clown)\b' -e '\bvet\b' -e 'курс|медцентр|психолог|ветклиник|ветеринар' \
+       "$CXM_DIR/Cxm" 2>/dev/null; then
+    echo "✗ neutrality: vertical names leaked into the CXM core ($CXM_DIR/Cxm)"
     fail=1
   fi
 else
-  echo "✗ neutrality: CRM core not found at $CRM_DIR/Crm (set AGDELTE_CRM_DIR) — guard 2 cannot run"
+  echo "✗ neutrality: CXM core not found at $CXM_DIR/Cxm (set AGDELTE_CXM_DIR) — guard 2 cannot run"
   fail=1
 fi
 

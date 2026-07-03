@@ -243,6 +243,38 @@ postulate
   #-}
 {-# COMPILE GHC listenHost = listenHostImpl #-}
 
+-- Listen on an AF_UNIX stream socket at `path` (nginx `proxy_pass http://unix:PATH:`). The server
+-- creates + chmods (0660) the socket; access is filesystem-gated (off-network). Used by headless
+-- deploys behind nginx instead of a TCP port.
+postulate
+  listenUnix : String → (HttpRequest → IO HttpResponse) → IO ⊤
+
+{-# FOREIGN GHC
+  listenUnixImpl :: T.Text -> (Http.Request -> IO AgdaResponse) -> IO ()
+  listenUnixImpl path handler = Http.serveUnix (T.unpack path) $ \req -> do
+    AgdaResponse status body hdrs <- handler req
+    return (Http.Response (fromIntegral status) body hdrs)
+  #-}
+{-# COMPILE GHC listenUnix = listenUnixImpl #-}
+
+-- Run `action` forever on a background thread, every `sec` seconds (first run immediately).
+-- The worker primitive for headless deploys: periodic outbox delivery, reminders, bus dispatch.
+-- An exception in one tick is swallowed (logged) so the loop survives transient failures.
+postulate
+  forkLoopEvery : Nat → IO ⊤ → IO ⊤
+
+{-# FOREIGN GHC import qualified Control.Concurrent as Conc #-}
+{-# FOREIGN GHC import qualified Control.Monad as Mon #-}
+{-# FOREIGN GHC
+  forkLoopEveryImpl :: Integer -> IO () -> IO ()
+  forkLoopEveryImpl sec action = do
+    _ <- Conc.forkIO (Mon.forever (do
+           action `Ex.catch` \e -> putStrLn ("worker tick failed: " ++ show (e :: Ex.SomeException))
+           Conc.threadDelay (fromIntegral sec * 1000000)))
+    return ()
+  #-}
+{-# COMPILE GHC forkLoopEvery = forkLoopEveryImpl #-}
+
 -- Read an environment variable, or a default if unset.
 {-# FOREIGN GHC import System.Environment (lookupEnv) #-}
 postulate

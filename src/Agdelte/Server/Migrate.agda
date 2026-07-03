@@ -8,7 +8,7 @@
 -- migrations are not reapplied (the version = the filename).
 --
 -- Convention: name migrations NNNN_description.sql (zero-padded ⇒ lexical order
--- = apply order). Uses FFI/Postgres (execSql/queryCol) + FFI/FileSystem.
+-- = apply order). Uses Storage.Postgres (execSql/queryCol) + FFI/FileSystem.
 module Agdelte.Server.Migrate where
 
 open import Agda.Builtin.IO using (IO)
@@ -20,7 +20,7 @@ open import Data.Char using (isSpace)
 open import Data.Bool using (Bool; true; false; not; _∧_; if_then_else_)
 
 open import Agdelte.FFI.Shared   using (startsWith)
-open import Agdelte.FFI.Postgres using (Pool; execSql; queryCol)
+open import Agdelte.Storage.Postgres using (Pool; execSql; queryCol)
 open import Agdelte.FFI.FileSystem using (listDirectory; readFileText)
 open import Agdelte.FFI.Server using (_>>=_; _>>_; pure; putStrLn)
 

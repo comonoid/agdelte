@@ -13,7 +13,7 @@ open import Agda.Builtin.Unit using (⊤)
 open import Agda.Builtin.String using (String)
 
 open import Agdelte.FFI.Server using (_>>=_; _>>_)
-open import Agdelte.FFI.Postgres using (Pool; newPool; closePool)
+open import Agdelte.Storage.Postgres using (Pool; newPool; closePool)
 open import Agdelte.Server.Migrate using (runMigrations)
 
 conninfo : String

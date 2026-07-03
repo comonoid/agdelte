@@ -16,7 +16,7 @@ open import Agda.Builtin.Unit using (⊤)
 open import Agda.Builtin.String using (String)
 
 open import Agdelte.FFI.Server
-open import Agdelte.FFI.Postgres
+open import Agdelte.Storage.Postgres
 
 ------------------------------------------------------------------------
 -- Configuration (libpq conninfo). Adjust to your local DB / role.

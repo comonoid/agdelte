@@ -1,11 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Agdelte.Http
-  ( serve, serveHost, serveWithWs, mkApp, toWaiApp, Request(..), Response(..)
+  ( serve, serveHost, serveUnix, serveWithWs, mkApp, toWaiApp, Request(..), Response(..)
   ) where
 
 import Control.Exception (SomeAsyncException(..), SomeException, fromException, throwIO, try)
 import Data.String (fromString)
+import qualified Network.Socket as Sock
+import System.Posix.Files (setFileMode)
+import System.Directory (removePathForcibly)
 import qualified Data.Text as T
 import Data.Text (Text)
 import qualified Data.Text.Encoding as TE
@@ -56,6 +59,20 @@ serveHost host port httpHandler = do
                $ Warp.setHost (fromString (T.unpack host))
                $ Warp.defaultSettings
   Warp.runSettings settings (mkApp httpHandler Nothing)
+
+-- Serve over an AF_UNIX stream socket at `path` (for nginx `proxy_pass http://unix:PATH:`).
+-- Removes any stale socket file, binds, chmods 0660 so nginx (running in the socket's group,
+-- e.g. www-data) can connect while off-box peers cannot, listens, and hands the socket to Warp.
+-- Off-network by construction; access is filesystem-gated (systemd sets the socket dir + group).
+serveUnix :: FilePath -> (Request -> IO Response) -> IO ()
+serveUnix path httpHandler = do
+  removePathForcibly path
+  sock <- Sock.socket Sock.AF_UNIX Sock.Stream Sock.defaultProtocol
+  Sock.bind sock (Sock.SockAddrUnix path)
+  setFileMode path 0o660
+  Sock.listen sock 1024
+  putStrLn $ "Agdelte server listening on unix socket " ++ path
+  Warp.runSettingsSocket Warp.defaultSettings sock (mkApp httpHandler Nothing)
 
 -- | Build WAI Application with optional WebSocket routing (without starting warp).
 -- Needed for tests (Warp.testWithApplication).

@@ -17,7 +17,7 @@ build-type:    Simple
 -- it just won't ship in an sdist.)
 executable pg-spike
   main-is:          MAlonzo/Code/PgSpike.hs
-  hs-source-dirs:   _build, hs
+  hs-source-dirs:   _build, hs, /home/n/agdelte-addons/agdelte-store/hs
   -- -threaded: warp and hpgsql's timer manager require the threaded RTS.
   ghc-options:      -main-is MAlonzo.Code.PgSpike -w -threaded -rtsopts "-with-rtsopts=-N"
   -- GHC2021 enables BangPatterns/ScopedTypeVariables etc. used by the
@@ -49,7 +49,7 @@ executable pg-spike
 -- migrate-demo: harness for the migration runner (Agdelte.Server.Migrate).
 executable migrate-demo
   main-is:          MAlonzo/Code/MigrateDemo.hs
-  hs-source-dirs:   _build, hs
+  hs-source-dirs:   _build, hs, /home/n/agdelte-addons/agdelte-store/hs
   ghc-options:      -main-is MAlonzo.Code.MigrateDemo -w -threaded -rtsopts "-with-rtsopts=-N"
   default-language: GHC2021
   build-depends:
@@ -66,53 +66,19 @@ executable indexedmap-test
   default-language: GHC2021
   build-depends:    base, text, containers
 
--- crmwire-test: round-trip test for Crm.Wire codecs (Phase 1, #N6).
-executable crmwire-test
-  main-is:          MAlonzo/Code/CrmWireTest.hs
+-- cxm-server: migration Phase 5 headless CXM entry (runInstance + listen + Cxm.Api.routeExt
+-- with the /psych booking+payments pack). The agdelte-cxm replacement for crm-server.
+executable cxm-server
+  main-is:          MAlonzo/Code/CxmServer.hs
   hs-source-dirs:   _build, hs
-  ghc-options:      -main-is MAlonzo.Code.CrmWireTest -w -rtsopts
-  default-language: GHC2021
-  build-depends:    base, text
-
--- crmstore-test: Phase 2 test for Crm.Store (apply / indexes / nextId / op codec).
-executable crmstore-test
-  main-is:          MAlonzo/Code/CrmStoreTest.hs
-  hs-source-dirs:   _build, hs
-  ghc-options:      -main-is MAlonzo.Code.CrmStoreTest -w -rtsopts
-  default-language: GHC2021
-  build-depends:    base, text, containers
-
--- walrec-test: Phase 3 fault-injection test for Agdelte.Storage.WAL recovery
--- (lenient decode, torn-tail drop, transaction atomicity, mid-corruption refusal).
--- After the store extraction the WAL uses Agdelte.Storage.FFI (no Agdelte.Http),
--- so this no longer needs the warp/wai HTTP stack — just the store's FFI deps.
-executable walrec-test
-  main-is:          MAlonzo/Code/WalRecoveryTest.hs
-  hs-source-dirs:   _build, hs
-  ghc-options:      -main-is MAlonzo.Code.WalRecoveryTest -w -rtsopts
-  default-language: GHC2021
-  build-depends:    base, text, containers, bytestring, unix, directory, filepath
-
--- crmcommands-test: Phase 4 domain transactions (FK / slot / transition / cascade / charge).
-executable crmcommands-test
-  main-is:          MAlonzo/Code/CrmCommandsTest.hs
-  hs-source-dirs:   _build, hs
-  ghc-options:      -main-is MAlonzo.Code.CrmCommandsTest -w -rtsopts
-  default-language: GHC2021
-  build-depends:    base, text, containers
-
--- crm-server: Phase 5 headless CRM entry (walOpen + listen + Crm.Api router).
-executable crm-server
-  main-is:          MAlonzo/Code/CrmServer.hs
-  hs-source-dirs:   _build, hs
-  ghc-options:      -main-is MAlonzo.Code.CrmServer -w -threaded -rtsopts "-with-rtsopts=-N"
+  ghc-options:      -main-is MAlonzo.Code.CxmServer -w -threaded -rtsopts "-with-rtsopts=-N"
   default-language: GHC2021
   build-depends:
       base, bytestring, containers, text, time
     , crypton, memory, base64-bytestring
     , http-client, http-client-tls, aeson
     , warp, wai, wai-websockets, websockets, http-types, case-insensitive
-    , network, stm, async, unix, directory, filepath
+    , network, stm, async, unix, directory, filepath, process
     , hpgsql, Only
 
 -- json-test: audit M2 — escape-aware JSON parser in Agdelte.FFI.Json.
@@ -132,25 +98,13 @@ executable store-txn-test
   build-depends:    base, text
 
 -- (courses-smoke-test removed 2026-06-17: agdelte-courses frozen as legacy reference.)
-
-executable psych-schedule-test
-  main-is:          MAlonzo/Code/PsychScheduleTest.hs
-  hs-source-dirs:   _build, hs
-  ghc-options:      -main-is MAlonzo.Code.PsychScheduleTest -w -rtsopts
-  default-language: GHC2021
-  build-depends:    base, text, containers
+-- (crm-server + crm*/psych-schedule/authz-store/schema-spike/walrec tests removed 2026-07-02:
+--  agdelte-crm & the legacy agdelte-pack-psych retired; the site now runs on agdelte-cxm.)
 
 executable rbac-test
   main-is:          MAlonzo/Code/RbacTest.hs
   hs-source-dirs:   _build, hs
   ghc-options:      -main-is MAlonzo.Code.RbacTest -w -rtsopts
-  default-language: GHC2021
-  build-depends:    base, text, containers
-
-executable authz-store-test
-  main-is:          MAlonzo/Code/AuthzStoreTest.hs
-  hs-source-dirs:   _build, hs
-  ghc-options:      -main-is MAlonzo.Code.AuthzStoreTest -w -rtsopts
   default-language: GHC2021
   build-depends:    base, text, containers
 
@@ -163,9 +117,3 @@ executable yookassa-test
                   , http-client, http-client-tls, aeson
                   , bytestring, http-types
 
-executable schema-spike-test
-  main-is:          MAlonzo/Code/SchemaSpikeTest.hs
-  hs-source-dirs:   _build, hs
-  ghc-options:      -main-is MAlonzo.Code.SchemaSpikeTest -w -rtsopts
-  default-language: GHC2021
-  build-depends:    base, text, containers
