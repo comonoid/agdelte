@@ -454,15 +454,15 @@ postulate
   return { encode: (arr) => arr.map(x => encoder.encode(x)) };
 } #-}
 
-{-# COMPILE JS encodeList = function(encoder) {
+{-# COMPILE JS encodeList = function(_tA) { return function(encoder) {
   return {
     /* Agda List compiles to a native JS array. */
     encode: (list) => list.map(head => encoder.encode(head))
   };
-} #-}
+}; } #-}
 
 -- FFI-FRAGILE: just (Maybe), nothing (Maybe)
-{-# COMPILE JS encodeMaybe = function(encoder) {
+{-# COMPILE JS encodeMaybe = function(_tA) { return function(encoder) {
   return {
     encode: (maybe) => {
       return maybe({
@@ -471,7 +471,7 @@ postulate
       });
     }
   };
-} #-}
+}; } #-}
 
 ------------------------------------------------------------------------
 -- Object encoding

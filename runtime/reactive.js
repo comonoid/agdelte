@@ -2640,4 +2640,4 @@ export { interpretEvent, unsubscribe } from './events.js';
 export { deepEqual, countSlots, detectSlots, probeCtor, probeSlots, changedSlotsFromCache } from './agda-values.js';
 
 // Internal helpers exported for testing (used by fuzz-runtime.mjs)
-export { wrapMutable, cloneSlot, reconcile };
+export { wrapMutable, cloneSlot, reconcile, agdaHeadersToObj };
