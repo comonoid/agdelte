@@ -114,13 +114,19 @@ const ATTR_NS = {
 /**
  * Convert Agda List (String × String) to JS headers object.
  * Scott-encoded: list(cases) where cases = { '[]': ..., '_∷_': (head, tail) => ... }
- * Each pair: pair(cases) where cases = { '_,_': (fst, snd) => ... }
+ * Each pair (_,_) can be (same duality as events.js onKeys):
+ *   Function format: (cb) => cb['_,_'](key, value)
+ *   Object format:   {'_,_': cb => cb['_,_'](key, value)}   ← Agda 2.9 --js emits this
  */
 function agdaHeadersToObj(agdaList) {
   const result = {};
   const items = listToArray(agdaList).items;
   for (const pair of items) {
-    pair({ '_,_': (k, v) => { result[k] = v; } });
+    if (typeof pair === 'function') {
+      pair({ '_,_': (k, v) => { result[k] = v; } });
+    } else if (pair && typeof pair['_,_'] === 'function') {
+      pair['_,_']({ '_,_': (k, v) => { result[k] = v; } });
+    }
   }
   return result;
 }
