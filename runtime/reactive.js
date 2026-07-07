@@ -186,12 +186,15 @@ function executeTask(task, onSuccess, onError, _depth = 0) {
         .then((text) => executeTask(onOk(text), onSuccess, onError, _depth + 1))
         .catch((error) => executeTask(onErr(error.message), onSuccess, onError, _depth + 1));
     },
+    // H-variants: non-2xx delivers the response BODY to onErr (fall back to "HTTP N" when
+    // empty) — API servers put structured error envelopes in 4xx bodies; discarding them
+    // (the old behavior) made typed clients show "network error" for every server rejection.
     'httpGetH': (url, headers, onOk, onErr) => {
       fetch(url, { headers: agdaHeadersToObj(headers) })
-        .then((response) => {
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          return response.text();
-        })
+        .then((response) => response.text().then((text) => {
+          if (!response.ok) throw new Error(text || `HTTP ${response.status}`);
+          return text;
+        }))
         .then((text) => executeTask(onOk(text), onSuccess, onError, _depth + 1))
         .catch((error) => executeTask(onErr(error.message), onSuccess, onError, _depth + 1));
     },
@@ -201,10 +204,10 @@ function executeTask(task, onSuccess, onError, _depth = 0) {
         hdrs['Content-Type'] = detectContentType(body);
       }
       fetch(url, { method: 'POST', headers: hdrs, body })
-        .then((response) => {
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          return response.text();
-        })
+        .then((response) => response.text().then((text) => {
+          if (!response.ok) throw new Error(text || `HTTP ${response.status}`);
+          return text;
+        }))
         .then((text) => executeTask(onOk(text), onSuccess, onError, _depth + 1))
         .catch((error) => executeTask(onErr(error.message), onSuccess, onError, _depth + 1));
     },
@@ -282,9 +285,12 @@ function executeCmd(cmd, dispatch) {
         .then((text) => dispatch(onSuccess(text)))
         .catch((error) => dispatch(onError(error.message)));
     },
+    // H-variants: non-2xx delivers the response BODY to onError (fall back to "HTTP N") —
+    // structured error envelopes live in 4xx bodies; see the Task interpreter twin above.
     'httpGetH': (url, headers, onSuccess, onError) => {
       fetch(url, { headers: agdaHeadersToObj(headers) })
-        .then((r) => r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`)))
+        .then((r) => r.text().then((text) =>
+          r.ok ? text : Promise.reject(new Error(text || `HTTP ${r.status}`))))
         .then((text) => dispatch(onSuccess(text)))
         .catch((error) => dispatch(onError(error.message)));
     },
@@ -294,7 +300,8 @@ function executeCmd(cmd, dispatch) {
         hdrs['Content-Type'] = detectContentType(body);
       }
       fetch(url, { method: 'POST', headers: hdrs, body })
-        .then((r) => r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`)))
+        .then((r) => r.text().then((text) =>
+          r.ok ? text : Promise.reject(new Error(text || `HTTP ${r.status}`))))
         .then((text) => dispatch(onSuccess(text)))
         .catch((error) => dispatch(onError(error.message)));
     },
