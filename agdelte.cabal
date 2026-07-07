@@ -88,6 +88,21 @@ executable pg-bench
     , network, stm, async, unix, directory, filepath, process
     , hpgsql, Only
 
+-- pg-rollback: DOWN-mode migration runner (pg-store-plan «Миграции») — rolls back the last N
+-- applied migrations, refusing if any is irreversible. DESTRUCTIVE — scratch/target db only.
+executable pg-rollback
+  main-is:          MAlonzo/Code/PgRollback.hs
+  hs-source-dirs:   _build, hs, /home/n/agdelte-addons/agdelte-store/hs
+  ghc-options:      -main-is MAlonzo.Code.PgRollback -w -threaded -rtsopts "-with-rtsopts=-N"
+  default-language: GHC2021
+  build-depends:
+      base, bytestring, containers, text, time
+    , crypton, memory, base64-bytestring
+    , http-client, http-client-tls, aeson
+    , warp, wai, wai-websockets, websockets, http-types, case-insensitive
+    , network, stm, async, unix, directory, filepath, process
+    , hpgsql, Only
+
 -- cxm-server-pg: the Postgres-backed CXM server (pg-store-plan Ф3, катовер-кандидат, wave-1 surface).
 executable cxm-server-pg
   main-is:          MAlonzo/Code/CxmServerPg.hs
