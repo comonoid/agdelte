@@ -103,6 +103,20 @@ executable pg-rollback
     , network, stm, async, unix, directory, filepath, process
     , hpgsql, Only
 
+-- pg-query-diff: live diff for the query-EDSL — native runCount ≡ PG compileCount over seeded rows.
+executable pg-query-diff
+  main-is:          MAlonzo/Code/PgQueryDiff.hs
+  hs-source-dirs:   _build, hs, /home/n/agdelte-addons/agdelte-store/hs
+  ghc-options:      -main-is MAlonzo.Code.PgQueryDiff -w -threaded -rtsopts "-with-rtsopts=-N"
+  default-language: GHC2021
+  build-depends:
+      base, bytestring, containers, text, time
+    , crypton, memory, base64-bytestring
+    , http-client, http-client-tls, aeson
+    , warp, wai, wai-websockets, websockets, http-types, case-insensitive
+    , network, stm, async, unix, directory, filepath, process
+    , hpgsql, Only
+
 -- cxm-server-pg: the Postgres-backed CXM server (pg-store-plan Ф3, катовер-кандидат, wave-1 surface).
 executable cxm-server-pg
   main-is:          MAlonzo/Code/CxmServerPg.hs
