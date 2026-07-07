@@ -96,14 +96,13 @@
     "gen:migrate-demo": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i server server/MigrateDemo.agda",
     "build:migrate-demo": "npm run gen:migrate-demo && cabal build migrate-demo",
     "run:migrate-demo": "cabal run migrate-demo",
-    "gen:im-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i server server/IndexedMapTest.agda",
-    "build:im-test": "npm run gen:im-test && cabal build indexedmap-test",
-    "test:im": "npm run build:im-test && cabal run indexedmap-test",
     "clean": "rm -rf _build MAlonzo jAgda",
-    "gen:cxm-server": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i /home/n/cxm-core/cxm -i /home/n/agdelte-addons/agdelte-auth -i /home/n/agdelte-addons/agdelte-payments -i /home/n/cxm-core/cxm-pack-psych -i /home/n/cxm-core/server /home/n/cxm-core/server/CxmServer.agda",
-    "build:cxm-server": "npm run gen:cxm-server && cabal build cxm-server",
-    "gen:store-txn-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i /home/n/agdelte-addons/agdelte-store -i server server/StoreTxnTest.agda",
-    "test:store-txn": "npm run gen:store-txn-test && cabal build store-txn-test && cabal run store-txn-test",
+    "gen:pg-diff": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i /home/n/cxm-core/cxm -i /home/n/agdelte-addons/agdelte-auth -i /home/n/agdelte-addons/agdelte-payments -i /home/n/cxm-core/cxm-pack-psych -i /home/n/cxm-core/server /home/n/cxm-core/server/PgDiff.agda",
+    "build:pg-diff": "npm run gen:pg-diff && cabal build pg-diff",
+    "gen:pg-bench": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i /home/n/cxm-core/cxm -i /home/n/agdelte-addons/agdelte-auth -i /home/n/agdelte-addons/agdelte-payments -i /home/n/cxm-core/cxm-pack-psych -i /home/n/cxm-core/server /home/n/cxm-core/server/PgBench.agda",
+    "build:pg-bench": "npm run gen:pg-bench && cabal build pg-bench",
+    "gen:cxm-server-pg": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i /home/n/cxm-core/cxm -i /home/n/agdelte-addons/agdelte-auth -i /home/n/agdelte-addons/agdelte-payments -i /home/n/cxm-core/cxm-pack-psych -i /home/n/cxm-core/server /home/n/cxm-core/server/CxmServerPg.agda",
+    "build:cxm-server-pg": "npm run gen:cxm-server-pg && cabal build cxm-server-pg",
     "test:ghc": "bash scripts/run-ghc-tests.sh",
     "gen:json-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i server server/JsonTest.agda",
     "test:json-ffi": "npm run gen:json-test && cabal build json-test && cabal run json-test",
@@ -133,7 +132,7 @@
     "node": ">=20.0.0"
   },
   "devDependencies": {
-    "happy-dom": "^20.8.4"
+    "happy-dom": "^20.10.6"
   },
   "agda": {
     "version": ">=2.9",

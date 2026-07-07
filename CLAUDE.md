@@ -7,27 +7,33 @@
 ноль. Домены/приложения — в отдельных репозиториях (раскладка ниже). *(CRM удалён — вся его
 функциональность перенесена в CXM; несколько аудитов подтвердили.)*
 
-**Хранилище (для генерик-стора `agdelte-store`):** движок **WAL + in-memory, типизированные
-записи** (Postgres — отложенный scale-out, не основной путь). Перед работой над хранилищем читать:
-- **`docs/adr/0001-storage-wal-in-memory.md`** — решение и обоснование;
-- **`docs/concepts/storage-model.md`** — дизайн + механика рантайма (типы+индексы, `IndexedMap`,
-  `Op`, монада `Txn`, транзакции);
-- **`docs/concepts/declarative-storage.md`** — вектор: схема-`template` → кодек/индексы/SQL
-  выводятся интерпретаторами (partial-RAM ≡ SQL ≡ смена backend);
-- **`docs/POSTGRES-SPIKE.md`** — Postgres-путь (hpgsql; GHC-грабли: zlib `LIBRARY_PATH`, `-threaded`,
-  устаревший `.agdai`-кэш). **Postgres-ДРАЙВЕР переехал в `agdelte-store`** (`Agdelte.Storage.Postgres`,
-  2026-07-03); раннер миграций (`Server.Migrate`) + pg-спайки остаются здесь (нужен Warp/FS-FFI).
+**Хранилище (для генерик-стора `agdelte-store`) — POSTGRES-ONLY (2026-07-07).** Стор — типизированный
+**EDSL, компилирующийся в SQL**: схема → DDL/INSERT/UPSERT/DELETE/SELECT (`Storage.SQL`), команды —
+freer-монада `Storage.Free` (`Tx`), исполнение `Storage.FreeIO` (BEGIN→fold→COMMIT) через Conn-шов
+`Storage.PgConn` над драйвером `Storage.Postgres` (hpgsql); JSON-декод `Storage.JsonRow`, миграции-
+как-термы `Storage.Migration`, query-EDSL `Storage.Query`. Есть нативный эталонный интерпретатор
+(чистый, без БД) — он же чекер lock-дисциплины и тест-дубль. **WAL + in-memory движок
+(`IndexedMap`/`NatMap`/`WAL`/`Txn`) — УДАЛЁН** как неудачный эксперимент (был отложенным путём, стал
+единственным — но Postgres-only победил). Перед работой над хранилищем читать:
+- **`~/cxm-core/docs/pg-store-plan.md`** — решения, контракты (READ COMMITTED навсегда, lock-дисциплина
+  lockRoot/lockKey, Conn-скоуп-контракт, миграции-EDSL, аудиты, milestones);
+- **`~/cxm-core/docs/edsl-intro.md`** — как устроен 3-слойный стор-EDSL и почему им легко пользоваться;
+- **`docs/POSTGRES-SPIKE.md`** — GHC-грабли живьём (zlib `LIBRARY_PATH`, `-threaded`, устаревший
+  `.agdai`-кэш). `docs/adr/0001` + `storage-model.md`/`declarative-storage.md` — ИСТОРИЯ (WAL-эра).
 
 **Раскладка репозиториев (2026-07-03).** Либа = каталог + `.agda-lib` (`name/include/depend`);
 реестр `~/.agda/libraries` резолвит по имени. Граф (вниз):
 - **`agdelte`** (ЭТОТ репо: `src/`+`hs/`+`server/`+build harness `agdelte.cabal`/`package.json`) —
-  фреймворк. depend: stdlib + `agdelte-store`. Сюда же входит сборка `cxm-server`/`pg-spike`.
-- **`agdelte-store`** (`~/agdelte-addons/agdelte-store`, depend: stdlib) — event-sourced стор
-  `Agdelte.Storage.{NatMap,IndexedMap,Wire,WAL,Txn,Schema,FFI,Postgres}`.
+  фреймворк. depend: stdlib + `agdelte-store`. Сюда же входит сборка PG-бинарей CXM
+  (`cxm-server-pg`/`pg-diff`/`pg-bench`).
+- **`agdelte-store`** (`~/agdelte-addons/agdelte-store`, depend: stdlib) — генерик стор-EDSL
+  `Agdelte.Storage.{Schema,SQL,Free,FreeIO,JsonRow,PgConn,Migration,Query,FFI,Postgres}` (Postgres-only;
+  WAL-движок NatMap/IndexedMap/WAL/Txn удалён 2026-07-07).
 - **`agdelte-auth`** (`~/agdelte-addons/agdelte-auth`, depend: stdlib+agdelte) — `Agdelte.Auth.*`.
 - **`agdelte-payments`** (`~/agdelte-addons/agdelte-payments`, depend: stdlib) — `Agdelte.Payment.YooKassa`.
 - **`cxm` + `cxm-pack-psych`** (`~/cxm-core`, depend: stdlib+agdelte+store+auth+payments[+cxm]) —
-  движок CXM + психо-пак (`Cxm.*`/`PsychCxm.*`); `server/CxmServer.agda` там же (харнесс — в этом репо).
+  движок CXM + психо-пак (`Cxm.*`/`PsychCxm.*`); PG-сервер `~/cxm-core/server/CxmServerPg.agda`
+  (+ `PgDiff`/`PgBench`) там же (build-харнесс — в этом репо).
 - **Архив** `~/.agda/_archive/`: `agdelte-courses` (легаси видео) + до-переносные git-оригиналы
   store/auth/payments. `agdelte-crm` и легаси pack-psych — УДАЛЕНЫ.
 

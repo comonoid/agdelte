@@ -275,6 +275,36 @@ postulate
   #-}
 {-# COMPILE GHC forkLoopEvery = forkLoopEveryImpl #-}
 
+-- Post-commit worker nudge (one GLOBAL flag; single consumer = THE worker loop). A handler that
+-- enqueues outbox work calls `nudgeWorker` after its commit, so delivery starts immediately
+-- instead of waiting out the poll interval (e.g. the verification email: ≤CXM_WORKER_SEC → ~now).
+-- `forkLoopNudged` = forkLoopEvery whose sleep is interruptible by a nudge; a nudge arriving
+-- DURING a tick is remembered (MVar ()) — no lost wakeups. In-process only by design: the writer
+-- and the worker share the process; multi-process wakeups need an app bus (pg-store-plan, LISTEN).
+postulate
+  nudgeWorker    : IO ⊤
+  forkLoopNudged : Nat → IO ⊤ → IO ⊤
+
+{-# FOREIGN GHC import qualified System.Timeout as Tmo #-}
+{-# FOREIGN GHC import qualified System.IO.Unsafe as Unsafe #-}
+{-# FOREIGN GHC
+  workerNudgeVar :: Conc.MVar ()
+  workerNudgeVar = Unsafe.unsafePerformIO Conc.newEmptyMVar
+  {-# NOINLINE workerNudgeVar #-}
+
+  nudgeWorkerImpl :: IO ()
+  nudgeWorkerImpl = Mon.void (Conc.tryPutMVar workerNudgeVar ())
+
+  forkLoopNudgedImpl :: Integer -> IO () -> IO ()
+  forkLoopNudgedImpl sec action = do
+    _ <- Conc.forkIO (Mon.forever (do
+           action `Ex.catch` \e -> putStrLn ("worker tick failed: " ++ show (e :: Ex.SomeException))
+           Mon.void (Tmo.timeout (fromIntegral sec * 1000000) (Conc.takeMVar workerNudgeVar))))
+    return ()
+  #-}
+{-# COMPILE GHC nudgeWorker = nudgeWorkerImpl #-}
+{-# COMPILE GHC forkLoopNudged = forkLoopNudgedImpl #-}
+
 -- Read an environment variable, or a default if unset.
 {-# FOREIGN GHC import System.Environment (lookupEnv) #-}
 postulate

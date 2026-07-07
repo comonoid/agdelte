@@ -58,20 +58,41 @@ executable migrate-demo
     , network, stm, async, unix, directory, filepath
     , hpgsql, Only
 
--- indexedmap-test: runtime unit test for Agdelte.Storage.IndexedMap (Phase 0).
-executable indexedmap-test
-  main-is:          MAlonzo/Code/IndexedMapTest.hs
-  hs-source-dirs:   _build, hs
-  ghc-options:      -main-is MAlonzo.Code.IndexedMapTest -w -rtsopts
+-- pg-diff: live diff harness native ≡ PG over the ported command corpus (pg-store-plan Ф3).
+-- DESTRUCTIVE on the target db (TRUNCATE per scenario) — scratch databases only.
+executable pg-diff
+  main-is:          MAlonzo/Code/PgDiff.hs
+  hs-source-dirs:   _build, hs, /home/n/agdelte-addons/agdelte-store/hs
+  ghc-options:      -main-is MAlonzo.Code.PgDiff -w -threaded -rtsopts "-with-rtsopts=-N"
   default-language: GHC2021
-  build-depends:    base, text, containers
+  build-depends:
+      base, bytestring, containers, text, time
+    , crypton, memory, base64-bytestring
+    , http-client, http-client-tls, aeson
+    , warp, wai, wai-websockets, websockets, http-types, case-insensitive
+    , network, stm, async, unix, directory, filepath, process
+    , hpgsql, Only
 
--- cxm-server: migration Phase 5 headless CXM entry (runInstance + listen + Cxm.Api.routeExt
--- with the /psych booking+payments pack). The agdelte-cxm replacement for crm-server.
-executable cxm-server
-  main-is:          MAlonzo/Code/CxmServer.hs
-  hs-source-dirs:   _build, hs
-  ghc-options:      -main-is MAlonzo.Code.CxmServer -w -threaded -rtsopts "-with-rtsopts=-N"
+-- pg-bench: chattiness measurement (pg-store-plan A6) — round-trips + wall-clock per atom on live PG.
+-- DESTRUCTIVE on the target db (TRUNCATE per run) — scratch databases only.
+executable pg-bench
+  main-is:          MAlonzo/Code/PgBench.hs
+  hs-source-dirs:   _build, hs, /home/n/agdelte-addons/agdelte-store/hs
+  ghc-options:      -main-is MAlonzo.Code.PgBench -w -threaded -rtsopts "-with-rtsopts=-N"
+  default-language: GHC2021
+  build-depends:
+      base, bytestring, containers, text, time
+    , crypton, memory, base64-bytestring
+    , http-client, http-client-tls, aeson
+    , warp, wai, wai-websockets, websockets, http-types, case-insensitive
+    , network, stm, async, unix, directory, filepath, process
+    , hpgsql, Only
+
+-- cxm-server-pg: the Postgres-backed CXM server (pg-store-plan Ф3, катовер-кандидат, wave-1 surface).
+executable cxm-server-pg
+  main-is:          MAlonzo/Code/CxmServerPg.hs
+  hs-source-dirs:   _build, hs, /home/n/agdelte-addons/agdelte-store/hs
+  ghc-options:      -main-is MAlonzo.Code.CxmServerPg -w -threaded -rtsopts "-with-rtsopts=-N"
   default-language: GHC2021
   build-depends:
       base, bytestring, containers, text, time
@@ -89,17 +110,11 @@ executable json-test
   default-language: GHC2021
   build-depends:    base, text
 
--- store-txn-test: the GENERIC Agdelte.Storage.Txn monad on a toy domain (no CRM).
-executable store-txn-test
-  main-is:          MAlonzo/Code/StoreTxnTest.hs
-  hs-source-dirs:   _build, hs
-  ghc-options:      -main-is MAlonzo.Code.StoreTxnTest -w -rtsopts
-  default-language: GHC2021
-  build-depends:    base, text
-
 -- (courses-smoke-test removed 2026-06-17: agdelte-courses frozen as legacy reference.)
 -- (crm-server + crm*/psych-schedule/authz-store/schema-spike/walrec tests removed 2026-07-02:
 --  agdelte-crm & the legacy agdelte-pack-psych retired; the site now runs on agdelte-cxm.)
+-- (cxm-server/migrate-wal-pg/store-txn-test/indexedmap-test removed 2026-07-07: the WAL backend
+--  was retired — CXM is Postgres-only via the store EDSL; see docs/pg-store-plan.md.)
 
 executable rbac-test
   main-is:          MAlonzo/Code/RbacTest.hs
