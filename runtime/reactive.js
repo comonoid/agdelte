@@ -170,19 +170,19 @@ function executeTask(task, onSuccess, onError, _depth = 0) {
     'fail': (error) => onError(error),
     'httpGet': (url, onOk, onErr) => {
       fetch(url)
-        .then((response) => {
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          return response.text();
-        })
+        .then((response) => response.text().then((text) => {
+          if (!response.ok) throw new Error(text || `HTTP ${response.status}`);
+          return text;
+        }))
         .then((text) => executeTask(onOk(text), onSuccess, onError, _depth + 1))
         .catch((error) => executeTask(onErr(error.message), onSuccess, onError, _depth + 1));
     },
     'httpPost': (url, body, onOk, onErr) => {
       fetch(url, { method: 'POST', headers: { 'Content-Type': detectContentType(body) }, body })
-        .then((response) => {
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          return response.text();
-        })
+        .then((response) => response.text().then((text) => {
+          if (!response.ok) throw new Error(text || `HTTP ${response.status}`);
+          return text;
+        }))
         .then((text) => executeTask(onOk(text), onSuccess, onError, _depth + 1))
         .catch((error) => executeTask(onErr(error.message), onSuccess, onError, _depth + 1));
     },
@@ -275,13 +275,15 @@ function executeCmd(cmd, dispatch) {
     },
     'httpGet': (url, onSuccess, onError) => {
       fetch(url)
-        .then((r) => r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`)))
+        .then((r) => r.text().then((text) =>
+          r.ok ? text : Promise.reject(new Error(text || `HTTP ${r.status}`))))
         .then((text) => dispatch(onSuccess(text)))
         .catch((error) => dispatch(onError(error.message)));
     },
     'httpPost': (url, body, onSuccess, onError) => {
       fetch(url, { method: 'POST', headers: { 'Content-Type': detectContentType(body) }, body })
-        .then((r) => r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`)))
+        .then((r) => r.text().then((text) =>
+          r.ok ? text : Promise.reject(new Error(text || `HTTP ${r.status}`))))
         .then((text) => dispatch(onSuccess(text)))
         .catch((error) => dispatch(onError(error.message)));
     },
@@ -1730,7 +1732,13 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       if (changed && b.slots && !b.slots.some(s => changed.has(s))) continue;
       const extract = NodeModule.Binding.extract(b.binding);
       const newVal = extract(newModel);
-      if (newVal !== b.lastValue) {
+      // Controlled inputs: compare against the LIVE property, not lastValue — the user types
+      // into el.value directly, and an intra-batch round-trip (""→typed→"") leaves lastValue
+      // unchanged while the DOM diverged. Writing only on real divergence keeps the caret safe.
+      if (b.attrName === 'value' && 'value' in b.node) {
+        if (b.node.value !== newVal) b.node.value = newVal;
+        b.lastValue = newVal;
+      } else if (newVal !== b.lastValue) {
         setAttr(b.node, b.attrName, newVal);
         b.lastValue = newVal;
       }
