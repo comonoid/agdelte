@@ -34,12 +34,12 @@ function assertEqual(actual, expected, message) {
 }
 
 // Scott-encoding helpers
-const matchBool = (b) => b({"true": () => true, "false": () => false});
-const matchMaybe = (m) => m({just: x => x, nothing: () => null});
+const matchBool = (b) => b;                                        // Bool is native
+const matchMaybe = (m) => m({just: x => x, nothing: () => null});  // Maybe is Scott
 
-// Duration helpers (object-encoded from diffDates, function-encoded for mkDuration)
-const mkDuration = (ms) => ({"mkDuration": cb => cb["mkDuration"](ms)});
-const extractDuration = (dur) => dur["mkDuration"]({mkDuration: ms => ms});
+// Duration is a Scott-encoded record (a function taking the case object)
+const mkDuration = (ms) => (cb) => cb.mkDuration(ms);
+const extractDuration = (dur) => dur({ mkDuration: ms => ms });
 
 // ========================================
 // Tests

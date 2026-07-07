@@ -43,7 +43,7 @@ function assertDeepEqual(actual, expected, message) {
 }
 
 // Scott-encoding helpers
-const matchBool = (b) => b({"true": () => true, "false": () => false});
+const matchBool = (b) => b;  // Bool is native JS boolean
 
 // Scott constructors for test inputs
 const scottTrue  = (cases) => cases["true"]();
@@ -65,11 +65,11 @@ const matchResult = (r) => r({ok: v => ({tag: 'ok', value: v}), err: e => ({tag:
 console.log('\n=== Json Encoder Tests ===\n');
 
 test('encodeBool: true', () => {
-  assertEqual(encodeBool.encode(scottTrue), true);
+  assertEqual(encodeBool.encode(true), true);    // Bool is native
 });
 
 test('encodeBool: false', () => {
-  assertEqual(encodeBool.encode(scottFalse), false);
+  assertEqual(encodeBool.encode(false), false);
 });
 
 test('encodeInt: positive', () => {
@@ -89,20 +89,19 @@ test('encodeString: hello', () => {
 });
 
 test('encodeList(encodeString): empty', () => {
-  assertDeepEqual(encodeList(encodeString).encode(scottNil), []);
+  assertDeepEqual(encodeList(null)(encodeString).encode([]), []);   // List is a native array; +type-slot
 });
 
 test('encodeList(encodeString): ["a", "b"]', () => {
-  const list = scottCons("a", scottCons("b", scottNil));
-  assertDeepEqual(encodeList(encodeString).encode(list), ["a", "b"]);
+  assertDeepEqual(encodeList(null)(encodeString).encode(["a", "b"]), ["a", "b"]);
 });
 
 test('encodeMaybe(encodeString): just "x"', () => {
-  assertEqual(encodeMaybe(encodeString).encode(scottJust("x")), "x");
+  assertEqual(encodeMaybe(null)(encodeString).encode(scottJust("x")), "x");   // Maybe is Scott; +type-slot
 });
 
 test('encodeMaybe(encodeString): nothing', () => {
-  assertEqual(encodeMaybe(encodeString).encode(scottNothing), null);
+  assertEqual(encodeMaybe(null)(encodeString).encode(scottNothing), null);
 });
 
 // ========================================
@@ -152,19 +151,19 @@ test('natDecoder: negative fails', () => {
 console.log('\n=== Json decodeString Tests ===\n');
 
 test('decodeString: valid JSON string', () => {
-  const result = matchResult(decodeStringFn(stringDecoder)('"hello"'));
+  const result = matchResult(decodeStringFn(null)(stringDecoder)('"hello"'));
   assertEqual(result.tag, 'ok');
   assertEqual(result.value, "hello");
 });
 
 test('decodeString: invalid JSON', () => {
-  const result = matchResult(decodeStringFn(stringDecoder)('invalid'));
+  const result = matchResult(decodeStringFn(null)(stringDecoder)('invalid'));
   assertEqual(result.tag, 'err');
   assert(result.error.startsWith('JSON parse error:'), `Expected JSON parse error, got: ${result.error}`);
 });
 
 test('decodeString: type mismatch', () => {
-  const result = matchResult(decodeStringFn(stringDecoder)('42'));
+  const result = matchResult(decodeStringFn(null)(stringDecoder)('42'));
   assertEqual(result.tag, 'err');
 });
 
@@ -175,10 +174,10 @@ test('decodeString: type mismatch', () => {
 console.log('\n=== Json Combinator Tests ===\n');
 
 test('map2 with field decoders', () => {
-  const decoder = map2(a => b => ({name: a, age: Number(b)}))(
-    fieldDecoder("name")(stringDecoder)
+  const decoder = map2(null)(null)(null)(a => b => ({name: a, age: Number(b)}))(
+    fieldDecoder(null)("name")(stringDecoder)
   )(
-    fieldDecoder("age")(natDecoder)
+    fieldDecoder(null)("age")(natDecoder)
   );
   const result = decoder.decode({name: "Alice", age: 30});
   assertEqual(result.tag, 'ok');
@@ -196,7 +195,7 @@ test('encodeString roundtrip via decodeString', () => {
   const original = "hello world";
   const encoded = encodeString.encode(original);
   const json = JSON.stringify(encoded);
-  const result = matchResult(decodeStringFn(stringDecoder)(json));
+  const result = matchResult(decodeStringFn(null)(stringDecoder)(json));
   assertEqual(result.tag, 'ok');
   assertEqual(result.value, original);
 });
@@ -236,31 +235,29 @@ test('encodeFloat: negative zero', () => {
 });
 
 test('encodeList: nested lists', () => {
-  const innerList = scottCons("a", scottCons("b", scottNil));
-  const outerList = scottCons(innerList, scottNil);
-  const encoded = encodeList(encodeList(encodeString)).encode(outerList);
+  const encoded = encodeList(null)(encodeList(null)(encodeString)).encode([["a", "b"]]);   // native arrays
   assertDeepEqual(encoded, [["a", "b"]], 'nested list should encode');
 });
 
 test('decodeString: empty JSON object', () => {
-  const result = matchResult(decodeStringFn(stringDecoder)('{}'));
+  const result = matchResult(decodeStringFn(null)(stringDecoder)('{}'));
   assertEqual(result.tag, 'err', 'empty object is not a string');
 });
 
 test('decodeString: empty string JSON', () => {
-  const result = matchResult(decodeStringFn(stringDecoder)('""'));
+  const result = matchResult(decodeStringFn(null)(stringDecoder)('""'));
   assertEqual(result.tag, 'ok');
   assertEqual(result.value, '', 'empty string should decode');
 });
 
 test('field decoder: missing field', () => {
-  const decoder = fieldDecoder("missing")(stringDecoder);
+  const decoder = fieldDecoder(null)("missing")(stringDecoder);
   const result = decoder.decode({name: "Alice"});
   assertEqual(result.tag, 'err', 'missing field should fail');
 });
 
 test('field decoder: null field value', () => {
-  const decoder = fieldDecoder("name")(stringDecoder);
+  const decoder = fieldDecoder(null)("name")(stringDecoder);
   const result = decoder.decode({name: null});
   assertEqual(result.tag, 'err', 'null string field should fail');
 });

@@ -147,7 +147,7 @@ postulate
   -- Index into array
   index : ∀ {A : Set} → ℕ → Decoder A → Decoder A
 
-{-# COMPILE JS field′ = function(name) { return function(decoder) {
+{-# COMPILE JS field′ = function(_t1) { return function(name) { return function(decoder) {
   return {
     decode: (json) => {
       if (typeof json !== 'object' || json === null) {
@@ -159,9 +159,9 @@ postulate
       return decoder.decode(json[name]);
     }
   };
-}; } #-}
+}; } } #-}
 
-{-# COMPILE JS optionalField = function(name) { return function(decoder) {
+{-# COMPILE JS optionalField = function(_t1) { return function(name) { return function(decoder) {
   return {
     decode: (json) => {
       if (typeof json !== 'object' || json === null) {
@@ -177,9 +177,9 @@ postulate
       return result;
     }
   };
-}; } #-}
+}; } } #-}
 
-{-# COMPILE JS fieldWithDefault = function(name) { return function(def) { return function(decoder) {
+{-# COMPILE JS fieldWithDefault = function(_t1) { return function(name) { return function(def) { return function(decoder) {
   return {
     decode: (json) => {
       if (typeof json !== 'object' || json === null || !(name in json)) {
@@ -190,9 +190,9 @@ postulate
       return { tag: 'ok', value: def };
     }
   };
-}; }; } #-}
+}; }; } } #-}
 
-{-# COMPILE JS array = function(decoder) {
+{-# COMPILE JS array = function(_t1) { return function(decoder) {
   return {
     decode: (json) => {
       if (!Array.isArray(json)) {
@@ -209,9 +209,9 @@ postulate
       return { tag: 'ok', value: results };
     }
   };
-} #-}
+} } #-}
 
-{-# COMPILE JS list = function(decoder) {
+{-# COMPILE JS list = function(_t1) { return function(decoder) {
   return {
     decode: (json) => {
       if (!Array.isArray(json)) {
@@ -229,9 +229,9 @@ postulate
       return { tag: 'ok', value: results };
     }
   };
-} #-}
+} } #-}
 
-{-# COMPILE JS nullable = function(decoder) {
+{-# COMPILE JS nullable = function(_t1) { return function(decoder) {
   return {
     decode: (json) => {
       if (json === null || json === undefined) {
@@ -244,9 +244,9 @@ postulate
       return result;
     }
   };
-} #-}
+} } #-}
 
-{-# COMPILE JS index = function(i) { return function(decoder) {
+{-# COMPILE JS index = function(_t1) { return function(i) { return function(decoder) {
   return {
     decode: (json) => {
       if (!Array.isArray(json)) {
@@ -259,7 +259,7 @@ postulate
       return decoder.decode(json[idx]);
     }
   };
-}; } #-}
+}; } } #-}
 
 ------------------------------------------------------------------------
 -- Functor / Applicative / Monad
@@ -284,7 +284,7 @@ postulate
   -- Alternative: try first, if fails try second
   oneOf : ∀ {A : Set} → List (Decoder A) → Decoder A
 
-{-# COMPILE JS mapDecoder = function(f) { return function(decoder) {
+{-# COMPILE JS mapDecoder = function(_t1) { return function(_t2) { return function(f) { return function(decoder) {
   return {
     decode: (json) => {
       const result = decoder.decode(json);
@@ -294,17 +294,17 @@ postulate
       return result;
     }
   };
-}; } #-}
+}; } } } #-}
 
-{-# COMPILE JS succeed = function(value) {
+{-# COMPILE JS succeed = function(_t1) { return function(value) {
   return { decode: (_) => ({ tag: 'ok', value }) };
-} #-}
+} } #-}
 
-{-# COMPILE JS fail = function(msg) {
+{-# COMPILE JS fail = function(_t1) { return function(msg) {
   return { decode: (_) => ({ tag: 'err', error: msg }) };
-} #-}
+} } #-}
 
-{-# COMPILE JS apply = function(df) { return function(da) {
+{-# COMPILE JS apply = function(_t1) { return function(_t2) { return function(df) { return function(da) {
   return {
     decode: (json) => {
       const rf = df.decode(json);
@@ -314,9 +314,9 @@ postulate
       return { tag: 'ok', value: rf.value(ra.value) };
     }
   };
-}; } #-}
+}; } } } #-}
 
-{-# COMPILE JS andThen = function(f) { return function(decoder) {
+{-# COMPILE JS andThen = function(_t1) { return function(_t2) { return function(f) { return function(decoder) {
   return {
     decode: (json) => {
       const result = decoder.decode(json);
@@ -324,9 +324,9 @@ postulate
       return f(result.value).decode(json);
     }
   };
-}; } #-}
+}; } } } #-}
 
-{-# COMPILE JS oneOf = function(decoders) {
+{-# COMPILE JS oneOf = function(_t1) { return function(decoders) {
   return {
     decode: (json) => {
       const errors = [];
@@ -341,7 +341,7 @@ postulate
       return { tag: 'err', error: 'None of ' + errors.length + ' decoders matched: ' + errors.join('; ') };
     }
   };
-} #-}
+} } #-}
 
 ------------------------------------------------------------------------
 -- Running decoders
@@ -354,7 +354,7 @@ postulate
   -- Decode a JsonValue directly
   decodeValue : ∀ {A : Set} → Decoder A → JsonValue → Result String A
 
-{-# COMPILE JS decodeString = function(decoder) { return function(jsonStr) {
+{-# COMPILE JS decodeString = function(_t1) { return function(decoder) { return function(jsonStr) {
   try {
     const json = JSON.parse(jsonStr);
     const result = decoder.decode(json);
@@ -365,11 +365,11 @@ postulate
   } catch (e) {
     return b => b["err"]('JSON parse error: ' + e.message);
   }
-}; } #-}
+}; } } #-}
 
 -- FFI-FRAGILE: jNull, jBool, jNumber, jFloat, jString, jArray, jObject (JsonValue),
 --   true/false (Bool), _,_ (Pair), [] / _∷_ (List)
-{-# COMPILE JS decodeValue = function(decoder) { return function(json) {
+{-# COMPILE JS decodeValue = function(_t1) { return function(decoder) { return function(json) {
   var expectedKeys = ['jNull','jBool','jNumber','jFloat','jString','jArray','jObject'];
   function toList(x) {
     if (Array.isArray(x)) return x;
@@ -406,7 +406,7 @@ postulate
     return b => b["ok"](result.value);
   }
   return b => b["err"](result.error);
-}; } #-}
+}; } } #-}
 
 ------------------------------------------------------------------------
 -- Encoder type
@@ -579,7 +579,7 @@ postulate
   map7 : ∀ {A B C D E F G R : Set} → (A → B → C → D → E → F → G → R) → Decoder A → Decoder B → Decoder C → Decoder D → Decoder E → Decoder F → Decoder G → Decoder R
   map8 : ∀ {A B C D E F G H R : Set} → (A → B → C → D → E → F → G → H → R) → Decoder A → Decoder B → Decoder C → Decoder D → Decoder E → Decoder F → Decoder G → Decoder H → Decoder R
 
-{-# COMPILE JS map2 = function(f) { return function(da) { return function(db) {
+{-# COMPILE JS map2 = function(_t1) { return function(_t2) { return function(_t3) { return function(f) { return function(da) { return function(db) {
   return {
     decode: (json) => {
       const ra = da.decode(json);
@@ -589,9 +589,9 @@ postulate
       return { tag: 'ok', value: f(ra.value)(rb.value) };
     }
   };
-}; }; } #-}
+}; }; } } } } #-}
 
-{-# COMPILE JS map3 = function(f) { return function(da) { return function(db) { return function(dc) {
+{-# COMPILE JS map3 = function(_t1) { return function(_t2) { return function(_t3) { return function(_t4) { return function(f) { return function(da) { return function(db) { return function(dc) {
   return {
     decode: (json) => {
       const ra = da.decode(json);
@@ -603,9 +603,9 @@ postulate
       return { tag: 'ok', value: f(ra.value)(rb.value)(rc.value) };
     }
   };
-}; }; }; } #-}
+}; }; }; } } } } } #-}
 
-{-# COMPILE JS map4 = function(f) { return function(da) { return function(db) { return function(dc) { return function(dd) {
+{-# COMPILE JS map4 = function(_t1) { return function(_t2) { return function(_t3) { return function(_t4) { return function(_t5) { return function(f) { return function(da) { return function(db) { return function(dc) { return function(dd) {
   return {
     decode: (json) => {
       const ra = da.decode(json);
@@ -619,9 +619,9 @@ postulate
       return { tag: 'ok', value: f(ra.value)(rb.value)(rc.value)(rd.value) };
     }
   };
-}; }; }; }; } #-}
+}; }; }; }; } } } } } } #-}
 
-{-# COMPILE JS map5 = function(f) { return function(da) { return function(db) { return function(dc) { return function(dd) { return function(de) {
+{-# COMPILE JS map5 = function(_t1) { return function(_t2) { return function(_t3) { return function(_t4) { return function(_t5) { return function(_t6) { return function(f) { return function(da) { return function(db) { return function(dc) { return function(dd) { return function(de) {
   return {
     decode: (json) => {
       const ra = da.decode(json);
@@ -637,9 +637,9 @@ postulate
       return { tag: 'ok', value: f(ra.value)(rb.value)(rc.value)(rd.value)(re.value) };
     }
   };
-}; }; }; }; }; } #-}
+}; }; }; }; }; } } } } } } } #-}
 
-{-# COMPILE JS map6 = function(f) { return function(da) { return function(db) { return function(dc) { return function(dd) { return function(de) { return function(df) {
+{-# COMPILE JS map6 = function(_t1) { return function(_t2) { return function(_t3) { return function(_t4) { return function(_t5) { return function(_t6) { return function(_t7) { return function(f) { return function(da) { return function(db) { return function(dc) { return function(dd) { return function(de) { return function(df) {
   return {
     decode: (json) => {
       const ra = da.decode(json);
@@ -657,9 +657,9 @@ postulate
       return { tag: 'ok', value: f(ra.value)(rb.value)(rc.value)(rd.value)(re.value)(rf.value) };
     }
   };
-}; }; }; }; }; }; } #-}
+}; }; }; }; }; }; } } } } } } } } #-}
 
-{-# COMPILE JS map7 = function(f) { return function(da) { return function(db) { return function(dc) { return function(dd) { return function(de) { return function(df) { return function(dg) {
+{-# COMPILE JS map7 = function(_t1) { return function(_t2) { return function(_t3) { return function(_t4) { return function(_t5) { return function(_t6) { return function(_t7) { return function(_t8) { return function(f) { return function(da) { return function(db) { return function(dc) { return function(dd) { return function(de) { return function(df) { return function(dg) {
   return {
     decode: (json) => {
       const ra = da.decode(json);
@@ -679,9 +679,9 @@ postulate
       return { tag: 'ok', value: f(ra.value)(rb.value)(rc.value)(rd.value)(re.value)(rf.value)(rg.value) };
     }
   };
-}; }; }; }; }; }; }; } #-}
+}; }; }; }; }; }; }; } } } } } } } } } #-}
 
-{-# COMPILE JS map8 = function(f) { return function(da) { return function(db) { return function(dc) { return function(dd) { return function(de) { return function(df) { return function(dg) { return function(dh) {
+{-# COMPILE JS map8 = function(_t1) { return function(_t2) { return function(_t3) { return function(_t4) { return function(_t5) { return function(_t6) { return function(_t7) { return function(_t8) { return function(_t9) { return function(f) { return function(da) { return function(db) { return function(dc) { return function(dd) { return function(de) { return function(df) { return function(dg) { return function(dh) {
   return {
     decode: (json) => {
       const ra = da.decode(json);
@@ -703,7 +703,7 @@ postulate
       return { tag: 'ok', value: f(ra.value)(rb.value)(rc.value)(rd.value)(re.value)(rf.value)(rg.value)(rh.value) };
     }
   };
-}; }; }; }; }; }; }; }; } #-}
+}; }; }; }; }; }; }; }; } } } } } } } } } } #-}
 
 ------------------------------------------------------------------------
 -- Operators

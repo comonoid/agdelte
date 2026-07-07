@@ -40,31 +40,15 @@ function assertDeepEqual(actual, expected, message) {
   }
 }
 
-// Scott-encoding helpers
-const matchBool = (b) => b({"true": () => true, "false": () => false});
-const matchMaybe = (m) => m({just: x => x, nothing: () => null});
+// Encoding conventions (agdelte --js): Bool → native JS boolean, List → native JS array,
+// Maybe → Scott-encoded (a function). Predicates return NATIVE booleans.
+const matchBool = (b) => b;                                        // Bool is native → identity
+const matchMaybe = (m) => m({just: x => x, nothing: () => null});  // Maybe is Scott
+const collectList = (list) => list;                               // List is a native array
 
-function collectList(list) {
-  const arr = [];
-  let cur = list;
-  let done = false;
-  while (!done) {
-    cur({ '[]': () => { done = true; },
-          '_∷_': (head, tail) => { arr.push(head); cur = tail; }});
-  }
-  return arr;
-}
-
-// Scott Bool predicates (Array FFI expects predicates returning Scott Bool)
-const pred20 = (x) => x === 20
-  ? (cases) => cases["true"]()
-  : (cases) => cases["false"]();
-
-const predNever = (_) => (cases) => cases["false"]();
-
-const eqNum = (a) => (b) => a === b
-  ? (cases) => cases["true"]()
-  : (cases) => cases["false"]();
+const pred20 = (x) => x === 20;
+const predNever = (_) => false;
+const eqNum = (a) => (b) => a === b;
 
 // ========================================
 // Tests
@@ -133,9 +117,7 @@ test('map: applies function', () => {
 });
 
 test('filter: keeps matching elements', () => {
-  const gt2 = (x) => x > 2
-    ? (cases) => cases["true"]()
-    : (cases) => cases["false"]();
+  const gt2 = (x) => x > 2;
   assertDeepEqual(arrayFilter(gt2)([1, 2, 3, 4]), [3, 4]);
 });
 
@@ -158,9 +140,9 @@ console.log('\n=== Array Extended Tests ===\n');
 
 // Sort comparator for numbers
 const numCmp = (a) => (b) => {
-  if (a < b) return (c) => c.lt();
-  if (a > b) return (c) => c.gt();
-  return (c) => c.eq();
+  if (a < b) return (c) => c.cmpLT();
+  if (a > b) return (c) => c.cmpGT();
+  return (c) => c.cmpEQ();
 };
 
 test('sortBy: sorts numbers ascending', () => {
@@ -170,9 +152,9 @@ test('sortBy: sorts numbers ascending', () => {
 test('sortBy: stability (equal elements keep order)', () => {
   const items = [{v: 2, id: 'a'}, {v: 1, id: 'b'}, {v: 2, id: 'c'}, {v: 1, id: 'd'}];
   const cmp = (a) => (b) => {
-    if (a.v < b.v) return (c) => c.lt();
-    if (a.v > b.v) return (c) => c.gt();
-    return (c) => c.eq();
+    if (a.v < b.v) return (c) => c.cmpLT();
+    if (a.v > b.v) return (c) => c.cmpGT();
+    return (c) => c.cmpEQ();
   };
   const sorted = sortBy(cmp)(items);
   assertEqual(sorted[0].id, 'b', 'first 1 should be b');

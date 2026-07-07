@@ -35,17 +35,12 @@ function assertEqual(actual, expected, message) {
 
 // Scott-encoding helpers
 function collectErrors(list) {
-  const errors = [];
-  let cur = list;
-  let done = false;
-  while (!done) {
-    cur({ '[]': () => { done = true; },
-          '_∷_': (e, tail) => {
-            e({ mkError: (field, msg) => errors.push({field, msg}) });
-            cur = tail;
-          }});
-  }
-  return errors;
+  // validation returns a native JS array of Scott-encoded Error records (tupled dispatch)
+  return list.map((e) => {
+    let out;
+    e({ mkError: (field, msg) => { out = { field, msg }; } });
+    return out;
+  });
 }
 
 // ========================================

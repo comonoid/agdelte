@@ -31,11 +31,8 @@ const matchMaybe = (m) => m({ just: x => ({ tag: 'just', value: x }), nothing: (
 const matchBool = (b) => (typeof b === 'function') ? b({ "true": () => true, "false": () => false }) : b;
 const matchResult = (r) => r({ ok: v => ({ tag: 'ok', value: v }), err: e => ({ tag: 'err', error: e }) });
 
-function collectList(list) {
-  const arr = []; let cur = list; let done = false;
-  while (!done) { cur({ '[]': () => { done = true; }, '_∷_': (h, t) => { arr.push(h); cur = t; } }); }
-  return arr;
-}
+// Agda List compiles to a native JS array (not Scott-encoded)
+const collectList = (list) => list;
 
 // Scott constructors
 // Agda Bool compiles to JS true/false (not Scott-encoded)
@@ -45,8 +42,8 @@ const scottJust  = (x) => (c) => c.just(x);
 const scottNothing = (c) => c.nothing();
 const scottOk  = (x) => (c) => c.ok(x);
 const scottErr = (x) => (c) => c.err(x);
-const scottNil = (c) => c['[]']();
-const scottCons = (h, t) => (c) => c['_∷_'](h, t);
+const scottNil = [];                       // List is a native array
+const scottCons = (h, t) => [h, ...t];
 
 // ─── String ─────────────────────────────────────────────────────────
 
