@@ -256,6 +256,44 @@ export function deepEqual(a, b, depth = 0) {
     return true;
   }
 
+  // Native arrays (Agda lists compile to JS arrays) — structural, elementwise
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!deepEqual(a[i], b[i], depth + 1)) return false;
+    }
+    return true;
+  }
+
+  // OBJECT-encoded Scott values (Agda 2.9 --js emits records/data as
+  // {"ctorName": cases => cases["ctorName"](f1, f2, …)}) — same probe as the
+  // function form above. Anything else object-shaped stays reference-compared.
+  {
+    const ka = Object.keys(a), kb = Object.keys(b);
+    if (ka.length === 1 && kb.length === 1 &&
+        typeof a[ka[0]] === 'function' && typeof b[kb[0]] === 'function') {
+      if (ka[0] !== kb[0]) return false;
+      let aArgs, bArgs;
+      const probeA = new Proxy({}, {
+        get(_, name) { return (...args) => { aArgs = args; }; }
+      });
+      const probeB = new Proxy({}, {
+        get(_, name) { return (...args) => { bArgs = args; }; }
+      });
+      try {
+        a[ka[0]](probeA);
+        b[kb[0]](probeB);
+      } catch {
+        return false;
+      }
+      if (!aArgs || !bArgs || aArgs.length !== bArgs.length) return false;
+      for (let i = 0; i < aArgs.length; i++) {
+        if (!deepEqual(aArgs[i], bArgs[i], depth + 1)) return false;
+      }
+      return true;
+    }
+  }
+
   return false;
 }
 

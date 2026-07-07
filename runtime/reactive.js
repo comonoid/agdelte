@@ -2028,14 +2028,38 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       }
     }
 
+    // Re-render an entry in place when its ITEM changed: rows bake item data in at render
+    // time (static text/class from the item value), so binding updates alone leave the DOM
+    // stale (bug found by cxm-ui Ф4.1 smoke: a revised knowledge row kept its old status).
+    const rerenderEntry = (entry, newItem, idx) => {
+      const itemScope = createScope(parentScope);
+      const itemNode = withScope(itemScope, () =>
+        renderNode(list.render(newItem)(BigInt(idx)))
+      );
+      const newNode = itemNode || document.createComment('empty');
+      entry.node.replaceWith(newNode);
+      if (entry.scope) destroyScope(entry.scope);
+      if (itemNode) {
+        entry.scope = itemScope;
+      } else {
+        destroyScope(itemScope);
+        entry.scope = null;
+      }
+      entry.node = newNode;
+      entry.item = newItem;
+    };
+
     // Check if anything changed
     const keysChanged = newKeys.length !== oldItems.length ||
       newKeys.some((key, i) => oldItems[i]?.key !== key);
 
     if (!keysChanged) {
-      // Same keys in same order: just update bindings
-      for (const entry of oldItems) {
-        if (entry.scope) {
+      // Same keys in same order: refresh rows whose item changed, update bindings otherwise
+      for (let i = 0; i < oldItems.length; i++) {
+        const entry = oldItems[i];
+        if (!deepEqual(entry.item, newItems[i])) {
+          rerenderEntry(entry, newItems[i], i);
+        } else if (entry.scope) {
           updateScopeImmediate(entry.scope, oldModel, newModel);
         }
       }
@@ -2075,13 +2099,14 @@ export async function runReactiveApp(moduleExports, container, options = {}) {
       const oldEntry = oldKeyMap.get(key);
 
       if (oldEntry) {
-        // Reuse existing DOM node
+        // Reuse existing DOM node; re-render it if the item's content changed
         insertAfter.after(oldEntry.node);
-        insertAfter = oldEntry.node;
-        // Update bindings in existing scope
-        if (oldEntry.scope) {
+        if (!deepEqual(oldEntry.item, newItems[i])) {
+          rerenderEntry(oldEntry, newItems[i], i);
+        } else if (oldEntry.scope) {
           updateScopeImmediate(oldEntry.scope, oldModel, newModel);
         }
+        insertAfter = oldEntry.node;
         newRendered.push(oldEntry);
       } else {
         // New item: render fresh
