@@ -502,13 +502,16 @@ postulate
   return (cases) => cases["jObject"](pairs);
 } #-}
 
-{-# COMPILE JS encodeWith = function(encoder) { return function(value) {
+-- NB: JS-бэкенд передаёт стёртый {A : Set} явным первым аргументом (null) — прагма ОБЯЗАНА
+-- его принять (_tA), как в encodeList/encodeMaybe. GHC-бэкенд стирает молча — баг всплыл
+-- только у первого JS-потребителя (PsychCxm.Client, 2026-07-11).
+{-# COMPILE JS encodeWith = function(_tA) { return function(encoder) { return function(value) {
   return encoder.encode(value);
-}; } #-}
+}; }; } #-}
 
-{-# COMPILE JS encodeToString = function(encoder) { return function(value) {
+{-# COMPILE JS encodeToString = function(_tA) { return function(encoder) { return function(value) {
   return JSON.stringify(encoder.encode(value));
-}; } #-}
+}; }; } #-}
 
 ------------------------------------------------------------------------
 -- Helper: build object encoder from fields
