@@ -119,9 +119,9 @@ executable pg-query-diff
 
 -- cxm-server-pg: the Postgres-backed CXM server (pg-store-plan Ф3, катовер-кандидат, wave-1 surface).
 executable cxm-server-pg
-  main-is:          MAlonzo/Code/CxmServerPg.hs
+  main-is:          MAlonzo/Code/PsychMain.hs
   hs-source-dirs:   _build, hs, /home/n/agdelte-addons/agdelte-store/hs
-  ghc-options:      -main-is MAlonzo.Code.CxmServerPg -w -threaded -rtsopts "-with-rtsopts=-N"
+  ghc-options:      -main-is MAlonzo.Code.PsychMain -w -threaded -rtsopts "-with-rtsopts=-N"
   default-language: GHC2021
   build-depends:
       base, bytestring, containers, text, time
