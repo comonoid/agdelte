@@ -5,9 +5,11 @@ module Agdelte.Http
   ) where
 
 import Control.Exception (SomeAsyncException(..), SomeException, fromException, throwIO, try)
+import Control.Monad (void)
 import Data.String (fromString)
 import qualified Network.Socket as Sock
 import System.Posix.Files (setFileMode)
+import System.Posix.Signals (installHandler, sigTERM, sigINT, Handler(Catch))
 import System.Directory (removePathForcibly)
 import qualified Data.Text as T
 import Data.Text (Text)
@@ -43,9 +45,20 @@ serve port handler = do
   putStrLn $ "Agdelte server listening on port " ++ show port
   serveWithWs port handler Nothing
 
+-- Graceful shutdown (бесшовный reload, blue-green): SIGTERM/SIGINT → warp перестаёт
+-- принимать новые соединения, in-flight запросы дорабатывают (timeout сек), runSettings
+-- возвращается и процесс завершается сам. systemd (TimeoutStopSec) добьёт зависшее.
+gracefulSettings :: Warp.Settings -> Warp.Settings
+gracefulSettings =
+    Warp.setGracefulShutdownTimeout (Just 30)
+  . Warp.setInstallShutdownHandler (\closeSocket -> do
+      void $ installHandler sigTERM (Catch closeSocket) Nothing
+      void $ installHandler sigINT  (Catch closeSocket) Nothing)
+
 serveWithWs :: Int -> (Request -> IO Response) -> Maybe (Text, WS.ServerApp) -> IO ()
 serveWithWs port httpHandler mWsHandler = do
-  let settings = Warp.setPort port
+  let settings = gracefulSettings
+               $ Warp.setPort port
                $ Warp.setHost "*"
                $ Warp.defaultSettings
   Warp.runSettings settings (mkApp httpHandler mWsHandler)
@@ -55,7 +68,8 @@ serveWithWs port httpHandler mWsHandler = do
 serveHost :: Text -> Int -> (Request -> IO Response) -> IO ()
 serveHost host port httpHandler = do
   putStrLn $ "Agdelte server listening on " ++ T.unpack host ++ ":" ++ show port
-  let settings = Warp.setPort port
+  let settings = gracefulSettings
+               $ Warp.setPort port
                $ Warp.setHost (fromString (T.unpack host))
                $ Warp.defaultSettings
   Warp.runSettings settings (mkApp httpHandler Nothing)
@@ -72,7 +86,7 @@ serveUnix path httpHandler = do
   setFileMode path 0o660
   Sock.listen sock 1024
   putStrLn $ "Agdelte server listening on unix socket " ++ path
-  Warp.runSettingsSocket Warp.defaultSettings sock (mkApp httpHandler Nothing)
+  Warp.runSettingsSocket (gracefulSettings Warp.defaultSettings) sock (mkApp httpHandler Nothing)
 
 -- | Build WAI Application with optional WebSocket routing (without starting warp).
 -- Needed for tests (Warp.testWithApplication).
