@@ -116,7 +116,9 @@
     "gen:rbac-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i /home/n/agdelte-addons/agdelte-auth -i server server/RbacTest.agda",
     "test:rbac": "npm run gen:rbac-test && cabal build rbac-test && cabal run rbac-test",
     "gen:yookassa-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i /home/n/agdelte-addons/agdelte-payments -i server server/YooKassaTest.agda",
-    "test:yookassa": "npm run gen:yookassa-test && cabal build yookassa-test && cabal run yookassa-test"
+    "test:yookassa": "npm run gen:yookassa-test && cabal build yookassa-test && cabal run yookassa-test",
+    "gen:stripe-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i /home/n/agdelte-addons/agdelte-payments -i server server/StripeTest.agda",
+    "test:stripe": "npm run gen:stripe-test && cabal build stripe-test && cabal run stripe-test"
   },
   "keywords": [
     "agda",
