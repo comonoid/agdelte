@@ -132,6 +132,8 @@ checks =
   chk "cur-rej-upper"   (is-nothing (mkCurrency "USD")) ∷
   chk "cur-rej-empty"   (is-nothing (mkCurrency "")) ∷
   chk "cur-rej-mixed"   (is-nothing (mkCurrency "u1d")) ∷
+  chk "cur-rej-len-2"   (is-nothing (mkCurrency "eu")) ∷
+  chk "cur-rej-len-4"   (is-nothing (mkCurrency "euro")) ∷
   chk "cur-code-stable" (maybe′ (λ c → curCode c ==ˢ "eur") false (mkCurrency "eur")) ∷
   chk "amt-ok-one"      (maybe′ (λ a → eqℕ 1 (amountOf a)) false (mkPositive 1)) ∷
   chk "amt-rej-zero"    (is-nothing (mkPositive 0)) ∷

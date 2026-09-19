@@ -120,7 +120,9 @@
     "test:yk-mock": "node scripts/run-yk-mock.mjs",
     "gen:yookassa-net-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i /home/n/agdelte-addons/agdelte-payments -i server server/YooKassaNetTest.agda",
     "gen:stripe-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i /home/n/agdelte-addons/agdelte-payments -i server server/StripeTest.agda",
-    "test:stripe": "npm run gen:stripe-test && cabal build stripe-test && cabal run stripe-test"
+    "test:stripe": "npm run gen:stripe-test && cabal build stripe-test && cabal run stripe-test",
+    "gen:stripe-net-test": "agda --compile --ghc-dont-call-ghc --compile-dir=_build -i src -i /home/n/agdelte-addons/agdelte-payments -i server server/StripeNetTest.agda",
+    "test:stripe-mock": "node scripts/run-stripe-mock.mjs"
   },
   "keywords": [
     "agda",

@@ -170,6 +170,16 @@ executable yookassa-net-test
                   , http-client, http-client-tls, aeson
                   , bytestring, http-types
 
+executable stripe-net-test
+  main-is:          MAlonzo/Code/StripeNetTest.hs
+  hs-source-dirs:   _build, hs
+  ghc-options:      -main-is MAlonzo.Code.StripeNetTest -w -rtsopts
+  default-language: GHC2021
+  build-depends:    base, text, containers, crypton, memory, base64-bytestring
+                  , http-client, http-client-tls, aeson
+                  , bytestring, http-types
+
+
 executable stripe-test
   main-is:          MAlonzo/Code/StripeTest.hs
   hs-source-dirs:   _build, hs
