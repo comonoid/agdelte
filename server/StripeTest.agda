@@ -13,9 +13,9 @@ open import Agda.Builtin.String using (String; primStringEquality)
 open import Agda.Builtin.Char using (Char; primCharEquality)
 open import Agda.Builtin.String using (primStringToList)
 open import Data.Bool using (Bool; not; _∨_; true; false; _∧_)
-open import Data.List using (List; []; _∷_)
+open import Data.List using (List; []; _∷_; concatMap)
 open import Data.Maybe using (Maybe; just; nothing; is-nothing; is-just; maybe′)
-open import Data.Product using (_×_; _,_)
+open import Data.Product using (_×_; _,_; proj₁; proj₂)
 open import Data.Nat using (ℕ; _≡ᵇ_)
 open import Data.Nat.Show using (show)
 open import Data.String using () renaming (_++_ to _<>_)
@@ -26,6 +26,7 @@ open import Agdelte.Payment.Stripe
         ; SessionCompleted; Unrecognized; RawPair; rpFst; rpSnd
         ; Currency; mkCurrency; curCode; Positive; mkPositive; amountOf)
 open import Agdelte.Payment.StripeForm using (formEncS)
+open import Agdelte.Payment.StripeVectors using (vectors)
 
 postulate
   putStrLn : String → IO ⊤
@@ -148,6 +149,20 @@ checks =
   chk "form-no-sep-mixed"    (noSep (primStringToList (formEncS "a b=c&d+e % Путь"))) ∷
   []
 
+-- ─── Ур.4: векторы из OpenAPI-спеки (Agdelte.Payment.StripeVectors) ───────
+-- Для каждого вектора (имя, вход, ожидание) три чека: expected (formEncS =
+-- ожидание, посчитанное генератором по RFC 3986), mirror (Agda = Haskell),
+-- no-sep (нет сырых ' ' '=' '&' '+'). Имена чеков — по вектору.
+vecChecks : List (String × Bool)
+vecChecks = concatMap v vectors
+  where
+    v : String × String × String → List (String × Bool)
+    v (name , input , expected) =
+      chk (name <> "-expected") (formEncS input ==ˢ expected) ∷
+      chk (name <> "-mirror")   (formEncS input ==ˢ formEncHS input) ∷
+      chk (name <> "-no-sep")   (noSep (primStringToList (formEncS input))) ∷
+      []
+
 report : String → Bool → IO ⊤
 report name true  = putStrLn ("PASS " <> name)
 report name false = putStrLn ("FAIL " <> name)
@@ -156,5 +171,9 @@ runAll : List (String × Bool) → IO ⊤
 runAll []             = putStrLn "stripe done"
 runAll ((n , b) ∷ xs) = report n b seq runAll xs
 
+_++ℓ_ : List (String × Bool) → List (String × Bool) → List (String × Bool)
+_++ℓ_ []       ys = ys
+_++ℓ_ (x ∷ xs) ys = x ∷ _++ℓ_ xs ys
+
 main : IO ⊤
-main = runAll checks
+main = runAll (checks ++ℓ vecChecks)
